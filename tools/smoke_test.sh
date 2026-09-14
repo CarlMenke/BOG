@@ -201,6 +201,21 @@ also "a spear cannot kill the Elder" "control PASS"
 # Headless, and it quits itself around tick 280.
 check "a respawn hands back nothing" "respawn PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- respawn
+# Gubs in their team's colour (D-046), read off the material the renderer will
+# draw with rather than off what the script meant to set. One Gub per team has
+# to be in exactly its nameplate colour, a free-for-all Gub has to be back on the
+# imported yellow, the Elder's robe has to keep its purple over a tinted body,
+# a corpse has to die in the colour it lived in, and a lobby roster change has to
+# repaint the Gub whose team moved. The corpse half fails against a ragdoll that
+# copies the mesh's own material, and the lobby half against a backdrop that
+# only recolours the plate. Headless, it quits itself on tick 12. The lineup:
+#     ... --resolution 1800x640 --script tools/snapshot.gd -- \
+#         res://tools/team_tint.tscn out/team_tint.png 40 studio|dusk|noon
+check "team colours on the body" "team_tint: teams PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" tools/team_tint.tscn
+also "team colours on the body" "team_tint: robe PASS"
+also "team colours on the body" "team_tint: corpse PASS"
+also "team colours on the body" "team_tint: PASS"
 # The camera, kept out of the scenery (D-045). A player: "too frequently the
 # camera is inside meshes and stuff when there are meshes behind the character".
 # Seven legs — a wall on each shoulder walked along, a corner, under a canopy and

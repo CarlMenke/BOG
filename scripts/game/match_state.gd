@@ -559,11 +559,15 @@ func _create_gub(peer_id: int, spawn: Transform3D, life: int) -> void:
 	gub.revive_at(spawn, life)
 	gub.grant_invulnerability(config().spawn_protection)
 
+	var shown_team := gub.team if config().mode == MatchConfig.Mode.TEAMS \
+		else MatchConfig.TEAM_NONE
+	# The body and the plate always agree, including in free-for-all, where both
+	# are neutral (D-046).
+	gub.set_team_tint(shown_team)
 	var plate := gub.get_node_or_null("Nameplate") as Nameplate
 	if plate != null:
 		plate.set_display_name(gub.display_name)
-		plate.set_team(gub.team if config().mode == MatchConfig.Mode.TEAMS
-			else MatchConfig.TEAM_NONE)
+		plate.set_team(shown_team)
 		# You do not need a label telling you your own name.
 		plate.visible = peer_id != Net.local_id()
 

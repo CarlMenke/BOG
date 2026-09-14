@@ -144,9 +144,23 @@ func _adopt(source: Gub) -> void:
 		# "eyeball meshes end up outside the head surface" and "black
 		# self-intersecting seams" in the QA report are that, not the physics —
 		# the corpse's bones sit exactly where the live Gub's were.
+		#
+		# Copied from what the dead Gub was *drawn with*, not from the mesh
+		# resource, or a Gub in a team colour would drop dead yellow (D-046). The
+		# live mesh is matched by name, which also leaves the robe out: the corpse
+		# model is a fresh `gub.glb` and has no "Elder" to match.
+		var live := _live_mesh(source_model, node.name)
 		for surface in node.mesh.get_surface_count():
-			var material := node.mesh.surface_get_material(surface)
-			if material != null:
+			var material: Material = live.get_active_material(surface) \
+				if live != null else node.mesh.surface_get_material(surface)
+			if material is ShaderMaterial:
+				# The team-colour shader writes depth in every pass already, and the
+				# fade itself is `GeometryInstance3D.transparency`, which puts it in
+				# the transparent pass on its own. So there is nothing to switch
+				# when the fade starts, and nothing to copy: sharing the live Gub's
+				# material changes no one's colour.
+				node.set_surface_override_material(surface, material)
+			elif material != null:
 				var copy := material.duplicate() as BaseMaterial3D
 				node.set_surface_override_material(surface, copy)
 				_materials.append(copy)
@@ -238,6 +252,13 @@ func _process(delta: float) -> void:
 			material.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_ALWAYS
 	for mesh in _meshes:
 		mesh.transparency = 1.0 - alpha
+
+
+func _live_mesh(source_model: Node, mesh_name: String) -> MeshInstance3D:
+	for mesh in _find_meshes(source_model):
+		if mesh.name == mesh_name:
+			return mesh
+	return null
 
 
 func _find_meshes(node: Node) -> Array[MeshInstance3D]:

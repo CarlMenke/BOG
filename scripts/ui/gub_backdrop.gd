@@ -195,6 +195,9 @@ func _apply_slot(index: int) -> void:
 	var team: int = entry.get("team", MatchConfig.TEAM_NONE)
 	gub.display_name = String(entry.get("name", "Gub"))
 	gub.team = team
+	# Every roster change comes through here, so a team switched in the lobby
+	# repaints the Gub standing in the ring as well as its plate (D-046).
+	gub.set_team_tint(team)
 	var plate := gub.get_node_or_null("Nameplate") as Nameplate
 	if plate != null:
 		plate.set_display_name(gub.display_name)

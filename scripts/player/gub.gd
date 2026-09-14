@@ -29,6 +29,11 @@ signal threw_spear(origin: Vector3, direction: Vector3)
 ## a tidier order would have renumbered every cause already in flight.
 enum Cause { SPEAR, FALL, VOID, UNKNOWN, LIGHTNING }
 
+## The body in a team's colour; see `set_team_tint` and D-046.
+const TINT_SHADER := preload("res://resources/shaders/gub_team_tint.gdshader")
+## The body mesh's node name inside `gub.glb`, as `tools/build_gub.py` writes it.
+const BODY_MESH_NAME := "Gub"
+
 ## The ground speed each locomotion clip was authored at, in metres per second,
 ## measured on the finished 1.80 m rig by `tools/build_gub.py` (hips travel over
 ## the cycle, divided by the cycle's *interval* count and not its frame count —
@@ -221,6 +226,13 @@ var held_spear: HeldSpear
 ## hidden second skinned mesh on every rig is 4,352 triangles of nothing.
 var elder_robe: ElderRobe
 var team: int = MatchConfig.TEAM_NONE
+## The body's own skinned mesh out of `gub.glb`, found once in `_ready` before
+## anything else is hung off the skeleton — so never the spear, and never the
+## robe (D-046). Null only on a rig a re-import has broken.
+var body_mesh: MeshInstance3D
+## This Gub's copy of the team-colour material, made the first time it is
+## tinted and reused after that. Null on a Gub that has never been on a team.
+var _tint_material: ShaderMaterial
 var alive: bool = true
 ## Set while the round is starting or just after a respawn; blocks damage.
 var invulnerable_until: float = 0.0
@@ -283,7 +295,83 @@ func _ready() -> void:
 	sync_position = global_position
 	sync_yaw = body_yaw
 	_apply_capsule(STAND_HEIGHT)
+	body_mesh = _find_body_mesh()
 	_equip_spear()
+
+
+## The mesh `build_gub.py` calls "Gub", under the skeleton. Looked for by name
+## first, and failing that the first skinned mesh there, because this runs
+## before the spear or a robe has been attached and at that moment the body is
+## the only mesh the rig has.
+func _find_body_mesh() -> MeshInstance3D:
+	var skeleton := _model_root.find_child("Skeleton3D", true, false) as Skeleton3D
+	if skeleton == null:
+		return null
+	var named := skeleton.get_node_or_null(BODY_MESH_NAME) as MeshInstance3D
+	if named != null:
+		return named
+	for child in skeleton.get_children():
+		if child is MeshInstance3D and (child as MeshInstance3D).mesh != null:
+			return child
+	return null
+
+
+## Paint the body in `team`'s colour, or put the imported yellow back for
+## `MatchConfig.TEAM_NONE` (D-046).
+##
+## Free-for-all is TEAM_NONE, and so is every Gub in it: the nameplate goes
+## neutral there because everyone is a threat, and the body follows the
+## nameplate rather than inventing a per-player colour nobody else in the UI
+## uses. The colour is `Nameplate.colour_for_team`, the one the plate, the
+## lobby stripe, the scoreboard and the kill feed already share.
+##
+## Only the body mesh. The robe is a second mesh on the same skeleton and is
+## never touched: "that is an Elder" and "that is my team" are two reads, and the
+## purple is the first of them.
+##
+## Safe to call as often as a lobby roster changes; the material is made once
+## per Gub and only its colour moves after that.
+func set_team_tint(new_team: int) -> void:
+	if body_mesh == null:
+		return
+	if new_team < 0:
+		body_mesh.set_surface_override_material(0, null)
+		return
+	if _tint_material == null:
+		_tint_material = make_tint_material(body_mesh.mesh.surface_get_material(0))
+	_tint_material.set_shader_parameter("team_colour", Nameplate.colour_for_team(new_team))
+	body_mesh.set_surface_override_material(0, _tint_material)
+
+
+## The team-colour shader, carrying over what the imported body material sets so
+## a tinted Gub is lit exactly like a yellow one. Static so the corpse can build
+## the same thing if it ever has to.
+static func make_tint_material(imported: Material) -> ShaderMaterial:
+	var material := ShaderMaterial.new()
+	material.shader = TINT_SHADER
+	var source := imported as BaseMaterial3D
+	if source != null:
+		material.set_shader_parameter("albedo_texture", source.albedo_texture)
+		material.set_shader_parameter("roughness", source.roughness)
+		material.set_shader_parameter("specular", source.metallic_specular)
+		# A `Color`, not a `Vector3`: only a Color is converted to linear on its
+		# way into a `source_color` uniform, and the material's getter is sRGB.
+		material.set_shader_parameter("emission",
+			source.emission if source.emission_enabled else Color.BLACK)
+		material.set_shader_parameter("emission_energy", source.emission_energy_multiplier)
+	return material
+
+
+## The colour this Gub's body is currently drawn in, read back off the material
+## the renderer will actually use — or null while it wears the imported one.
+## For the checks.
+static func tint_of(mesh: MeshInstance3D) -> Variant:
+	if mesh == null:
+		return null
+	var active := mesh.get_active_material(0) as ShaderMaterial
+	if active == null or active.shader != TINT_SHADER:
+		return null
+	return active.get_shader_parameter("team_colour")
 
 
 func _equip_spear() -> void:

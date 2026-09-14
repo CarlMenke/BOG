@@ -3376,3 +3376,81 @@ headless with `--fixed-fps 60`, about two seconds. 28 checks to 30.
   pivot in the 2.6 m-wide, 2.2 m-high tunnel while looking down. It is outside the
   scenery, but it is inside the Gub. The cave (PLAN 5.2) will want either more
   headroom than that or the local Gub faded when the camera is that close.
+
+## D-046 — In Teams, the Gub's body is recoloured to its team, and the Elder's robe is not
+The user: *"For teams, the gubs change color to the hue, should be able to just
+tint the mesh."* The team colours already existed, in `Nameplate.TEAM_COLOURS`,
+shared through `UIPalette.team_colour` by the plate, the lobby stripe, the
+scoreboard, the kill feed and chat. The body now uses the same eight.
+
+**Only the body.** The Elder's robe (D-037, D-038) is a second skinned mesh on the
+same skeleton, and it keeps its purple. The user chose this: "that is an Elder"
+and "that is my team" are two separate reads, and a robe in the team colour
+would merge them. A Gub on Team 1 wearing the robe is a blue Gub in a purple robe.
+
+**How: a recolour shader, not a multiply.** `gub.glb` has one mesh and one
+`StandardMaterial3D`, textured with a saturated yellow (`gub_basecolor.jpg`) that
+also contains the eye whites, the pupils and some dark patches. Its emission is
+the same texture times a grey. Multiplying `albedo_color` by a team colour can't
+produce most of the palette: yellow times blue is olive, and yellow times violet
+is brown. `resources/shaders/gub_team_tint.gdshader` finds the yellow skin by hue
+(about 15-95 degrees) and saturation, replaces its colour with the team colour at
+the same brightness (`team_colour * value / 0.9`), and leaves everything else
+alone. So the eyes stay white, and the painted shading and the brown stripes
+still show. Roughness, specular and emission are copied from the imported
+material, so a tinted Gub is lit like a yellow one. `reference_value` 0.72 was
+tried first. Every team came out a step paler than the yellow Gub next to it. At
+0.9 the brightness matches.
+
+**Where.** `Gub.set_team_tint(team)` makes one `ShaderMaterial` per Gub the
+first time it is needed, sets `team_colour`, and applies it with
+`set_surface_override_material` on `body_mesh`. `body_mesh` is found in `_ready`
+before the spear or any robe is attached. `TEAM_NONE` clears the override and
+puts the imported material back. It is called from `MatchState._create_gub`
+with the same team the nameplate gets, and from `GubBackdrop._apply_slot`. Every
+lobby roster change goes through `_apply_slot`, so a player switching team
+repaints their Gub in the ring.
+
+**Free-for-all is the imported yellow.** The nameplate is neutral there because
+everyone is a threat, and the body follows the plate. Nothing else in the UI has
+a per-player colour to stay consistent with, so there was nothing to invent.
+Team 4's amber ends up close to that yellow, but the two never share a match.
+
+**The corpse.** `GubRagdoll._adopt` used to copy `mesh.surface_get_material`,
+which is the imported yellow, so a blue Gub would have died yellow. It now takes
+`get_active_material` from the live mesh with the same name. That also leaves the
+robe out, because the corpse is a fresh `gub.glb` with no "Elder" in it. The
+shader material is shared rather than duplicated. The fade is
+`GeometryInstance3D.transparency`, which moves the draw to the transparent pass
+by itself, and the shader has `depth_draw_always` built in. So nothing needs to
+change when the fade starts, which is what the `StandardMaterial3D` copies still
+do. Rendered mid-fade, a teal corpse dissolves the same way the yellow one does.
+
+**Checked.** `tools/team_tint.tscn`, headless, in the gate as "team colours on the
+body". Every assertion reads `get_active_material`: eight Gubs each exactly in
+their nameplate colour; a Gub moved from a team to `TEAM_NONE` is back on the
+imported material; the robe's active material is its own, while the body under it
+stays tinted; a corpse of a tinted Gub is still tinted and a corpse of a yellow
+one is still a `StandardMaterial3D`; and `GubBackdrop.set_roster` repaints a Gub
+whose team changed. With the old ragdoll `corpse` fails, and with the old backdrop
+`lobby` fails. The same scene through `snapshot.gd` renders the lineup under
+`studio`, `dusk` (Whisperbloom's env) or `noon` (Rust's). 29 checks to 33.
+
+### Rejected
+- **`albedo_color` multiply.** Olive blues and brown violets, as above.
+- **Per-team textures, generated or authored.** Eight 1024² images for something a
+  uniform can do. Generating them at match start is a second of GDScript pixel
+  loops.
+- **Tinting the robe too, or a team trim on it.** The user's call. See above.
+- **A per-player colour in free-for-all.** Nothing else in the UI uses one, and
+  the body should say what the plate says.
+- **Saturating the team colours for the body.** They are pastel because they are
+  UI colours, and a body in a different shade from its own plate is two colours
+  for one team.
+
+### What this does not cover
+- `MatchState._create_gub`'s call is not asserted by the check. It is one line
+  beside the plate's and reads the same `shown_team`, but only the backdrop path
+  is exercised.
+- The hue window is fitted to this texture. A re-bake of `gub_basecolor.jpg` in a
+  different base colour needs the window in the shader moved with it.
