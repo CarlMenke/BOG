@@ -40,24 +40,8 @@ extends StaticMap
 
 # ---------------------------------------------------------------- the table ---
 
-## One landing surface, as the parkour checker reads it.
-##
-## `radius` is the *inscribed* radius of the slab's footprint, less 0.15 m of
-## lip — the circle you can be sure is solid under your feet whichever way the
-## slab is yawed. Using half the diagonal instead would promise ground at the
-## corners of a rectangle, which is exactly where a landing goes wrong.
-class Platform extends RefCounted:
-	var centre: Vector3   ## x, the top surface's y, z — where a Gub stands
-	var radius: float     ## inscribed landing radius of the scaled footprint
-	var zone: String      ## "kopje", "ridge", "termites", …
-	var label: String     ## "spiral 3", "ridge 5", "nest" — named in failures
-
-	func _init(at: Vector3, landing_radius: float, in_zone: String, called: String) -> void:
-		centre = at
-		radius = landing_radius
-		zone = in_zone
-		label = called
-
+## `Platform`, the landing record, is `StaticMap.Platform` — it moved there when
+## a second built map needed it (D-056).
 
 const KIT := "res://assets/Stylized_Nature_MegaKitStandard/glTF/%s.gltf"
 const DESERT_DIFFUSE := "res://assets/Stylized_Nature_MegaKitStandard/glTF/Rocks_Desert_Diffuse.png"
@@ -367,9 +351,7 @@ const TRUNK_FRACTION := 0.62
 
 # ------------------------------------------------------------------ state ---
 
-## Every landing on the map, in build order. Filled before `super()` so the
-## checker and the collision sweep are looking at the same map.
-var platforms: Array[Platform] = []
+## Every landing on the map is `StaticMap.platforms`, filled before `super()`.
 ## Where the pads are, read off the `Spawns` markers. The dressing dodges these;
 ## the platform positions are authored, so the checker asserts those instead.
 var spawn_keepouts: Array[Vector3] = []

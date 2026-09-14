@@ -2,10 +2,11 @@
 
 A match-based third-person multiplayer game in Godot 4.7.2. You are a Gub — a
 small yellow alien — fighting with thrown spears that kill in one hit, on one of
-three maps: **Whisperbloom Hollow**, a floating enchanted-forest island grown from
-a seed; **Rust**, a hand-made industrial yard under a hard sun; or **Kopje
-Crossing**, a savanna plateau with a hundred and twenty-three rocks to climb. The
-host picks in the lobby.
+four maps: **Whisperbloom Hollow**, a floating enchanted-forest island grown from
+a seed; **Rust**, a hand-made industrial yard under a hard sun; **Kopje
+Crossing**, a savanna plateau with a hundred and twenty-three rocks to climb; or
+**Lantern Wharf**, a small walled box yard at dusk with two bases facing each
+other across it. The host picks in the lobby.
 
 Spears are the whole fight. One lands, you die, and the thrower's hand is empty
 until it grows back, so an empty hand is the most useful thing on screen: it
@@ -234,9 +235,9 @@ and `tools/` is full of scenes for it:
 | `preview_sky` | the sky and environment |
 | `preview_island` | **the island** — a dozen framings (plan view, eye height on any pad, under a tree), `match` for real Gubs, `hud` to keep the HUD |
 | `island_report` | **the island as numbers** — footprint, slope, placed props per layer, tree heights, spawn spacing, capture bases. In the gate |
-| `preview_map` | **a static map** — top-down, side, or eye height on any spawn pad; `probe` prints the floor as ASCII. Rust by default, `map=res://scenes/world/maps/safari.tscn` for the savanna. Checks every pad with the physics, and is in the gate for both |
-| `parkour_report` | **Kopje Crossing** — rebuilds the Gub's jump arc and proves every platform can be reached from the ground. In the gate |
-| `playthrough.tscn` | the whole flow, menu to results, headless. Add `-- rust` or `-- safari` to play it on a static map |
+| `preview_map` | **a static map** — top-down, side, or eye height on any spawn pad; `probe` prints the floor as ASCII. Rust by default, `map=res://scenes/world/maps/safari.tscn` for the savanna, `map=res://scenes/world/maps/wharf.tscn min_triangles=1000` for the box yard. Checks every pad with the physics, and is in the gate for all three |
+| `parkour_report` | **a built map** — rebuilds the Gub's jump arc and proves every platform can be reached from the ground. Kopje Crossing by default; `map=res://scenes/world/maps/wharf.tscn` also proves no jump reaches a tower top and measures the longest sightline. In the gate for both |
+| `playthrough.tscn` | the whole flow, menu to results, headless. Add `-- rust`, `-- safari` or `-- wharf` to play it on a static map |
 | `match_rules.tscn` | 195 assertions across 14 scoring scenarios, headless |
 | `net_loopback.tscn` | two real processes over a real socket, ten rematches included. Run by hand through `net_test.sh` (not in the gate, ~45 s); binds loopback only |
 | `inspect_scene.gd` | dump a scene's tree, clips, bones and triangle counts |
@@ -343,6 +344,12 @@ map in `_ready` out of MegaKit rocks placed from layout tables and then lets
 `StaticMap` bake the collision exactly as it does for Rust. Editing the map means
 editing a table; `tools/parkour_report.gd` then says whether every platform is
 still reachable (**D-042**).
+
+**Lantern Wharf is built the same way**, smaller: `scenes/world/maps/wharf.tscn`
+and `scripts/world/maps/wharf_map.gd` lay out a 36 m yard of painted containers
+and crates from tables, with corrugation textures computed in code rather than
+loaded. It is the first map to declare its own Capture G·U·B bases and letters,
+and `parkour_report` holds it to a 25 m sightline (**D-056**).
 
 ---
 

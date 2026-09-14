@@ -442,8 +442,9 @@ func _stage_warmup() -> bool:
 ## stepped by now: two bases for two teams, on distinct pads well apart, each
 ## with pads of its own to spawn on, and three letter points that are on a real
 ## floor with a Gub's head room, outside both bases and apart from each other.
-## No map declares its own objectives yet, so this is the fallback's check, and
-## it is what says the mode is playable on every map it can be picked on.
+## Lantern Wharf declares its own bases and letters (D-056) and every other map
+## is on the fallback, so this is both checks: that the fallback is playable on
+## every map it can be picked on, and that a declared layout is sound.
 func _check_capture_layout() -> void:
 	var failures_before := _failures
 	var layout := MatchState.capture_layout()
@@ -478,8 +479,12 @@ func _check_capture_layout() -> void:
 			_check("capture: %s and %s are apart" % [glyph,
 				MatchState.letter_name(MatchState.LETTERS[j])],
 				point.distance_to(letters[j]) > 3.0, true)
-	print("playthrough: capture layout on '%s' — bases %s, letters %s" % [_map,
+	# Declared or fallback, said in the line, so the gate can tell a map that
+	# states its own objectives (D-056) from one the fallback is standing in for.
+	print("playthrough: capture layout on '%s' — %s bases %s, %s letters %s" % [_map,
+		"declared" if layout.bases_declared else "fallback",
 		", ".join(layout.bases.map(func(v: Vector3) -> String: return "(%.1f, %.1f, %.1f)" % [v.x, v.y, v.z])),
+		"declared" if layout.letters_declared else "fallback",
 		", ".join(letters.map(func(v: Vector3) -> String: return "(%.1f, %.1f, %.1f)" % [v.x, v.y, v.z]))])
 	if _failures == failures_before:
 		print("playthrough: capture layout PASS")

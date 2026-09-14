@@ -300,9 +300,9 @@ check "full playthrough" "playthrough: PASS" \
 # Capture G·U·B's bases and letters on this map (D-051), from the same run: two
 # bases on distinct pads well apart, each team with pads of its own, and three
 # letter points on a real floor with a Gub's head room, outside both bases and
-# apart. No map declares its own objectives yet, so this is the fallback being
-# proven playable on every map the mode can be picked on; Rust and Kopje Crossing
-# carry the same line below.
+# apart. This map declares no objectives of its own, so this is the fallback
+# being proven playable; Rust and Kopje Crossing carry the same line below, and
+# Lantern Wharf carries it for a layout the map declares itself (D-056).
 also "full playthrough" "playthrough: capture layout PASS"
 # The same walk again on the hand-made map, which is a different branch in
 # `arena.gd` from the first frame: no generation, an instanced scene bringing
@@ -324,6 +324,16 @@ also "rust playthrough" "playthrough: capture layout PASS"
 check "safari playthrough" "playthrough: PASS"     "$GODOT" --headless --path "$GODOT_ROOT" tools/playthrough.tscn -- safari
 also "safari playthrough" "arena: Kopje Crossing built from"
 also "safari playthrough" "playthrough: capture layout PASS"
+# And on Lantern Wharf, the small built map (D-056): a box yard laid out of a
+# table like the savanna, so the same three lines — and a fourth, because it is
+# the first map to declare its own Capture G·U·B bases and letters rather than
+# leave them to the fallback, and a layout that quietly fell back would still
+# pass the third.
+check "wharf playthrough" "playthrough: PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" tools/playthrough.tscn -- wharf
+also "wharf playthrough" "arena: Lantern Wharf built from"
+also "wharf playthrough" "playthrough: capture layout PASS"
+also "wharf playthrough" "capture layout on 'wharf' — declared bases"
 # A Capture G·U·B match standing up in the real arena (D-051): `arena.gd` draws
 # a ring per team, the host settles three cards onto the map once the physics
 # has stepped, and every Gub spawns on a pad of its own team's. The rules
@@ -464,6 +474,22 @@ check "safari spawns and collision" "preview_map: PASS"     "$GODOT" --path "$GO
 # off `Gub` rather than typing. A change to the jump that strands a platform
 # fails here instead of in a match. About six seconds, so it earns its place.
 check "safari parkour reachability" "parkour_report: PASS"     "$GODOT" --path "$GODOT_ROOT" --resolution 1000x1000 --script tools/snapshot.gd --     res://tools/parkour_report.tscn "$GODOT_LOG_DIR/safari_parkour.png" 30 top
+# Lantern Wharf's eight pads through the same tool. Its floor for "the geometry
+# was built" is its own: the yard is 1,700 triangles of boxes on purpose, and
+# Rust's 90,000 would fail it for being cheap.
+check "wharf spawns and collision" "preview_map: PASS" \
+    "$GODOT" --path "$GODOT_ROOT" --resolution 900x1100 --script tools/snapshot.gd -- \
+    res://tools/preview_map.tscn "$GODOT_LOG_DIR/wharf_top.png" 30 top \
+    map=res://scenes/world/maps/wharf.tscn min_triangles=1000
+# And the box yard's own promises, from the same report as the savanna's: every
+# crate and climbable box is reachable, no jump at all — the one-tick dive
+# included — reaches the top of a tower or a wall, no eye-to-eye sightline is
+# longer than 25 m on the ground or 26 m from a roof, and no spawn pad sees the
+# other base's pads.
+check "wharf parkour and sightlines" "parkour_report: PASS" \
+    "$GODOT" --path "$GODOT_ROOT" --resolution 1000x1000 --script tools/snapshot.gd -- \
+    res://tools/parkour_report.tscn "$GODOT_LOG_DIR/wharf_parkour.png" 30 top \
+    map=res://scenes/world/maps/wharf.tscn
 # Walks the menu into a real match and asks Input.mouse_mode what happened. It
 # grabs the physical mouse for about a second on the way through, which is the
 # only way to prove the thing it proves: every other check here stands the arena

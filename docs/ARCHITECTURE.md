@@ -213,7 +213,7 @@ and a **static** one is a hand-made scene that brings its own environment, sun,
 lights and spawn markers — the contract is written down in
 `scripts/world/static_map.gd`, and no procedural step runs for one.
 
-There are three maps.
+There are four maps.
 
 **Rust** is the static one: a hand-made industrial arena, 42 x 28 x 64 m,
 instanced whole from `art/maps/rust/rust.glb` (148 meshes, 96,301 triangles) by
@@ -246,6 +246,17 @@ from one constant-seeded `RandomNumberGenerator` in a fixed order.
 `SafariMap.platforms` is also the input to `tools/parkour_report.gd`, which
 rebuilds the Gub's jump arc from `Gub`'s constants and fails the gate if any
 landing is unreachable from the ground.
+
+**Lantern Wharf** is a third built map, and the small one (**D-056**):
+`scenes/world/maps/wharf.tscn` with `WharfMap` extending `StaticMap`, a 36 m
+walled yard at dusk built from layout tables — container walls three high,
+fourteen three-high towers, six single containers and eight crates, the north
+half written and the south half mirrored. Its landings and its `off_limits`
+tower and wall tops are both on `StaticMap` (the `Platform` record moved there
+from `SafariMap`), so the same `parkour_report` walks it, proves no jump reaches
+a tower top, and measures the longest eye-to-eye sightline. Its scene also
+declares `Bases` and `Letters` for Capture G·U·B rather than leaving them to the
+fallback.
 
 **Whisperbloom Hollow** is the procedural one. It is built
 from one integer seed at load, in an order that is load-bearing:
@@ -292,12 +303,14 @@ declares (**D-051**). A static map built for the mode declares, on its
 - `Spawns` as always; each pad belongs to the nearest base, and in this mode Gubs
   spawn only on their own team's pads.
 
-**No map declares these yet, so every map plays on a placeholder fallback**:
+**Lantern Wharf declares all of them (D-056); every other map plays on a
+placeholder fallback**:
 the pads are split into one arc per team by bearing, each team's base is the pad
 nearest its arc's middle, and the letters sit between the first two bases (G at
 the midpoint, U and B either side across the axis). The host settles each card
 onto a standable floor near the bases' height once the physics has stepped.
-`tools/playthrough.gd` checks the result on all three maps. `CaptureBase` draws
+`tools/playthrough.gd` checks the result on all four maps, and says in its log
+line whether the layout was declared or fallen back to. `CaptureBase` draws
 each base in its team's colour, only in this mode.
 
 ---

@@ -28,7 +28,8 @@ extends Node3D
 ##
 ## Usage:
 ##   Godot --path . --resolution 1280x720 --script tools/snapshot.gd -- \
-##       res://tools/preview_map.tscn out.png <ticks> <view> [map=res://map.tscn]
+##       res://tools/preview_map.tscn out.png <ticks> <view> [map=res://map.tscn] \
+##       [min_triangles=N]
 ##
 ##   views: top  side  front  probe  pad0 .. pad7
 ##
@@ -62,6 +63,10 @@ const PAD_SEPARATION := 6.0
 
 ## A map that comes out under this many triangles did not import — the arena is
 ## 96,301 of them and there is no way to lose a third of that by accident.
+##
+## A built map is a different animal: Lantern Wharf is about a hundred and fifty
+## boxes of twelve triangles and is right to be, so it passes `min_triangles=`
+## with its own floor rather than this tool learning which map is which (D-056).
 const MIN_TRIANGLES := 90000
 
 ## The grid the `probe` view walks, in metres. Two is fine enough to find a
@@ -78,6 +83,7 @@ const VIEWS := ["top", "side", "front", "probe"]
 
 var _view: String = "top"
 var _map_path: String = DEFAULT_MAP
+var _min_triangles: int = MIN_TRIANGLES
 var _map: StaticMap
 var _spawns: Array[Transform3D] = []
 var _centre: Vector3 = Vector3.ZERO
@@ -98,6 +104,8 @@ func _ready() -> void:
 			_view = arg
 		elif arg.begins_with("map="):
 			_map_path = arg.trim_prefix("map=")
+		elif arg.begins_with("min_triangles="):
+			_min_triangles = int(arg.trim_prefix("min_triangles="))
 
 	var packed := load(_map_path) as PackedScene
 	if packed == null:
@@ -145,7 +153,7 @@ func _physics_process(_delta: float) -> void:
 ## The map built the thing the match needs from it.
 func _check_build() -> void:
 	_want("the geometry imported (%d triangles)" % _map.triangles,
-		_map.triangles > MIN_TRIANGLES)
+		_map.triangles > _min_triangles)
 	_want("collision was built (%d shapes)" % _map.shapes, _map.shapes > 0)
 	var body := _map.get_node_or_null("Collision") as StaticBody3D
 	if _want("there is a Collision body", body != null):

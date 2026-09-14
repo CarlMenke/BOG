@@ -9,7 +9,7 @@ extends Node3D
 ## the arc is five constants in `gub.gd` and one in `project.godot`.
 ##
 ## So this rebuilds the arc from those constants, builds the whole reachability
-## graph out of `SafariMap.platforms`, and walks it from the ground. Anything it
+## graph out of the map's `StaticMap.platforms`, and walks it from the ground. Anything it
 ## cannot reach is named. It also checks the *physics* against the table — a ray
 ## down onto layer 1 from every landing and a Gub-sized capsule standing on it —
 ## because the table is what the graph believes and the trimesh is what a player
@@ -27,12 +27,46 @@ extends Node3D
 ##
 ## Usage:
 ##   Godot --path . --resolution 1000x1000 --script tools/snapshot.gd -- \
-##       res://tools/parkour_report.tscn out.png <ticks> [top|side|iso]
+##       res://tools/parkour_report.tscn out.png <ticks> [top|side|iso] [map=res://map.tscn]
+##
+## Kopje Crossing unless `map=` names another built map. What each map is held
+## to — how many landings, whether it needs dive shortcuts, how long a sightline
+## it allows — is in `EXPECT`, because a rock garden and a box yard want
+## different numbers and one threshold in a shared tool would be wrong for one
+## of them (the same argument D-042 made about `preview_map`'s sightline).
 ##
 ## Everything is printed before the render, so this is also a headless check —
 ## `tools/smoke_test.sh` greps it for `parkour_report: PASS`.
 
-const MAP_SCENE := "res://scenes/world/maps/safari.tscn"
+const DEFAULT_MAP := "res://scenes/world/maps/safari.tscn"
+
+## Per map, by scene path:
+##
+##   min_platforms   fewer landings than this and the table did not build
+##   min_big_edges   how many big-dive shortcuts the layout must offer
+##   summit_zone     if set, the landing labelled "summit" must leap to a
+##                   landing in this zone (Kopje Crossing's prize, D-042)
+##   sightline       if above zero, the longest line between two Gubs' eyes
+##                   standing on the ground may not be longer than this
+##   roof_sightline  the same, with at least one of the two on a landing
+##   reach           half the width of the square the ASCII map and the top
+##                   camera frame, in metres
+##   grid            the ASCII map's cell, in metres
+const EXPECT := {
+	"res://scenes/world/maps/safari.tscn": {
+		"min_platforms": 110, "min_big_edges": 6, "summit_zone": "ridge",
+		"sightline": 0.0, "roof_sightline": 0.0, "reach": 36.0, "grid": 2.0,
+	},
+	"res://scenes/world/maps/wharf.tscn": {
+		"min_platforms": 20, "min_big_edges": 0, "summit_zone": "",
+		"sightline": 25.0, "roof_sightline": 26.0, "reach": 20.0, "grid": 1.0,
+	},
+}
+
+## The sightline scan's grid, and where on a Gub the line runs between. Eye to
+## eye is the fair question: a Gub who can see another's eyes can be seen back.
+const SIGHT_STEP := 2.0
+const EYE := 1.45
 
 ## The movement model, read off `Gub` and `ProjectSettings` rather than typed, so
 ## a change to the character's jump fails this check instead of quietly
@@ -78,10 +112,9 @@ const GROUND_HOP := 1.3
 const GROUND_LEAP := 1.9
 const GROUND_BIG := 3.5
 
-const MIN_PLATFORMS := 110
-## Big leaps are shortcuts. A map with none is a map where the dive's full range
-## is never worth learning; this is the floor, not a target.
-const MIN_BIG_EDGES := 6
+## (`min_platforms` and `min_big_edges` are in `EXPECT`. Big leaps are
+## shortcuts: on Kopje Crossing a map with none is a map where the dive's full
+## range is never worth learning, so there it is a floor, not a target.)
 
 const SPAWN_PLATFORM_KEEPOUT := 3.5
 const SPAWN_TRUNK_KEEPOUT := 4.0
@@ -100,14 +133,16 @@ const LEAP_COST := 2.25
 
 const VIEWS := ["top", "side", "iso"]
 
-## The ASCII map's grid, in metres. Two is fine enough to see a spiral step and
-## coarse enough that a 96 m plateau fits in a terminal.
-const GRID_STEP := 2.0
-const GRID_REACH := 36.0
+## The ASCII map's grid is `EXPECT`'s `grid`: two metres is fine enough to see a
+## spiral step and coarse enough that a 96 m plateau fits in a terminal, and a
+## 36 m box yard wants one.
 
 var _view: String = "top"
+var _map_path: String = DEFAULT_MAP
+var _expect: Dictionary = {}
+var _grid_step: float = 2.0
 var _map: StaticMap
-var _platforms: Array[SafariMap.Platform] = []
+var _platforms: Array[StaticMap.Platform] = []
 var _spawns: Array[Transform3D] = []
 var _edges: Dictionary = {}      ## Vector2i(from, to) -> "hop" | "leap" | "big"
 var _tree: Dictionary = {}       ## to -> Vector2i(from, class index) as Vector2i
@@ -131,6 +166,10 @@ func _ready() -> void:
 	for arg: String in OS.get_cmdline_user_args():
 		if VIEWS.has(arg):
 			_view = arg
+		elif arg.begins_with("map="):
+			_map_path = arg.trim_prefix("map=")
+	_expect = EXPECT.get(_map_path, EXPECT[DEFAULT_MAP])
+	_grid_step = float(_expect["grid"])
 
 	_gravity = float(ProjectSettings.get_setting("physics/3d/default_gravity", 24.0))
 	_apex = JUMP * JUMP / (2.0 * _gravity)
@@ -145,9 +184,9 @@ func _ready() -> void:
 	_tick_rise = after / _gravity
 	_tick_apex = _tick_start + after * after / (2.0 * _gravity)
 
-	var packed := load(MAP_SCENE) as PackedScene
+	var packed := load(_map_path) as PackedScene
 	if packed == null:
-		_fail("the map scene loads (%s)" % MAP_SCENE)
+		_fail("the map scene loads (%s)" % _map_path)
 		return
 	var instanced := packed.instantiate()
 	# Renamed exactly as `arena.gd` renames it, so the map's own build log line
@@ -158,13 +197,13 @@ func _ready() -> void:
 	if _map == null:
 		_fail("the map's root is a StaticMap")
 		return
-	if not (_map is SafariMap):
-		_fail("the map is a SafariMap and can be asked about its platforms")
+	if _map.platforms.is_empty():
+		_fail("the map declares its platforms")
 		return
-	_platforms = (_map as SafariMap).platforms
+	_platforms = _map.platforms
 	_spawns = _map.spawn_points()
 	print("parkour_report: %s — %d platforms, %d triangles, %d shapes, built in %d ms" % [
-		MAP_SCENE, _platforms.size(), _map.triangles, _map.shapes, _map.build_msec])
+		_map_path, _platforms.size(), _map.triangles, _map.shapes, _map.build_msec])
 
 
 ## Everything below needs the map's static body to be in the broadphase, and
@@ -180,7 +219,9 @@ func _physics_process(_delta: float) -> void:
 	_check_physics()
 	_build_graph()
 	_check_reachability()
+	_check_off_limits()
 	_check_spawns()
+	_check_sightlines()
 	_print_height_map()
 	_draw()
 	_build_camera()
@@ -192,10 +233,11 @@ func _physics_process(_delta: float) -> void:
 # ------------------------------------------------------------------ counts ---
 
 func _check_counts() -> void:
-	_want("there are at least %d platforms (%d)" % [MIN_PLATFORMS, _platforms.size()],
-		_platforms.size() >= MIN_PLATFORMS)
+	var min_platforms := int(_expect["min_platforms"])
+	_want("there are at least %d platforms (%d)" % [min_platforms, _platforms.size()],
+		_platforms.size() >= min_platforms)
 	var zones: Dictionary = {}
-	for platform: SafariMap.Platform in _platforms:
+	for platform: StaticMap.Platform in _platforms:
 		zones[platform.zone] = int(zones.get(platform.zone, 0)) + 1
 	var parts: Array[String] = []
 	for zone: String in zones:
@@ -225,7 +267,7 @@ func _check_physics() -> void:
 
 	var missing := 0
 	var blocked := 0
-	for platform: SafariMap.Platform in _platforms:
+	for platform: StaticMap.Platform in _platforms:
 		var at: Vector3 = platform.centre
 		var ray := PhysicsRayQueryParameters3D.create(
 			at + Vector3.UP * RAY_ABOVE, at - Vector3.UP * RAY_BELOW)
@@ -280,7 +322,7 @@ func _build_graph() -> void:
 ## lip, clear B's lip by its own radius with 0.2 m to spare. `Δy` is compared
 ## against the reach at one lip-clearance higher than the landing, so a jump that
 ## would scrape the edge of B on the way in does not count as making it.
-func _classify(a: SafariMap.Platform, b: SafariMap.Platform) -> String:
+func _classify(a: StaticMap.Platform, b: StaticMap.Platform) -> String:
 	var gap := Vector2(a.centre.x, a.centre.z).distance_to(Vector2(b.centre.x, b.centre.z))
 	var needed := gap - (a.radius - EDGE_MARGIN) - b.radius - CAPSULE_RADIUS + LANDING_MARGIN
 	var rise: float = b.centre.y - a.centre.y + LIP_CLEARANCE
@@ -386,8 +428,14 @@ func _check_reachability() -> void:
 	print("  edges:  %d hop, %d leap, %d big in the whole graph" % [
 		all["hop"], all["leap"], all["big"]])
 
-	_want("there are big-leap shortcuts (%d, want %d)" % [all["big"], MIN_BIG_EDGES],
-		all["big"] >= MIN_BIG_EDGES)
+	var min_big := int(_expect["min_big_edges"])
+	if min_big > 0:
+		_want("there are big-leap shortcuts (%d, want %d)" % [all["big"], min_big],
+			all["big"] >= min_big)
+
+	var summit_zone := String(_expect["summit_zone"])
+	if summit_zone == "":
+		return
 
 	# The summit is the map's prize and it has to be a place you can leave in a
 	# hurry. A dive off the top that lands on the ridge or a saddle is what makes
@@ -399,12 +447,12 @@ func _check_reachability() -> void:
 	var landings: Array[String] = []
 	if summit >= 0:
 		for j: int in count:
-			if String(_platforms[j].zone) != "ridge":
+			if String(_platforms[j].zone) != summit_zone:
 				continue
 			if String(_edges.get(Vector2i(summit, j), "")) == "leap":
 				landings.append(String(_platforms[j].label))
-	_want("the summit can dive to the ridge (%s)" % (
-		", ".join(landings) if not landings.is_empty() else "nowhere"),
+	_want("the summit can dive to the %s (%s)" % [summit_zone,
+		", ".join(landings) if not landings.is_empty() else "nowhere"],
 		not landings.is_empty())
 
 
@@ -412,7 +460,7 @@ func _check_reachability() -> void:
 
 func _check_spawns() -> void:
 	var close: Array[String] = []
-	for platform: SafariMap.Platform in _platforms:
+	for platform: StaticMap.Platform in _platforms:
 		for pad: Transform3D in _spawns:
 			var gap := Vector2(platform.centre.x, platform.centre.z).distance_to(
 				Vector2(pad.origin.x, pad.origin.z))
@@ -447,6 +495,146 @@ func _cylinders(from: Node) -> Array[CollisionShape3D]:
 	return out
 
 
+# --------------------------------------------------------------- off limits ---
+
+## Nothing reaches a top the map has declared off limits — not a hop, not a
+## leap, and not the one-tick dive the reachability walk deliberately ignores.
+##
+## Reachability asks "can you get everywhere you should"; this asks the other
+## question, "can you get somewhere you should not". On a box yard the answer
+## that matters is the top of a tall stack: from up there the whole map is a
+## shooting gallery, and a stack you can reach with a dive nobody practises is a
+## stack somebody will practise.
+func _check_off_limits() -> void:
+	var perches := _map.off_limits
+	if perches.is_empty():
+		return
+	var reached: Array[String] = []
+	for perch: StaticMap.Platform in perches:
+		# From the ground there is no gap to cross, only a height to clear.
+		if perch.centre.y + LIP_CLEARANCE <= _tick_apex:
+			reached.append("%s from the ground" % perch.label)
+			continue
+		for platform: StaticMap.Platform in _platforms:
+			var jump := _classify(platform, perch)
+			if jump != "":
+				reached.append("%s by a %s off %s" % [perch.label, jump, platform.label])
+				break
+	for what: String in reached:
+		print("  FAIL  a Gub can reach %s" % what)
+	_want("no jump reaches an off-limits top (%d tops, highest dive %.2f m, %d reached)" % [
+		perches.size(), _tick_apex, reached.size()], reached.is_empty())
+
+
+# -------------------------------------------------------------- sightlines ---
+
+## How far one Gub can see another, eye to eye, on this map.
+##
+## Only for a map that states a limit. Every standable point on a two-metre grid
+## of the ground, and every landing, is an eye 1.45 m up; every pair of eyes
+## that can see each other through layer 1 is a sightline, and the longest is
+## the number. Ground to ground is what the aisles allow; anything involving a
+## landing is what climbing buys, and a landing that sees across the whole map
+## is a camping perch whatever the aisles do.
+##
+## Also asked, when the map declares two bases: whether any spawn pad can see a
+## pad that belongs to the other base. A player killed from the other team's
+## spawn before their first step has not played the round.
+func _check_sightlines() -> void:
+	var limit := float(_expect["sightline"])
+	if limit <= 0.0:
+		return
+	var roof_limit := float(_expect["roof_sightline"])
+	var space := get_world_3d().direct_space_state
+	var capsule := CapsuleShape3D.new()
+	capsule.radius = CAPSULE_RADIUS
+	capsule.height = CAPSULE_HEIGHT
+	var fits := PhysicsShapeQueryParameters3D.new()
+	fits.shape = capsule
+	fits.collision_mask = LAYER_WORLD
+
+	var ground: Array[Vector3] = []
+	var reach := float(_expect["reach"])
+	var x := -reach + SIGHT_STEP * 0.5
+	while x < reach:
+		var z := -reach + SIGHT_STEP * 0.5
+		while z < reach:
+			var ray := PhysicsRayQueryParameters3D.create(Vector3(x, 0.6, z), Vector3(x, -0.6, z))
+			ray.collision_mask = LAYER_WORLD
+			var hit := space.intersect_ray(ray)
+			if not hit.is_empty():
+				var foot: Vector3 = hit["position"]
+				fits.transform = Transform3D(Basis.IDENTITY,
+					foot + Vector3.UP * (CAPSULE_LIFT + 0.05))
+				if space.intersect_shape(fits, 1).is_empty():
+					ground.append(foot)
+			z += SIGHT_STEP
+		x += SIGHT_STEP
+	var roofs: Array[Vector3] = []
+	for platform: StaticMap.Platform in _platforms:
+		roofs.append(platform.centre)
+	var everywhere: Array[Vector3] = ground + roofs
+
+	var worst_ground := _longest_sight(space, ground, ground)
+	var worst_roof := _longest_sight(space, roofs, everywhere)
+	print("  sightline: %d ground points, %d landings" % [ground.size(), roofs.size()])
+	print("  sightline: ground to ground %.1f m, %s to %s" % [float(worst_ground[0]),
+		_vec(worst_ground[1]), _vec(worst_ground[2])])
+	print("  sightline: from a landing %.1f m, %s to %s" % [float(worst_roof[0]),
+		_vec(worst_roof[1]), _vec(worst_roof[2])])
+	_want("no ground sightline is longer than %.0f m (%.1f)" % [limit, float(worst_ground[0])],
+		float(worst_ground[0]) <= limit)
+	_want("no sightline from a landing is longer than %.0f m (%.1f)" % [roof_limit,
+		float(worst_roof[0])], float(worst_roof[0]) <= roof_limit)
+
+	var bases := _map.base_points()
+	if bases.size() != 2:
+		return
+	var seen: Array[String] = []
+	for i: int in _spawns.size():
+		for j: int in range(i + 1, _spawns.size()):
+			var a := _spawns[i].origin
+			var b := _spawns[j].origin
+			if _nearest(bases, a) == _nearest(bases, b):
+				continue
+			if _sees(space, a, b):
+				seen.append("pad %d sees pad %d (%.1f m)" % [i, j, a.distance_to(b)])
+	for what: String in seen:
+		print("  FAIL  %s" % what)
+	_want("no spawn pad sees the other base's pads (%d do)" % seen.size(), seen.is_empty())
+
+
+## [length, from, to] of the longest clear eye-to-eye line from any point in
+## `from` to any point in `to`.
+func _longest_sight(space: PhysicsDirectSpaceState3D, from: Array[Vector3],
+		to: Array[Vector3]) -> Array:
+	var best: Array = [0.0, Vector3.ZERO, Vector3.ZERO]
+	for a: Vector3 in from:
+		for b: Vector3 in to:
+			var length := a.distance_to(b)
+			if length <= float(best[0]):
+				continue
+			if _sees(space, a, b):
+				best = [length, a, b]
+	return best
+
+
+func _sees(space: PhysicsDirectSpaceState3D, a: Vector3, b: Vector3) -> bool:
+	var ray := PhysicsRayQueryParameters3D.create(a + Vector3.UP * EYE, b + Vector3.UP * EYE)
+	ray.collision_mask = LAYER_WORLD
+	ray.hit_back_faces = true
+	return space.intersect_ray(ray).is_empty()
+
+
+func _nearest(points: Array[Vector3], to: Vector3) -> int:
+	var best := 0
+	for i: int in points.size():
+		if Vector2(points[i].x, points[i].z).distance_to(Vector2(to.x, to.z)) \
+				< Vector2(points[best].x, points[best].z).distance_to(Vector2(to.x, to.z)):
+			best = i
+	return best
+
+
 # ---------------------------------------------------------------- the maps ---
 
 ## The layout as a terminal picture: the height of the nearest landing in each
@@ -457,17 +645,18 @@ func _cylinders(from: Node) -> Array[CollisionShape3D]:
 ## makes it obvious at a glance that the kopje is the high ground, that the ridge
 ## runs along one side and that nothing is stranded out at the rim.
 func _print_height_map() -> void:
-	var columns := int(GRID_REACH * 2.0 / GRID_STEP) + 1
-	print("parkour: landing tops on a %.0f m grid, digits are whole metres, '.' is ground" % GRID_STEP)
+	var reach := float(_expect["reach"])
+	var columns := int(reach * 2.0 / _grid_step) + 1
+	print("parkour: landing tops on a %.0f m grid, digits are whole metres, '.' is ground" % _grid_step)
 	var ruler := "      "
 	for c: int in columns:
-		ruler += "|" if int(-GRID_REACH + float(c) * GRID_STEP) % 10 == 0 else " "
+		ruler += "|" if int(-reach + float(c) * _grid_step) % 10 == 0 else " "
 	print(ruler)
 	for r: int in columns:
-		var z := -GRID_REACH + float(r) * GRID_STEP
+		var z := -reach + float(r) * _grid_step
 		var row := ""
 		for c: int in columns:
-			var x := -GRID_REACH + float(c) * GRID_STEP
+			var x := -reach + float(c) * _grid_step
 			row += _cell_glyph(Vector2(x, z))
 		print("%5d %s" % [int(z), row])
 	print(ruler)
@@ -475,9 +664,9 @@ func _print_height_map() -> void:
 
 func _cell_glyph(at: Vector2) -> String:
 	var best := -1.0
-	for platform: SafariMap.Platform in _platforms:
+	for platform: StaticMap.Platform in _platforms:
 		var centre := Vector2(platform.centre.x, platform.centre.z)
-		if at.distance_to(centre) <= maxf(float(platform.radius), GRID_STEP * 0.5):
+		if at.distance_to(centre) <= maxf(float(platform.radius), _grid_step * 0.5):
 			best = maxf(best, float(platform.centre.y))
 	if best < 0.0:
 		return "."
@@ -494,7 +683,7 @@ func _draw() -> void:
 	group.name = "Graph"
 	add_child(group)
 
-	for platform: SafariMap.Platform in _platforms:
+	for platform: StaticMap.Platform in _platforms:
 		var disc := MeshInstance3D.new()
 		var cylinder := CylinderMesh.new()
 		cylinder.top_radius = float(platform.radius)
@@ -556,19 +745,21 @@ func _build_camera() -> void:
 	var camera := Camera3D.new()
 	camera.far = 400.0
 	add_child(camera)
+	# Framed off the map's own reach: Kopje Crossing's 36 m is 104 m of frame.
+	var scale := float(_expect["reach"]) / 36.0
 	match _view:
 		"side":
 			camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-			camera.size = 104.0
-			camera.look_at_from_position(Vector3(96.0, 12.0, 0.0),
-				Vector3(0.0, 6.0, 0.0), Vector3.UP)
+			camera.size = 104.0 * scale
+			camera.look_at_from_position(Vector3(96.0, 12.0, 0.0) * scale,
+				Vector3(0.0, 6.0, 0.0) * scale, Vector3.UP)
 		"iso":
 			camera.fov = 50.0
-			camera.look_at_from_position(Vector3(70.0, 55.0, 70.0),
+			camera.look_at_from_position(Vector3(70.0, 55.0, 70.0) * scale,
 				Vector3(0.0, 3.0, 0.0), Vector3.UP)
 		_:
 			camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-			camera.size = 104.0
+			camera.size = 104.0 * scale
 			# `Vector3.UP` is degenerate for a camera already looking along it,
 			# so -Z is the up vector instead, which also puts the ridge at the
 			# top of the picture.

@@ -66,6 +66,36 @@ extends Node3D
 ##   nearest, and in this mode a Gub respawns only on its own team's pads, so
 ##   put four pads near each base for a two-team map.
 
+## And, **optionally, for `tools/parkour_report.gd`** (D-042, D-056). A map
+## built from a table rather than imported can say where its landings are, by
+## filling `platforms` before calling `super()`, and the report walks the Gub's
+## jump arc over them. `off_limits` is the other half of that for a map that
+## wants somewhere *nobody* stands — the top of a tall stack that would see the
+## whole map — and the report fails if any jump at all reaches one.
+
+## One landing surface, as the parkour checker reads it.
+##
+## `radius` is the *inscribed* radius of the slab's footprint, less 0.15 m of
+## lip — the circle you can be sure is solid under your feet whichever way the
+## slab is yawed. Using half the diagonal instead would promise ground at the
+## corners of a rectangle, which is exactly where a landing goes wrong.
+##
+## Lived on `SafariMap` until a second built map needed the same record; it is
+## here because the report reads it off any `StaticMap`, not because Rust has
+## any.
+class Platform extends RefCounted:
+	var centre: Vector3   ## x, the top surface's y, z — where a Gub stands
+	var radius: float     ## inscribed landing radius of the scaled footprint
+	var zone: String      ## "kopje", "ridge", "termites", …
+	var label: String     ## "spiral 3", "ridge 5", "nest" — named in failures
+
+	func _init(at: Vector3, landing_radius: float, in_zone: String, called: String) -> void:
+		centre = at
+		radius = landing_radius
+		zone = in_zone
+		label = called
+
+
 ## The ring `spawn_points()` invents when a map ships without any. Eight, the
 ## same count a real map owes, so the rest of the match behaves normally while
 ## the map is being shouted at.
@@ -109,6 +139,14 @@ var triangles: int = 0
 var shapes: int = 0
 var meshes: int = 0
 var build_msec: int = 0
+
+## Every landing a built map declares, in build order; empty on an imported map.
+## Filled before `super()` so the checker and the collision sweep are looking at
+## the same map.
+var platforms: Array[Platform] = []
+## Tops that must be out of reach of every landing and of the ground, by any
+## jump, the hardest dive included. Empty unless a map says otherwise.
+var off_limits: Array[Platform] = []
 
 
 func _ready() -> void:

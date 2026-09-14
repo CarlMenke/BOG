@@ -70,6 +70,15 @@ const MAPS: Array[Dictionary] = [
 		# `kind` column is for.
 		"loading_line": "Stacking the kopje",
 	},
+	{
+		"id": "wharf",
+		"display_name": "Lantern Wharf",
+		"kind": Kind.STATIC,
+		"scene": "res://scenes/world/maps/wharf.tscn",
+		# Built from a table like Kopje Crossing, and the small one: a 36 m box
+		# yard with two declared Capture G·U·B bases (D-056).
+		"loading_line": "Lighting the floodlights",
+	},
 	# A static map is one more entry and nothing else in this file changes —
 	# the lobby's picker, `SceneFlow`'s loading card and `arena.gd`'s branch all
 	# read this table and none of them names a map.

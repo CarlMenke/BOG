@@ -1,0 +1,93 @@
+[gd_resource type="Environment" load_steps=3 format=3 uid="uid://cq2gubwharfenv"]
+
+; Environment for Lantern Wharf. Dusk on a wet dock: the sun is a low orange
+; line over the west wall and the floodlights on the wall corners are doing most
+; of the work — the far end of the day from Kopje Crossing's noon and Rust's
+; afternoon, and warmer and bluer than the island's torch-lit night (D-009, D-056).
+;
+; Derived from `safari_env.tres`, which was derived from `rust_env.tres`, and
+; the same rule held: the tonemapping, the glow and the SSAO are theirs, and the
+; sky, the fog and the exposure are the whole of the difference.
+;
+;   * A dusk sky: violet-blue overhead, a hot orange band at the horizon. It is
+;     the ambient and the reflections (`ambient_light_source` is the sky), so
+;     the shaded side of every box goes cool and the lit side, under the sun and
+;     the sodium floods, goes warm — which is what separates the two faces of a
+;     box at a glance, and a box you cannot read the corner of is a box you run
+;     into.
+;   * **`background_energy_multiplier` is the exposure control** (see
+;     `rust_env.tres`, which measured it). Set from renders, not taste; see
+;     D-056 for the numbers.
+;   * Fog: a little denser than the savanna's and tinted to the horizon, because
+;     nothing on this map is more than 25 m away and a touch of haze at that
+;     range is what puts the far wall behind the near one.
+;   * Glow stays on at Rust's threshold. The lamp heads are emissive at 6x, so
+;     they bloom and nothing lit by them does.
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_wharfsky"]
+sky_top_color = Color(0.16, 0.2, 0.42, 1)
+sky_horizon_color = Color(0.94, 0.52, 0.32, 1)
+sky_curve = 0.18
+sky_energy_multiplier = 1.0
+ground_bottom_color = Color(0.1, 0.1, 0.14, 1)
+ground_horizon_color = Color(0.46, 0.34, 0.32, 1)
+ground_curve = 0.05
+ground_energy_multiplier = 1.0
+sun_angle_max = 8.0
+sun_curve = 0.1
+use_debanding = true
+
+[sub_resource type="Sky" id="Sky_wharf"]
+sky_material = SubResource("ProceduralSkyMaterial_wharfsky")
+radiance_size = 3
+
+[resource]
+resource_name = "WharfEnvironment"
+background_mode = 2
+sky = SubResource("Sky_wharf")
+background_energy_multiplier = 1.5
+ambient_light_source = 3
+reflected_light_source = 2
+tonemap_mode = 3
+tonemap_exposure = 1.0
+tonemap_white = 6.0
+ssao_enabled = true
+ssao_radius = 1.1
+ssao_intensity = 1.2
+ssao_power = 1.4
+ssao_detail = 0.6
+ssao_horizon = 0.08
+ssao_sharpness = 0.98
+ssao_light_affect = 0.0
+ssao_ao_channel_affect = 0.35
+glow_enabled = true
+glow_levels/1 = 0.0
+glow_levels/2 = 0.35
+glow_levels/3 = 0.85
+glow_levels/4 = 1.0
+glow_levels/5 = 0.7
+glow_levels/6 = 0.25
+glow_levels/7 = 0.0
+glow_normalized = true
+glow_intensity = 0.55
+glow_strength = 1.0
+glow_mix = 0.05
+glow_bloom = 0.0
+glow_blend_mode = 1
+glow_hdr_threshold = 2.0
+glow_hdr_scale = 2.0
+glow_hdr_luminance_cap = 10.0
+fog_enabled = true
+fog_light_color = Color(0.62, 0.46, 0.44, 1)
+fog_light_energy = 1.0
+fog_sun_scatter = 0.25
+fog_density = 0.004
+fog_aerial_perspective = 0.2
+fog_sky_affect = 0.0
+fog_height = -2.0
+fog_height_density = 0.0
+volumetric_fog_enabled = false
+adjustment_enabled = true
+adjustment_brightness = 1.0
+adjustment_contrast = 1.05
+adjustment_saturation = 1.08

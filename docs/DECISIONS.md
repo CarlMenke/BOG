@@ -4323,3 +4323,144 @@ to change.
 - **Keeping the leaf ring.** Over twelve trees it drops leaves out of empty sky.
 - **Thinning the grass to hold the triangle count.** Not asked for, and it
   changes the look.
+
+## D-056 — Lantern Wharf: a small symmetric box yard, built from a table, held to a 25 m sightline and to tops nobody can reach
+The user: *"add shipment call of duty map"*.
+
+What was built is the *shape* of that kind of map, not a copy of one: a small,
+dense, walled, mirror-symmetric yard with two bases facing each other across a
+grid of hard cover, where nothing is ever far away and the fight is meant to be
+chaotic. The geometry, the props, the textures and the name are this game's
+own. No layout, name or asset from any other game was used or referred to; the
+layout came out of a search against this game's own sightline and jump numbers
+(below). The map is **Lantern Wharf**, id `wharf`, the fourth row in
+`MapCatalog`.
+
+**What it is.**
+- A 36 x 36 m yard at y = 0, walled by container stacks three high (7.8 m; four
+  wall boxes carry a fourth tier for the skyline), on a floor that stops at the
+  walls' outer face. `void_height` is -10 and nobody meets it.
+- Inside: **14 towers** (three containers, 7.8 m), **6 singles** (one container,
+  2.6 m, climbable) and **8 crates** (1.2 m, a hop from the ground). 88 wall
+  boxes. 1,714 triangles swept into 9 collision shapes in about 3 ms; the
+  dressing adds door bars, two quay cranes beyond the north and south walls and
+  four floodlight masts, none of it collision.
+- The north half is the table and the south half is its mirror across z = 0.
+  The table happens to be symmetric in x too; it is written out both sides so a
+  later edit can break that without touching the mirror.
+- Eight pads, four per team, alternating north and south: two in each end's
+  corner pockets and two in the bays either side of its base. Each faces the
+  middle and sees 7.3-8.3 m down its nose, which on a box map is the right
+  number: the first thing in front of a spawning Gub is cover.
+- **Capture G·U·B is declared, not fallen back to** (D-051's contract). `Bases`
+  are (0, 0, -15.5) and (0, 0, 15.5), 31 m apart, each in the 6.6 m bay between
+  two towers against its back wall, behind a spine tower; `base_radius` is 4.
+  `Letters` are G at the crossroads in the centre and U and B in the pockets
+  against the west and east walls, each the same distance from both bases.
+  `playthrough -- wharf` and `capture_preview -- wharf` both report the layout
+  as declared by the map.
+
+**Built from a table, like Kopje Crossing (D-042).** `WharfMap` extends
+`StaticMap`, lays the floor, walls, boxes and crates, calls `super()` to bake
+them, and then adds the dressing. There is no random draw anywhere, so every
+peer builds the same yard by construction. The container is a hand-built mesh
+rather than a `BoxMesh`, for its UVs: every face is mapped in metres along and
+0-1 up, so the ribs are vertical and even on every side and the rails of the
+texture land on every edge. The corrugation albedo, its normal map, the crate
+planks and the wet concrete are all computed at load. Rust's textures were
+considered and not used: the repository records no licence for the Rust
+source, and a painted box needs nothing an image file would add.
+
+### The two numbers the layout answers to
+**No jump reaches a tall top.** The Gub's jump reaches 1.69 m, a leap 2.30 m,
+and the one-tick dive `parkour_report` calls "big" 4.23 m of rise. So a
+two-high stack (5.2 m) beside a single (2.6 m) is reachable, and from 5.2 m every
+roof on the map is in view. There are no two-high stacks: cover is either
+climbable (a single, a crate) or out of reach of everything (a tower, a wall).
+`StaticMap` grew `off_limits` for this, and `parkour_report` fails the build if
+any hop, leap or big dive off any landing, or from the ground, reaches one of
+the 56 tower and wall tops.
+
+**No eye-to-eye sightline over 25 m.** A 36 m square has 51 m diagonals.
+`parkour_report` now samples the floor every 2 m (288 standable points) plus
+every landing, eyes 1.45 m up, and casts every pair. The longest line between
+two Gubs on the ground is **23.4 m**; from a roof it is **25.0 m** (24.97 m,
+the roof of a yard box to the far end's corner pocket). The gate allows 25 m on
+the ground and 26 m from a roof: the roof number is deterministic, but a limit
+that passes by three centimetres fails the day `EYE` or a box moves. It also
+checks that no spawn pad sees any pad belonging to the other base, and none does.
+
+**How the layout was found.** The first hand-drawn layout measured 34.5 m on the
+ground and 40 m from a roof, and a second was worse. A line over 25 m inside a
+36 m square has to run more than 17.7 m along one axis, so every such line
+crosses the middle of the map or runs down a wall. So the layout was searched: a
+throwaway annealing script (not committed; it was scaffolding, and the committed
+check is the arbiter) moved a handful of mirrored towers and singles on a
+half-metre grid, kept every gap either flush or at least 1.6 m so there are no
+slots to get stuck in, kept the pads, base and a connected floor clear, and
+scored every visible pair of eyes past 24 m. Every result that left the strip
+along the back wall open stayed at 34 m, which is what put two towers either
+side of each base. The best result was then read, trimmed and given crates by
+hand, and checked in Godot against the real collision; the Python and the
+engine agreed to the tenth of a metre on both layouts compared.
+
+**Parkour.** 20 landings, all reachable by hops alone (44 hop, 56 leap, 52 big
+edges in the whole graph). Every crate is flush against the box it is a step
+onto, and every single has one.
+
+### Lighting
+Dusk, so it is neither Rust's afternoon nor Kopje Crossing's noon: an orange sun
+17 degrees up over the west-south-west wall (energy 0.9, shadowed), a
+violet-to-orange sky that is also the ambient, and four shadowless sodium
+floodlights on masts at the wall corners, aimed short of the middle so the pools
+overlap there and each base gets two. The containers are painted bright (red,
+blue, yellow, green, tangerine, teal, cream) and the walls are the same palette
+darkened to 62% and pulled toward grey, because a boundary as bright as the
+cover in front of it is a map where the cover does not stand out.
+`background_energy_multiplier` is 1.5. Counted with PIL on `out/wharf_pad0.png`,
+`wharf_pad4.png`, `wharf_parkour_iso.png` and `wharf_top.png`: 0.00% of pixels
+below 8/255 and 0.00% at 255 in all channels.
+
+### What changed around it
+- `StaticMap.Platform` (moved from `SafariMap`), `platforms` and `off_limits` are
+  on `StaticMap`, so the report reads any built map. Kopje Crossing is unchanged
+  and still passes its own nine checks.
+- `parkour_report` takes `map=` and holds each map to its own row in `EXPECT`
+  (landing count, big-edge floor, the summit rule, sightline limits, framing).
+  The sightline and off-limits checks run only for a map that asks for them.
+- `preview_map` takes `min_triangles=`: its 90,000 floor means "Rust imported",
+  and a box yard of 1,700 triangles is right to be under it.
+- `playthrough`'s capture line says whether the bases and letters were declared
+  or fallen back to, so the gate can tell.
+
+### What checks it
+Six lines in the gate, 51 checks to 57: a playthrough on `wharf` with `also`s
+that Lantern Wharf was built, that its capture layout passed and that the layout
+was declared; `preview_map` on its pads; and `parkour_report` on it. Renders are
+not committed: `out/wharf_top.png`, `wharf_side.png`, `wharf_pad0.png`,
+`wharf_pad4.png` and `wharf_pad7.png` from `preview_map`,
+`out/wharf_parkour.png` and `wharf_parkour_iso.png` from `parkour_report`, and
+`out/capture_base_wharf.png` from `capture_preview`.
+
+Nobody has played it. Whether 36 m with fourteen towers is good chaos for eight
+Gubs or a maze, whether the roofs of the six singles are worth the climb, and
+whether the floods read in a fight are for a person.
+
+### Rejected
+- **Reproducing a known map's layout.** The user named a map; the request was
+  read as its shape. A copy of someone else's level is not this game's to ship.
+- **Two-high stacks.** Reachable by the one-tick dive from any single beside
+  them, and a perch over every roof.
+- **An open strip along the back wall with the base in the middle of it.** A
+  34 m lane every spawn crosses; no layout the search found kept it and got
+  under 30 m.
+- **A roof limit of exactly 25 m.** It passes by 3 cm; see above.
+- **Rust's industrial textures.** No licence is recorded for them in the
+  repository, and computed corrugation is a few lines.
+- **A `BoxMesh` container.** Its 3x2 UV atlas puts the ribs on the wrong axis on
+  half the faces.
+- **Crane booms reaching in over the yard.** The first render read as a gate
+  from the ground, and the boom's shadow crossed a base; the booms now point out
+  over the water.
+- **Shadowed floodlights.** Four more shadow maps for a small map whose long sun
+  shadows already give every box its shape.
