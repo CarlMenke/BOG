@@ -3074,3 +3074,124 @@ Like Rust (STATUS, "what is left"), nobody has played a match on it. Whether
 eight Gubs on a 96 m plateau find each other, whether a 9.5 m summit with dives
 to both saddles is a king-of-the-hill or a sniper's nest, and whether 3,100 grass
 instances hide a crouched Gub more than they should are questions for a person.
+
+## D-043 — A snapshot from a life that is over is not about this Gub
+A player, after a match: *"there is a bug where you spawn with either an item or
+the elder randomly, it seems like after you die you respawn first where you died
+and picked it up from there or something?"* That breaks two rules at once — D-032
+(everything carried is lost on death) and D-038 (a robe that ends is consumed,
+never handed on) — and the player's guess about the mechanism was exactly right.
+
+### What was happening
+Movement is client-authoritative (D-004): the owner of a Gub publishes
+`sync_position` every tick, and every other copy of that Gub eases toward it in
+`Gub._follow_network`, snapping straight there when it is more than 6 m off. A
+dead Gub keeps publishing — it lies still and says so, every tick.
+
+When the respawn delay runs out, the **host** revives its own copy of the dead
+Gub at the pad (`_respawn` → `_do_respawn` → `revive_at`), marks it alive, and
+sends `_do_respawn` to everybody reliably. The owner's client is still dead until
+that message arrives, and every snapshot it sends in the meantime says *I am
+lying on my corpse*. The host's copy — alive now, and more than 6 m from the
+corpse — snapped straight back onto it. The corpse is where `_drop_loot` puts
+the drop. The host's `Pickup` saw a living Gub walk into it, `claim_pickup`
+checked `is_alive` and got yes, and the stock or the robe went to the Gub whose
+death had just produced it. "Randomly" was the loot roll: a mushroom or a lure
+nearly every time, a robe one time in fifty.
+
+**Only a Gub owned by a client could do this.** The host's own Gub has no remote
+owner to contradict it and was never affected, and no offline testbed could see
+it, because an `OfflineMultiplayerPeer` has no round trip.
+
+### Checking the guess before fixing it
+The planning pass named the mechanism from the code alone, and it was right in
+every particular but one, which only running it showed.
+
+`tools/net_loopback.gd` grew a stage that kills the client with the robe forced
+and a mushroom dropped beside it, then logs the host's copy every tick. Over
+127.0.0.1 it **never reproduces**: the dead client's snapshots do arrive on every
+tick, but the first one after the revive already carries the pad, because a
+loopback round trip is shorter than a physics tick. The stage passed against the
+bug.
+
+The first reproduction offline also passed, and for the reason that is the one
+particular the reading missed. Replaying the dead client's snapshot on *every*
+tick after the revive puts the body back on the corpse before the physics server
+has ever stepped it at the pad — so as far as the `Pickup` is concerned it never
+left, never came back, and no `body_entered` fires. The bug needs **one physics
+step at the pad before the stale snapshot lands**, which is exactly what real
+packets give: they do not arrive once per physics tick, and a 100–200 ms tunnel
+round trip is six to twelve ticks of them. With the replay on every other tick,
+`combat_range respawn` failed against the old code with the dummy holding a
+mushroom and wearing the robe, and all four drops taken.
+
+### The fix: every snapshot says which life it is from
+`Gub.sync_life` is replicated **ALWAYS, in the same synchronizer packet as
+`sync_position`**, and `Gub.life` is which life this copy is in.
+`_follow_network` does nothing — no move, zero velocity — while the two differ.
+
+* A snapshot from the life before is a corpse arriving after the revive: refused.
+  That is the bug.
+* A snapshot from the life after is the owner arriving before its `_do_respawn`
+  has: also refused, and the copy stays where it is, still hidden, for one more
+  round trip — which is what it looks like on every other screen anyway.
+
+**`life` is the host's number, never a local count.** `MatchState._life_of` is
+the Gub's deaths so far, passed through `_create_gub` and `_do_respawn` to
+`revive_at` on every peer. The obvious alternative — `revive_at` increments a
+counter — gives the same numbers in a clean match and different ones the first
+time anything revives a Gub an extra time, and the testbeds do exactly that. A
+remote Gub whose two ends disagree about its life stands frozen for the rest of
+the match, so the number has to be one nobody can count differently. Deaths are
+already the host's, only ever go up, and every respawn follows exactly one.
+
+The counter rides in the snapshot rather than on its own channel because the
+pair is judged together: a life number arriving on a reliable ON_CHANGE schedule
+would vouch for positions it was never sent with.
+
+`_respawn` also calls `_end_elder` before the respawn goes out. Nothing that can
+kill an Elder leaves the robe on today — since D-040 only the void can, and
+`report_kill` ends the robe there — but a Gub coming back from a death is the one
+Gub that certainly should not be wearing one, and saying so costs nothing when
+there is nothing to end. `GubCombat.reset` already zeroed stock on every peer;
+the host path was checked and was never the problem.
+
+### Rejected: taking the dead body out of the physics
+The suggested second half of the fix was to take a dead Gub off the player layer
+until `revive_at` — a dead Gub with no body the world can touch. It is a good
+rule on its own merits: an invisible capsule stands where a Gub fell for the
+length of a respawn delay, and `_lightning_hit` already carries a loop to step
+round it. It was built, and it made the bug **worse**.
+
+Putting `collision_layer` back at the pad, in either order relative to the move,
+made the physics engine (4.7's default) report `body_entered` for every `Pickup`
+at the corpse on the next step — with the body 9 m away at the pad — so the
+*host's own* Gub started collecting its loot too. Disabling the collision shape
+instead did the same. It only came right with the body restored two physics
+frames after the move, from a coroutine: a fix that works because of how many
+steps the physics server takes to notice a teleport is a clock nobody re-reads,
+which is D-039's lesson, and it is not going in to buy what the life number
+already fixes on its own. The corpse capsule and the loop in `_lightning_hit`
+stay as they were. If the dead body is ever taken out of the world, it has to be
+done somewhere the teleport cannot race it — and `combat_range respawn` is what
+that change has to pass, because it goes red on exactly this.
+
+### What checks it
+**`tools/combat_range.tscn respawn`**, in the gate (26 checks to 27). The player
+dies holding a mushroom and a dummy dies as the Elder holding one too, both
+killed **off their spawn pads**: a Gub that dies on a pad is handed the same pad
+back, never leaves its loot's catch volume and so never enters it, and passes
+whatever the code does. The loopback stage fell into exactly that on its first
+run, so the mode requires both revivals to land more than 6 m from their
+corpses. Loot lies on both corpses. The dummy is a remote Gub, so the mode plays
+its client: dead, it publishes the corpse; revived, it goes on publishing the
+corpse in the old life for 12 ticks (200 ms), a snapshot every other tick. A
+second after both respawns nobody may hold a mushroom or a lure, be the Elder,
+wear a robe, or have taken any of the four drops.
+
+**`tools/net_loopback.gd` stage 9/10** is the other side. It cannot open the
+window, and says so in its header, but it checks what the fix puts at risk: that
+over a real socket the host's copy of a respawned client follows it to its pad in
+the same life, and that nothing was picked up. `net_test.sh` is now 102 + 32
+assertions over ten stages; the one engine error at match start is the same one
+it has always reported.

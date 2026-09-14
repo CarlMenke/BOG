@@ -191,6 +191,26 @@ const LAYER_DEPLOYABLE := 8
 ## Gub whose grounded flag is a tick late still starts its airtime on the frame
 ## the jump happened.
 @export var sync_jump_serial: int = 0
+## Which life of this Gub the snapshot it rides in was taken in. See `life`.
+##
+## Replicated ALWAYS, in the same packet as `sync_position`, and that is the
+## whole point of it: a counter on its own reliable channel would arrive on a
+## different schedule from the position it is meant to vouch for, and the pair
+## has to be judged together or not at all.
+@export var sync_life: int = 0
+
+## Which life this copy of the Gub is in. Set only by `revive_at`, from a number
+## the host hands out (D-043) — never counted up locally, so every peer's copy
+## of one Gub agrees about it however many times a testbed revives it by hand.
+##
+## `_follow_network` ignores any snapshot whose `sync_life` is not this. That is
+## the fix for a player coming back from a death holding what they died on: the
+## host revives its copy of a remote Gub at the pad, but the owner's client is
+## still dead until the reliable `_do_respawn` reaches it, and every snapshot it
+## sends in the meantime says "I am lying on my corpse". Followed, those put the
+## host's live copy back on its own loot for a round trip, and the `Pickup`
+## there handed it over. They carry the life before, so now they are refused.
+var life: int = 0
 
 var display_name: String = "Gub"
 ## The spear in the Gub's hand. Hidden while one is in flight.
@@ -788,13 +808,25 @@ func _publish() -> void:
 	sync_crouching = is_crouching()
 	sync_sliding = is_sliding()
 	sync_grounded = is_on_floor()
+	sync_life = life
 
 
 ## Remote Gubs are not simulated — running physics for them would fight the
 ## authoritative position and produce jitter. They are eased toward what the
 ## network last reported, fast enough to stay honest and slow enough to hide
 ## packet spacing.
+##
+## **Except when what the network last reported was a different life.** A
+## snapshot from the life before is a corpse's position arriving after the
+## revive, and a snapshot from the life after is the owner arriving before the
+## `_do_respawn` that tells this copy it is alive; both are about a body this
+## copy is not, and the copy holds still until the two agree. The first case is
+## the bug (see `life`). The second is a Gub that stays hidden on its corpse a
+## round trip longer, which is exactly what it is on every other screen anyway.
 func _follow_network(delta: float) -> void:
+	if sync_life != life:
+		velocity = Vector3.ZERO
+		return
 	var distance := global_position.distance_to(sync_position)
 	if distance > 6.0:
 		# Too far to smooth: a teleport, a respawn, or a dropped burst.
@@ -860,9 +892,18 @@ func _drop_pending_spears() -> void:
 	_pending_spears.clear()
 
 
-func revive_at(spawn: Transform3D) -> void:
+## Put this Gub back on its feet at `spawn`, in life number `life_number`.
+##
+## `MatchState` passes the host's count — the Gub's deaths so far — on every
+## peer, so all copies of one Gub name the same life (D-043). Anything that
+## revives a Gub outside a match (the testbeds, the menu backdrop) can leave it
+## out: the Gub then stays in whatever life it was in, and its own snapshots,
+## seeded below, still agree with it.
+func revive_at(spawn: Transform3D, life_number: int = -1) -> void:
 	_drop_pending_spears()
 	alive = true
+	if life_number >= 0:
+		life = life_number
 	velocity = Vector3.ZERO
 	global_position = spawn.origin
 	body_yaw = spawn.basis.get_euler().y
@@ -892,4 +933,5 @@ func revive_at(spawn: Transform3D) -> void:
 	sync_crouching = false
 	sync_sliding = false
 	sync_grounded = true
+	sync_life = life
 	respawned.emit()

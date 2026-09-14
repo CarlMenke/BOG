@@ -477,12 +477,25 @@ func _next_spawn() -> Transform3D:
 
 func _spawn_gub(peer_id: int) -> void:
 	var spawn := _next_spawn()
-	_create_gub.rpc(peer_id, spawn)
-	_create_gub(peer_id, spawn)
+	var life := _life_of(peer_id)
+	_create_gub.rpc(peer_id, spawn, life)
+	_create_gub(peer_id, spawn, life)
+
+
+## Which life a Gub is about to begin, as the host counts it: its deaths so far.
+##
+## Handed to `Gub.revive_at` on every peer, so that every copy of one Gub agrees
+## which life a snapshot belongs to and can refuse one from a life that is over
+## (D-043). Deaths rather than a counter of its own, because it is already the
+## host's number, it only ever goes up, and every respawn follows exactly one of
+## them — so a second count kept beside it could only ever be a chance to
+## disagree with it.
+func _life_of(peer_id: int) -> int:
+	return int(stats.get(peer_id, {}).get("deaths", 0))
 
 
 @rpc("authority", "call_remote", "reliable")
-func _create_gub(peer_id: int, spawn: Transform3D) -> void:
+func _create_gub(peer_id: int, spawn: Transform3D, life: int) -> void:
 	if _players_root == null or gubs.has(peer_id):
 		return
 	var gub := GUB_SCENE.instantiate() as Gub
@@ -528,7 +541,7 @@ func _create_gub(peer_id: int, spawn: Transform3D) -> void:
 	# `sync_grounded` is worse, because the value a remote copy would compute for
 	# itself is permanently false and the owner's never changes, so ON_CHANGE
 	# replication has nothing to correct it with. See D-029.
-	gub.revive_at(spawn)
+	gub.revive_at(spawn, life)
 	gub.grant_invulnerability(config().spawn_protection)
 
 	var plate := gub.get_node_or_null("Nameplate") as Nameplate
@@ -550,18 +563,26 @@ func _respawn(peer_id: int) -> void:
 	entry["alive"] = true
 	entry["respawn_at"] = 0.0
 	entry["last_attacker"] = 0
-	_do_respawn.rpc(peer_id, spawn)
-	_do_respawn(peer_id, spawn)
+	# Belt and braces for D-038, and free when there is nothing to do. Nothing
+	# that can kill an Elder leaves the robe on today — the void ends it in
+	# `report_kill` — but a Gub coming back from a death is the one Gub that
+	# certainly should not be wearing one, so it is said here rather than
+	# trusted. Through `_end_elder`, before the respawn goes out, so the row and
+	# the cloth come off together on every peer and in that order.
+	_end_elder(peer_id)
+	var life := _life_of(peer_id)
+	_do_respawn.rpc(peer_id, spawn, life)
+	_do_respawn(peer_id, spawn, life)
 	_push_scores()
 
 
 @rpc("authority", "call_remote", "reliable")
-func _do_respawn(peer_id: int, spawn: Transform3D) -> void:
+func _do_respawn(peer_id: int, spawn: Transform3D, life: int) -> void:
 	var gub: Gub = gubs.get(peer_id)
 	if not is_instance_valid(gub):
 		return
 	gub.visible = true
-	gub.revive_at(spawn)
+	gub.revive_at(spawn, life)
 	gub.grant_invulnerability(config().spawn_protection)
 	var combat := gub.get_node_or_null("Combat") as GubCombat
 	if combat != null:

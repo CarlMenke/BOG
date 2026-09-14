@@ -117,6 +117,20 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##              *same* throw at the *same* Gub kills it once the robe is off.
 ##              Without that control, "did not die" is satisfied by a spear that
 ##              never left the hand.
+##   respawn  — both halves of "everything you carried is lost on death"
+##              (D-032, D-038) at the moment a player found them failing: the
+##              player dies holding a mushroom, a dummy dies as the Elder holding
+##              one too, both corpses are left lying in loot, and both come back.
+##              A second after the respawn nobody may be holding anything,
+##              wearing anything, or have picked up what they died on.
+##
+##              The dummy is the half that matters. It is a *remote* Gub, and the
+##              bug was a remote Gub's: its owner's client is still dead when the
+##              host revives it, and goes on publishing the corpse's position
+##              until the respawn reaches it — so for a round trip the host's copy
+##              was told to stand on its own loot, alive. No client exists here,
+##              so the mode *is* that client, and replays the dead one's last
+##              snapshot for `RESPAWN_STALE_TICKS` after the revive (D-043).
 ##   walk     — holds W for a second and requires the Gub to have gone somewhere.
 ##              Trivial-looking, and it is here because movement was wired up in
 ##              this file and in the sandbox and nowhere else, so every testbed
@@ -129,7 +143,7 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##   free     — no script; play it yourself
 const MODES := ["flight", "hit", "arc", "miss", "aim", "mushroom", "cover",
 	"lure", "lure_self", "letter", "cards", "lightning", "ward", "recharge",
-	"walk", "leave", "free"]
+	"respawn", "walk", "leave", "free"]
 
 ## How long after the cast the verdict is taken, in physics ticks. The click
 ## only starts the windup — the bolt leaves at `MatchConfig.lightning_delay`,
@@ -209,6 +223,23 @@ const RECHARGE_CYCLES := 12
 ## plausible repaint lag: anything still empty-handed at the end of it is not
 ## slow, it is never coming back.
 const DESYNC_PATIENCE := 30
+
+## Where the `respawn` mode kills its two Gubs. Deliberately *off* every spawn
+## pad, and further from each than `Gub._follow_network` smooths across: a Gub
+## that dies on a pad is handed that pad straight back, never leaves its loot's
+## catch volume and so never enters it either, and the check passes whatever the
+## code does. `tools/net_loopback.gd` fell into exactly that on its first run.
+const RESPAWN_PLAYER_CORPSE := Vector3(6.0, 0.1, 2.0)
+const RESPAWN_DUMMY_CORPSE := Vector3(-5.0, 0.1, 1.0)
+## How long the dummy's imaginary client goes on believing it is dead after the
+## host has revived it, in physics ticks: 200 ms, an ordinary round trip through
+## a playit tunnel. Long enough for the physics server to step the body into a
+## `Pickup` area several times over; the old code needed one.
+const RESPAWN_STALE_TICKS := 12
+## How long after both respawns the verdict is taken: a second, the figure in
+## the report, and long enough for any grant a claim would have made to have
+## been broadcast and applied.
+const RESPAWN_SETTLE_TICKS := 60
 
 ## How long the mushroom under test lives. Far longer than the run, so that
 ## nothing here is ever accidentally measuring a wither.
@@ -375,6 +406,17 @@ var _recharge_thrown: int = 0
 var _ward_step: int = 0
 var _ward_at: int = 0
 
+## `respawn`'s state. `_respawn_loot` is every drop lying on either corpse, held
+## by reference so the verdict can ask each one whether it was taken.
+var _respawn_step: int = 0
+var _respawn_at: int = 0
+var _respawn_loot: Array[Pickup] = []
+## The life the dummy died in, which is what its client's stale snapshots carry,
+## and the pad it was revived onto, which is what its fresh ones will.
+var _dummy_dead_life: int = 0
+var _dummy_pad: Vector3 = Vector3.ZERO
+var _dummy_revived_at: int = 0
+
 
 func _ready() -> void:
 	# The mode is found by *name* rather than at a fixed index, because this
@@ -468,7 +510,7 @@ func _dummy_count() -> int:
 	match _mode:
 		"lure":
 			return 3
-		"arc", "miss", "mushroom", "cover", "lure_self", "letter":
+		"arc", "miss", "mushroom", "cover", "lure_self", "letter", "respawn":
 			return 1
 		# Nobody to shoot at. `recharge` throws a dozen spears over the back
 		# wall on purpose (see `RECHARGE_TARGET`) and a dummy in the roster
@@ -580,6 +622,9 @@ func _physics_process(_delta: float) -> void:
 		return
 	if _mode == "ward":
 		_drive_ward(combat)
+		return
+	if _mode == "respawn":
+		_drive_respawn(player, combat)
 		return
 
 	# Not a `return`: the card has to be put down before there is anything to
@@ -758,6 +803,143 @@ func _drive_lightning(combat: GubCombat) -> void:
 		print("combat_range: the bolt killed %s — lightning PASS" % target.display_name)
 	else:
 		print("combat_range: nothing at the far end died — lightning FAIL")
+
+
+# ----------------------------------------------------------------- respawn ---
+
+## Kill a Gub carrying a mushroom and an Elder wearing a robe, leave both lying
+## in loot, respawn both, and require empty hands a second later.
+##
+## Steps, each on a gate rather than a frame number where there is one:
+##   0  stock both, robe the dummy, move both off their pads
+##   1  kill both where they stand and put loot on both corpses
+##   2  wait for both to be revived, playing the dummy's dead client meanwhile
+##   3  a second later, the verdict
+func _drive_respawn(player: Gub, combat: GubCombat) -> void:
+	var dummy := MatchState.gubs.get(DUMMY_BASE) as Gub
+	if dummy == null:
+		return
+	var dummy_combat := dummy.get_node_or_null("Combat") as GubCombat
+	# The dummy's client, from the kill on. Dead, or not yet told it has been
+	# revived, it publishes the corpse in the life it died in; caught up, it
+	# publishes the pad it was revived onto.
+	if _respawn_step >= 2:
+		_publish_for_dummy(dummy)
+
+	match _respawn_step:
+		0:
+			if _frames < 20:
+				return
+			combat.grant_mushroom(1)
+			dummy_combat.grant_mushroom(1)
+			MatchState._make_elder(DUMMY_BASE)
+			player.global_position = RESPAWN_PLAYER_CORPSE
+			player.velocity = Vector3.ZERO
+			dummy.global_position = RESPAWN_DUMMY_CORPSE
+			_stand_still(dummy)
+			_respawn_step = 1
+			_respawn_at = _frames
+		1:
+			# Long enough for the robe to be on and the grants to have landed,
+			# which is the state the precondition below insists on.
+			if _frames - _respawn_at < 10:
+				return
+			var armed := combat.mushroom_count() == 1 and dummy_combat.mushroom_count() == 1 \
+				and MatchState.is_elder(DUMMY_BASE) and dummy.elder_robe != null
+			if not armed:
+				print("combat_range: nobody was carrying anything to lose — respawn FAIL")
+				get_tree().quit()
+				return
+			_dummy_dead_life = dummy.life
+			dummy.respawned.connect(func() -> void:
+				_dummy_pad = dummy.global_position
+				_dummy_revived_at = _frames, CONNECT_ONE_SHOT)
+			# The player to a spear, which rolls its own loot — forced to a robe,
+			# so the thing lying on the corpse is the thing the player said they
+			# came back wearing. The Elder to the void, because since D-040 that
+			# is the only death it has, and a void death drops nothing; its loot
+			# is put down by hand through the same `_spawn_drop` a roll uses.
+			Net.config.elder_drop_chance = 1.0
+			MatchState.report_kill(1, DUMMY_BASE, Gub.Cause.SPEAR,
+				player.global_position, Vector3.FORWARD * 18.0, "Spine1")
+			MatchState.report_kill(DUMMY_BASE, DUMMY_BASE, Gub.Cause.VOID,
+				dummy.global_position, Vector3.DOWN, "")
+			var player_spot: Vector3 = MatchState._drop_spot(player.global_position)
+			var dummy_spot: Vector3 = MatchState._drop_spot(dummy.global_position)
+			MatchState._spawn_drop(Pickup.Kind.MUSHROOM, 0, player_spot)
+			MatchState._spawn_drop(Pickup.Kind.MUSHROOM, 0, dummy_spot)
+			MatchState._spawn_drop(Pickup.Kind.ELDER_ROBE, 0, dummy_spot)
+			for item: Pickup in MatchState._pickups.values():
+				if is_instance_valid(item) and not item.is_taken():
+					_respawn_loot.append(item)
+			if player.alive or dummy.alive or _respawn_loot.size() != 4:
+				print("combat_range: expected two corpses and four drops, got %d drops — respawn FAIL"
+					% _respawn_loot.size())
+				get_tree().quit()
+				return
+			_respawn_step = 2
+		2:
+			if not player.alive or not dummy.alive:
+				return
+			_respawn_step = 3
+			_respawn_at = _frames
+		3:
+			if _frames - _respawn_at < RESPAWN_SETTLE_TICKS:
+				return
+			_report_respawn(player, combat, dummy, dummy_combat)
+			get_tree().quit()
+
+
+## What the dummy's client would be sending this tick. See `RESPAWN_STALE_TICKS`.
+##
+## After the revive its snapshots land on every *other* tick, starting with the
+## second, and that spacing is not decoration. A snapshot on every tick puts the
+## body back on the corpse before the physics server has ever stepped it at the
+## pad, so no `Pickup` sees it leave and none sees it come back — the check goes
+## green on the bug. Real packets do not arrive once per physics tick, and one
+## tick at the pad is all it takes: the body leaves the catch volume, the stale
+## snapshot drags it back in, and `body_entered` fires on a Gub that is alive.
+func _publish_for_dummy(dummy: Gub) -> void:
+	if not dummy.alive:
+		dummy.sync_position = RESPAWN_DUMMY_CORPSE
+		dummy.sync_life = _dummy_dead_life
+		return
+	var since := _frames - _dummy_revived_at
+	if since < RESPAWN_STALE_TICKS:
+		if since % 2 == 1:
+			return
+		dummy.sync_position = RESPAWN_DUMMY_CORPSE
+		dummy.sync_life = _dummy_dead_life
+		return
+	dummy.sync_position = _dummy_pad
+	dummy.sync_life = dummy.life
+
+
+func _report_respawn(player: Gub, combat: GubCombat, dummy: Gub,
+		dummy_combat: GubCombat) -> void:
+	var taken := 0
+	for item: Pickup in _respawn_loot:
+		if not is_instance_valid(item) or item.is_taken():
+			taken += 1
+	var clear := RESPAWN_PLAYER_CORPSE.distance_to(player.global_position) > 6.0 \
+		and RESPAWN_DUMMY_CORPSE.distance_to(_dummy_pad) > 6.0
+	var carrying := "player %d mushrooms %d lures %s, dummy %d mushrooms %d lures %s" % [
+		combat.mushroom_count(), combat.lure_count(),
+		"ELDER" if MatchState.is_elder(1) or player.elder_robe != null else "no robe",
+		dummy_combat.mushroom_count(), dummy_combat.lure_count(),
+		"ELDER" if MatchState.is_elder(DUMMY_BASE) or dummy.elder_robe != null else "no robe"]
+	var empty := combat.mushroom_count() == 0 and combat.lure_count() == 0 \
+		and dummy_combat.mushroom_count() == 0 and dummy_combat.lure_count() == 0 \
+		and not MatchState.is_elder(1) and not MatchState.is_elder(DUMMY_BASE) \
+		and player.elder_robe == null and dummy.elder_robe == null
+	if not clear:
+		print("combat_range: a Gub was revived on top of its own corpse, so this proves nothing — respawn FAIL")
+	elif empty and taken == 0:
+		print("combat_range: a second after respawning, %s; %d of %d drops still on the corpses — respawn PASS"
+			% [carrying, _respawn_loot.size() - taken, _respawn_loot.size()])
+	else:
+		print("combat_range: a second after respawning, %s; %d of %d drops picked up off the corpses — respawn FAIL"
+			% [carrying, taken, _respawn_loot.size()])
 
 
 # -------------------------------------------------------------------- ward ---

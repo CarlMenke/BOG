@@ -22,12 +22,12 @@ island and out to a results screen, and two automated checks now walk that path:
 one in a single process, one across two processes over a real socket.
 
 ```
-bash tools/smoke_test.sh        # 26 checks, ~2 minutes, finds Godot by itself
+bash tools/smoke_test.sh        # 27 checks, ~2 minutes, finds Godot by itself
 bash tools/net_test.sh          # two processes, one socket. Not in the gate
 ```
 
-`smoke_test.sh` is the gate and it passes, 26 of 26. `net_test.sh` passes all
-nine of its stages (88 + 32 assertions) and still reports FAIL, deliberately:
+`smoke_test.sh` is the gate and it passes, 27 of 27. `net_test.sh` passes all
+ten of its stages (102 + 32 assertions) and still reports FAIL, deliberately:
 one transient engine warning survives at match start, and it holds itself to
 "the engine stayed quiet" rather than "the assertions passed". D-022 explains
 what it is and what the real fix costs.
@@ -252,7 +252,7 @@ Three tiers, because three different kinds of claim need three different proofs
 
 | tool | proves |
 |---|---|
-| `tools/smoke_test.sh` | **the gate** — import, and twenty-six checks |
+| `tools/smoke_test.sh` | **the gate** — import, and twenty-seven checks |
 | `tools/cursor_flow.tscn` | entering a match takes the mouse, and leaving gives it back |
 | `tools/playthrough.tscn` | the whole path, menu to results; 50 assertions on the island, 58 on Rust. Takes a map id after a `--` |
 | `tools/match_rules.tscn` | 195 assertions across 14 scoring scenarios |
@@ -260,9 +260,10 @@ Three tiers, because three different kinds of claim need three different proofs
 | `tools/combat_range.tscn cover` | a mushroom stops a spear, the same throw without one does not, and a Gub cannot walk into the cap (D-039) |
 | `tools/combat_range.tscn recharge` | the spear is back in the fist after twelve throws, and an emptied fist refills itself (D-039) |
 | `tools/combat_range.tscn ward` | a real spear cannot kill an Elder, the robe burns out on its own, and the same throw kills once it has (D-040) |
+| `tools/combat_range.tscn respawn` | a Gub that dies holding a mushroom and an Elder that dies in its robe both come back empty-handed, including a remote Gub whose client is 200 ms behind the host (D-043) |
 | `tools/ragdoll_stability.tscn` | a corpse is still a corpse 150 ticks later |
 | `tools/combat_range.tscn` | the real match path: a spear, a mushroom, a lure, a letter, the Elder's bolt |
-| `tools/net_loopback.tscn` | two processes, one socket, including a *client* using all three abilities. **Not in the gate** — it binds a port |
+| `tools/net_loopback.tscn` | two processes, one socket, including a *client* using all three abilities, dying and respawning. **Not in the gate** — it binds a port |
 | `tools/preview_map.tscn` | Rust and Kopje Crossing: renders one, and checks every spawn pad with the physics. **In the gate** for both |
 | `tools/parkour_report.tscn` | every Kopje Crossing platform has its rock, fits a Gub, and is reachable from the ground (D-042). **In the gate** |
 | `tools/preview_*.tscn` | it *looks* right. Needs a person, always will |

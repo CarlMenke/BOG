@@ -156,6 +156,8 @@ var _inbox: Array[Dictionary] = []
 var _spawned: Array = []
 ## Host only: peer ids a lure reported catching, from its `caught` signal.
 var _lure_caught: Array[int] = []
+## Host only: where stage 8 killed the client, which is where its loot lies.
+var _death_point: Vector3 = Vector3.ZERO
 
 
 func _ready() -> void:
@@ -259,6 +261,8 @@ func _run_host() -> void:
 		ok = await _stage_abilities()
 	if ok:
 		ok = await _stage_kill()
+	if ok:
+		ok = await _stage_respawn()
 	# Runs whatever happened above. The client is a live process that has to be
 	# told to stop, its tally has to reach this log, and the disconnect is the
 	# last check either way.
@@ -266,9 +270,9 @@ func _run_host() -> void:
 	await _finish()
 
 
-## 1/9. A client connects, and both sides notice.
+## 1/10. A client connects, and both sides notice.
 func _stage_connect() -> bool:
-	print("net_loopback: stage 1/9 — connection")
+	print("net_loopback: stage 1/10 — connection")
 	if not await _await_until("a peer to connect", JOIN_TIMEOUT,
 			func() -> bool: return not _peer_connected.is_empty()):
 		return false
@@ -285,14 +289,14 @@ func _stage_connect() -> bool:
 	return true
 
 
-## 2/9. Both sides hold the same roster, and the name got there through
+## 2/10. Both sides hold the same roster, and the name got there through
 ## `_request_join`.
 ##
 ## The client's copy is fetched over the control channel, which is this
 ## harness's own `@rpc` rather than the game's chat — if it were chat, a broken
 ## chat would look like a broken roster here and the real check would never run.
 func _stage_roster() -> bool:
-	print("net_loopback: stage 2/9 — roster replication")
+	print("net_loopback: stage 2/10 — roster replication")
 	_check("the roster has two players", Net.player_count(), 2)
 	var mine := _roster_digest()
 	var reply := await _request("roster", {}, STEP_TIMEOUT)
@@ -305,11 +309,11 @@ func _stage_roster() -> bool:
 	return true
 
 
-## 3/9. The client asked for a name the host already had, and `_unique_name`
+## 3/10. The client asked for a name the host already had, and `_unique_name`
 ## disambiguated it — on the host, where the decision belongs, and on the
 ## client, which only ever sees the answer.
 func _stage_names() -> bool:
-	print("net_loopback: stage 3/9 — name collision")
+	print("net_loopback: stage 3/10 — name collision")
 	_check("the host kept its name", Net.player_name(1), HOST_NAME)
 	_check("the host renamed the client", Net.player_name(_client_id),
 		CLIENT_UNIQUE_NAME)
@@ -325,11 +329,11 @@ func _stage_names() -> bool:
 	return true
 
 
-## 4/9. `MatchConfig.to_dict()` over the wire and `apply_dict` on the far side —
+## 4/10. `MatchConfig.to_dict()` over the wire and `apply_dict` on the far side —
 ## a flat Dictionary of primitives rather than a Resource, so that receiving one
 ## never means decoding an object (D-004).
 func _stage_config() -> bool:
-	print("net_loopback: stage 4/9 — config replication")
+	print("net_loopback: stage 4/10 — config replication")
 	var settings := Net.config.duplicate_config()
 	settings.map = CONFIG_MAP
 	settings.map_seed = CONFIG_SEED
@@ -358,10 +362,10 @@ func _stage_config() -> bool:
 	return true
 
 
-## 5/9. Chat in both directions, through `Net.send_chat`, asserting the text and
+## 5/10. Chat in both directions, through `Net.send_chat`, asserting the text and
 ## who it says sent it.
 func _stage_chat() -> bool:
-	print("net_loopback: stage 5/9 — chat both directions")
+	print("net_loopback: stage 5/10 — chat both directions")
 	var before := _chat.size()
 	if (await _request("say", {"text": CLIENT_CHAT}, STEP_TIMEOUT)).is_empty():
 		return false
@@ -390,11 +394,11 @@ func _stage_chat() -> bool:
 	return true
 
 
-## 6/9. Ready up, then start. `can_start_match()` refuses until every non-host
+## 6/10. Ready up, then start. `can_start_match()` refuses until every non-host
 ## peer has readied, so the client's `_request_ready` has to have arrived for
 ## this to be reachable at all.
 func _stage_match_start() -> bool:
-	print("net_loopback: stage 6/9 — match start")
+	print("net_loopback: stage 6/10 — match start")
 	_check("the host cannot start yet", Net.can_start_match(), false)
 	if (await _request("ready", {}, STEP_TIMEOUT)).is_empty():
 		return false
@@ -416,7 +420,7 @@ func _stage_match_start() -> bool:
 	return true
 
 
-## 7/9. The arena, and then the one thing no stage here had ever asked a
+## 7/10. The arena, and then the one thing no stage here had ever asked a
 ## *client* to do: use an ability.
 ##
 ## Both peers build the real island from the replicated seed, and then the
@@ -433,7 +437,7 @@ func _stage_match_start() -> bool:
 ## host sends it the instant *its own* island finishes. See the note below for
 ## how close that actually runs.
 func _stage_abilities() -> bool:
-	print("net_loopback: stage 7/9 — the arena, and the client's abilities in it")
+	print("net_loopback: stage 7/10 — the arena, and the client's abilities in it")
 	var started := Time.get_ticks_msec()
 	if not await _await_until("the host's arena", ARENA_TIMEOUT,
 			func() -> bool: return get_tree().current_scene is Arena):
@@ -535,16 +539,51 @@ func _stage_abilities() -> bool:
 	return true
 
 
-## 8/9. The host decides a death through `MatchState.report_kill` — the same
+## 8/10. The host decides a death through `MatchState.report_kill` — the same
 ## call a landed spear makes — and the client is asked what it saw.
 func _stage_kill() -> bool:
-	print("net_loopback: stage 8/9 — a kill over the wire")
+	print("net_loopback: stage 8/10 — a kill over the wire")
+	# Somewhere that is not the client's own spawn pad. Left where it spawned,
+	# the client dies on its pad and `_next_spawn` hands the same pad straight
+	# back — it is the one furthest from the host — so the respawn in stage 9
+	# would be a Gub revived exactly where its loot is, which cannot tell a
+	# respawn that picks things up from one that does not. The pad nearest the
+	# host that is not the host's own is far from wherever the next spawn will be.
+	var arena := get_tree().current_scene as Arena
+	var host_gub: Gub = MatchState.gubs.get(1)
+	if arena != null and is_instance_valid(host_gub):
+		var best := Vector3.INF
+		for pad: Transform3D in arena.spawn_points:
+			var away := pad.origin.distance_to(host_gub.global_position)
+			if away > 8.0 and (best == Vector3.INF
+					or away < best.distance_to(host_gub.global_position)):
+				best = pad.origin
+		if best != Vector3.INF:
+			var moved := await _request("move", {"to": best}, STEP_TIMEOUT)
+			if moved.is_empty():
+				return false
+			# Not "until it arrives": the lure from stage 7 may still be dragging it
+			# about. Where it ends up is fine, so long as stage 9 finds it was not
+			# the pad the respawn uses, and stage 9 checks that.
+			for i in 30:
+				await get_tree().physics_frame
 	var victim_gub: Gub = MatchState.gubs.get(_client_id)
 	var point := victim_gub.global_position if is_instance_valid(victim_gub) else Vector3.ZERO
+	_death_point = point
+	# The corpse has to leave the two things stage 9 needs lying on it: a robe,
+	# because the loot roll is forced to one (host only — `_drop_loot` is the
+	# only reader and it runs here), and a mushroom beside it, put down through
+	# the same `_spawn_drop` a rolled one comes out of. Between them they are both
+	# halves of what a respawn must not hand back — stock (D-032) and the Elder
+	# (D-038).
+	Net.config.elder_drop_chance = 1.0
 	# A blow with real speed in it: the corpse's flight is scaled by it, so a
 	# unit vector would leave the ragdoll path exercised but never pushed.
 	MatchState.report_kill(_client_id, 1, Gub.Cause.SPEAR, point,
 		Vector3.FORWARD * 18.0, "Spine1")
+	var spot: Vector3 = MatchState._drop_spot(point)
+	if spot != Vector3.INF:
+		MatchState._spawn_drop(Pickup.Kind.MUSHROOM, 0, spot)
 	_check("the host scored the kill", MatchState.kills(1), 1)
 	_check("the host recorded the death", MatchState.deaths(_client_id), 1)
 	_check("the host's own player_killed fired", _kills.size(), 1)
@@ -563,14 +602,87 @@ func _stage_kill() -> bool:
 	return true
 
 
-## 9/9. The client goes away and the host clears up after it. `Net.player_left`
+## 9/10. The client comes back with nothing in its hands, and the host's copy of
+## it comes back to where it actually is.
+##
+## A player's report: *"you spawn with either an item or the elder randomly, it
+## seems like after you die you respawn first where you died and picked it up
+## from there"*. The host revives its copy of a remote Gub at the pad, but the
+## owner's client is still dead until the reliable `_do_respawn` reaches it, and
+## goes on publishing its corpse's position until then; followed, those
+## snapshots put the host's live copy back on its own loot, and the `Pickup`
+## there handed it over. `Gub.sync_life` is what refuses them now (D-043).
+##
+## **Loopback cannot open that window, and this stage is not what guards it.**
+## Measured: the client's first snapshot after the revive already carries the
+## pad, because a round trip over 127.0.0.1 is shorter than a physics tick, and
+## the stage passed against the code with the bug in it. `combat_range respawn`
+## in the smoke gate is the guard; it plays a client 200 ms behind.
+##
+## What only this can check is the other side of that fix. A remote Gub that
+## refuses snapshots from the wrong life is a remote Gub that stands frozen for
+## the rest of the match if the two ends ever disagree about which life it is
+## in — so the host's copy is required to follow the client to wherever it
+## respawned, over a real socket, with the life number crossing it.
+func _stage_respawn() -> bool:
+	print("net_loopback: stage 9/10 — a respawn over the wire")
+	var gub: Gub = MatchState.gubs.get(_client_id)
+	if not _require("the host still has the client's Gub", is_instance_valid(gub)):
+		return false
+	var loot: Array[Pickup] = []
+	for item: Pickup in MatchState._pickups.values():
+		if is_instance_valid(item) and not item.is_taken() \
+				and item.global_position.distance_to(_death_point) < 3.0:
+			loot.append(item)
+	_check("the corpse left a robe and a mushroom", loot.size(), 2)
+
+	if not await _await_until("the client to respawn on the host", STEP_TIMEOUT,
+			func() -> bool: return gub.alive):
+		return false
+	# A second, which is the figure in the report and dozens of loopback round
+	# trips: long enough for a grant to have landed and for the copy to have
+	# caught up with its owner, or to have visibly failed to.
+	for i in 60:
+		await get_tree().physics_frame
+
+	var seen := await _request("respawn", {}, STEP_TIMEOUT)
+	if seen.is_empty():
+		return false
+	var there: Vector3 = seen.get("pos", Vector3.INF)
+	# Without this the rest can pass by accident: a Gub revived on the pad it died
+	# on never leaves its loot's catch volume, so never enters it either.
+	_check("the client respawned well away from its corpse",
+		there.distance_to(_death_point) > 6.0, true)
+	_check("the host's copy followed the client to where it respawned",
+		gub.global_position.distance_to(there) < 1.0, true)
+	_check("the host's copy is in the life the client is in",
+		gub.sync_life == gub.life and gub.life == MatchState.deaths(_client_id), true)
+	var taken := 0
+	for item: Pickup in loot:
+		if not is_instance_valid(item) or item.is_taken():
+			taken += 1
+	_check("nothing on the corpse was picked up by its owner", taken, 0)
+	var combat := gub.get_node_or_null("Combat") as GubCombat
+	_check("the host says the client holds no mushroom",
+		combat.mushroom_count() if combat != null else -1, 0)
+	_check("the host says the client is not the Elder", MatchState.is_elder(_client_id), false)
+	_check("the client agrees it holds no mushroom", int(seen.get("mushrooms", -1)), 0)
+	_check("the client agrees it holds no lure", int(seen.get("lures", -1)), 0)
+	_check("the client agrees it is not the Elder", bool(seen.get("elder", true)), false)
+	_check("the client is wearing no robe", bool(seen.get("robe", true)), false)
+	print("net_loopback:   peer %d respawned %.1f m from its loot with empty hands; the host's copy is %.2f m from it"
+		% [_client_id, there.distance_to(_death_point), gub.global_position.distance_to(there)])
+	return true
+
+
+## 10/10. The client goes away and the host clears up after it. `Net.player_left`
 ## and `MatchState._on_player_left` are the newest code in the networking layer
 ## and have never run against a socket.
 func _stage_disconnect() -> void:
 	if _client_id == 0 or not Net.has_player(_client_id):
-		print("net_loopback: stage 9/9 — skipped, no client to disconnect")
+		print("net_loopback: stage 10/10 — skipped, no client to disconnect")
 		return
-	print("net_loopback: stage 9/9 — disconnect")
+	print("net_loopback: stage 10/10 — disconnect")
 
 	# Its tally first, while it can still answer.
 	var tally := await _request("finish", {}, STEP_TIMEOUT)
@@ -743,6 +855,28 @@ func _serve(message: Dictionary) -> void:
 				reply["victim"] = int(kill[0])
 				reply["killer"] = int(kill[1])
 				reply["cause"] = int(kill[2])
+		"move":
+			var body := MatchState.local_gub()
+			if is_instance_valid(body):
+				body.global_position = payload.get("to", body.global_position) + Vector3.UP * 0.3
+				body.velocity = Vector3.ZERO
+				for i in 30:
+					await get_tree().physics_frame
+				reply["pos"] = body.global_position
+		"respawn":
+			var mine := MatchState.local_gub()
+			# Checked on the host from what is sent back, so this side only
+			# reports; the tally stays one place.
+			await _await_until("this client to be alive again", STEP_TIMEOUT,
+				func() -> bool: return is_instance_valid(mine) and mine.alive)
+			var combat: GubCombat = null
+			if is_instance_valid(mine):
+				combat = mine.get_node_or_null("Combat") as GubCombat
+			reply["mushrooms"] = combat.mushroom_count() if combat != null else -1
+			reply["lures"] = combat.lure_count() if combat != null else -1
+			reply["elder"] = MatchState.is_elder(Net.local_id())
+			reply["robe"] = is_instance_valid(mine) and mine.elder_robe != null
+			reply["pos"] = mine.global_position if is_instance_valid(mine) else Vector3.INF
 		"finish":
 			reply["checks"] = _checks
 			reply["failures"] = _failures

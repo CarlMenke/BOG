@@ -16,7 +16,7 @@
 # invite code the host prints, and reduces the pair to one PASS/FAIL.
 #
 # It currently exits non-zero, and that is the correct answer rather than a
-# broken tool: all nine stages pass, and the run then reports the engine errors
+# broken tool: all ten stages pass, and the run then reports the engine errors
 # raised by shipping code in `scripts/` that the offline peer had been hiding.
 # They are printed with an explanation apiece at the bottom of the run. When
 # they are fixed this goes green on its own; nothing here needs editing.
@@ -288,6 +288,6 @@ note_if "Unable to get unique ID" \
     "  a host who closed the lobby, logs three of these per frame until the" \
     "  scene finally changes."
 
-echo "net: FAIL   (the nine stages passed; the engine did not stay quiet)"
+echo "net: FAIL   (the ten stages passed; the engine did not stay quiet)"
 echo "net:        logs in $LOG_DIR"
 exit 1

@@ -184,6 +184,23 @@ check "a spear cannot kill the Elder" "ward PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- ward
 also "a spear cannot kill the Elder" "expiry PASS"
 also "a spear cannot kill the Elder" "control PASS"
+# A respawn hands back nothing (D-032, D-038, D-043). A player: "you spawn with
+# either an item or the elder randomly". The player dies holding a mushroom and
+# a dummy dies as the Elder holding one too, both off their spawn pads with loot
+# lying on both corpses; a second after both come back, nobody may hold, wear or
+# have picked up anything.
+#
+# The dummy is the half that caught it. It is a remote Gub, and the mode plays
+# its client 200 ms behind the host — still dead, still publishing the corpse,
+# a snapshot every other tick — which is the window the bug lived in: the
+# host's live copy was put back on its own loot and walked into it. Against the
+# code without `Gub.sync_life` this fails with the dummy holding a mushroom and
+# wearing the robe. `tools/net_loopback.gd` cannot open that window at all: a
+# loopback round trip is shorter than a physics tick.
+#
+# Headless, and it quits itself around tick 280.
+check "a respawn hands back nothing" "respawn PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- respawn
 # Menu to results screen, through the real scenes and the real autoloads. The
 # only check here that can notice a *join* coming apart — a lobby that never
 # hands off to the arena, an arena that never registers, a results screen that

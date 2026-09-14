@@ -783,7 +783,7 @@ func _run_elder() -> void:
 	_check("and off the body", _wearing_robe(901), false)
 
 	_revive(901)
-	MatchState._do_respawn(901, Transform3D.IDENTITY)
+	MatchState._do_respawn(901, Transform3D.IDENTITY, MatchState.deaths(901))
 	_check("respawning does not give it back", MatchState.is_elder(901), false)
 	if combat != null:
 		_check("and the spear is back", combat.has_spear(), true)
