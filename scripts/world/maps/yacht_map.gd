@@ -40,9 +40,36 @@ extends StaticMap
 ## every edge of the deck.
 ##
 ## Build order is the other built maps': everything added before `super()` is
-## swept into collision, everything after is dressing — the window glass, the
-## stair treads, the hot tub's water, the radar, and the sea. Nothing is random,
-## so every peer builds the same yacht by construction.
+## swept into collision, everything after is dressing. Nothing is random, so
+## every peer builds the same yacht by construction.
+##
+## The dressing is most of this file now, and it is what makes the map a place
+## rather than a model on a table (the atmosphere pass). In build order:
+##
+##   windows      dark glass bands round every deckhouse and a row of hull
+##                lights along the owner's deck.
+##   treads       the stairs' picture; their collision is a smooth ramp.
+##   details      the radar, the hot tub's water, the sheer line.
+##   sea          `_build_sea`, and it is the whole map. A displaced grid out to
+##                120 m with `yacht_sea.gdshader` on it: three sine waves in the
+##                vertex shader, four more per fragment, a Cox-Munk sun track
+##                that runs to the horizon, and the hull's foam and the shadow
+##                of her underwater body as a distance field rather than as
+##                geometry. 18,432 triangles, one draw call, no textures.
+##   anchorage    `_build_horizon`. Three headlands at three distances on the
+##                port side and three other boats at anchor, so that being 8.8 m
+##                up on the flybridge shows you somewhere and not a gradient.
+##                About 900 triangles, all of it in `BACKDROP_GROUP`.
+##   wind         `_build_wind`. The ensign at the transom, the burgee at the
+##                masthead, and the cable leading forward off the stem into the
+##                water. Everything that moves in the wind agrees with the
+##                swell's direction, because a yacht at anchor lies head to it.
+##   ambience     `YachtAmbience`. Six gulls on six circles, steam off the hot
+##                tub, and the audio hooks.
+##
+## Everything above costs, in total: one extra draw call for the sea, one for
+## the anchorage, one for the rigging, two for the flags, six for the gulls, one
+## particle system of 32, and one more directional light with no shadow map.
 
 # ------------------------------------------------------------------ levels ---
 
@@ -241,6 +268,7 @@ var _teak: StandardMaterial3D
 var _glass: StandardMaterial3D
 var _window: StandardMaterial3D
 var _chrome: StandardMaterial3D
+var _land: StandardMaterial3D
 var _water_material: ShaderMaterial
 
 var _hull_st: SurfaceTool
@@ -292,6 +320,9 @@ func _ready() -> void:
 	_build_windows(dressing)
 	_build_details(dressing)
 	_build_sea(dressing)
+	_build_horizon(dressing)
+	_build_wind(dressing)
+	YachtAmbience.build(dressing)
 
 
 # ------------------------------------------------------------------- hull ---
@@ -778,64 +809,403 @@ func _build_details(parent: Node3D) -> void:
 	water.mesh = disc
 	water.position = Vector3(TUB_AT.x, SUN_Y + TUB_HEIGHT + 0.012, TUB_AT.y)
 	var tub_water := StandardMaterial3D.new()
-	tub_water.albedo_color = Color(0.25, 0.78, 0.86)
-	tub_water.roughness = 0.05
+	tub_water.albedo_color = Color(0.13, 0.52, 0.60)
+	tub_water.roughness = 0.04
 	tub_water.emission_enabled = true
-	tub_water.emission = Color(0.1, 0.45, 0.55)
-	tub_water.emission_energy_multiplier = 0.4
+	tub_water.emission = Color(0.08, 0.34, 0.42)
+	tub_water.emission_energy_multiplier = 0.12
 	water.material_override = tub_water
 	water.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	parent.add_child(water)
 
 
-## The sea: one big quad at `WATER_Y`, out past where the fog closes, with a
-## foam line round the hull where it meets the water. Not collision, and in
-## `StaticMap.BACKDROP_GROUP` so `preview_map` frames the yacht and not the sea.
-## 2.4 km across, so its edge is under the fog from anywhere on board.
+## The sea, and it is the biggest thing on the map by a long way: a displaced
+## grid `SEA_REACH` metres out from the yacht in every direction, and a flat
+## skirt from the grid's rim to the horizon. Not collision — nothing built after
+## `super()` is — and in `StaticMap.BACKDROP_GROUP` so `preview_map` frames the
+## yacht and not the ocean.
+##
+## Why a grid at all. The sea used to be a `PlaneMesh`: two triangles, a
+## scrolling noise normal, and the single thing most wrong with this map. A
+## yacht on a flat pane of colour is a model on a table, and normal-mapping does
+## not fix it, because the eye reads *silhouette* before it reads shading — the
+## horizon has to have crests in it and the rail has to have water moving past
+## it. So the surface moves for real out to where a wave is smaller than a
+## pixel, and past that the shader's slope-for-roughness trade takes over
+## (`yacht_sea.gdshader`).
+##
+## The budget, deliberately: 96 x 96 cells is 18,432 triangles, welded, one draw
+## call, one material, opaque, casting no shadow, with no transparency, no
+## sorting and no texture memory at all. The yacht above it is 2,225 triangles,
+## so the sea is eight times the map — the right ratio for a map whose subject
+## is the sea. Three sine waves per vertex and four per fragment; the old plane
+## sampled two normal textures per fragment, so the pixel cost is a wash and the
+## vertex cost is new.
+const SEA_REACH := 120.0
+const SEA_CELL := 2.5
+## Where the sea ends, under the fog. At `fog_density` 0.0025 three per cent of
+## the light from 1.4 km away survives, so the skirt's rim is the fog's colour
+## to within a rounding error and the horizon has no seam in it.
+const SEA_HORIZON := 1400.0
+
+
 func _build_sea(parent: Node3D) -> void:
-	var sea := MeshInstance3D.new()
-	sea.name = "Sea"
-	var plane := PlaneMesh.new()
-	plane.size = Vector2(2400.0, 2400.0)
-	sea.mesh = plane
-	sea.position = Vector3(0.0, WATER_Y, 0.0)
-	sea.material_override = _water_material
+	var st := _begin()
+	var cells := int(round(SEA_REACH * 2.0 / SEA_CELL))
+	for i: int in cells:
+		var x0 := -SEA_REACH + float(i) * SEA_CELL
+		var x1 := x0 + SEA_CELL
+		for j: int in cells:
+			var z0 := -SEA_REACH + float(j) * SEA_CELL
+			var z1 := z0 + SEA_CELL
+			_quad(st, Vector3(x0, WATER_Y, z0), Vector3(x1, WATER_Y, z0),
+				Vector3(x1, WATER_Y, z1), Vector3(x0, WATER_Y, z1), Vector3.UP, Color.WHITE)
+	# The skirt: four trapezoids out to the horizon. The shader fades the swell
+	# to exactly nothing before the grid's rim, so these meet it flat — the rim
+	# has 97 vertices along each edge and the skirt has two, and there is still
+	# no crack, because every one of those 97 is at `WATER_Y` by then.
+	for side: int in 4:
+		var turn := float(side) * TAU * 0.25
+		var co := cos(turn)
+		var si := sin(turn)
+		var out: Array[Vector3] = []
+		for q: Vector2 in [Vector2(-SEA_HORIZON, -SEA_HORIZON), Vector2(SEA_HORIZON, -SEA_HORIZON),
+				Vector2(SEA_REACH, -SEA_REACH), Vector2(-SEA_REACH, -SEA_REACH)]:
+			out.append(Vector3(q.x * co - q.y * si, WATER_Y, q.x * si + q.y * co))
+		_quad(st, out[0], out[1], out[2], out[3], Vector3.UP, Color.WHITE)
+	# Welded. Every cell corner is shared by four quads with the same normal,
+	# colour and planar UV, so indexing cuts the vertex count — and the wave
+	# maths that runs on each one — by very nearly four.
+	st.index()
+	var sea := _commit(parent, "Sea", st, _water_material)
 	sea.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	sea.add_to_group(BACKDROP_GROUP)
-	parent.add_child(sea)
 
-	# Foam: a ring a little outside the waterline, from the stem round the
-	# transom.
+
+
+# ----------------------------------------------------------------- horizon ---
+
+## The anchorage. Halcyon Wake is not in the middle of an ocean — she is lying a
+## few hundred metres off a headland with the sun coming over her starboard bow,
+## and until now the map said that nowhere: the sea faded into fog and the world
+## stopped. From 8.8 m up on the flybridge that is the whole difference between
+## a view and a backdrop, and this map is *about* being 8.8 m up.
+##
+## Three masses of land at three distances, overlapping in bearing, and the
+## aerial perspective does the rest of the work: at 430 m the fog leaves a third
+## of the hill's own colour, at 900 m a tenth, so the near headland is a solid
+## grey-violet and the far range is barely a stain on the haze — and the eye
+## reads the gap between them as miles. That is also why they are not one ridge.
+##
+## Bearings are degrees anticlockwise from the starboard beam: 0 is +x, 90 is
+## the stern, 180 is port, 270 is the bow. All of this land is on the port side
+## and across the stern, because the sun bears 322 and the sector its track runs
+## out through has to stay empty water. That view — the flybridge, down-sun,
+## nothing out there at all — is the best thing on the map and a hill in it
+## would be vandalism.
+##
+## None of it is collision. It is added after `super()` and it is in
+## `BACKDROP_GROUP`, so `preview_map` still frames the yacht and
+## `parkour_report`'s overboard check still finds nothing but void over the
+## side — that check asks the physics server, and the physics server has never
+## heard of any of this.
+const COAST: Array[Dictionary] = [
+	{"label": "near head", "from": 116.0, "to": 216.0, "radius": 330.0, "peak": 44.0,
+		"phase": 0.0, "tint": Color(0.085, 0.080, 0.085)},
+	{"label": "middle ground", "from": 92.0, "to": 176.0, "radius": 560.0, "peak": 74.0,
+		"phase": 2.1, "tint": Color(0.125, 0.120, 0.135)},
+	{"label": "far range", "from": 152.0, "to": 254.0, "radius": 880.0, "peak": 122.0,
+		"phase": 4.3, "tint": Color(0.20, 0.19, 0.22)},
+]
+
+## Other people, at anchor, in the open water the coast leaves. Three, at three
+## distances, because one boat on a horizon is a prop and three is a place where
+## boats go: a sloop close enough to read as a boat, a gulet far enough to be a
+## shape, and a coaster far enough to be a smudge. The sloop's mast is the point
+## of her — a vertical line is the one thing a sea horizon has none of, and the
+## eye goes straight to it.
+##
+## `at` is (x, z) in metres and `heading` is degrees. They lie every way but the
+## same way, which is what an anchorage looks like and a marina does not.
+const VESSELS: Array[Dictionary] = [
+	{"label": "sloop", "at": Vector2(-98.0, -128.0), "heading": -14.0, "length": 12.5,
+		"beam": 3.6, "freeboard": 1.5, "house": 0.85, "mast": 16.5,
+		"hull": Color(0.88, 0.88, 0.86)},
+	{"label": "gulet", "at": Vector2(196.0, 176.0), "heading": 22.0, "length": 22.0,
+		"beam": 5.6, "freeboard": 2.2, "house": 2.4, "mast": 0.0,
+		"hull": Color(0.86, 0.85, 0.82)},
+	{"label": "coaster", "at": Vector2(-320.0, 540.0), "heading": -62.0, "length": 52.0,
+		"beam": 9.5, "freeboard": 4.6, "house": 6.0, "mast": 0.0,
+		"hull": Color(0.40, 0.42, 0.44)},
+]
+
+
+func _build_horizon(parent: Node3D) -> void:
 	var st := _begin()
-	var y := WATER_Y + 0.03
-	var z := WATERLINE_BOW_Z
-	var foam := Color(0.92, 0.96, 0.97)
-	while z < STERN_Z:
-		var z2 := minf(z + 1.0, STERN_Z)
-		for side: float in [-1.0, 1.0]:
-			var ia := waterline_half_width(z) * 1.06 + 0.05
-			var ib := waterline_half_width(z2) * 1.06 + 0.05
-			var oa := ia + 0.9
-			var ob := ib + 0.9
-			_quad(st, Vector3(ia * side, y, z), Vector3(ib * side, y, z2),
-				Vector3(ob * side, y, z2), Vector3(oa * side, y, z), Vector3.UP, foam)
-		z = z2
-	var tip := Vector3(0.0, y, WATERLINE_BOW_Z - 1.2)
-	for side: float in [-1.0, 1.0]:
-		_tri(st, tip, Vector3(0.95 * side, y, WATERLINE_BOW_Z), Vector3(0.05 * side, y,
-			WATERLINE_BOW_Z), Vector3.UP, foam)
-	_quad(st, Vector3(-WATERLINE_BEAM - 0.95, y, STERN_Z), Vector3(WATERLINE_BEAM + 0.95, y, STERN_Z),
-		Vector3(WATERLINE_BEAM + 0.95, y, STERN_Z + 1.4), Vector3(-WATERLINE_BEAM - 0.95, y,
-		STERN_Z + 1.4), Vector3.UP, foam)
-	var foam_material := StandardMaterial3D.new()
-	foam_material.vertex_color_use_as_albedo = true
-	foam_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	foam_material.albedo_color = Color(1.0, 1.0, 1.0, 0.55)
-	foam_material.roughness = 0.9
-	foam_material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	var node := _commit(parent, "Foam", st, foam_material)
+	for entry: Dictionary in COAST:
+		_coastline(st, entry)
+	for entry: Dictionary in VESSELS:
+		_vessel(st, entry)
+	var node := _commit(parent, "Anchorage", st, _land)
 	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	node.add_to_group(BACKDROP_GROUP)
+
+
+## One headland, as a curtain of quads from the water up to a skyline. The
+## skyline is a half-sine with two harmonics on it, so it has a summit, a
+## shoulder and a saddle rather than being a smooth hump — which is the whole
+## difference between a hill and a pile.
+func _coastline(st: SurfaceTool, entry: Dictionary) -> void:
+	var steps := 80
+	var from := deg_to_rad(float(entry["from"]))
+	var to := deg_to_rad(float(entry["to"]))
+	var radius := float(entry["radius"])
+	var peak := float(entry["peak"])
+	var phase := float(entry["phase"])
+	var tint: Color = entry["tint"]
+	var prev_foot := Vector3.ZERO
+	var prev_top := Vector3.ZERO
+	for i: int in steps + 1:
+		var t := float(i) / float(steps)
+		var ang := lerpf(from, to, t)
+		var r := radius * (1.0 + 0.09 * sin(t * TAU * 1.7 + phase))
+		var foot := Vector3(cos(ang) * r, WATER_Y, sin(ang) * r)
+		var top := foot + Vector3.UP * (peak * _coast_height(t, phase))
+		if i > 0:
+			var outward := -(foot + prev_foot) * 0.5
+			outward.y = 0.0
+			# The ridge is the *dark* part and the foot is the washed-out one:
+			# at this distance the haze pools at sea level, so a coast reads as
+			# a defined skyline standing on nothing. Doing it the other way
+			# round — which is the instinct, because the sun is up there — turns
+			# every headland into a meringue.
+			_haze_quad(st, prev_foot, foot, top, prev_top, outward.normalized(),
+				tint.lightened(0.30), tint)
+		prev_foot = foot
+		prev_top = top
+
+
+## A quad whose bottom edge is one colour and whose top edge is another, wound
+## to face `outward`. Only the coast needs this, and only because the gradient
+## from haze at the waterline to rock at the ridge is the whole of what makes a
+## distant headland read as land.
+static func _haze_quad(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3,
+		outward: Vector3, low: Color, high: Color) -> void:
+	var n := (b - a).cross(c - a)
+	if n.length_squared() < 1e-10:
+		return
+	var flip := n.dot(outward) > 0.0
+	var normal := n.normalized() * (1.0 if flip else -1.0)
+	var order: Array = [[a, low], [c, high], [b, low], [a, low], [d, high], [c, high]] if flip 		else [[a, low], [b, low], [c, high], [a, low], [c, high], [d, high]]
+	for item: Array in order:
+		st.set_color(item[1])
+		st.set_normal(normal)
+		st.set_uv(Vector2((item[0] as Vector3).x, (item[0] as Vector3).y) * 0.01)
+		st.add_vertex(item[0])
+
+
+static func _coast_height(t: float, phase: float) -> float:
+	var bump := pow(sin(PI * clampf(t, 0.0, 1.0)), 0.45)
+	var ridges := 0.55 + 0.45 * sin(t * TAU * 2.3 + phase)
+	var detail := 0.74 + 0.26 * sin(t * TAU * 6.1 + phase * 1.7)
+	var crags := 0.88 + 0.12 * sin(t * TAU * 13.7 + phase * 2.9)
+	return bump * ridges * detail * crags
+
+
+## One other boat: a hull with a pointed stem, a deckhouse, and a mast if she is
+## the kind that has one.
+func _vessel(st: SurfaceTool, entry: Dictionary) -> void:
+	var at: Vector2 = entry["at"]
+	var yaw := deg_to_rad(float(entry["heading"]))
+	var length := float(entry["length"])
+	var beam := float(entry["beam"])
+	var top := WATER_Y + float(entry["freeboard"])
+	var hull: Color = entry["hull"]
+	var centre := Vector3(at.x, 0.0, at.y)
+	# Plan outline, bow at -z: stem, two shoulders, two quarters.
+	var plan: Array[Vector2] = [
+		Vector2(0.0, -length * 0.5),
+		Vector2(beam * 0.5, -length * 0.18),
+		Vector2(beam * 0.5, length * 0.5),
+		Vector2(-beam * 0.5, length * 0.5),
+		Vector2(-beam * 0.5, -length * 0.18),
+	]
+	_prism(st, centre, yaw, plan, WATER_Y, top, hull)
+	var house := float(entry["house"])
+	if house > 0.0:
+		var hl := length * 0.15
+		var hb := beam * 0.31
+		_prism(st, centre, yaw, [Vector2(-hb, -hl), Vector2(hb, -hl), Vector2(hb, hl),
+			Vector2(-hb, hl)], top, top + house, hull.darkened(0.08))
+	var mast := float(entry["mast"])
+	if mast > 0.0:
+		var t := 0.13
+		_prism(st, centre, yaw, [Vector2(-t, -t), Vector2(t, -t), Vector2(t, t),
+			Vector2(-t, t)], top, top + mast, Color(0.82, 0.82, 0.80))
+		# A boom, because a bare stick reads as an aerial and a stick with a
+		# boom on it reads as a boat that sails.
+		_prism(st, centre, yaw, [Vector2(-0.09, 0.0), Vector2(0.09, 0.0),
+			Vector2(0.09, length * 0.3), Vector2(-0.09, length * 0.3)],
+			top + mast * 0.12, top + mast * 0.12 + 0.18, Color(0.82, 0.82, 0.80))
+
+
+## An extruded plan outline, turned by `yaw` about `centre`: the shape every
+## distant boat and deckhouse here is made of.
+func _prism(st: SurfaceTool, centre: Vector3, yaw: float, plan: Array, base: float,
+		top: float, colour: Color) -> void:
+	var ring: Array[Vector3] = []
+	for p: Vector2 in plan:
+		ring.append(_turn(centre, yaw, p))
+	for i: int in ring.size():
+		var a := ring[i]
+		var b := ring[(i + 1) % ring.size()]
+		var outward := (a + b) * 0.5 - centre
+		outward.y = 0.0
+		if outward.length_squared() < 1e-8:
+			outward = Vector3.RIGHT
+		_quad(st, Vector3(a.x, base, a.z), Vector3(b.x, base, b.z),
+			Vector3(b.x, top, b.z), Vector3(a.x, top, a.z), outward.normalized(), colour)
+	var cap := Vector3(0.0, 0.0, 0.0)
+	for p: Vector3 in ring:
+		cap += p
+	cap /= float(ring.size())
+	for i: int in ring.size():
+		var a := ring[i]
+		var b := ring[(i + 1) % ring.size()]
+		_tri(st, Vector3(cap.x, top, cap.z), Vector3(a.x, top, a.z), Vector3(b.x, top, b.z),
+			Vector3.UP, colour.lightened(0.06))
+
+
+static func _turn(centre: Vector3, yaw: float, local: Vector2) -> Vector3:
+	var c := cos(yaw)
+	var s := sin(yaw)
+	return Vector3(centre.x + local.x * c - local.y * s, 0.0,
+		centre.z + local.x * s + local.y * c)
+
+
+# -------------------------------------------------------------------- wind ---
+
+## Everything on a yacht at anchor that moves, moves in the wind, and all of it
+## has to agree. She lies head to her cable, so: the swell in
+## `yacht_sea.gdshader` runs bow to stern, the ensign at the transom streams
+## aft, the burgee at the masthead streams aft, and the cable leads forward off
+## the stem into the water. Get one of those backwards and the whole scene stops
+## being a place.
+##
+## The ensign is also the only saturated warm colour on a map made entirely of
+## white, blue and teak, and it flies over Team 2's base — so from four decks up
+## it doubles as the thing that says which end of the boat you are looking at.
+const ENSIGN_AT := Vector3(4.8, 1.0, 25.9)
+const ENSIGN_STAFF := 2.4
+const ENSIGN_SIZE := Vector2(1.9, 1.15)
+const BURGEE_SIZE := Vector2(1.0, 0.42)
+## Where the cable leaves the bow and where it goes into the water.
+const CABLE_HAWSE := Vector3(0.55, 1.30, -35.4)
+const CABLE_ENTRY := Vector3(-7.5, WATER_Y, -52.0)
+
+
+func _build_wind(parent: Node3D) -> void:
+	var st := _begin()
+	# The ensign staff, raked aft the way one always is.
+	var rake := deg_to_rad(18.0)
+	var head := ENSIGN_AT + Vector3(0.0, cos(rake) * ENSIGN_STAFF, sin(rake) * ENSIGN_STAFF)
+	_strut(st, ENSIGN_AT, head, 0.045, Color(0.86, 0.86, 0.84))
+	# The cable, as a catenary of short links from the hawse into the water. It
+	# is the one prop that says *at anchor* rather than *adrift*, and it gives
+	# the sea somewhere to be entered rather than only looked at.
+	var links := 18
+	var prev := CABLE_HAWSE
+	for k: int in links:
+		var t := float(k + 1) / float(links)
+		var p := CABLE_HAWSE.lerp(CABLE_ENTRY, t)
+		p.y -= 0.8 * sin(PI * t)
+		_strut(st, prev, p, 0.055, Color(0.22, 0.22, 0.23))
+		prev = p
+	var rig := _commit(parent, "Rigging", st, _paint)
+	rig.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+	_flag(parent, "Ensign", head + Vector3(0.0, -0.10, 0.05), ENSIGN_SIZE,
+		_flag_image(Color(0.62, 0.09, 0.12), Color(0.06, 0.10, 0.22), Color(0.94, 0.90, 0.78)),
+		5.2, 0.13)
+	_flag(parent, "Burgee", Vector3(MAST_AT.x + 0.16, MAST_TOP - 0.3, MAST_AT.y),
+		BURGEE_SIZE,
+		_flag_image(Color(0.62, 0.09, 0.12), Color(0.94, 0.90, 0.78), Color(0.06, 0.10, 0.22)),
+		7.4, 0.09)
+
+
+## One flag: a quad subdivided along its length, hoisted at its left edge and
+## flying aft. 66 vertices each, and the wave that moves them is in
+## `yacht_cloth.gdshader`. UVs are set by hand here rather than taken from
+## `_planar_uv`, because the shader needs to know where the hoist is.
+func _flag(parent: Node3D, called: String, hoist: Vector3, size: Vector2, pattern: Texture2D,
+		speed: float, amount: float) -> void:
+	var st := _begin()
+	var spans := 11
+	for i: int in spans:
+		var u0 := float(i) / float(spans)
+		var u1 := float(i + 1) / float(spans)
+		var x0 := u0 * size.x
+		var x1 := u1 * size.x
+		for corner: Array in [[x0, 0.0, u0, 1.0], [x1, size.y, u1, 0.0], [x1, 0.0, u1, 1.0],
+				[x0, 0.0, u0, 1.0], [x0, size.y, u0, 0.0], [x1, size.y, u1, 0.0]]:
+			st.set_color(Color.WHITE)
+			st.set_normal(Vector3.BACK)
+			st.set_uv(Vector2(corner[2], corner[3]))
+			st.add_vertex(Vector3(corner[0], corner[1] - size.y, 0.0))
+	var material := ShaderMaterial.new()
+	material.shader = CLOTH_SHADER
+	material.set_shader_parameter("pattern", pattern)
+	material.set_shader_parameter("flap_speed", speed)
+	material.set_shader_parameter("flap_amount", amount)
+	material.set_shader_parameter("flag_length", size.x)
+	material.set_shader_parameter("droop", size.x * 0.07)
+	var node := _commit(parent, called, st, material)
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# The cloth's own x runs from the hoist to the fly, so the mesh is turned to
+	# lie fore-and-aft and hung at the head of its staff.
+	node.position = hoist
+	node.rotation.y = -PI * 0.5
+
+
+## A square-section strut from `a` to `b`. The ensign staff and every link of
+## the cable are the same shape at different scales.
+func _strut(st: SurfaceTool, a: Vector3, b: Vector3, radius: float, colour: Color) -> void:
+	var along := b - a
+	if along.length_squared() < 1e-8:
+		return
+	var dir := along.normalized()
+	var side := dir.cross(Vector3.UP)
+	if side.length_squared() < 1e-6:
+		side = Vector3.RIGHT
+	side = side.normalized() * radius
+	var up := dir.cross(side).normalized() * radius
+	var corners: Array[Vector3] = [side + up, side - up, -side - up, -side + up]
+	for i: int in 4:
+		var c0 := corners[i]
+		var c1 := corners[(i + 1) % 4]
+		var mid := (c0 + c1) * 0.5
+		_quad(st, a + c0, b + c0, b + c1, a + c1, mid.normalized(), colour)
+
+
+## A flag's cloth, as a small image: a field, a canton in the upper hoist and a
+## band across the fly. Generated rather than painted, so there is nothing to
+## import, nothing to lose, and no real country's ensign to get wrong.
+static func _flag_image(field: Color, canton: Color, mark: Color) -> ImageTexture:
+	var w := 64
+	var h := 40
+	var image := Image.create(w, h, false, Image.FORMAT_RGB8)
+	for x: int in w:
+		for y: int in h:
+			var c := field
+			if x < w / 3 and y < h / 2:
+				c = canton
+			elif absi(y - h / 2) < 3 and x > w / 3:
+				c = mark
+			# A little shading toward the hoist, so the cloth does not read flat
+			# even before the wave gets to it.
+			image.set_pixel(x, y, c.darkened(0.12 * (1.0 - float(x) / float(w))))
+	image.generate_mipmaps()
+	return ImageTexture.create_from_image(image)
 
 
 # ------------------------------------------------------------------ meshes ---
@@ -917,6 +1287,23 @@ func _group(named: String, under: Node3D = null) -> Node3D:
 
 # --------------------------------------------------------------- materials ---
 
+## The sea's shader, in its own file rather than in a string constant here. It
+## is 150 lines of commented GLSL and it is the single largest art decision on
+## this map; a `const WATER_SHADER := """…"""` is where a shader goes to stop
+## being read.
+const SEA_SHADER := preload("res://resources/shaders/yacht_sea.gdshader")
+## The flags' shader. Two sines a vertex over 132 vertices; it is the cheapest
+## motion on the map and the only one a player can see from inside the salon.
+const CLOTH_SHADER := preload("res://resources/shaders/yacht_cloth.gdshader")
+## Teak, from Poly Haven (CC0; `assets/maps/yacht/SOURCES.md`). The grain is
+## photographed and the plank layout is generated, and `_teak_image` multiplies
+## one into the other at load — see there for why that is one texture and not
+## two materials.
+const TEAK_GRAIN := preload("res://assets/maps/yacht/teak_veneer_diff_1k.jpg")
+const TEAK_NORMAL := preload("res://assets/maps/yacht/teak_veneer_nor_gl_1k.jpg")
+const TEAK_ROUGH := preload("res://assets/maps/yacht/teak_veneer_rough_1k.jpg")
+
+
 func _build_materials() -> void:
 	# Painted gelcoat: everything white, navy and oxide on the yacht is vertex
 	# colour on this one material.
@@ -928,14 +1315,21 @@ func _build_materials() -> void:
 	_paint.clearcoat = 0.4
 	_paint.cull_mode = BaseMaterial3D.CULL_BACK
 
+	var deck := _teak_maps()
 	_teak = StandardMaterial3D.new()
-	_teak.albedo_color = Color(0.80, 0.62, 0.42)
-	_teak.albedo_texture = ImageTexture.create_from_image(_teak_image())
-	_teak.roughness = 0.78
+	_teak.albedo_color = Color(0.80, 0.77, 0.70)
+	_teak.albedo_texture = deck[0]
+	_teak.normal_enabled = true
+	_teak.normal_texture = deck[1]
+	_teak.normal_scale = 1.0
+	_teak.roughness = 0.92
+	_teak.roughness_texture = TEAK_ROUGH
+	_teak.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
+	_teak.uv1_scale = Vector3(1.2 / TEAK_TILE, 1.2 / TEAK_TILE, 1.0)
 	_teak.cull_mode = BaseMaterial3D.CULL_BACK
 
 	_glass = StandardMaterial3D.new()
-	_glass.albedo_color = Color(0.55, 0.72, 0.78, 0.32)
+	_glass.albedo_color = Color(0.70, 0.82, 0.86, 0.20)
 	_glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_glass.roughness = 0.05
 	_glass.metallic = 0.3
@@ -946,76 +1340,113 @@ func _build_materials() -> void:
 	_window.roughness = 0.1
 	_window.metallic = 0.35
 
+	# Land eight hundred metres off, and the boats between here and it. Matte,
+	# lit, and left to the fog: at this distance the fog is nine tenths of the
+	# colour, so what this material is actually for is holding the *slope*
+	# shading that tells a headland from a cut-out.
+	_land = StandardMaterial3D.new()
+	_land.vertex_color_use_as_albedo = true
+	_land.roughness = 1.0
+	_land.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+	_land.cull_mode = BaseMaterial3D.CULL_BACK
+
 	_chrome = StandardMaterial3D.new()
 	_chrome.albedo_color = Color(0.78, 0.80, 0.82)
 	_chrome.metallic = 0.9
 	_chrome.roughness = 0.22
 
-	var shader := Shader.new()
-	shader.code = WATER_SHADER
+	# The sea. `sun_direction` is read off the `Sun` node rather than from
+	# LIGHT0 in the shader, because this map now has two directional lights — the
+	# sun and the fill bounced off the water — and the order Godot registers them
+	# in is not a thing to hang the sun track on.
 	_water_material = ShaderMaterial.new()
-	_water_material.shader = shader
-	var noise := FastNoiseLite.new()
-	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
-	noise.frequency = 0.02
-	noise.fractal_octaves = 3
-	noise.seed = 0x5EA
-	var ripple := NoiseTexture2D.new()
-	ripple.noise = noise
-	ripple.seamless = true
-	ripple.as_normal_map = true
-	ripple.bump_strength = 6.0
-	ripple.width = 256
-	ripple.height = 256
-	_water_material.set_shader_parameter("ripple", ripple)
+	_water_material.shader = SEA_SHADER
+	var sun := get_node_or_null("Sun") as DirectionalLight3D
+	if sun != null:
+		_water_material.set_shader_parameter("sun_direction",
+			sun.global_transform.basis.z.normalized())
+		_water_material.set_shader_parameter("sun_color", sun.light_color)
+	# The hull's waterline, so the shader can draw the foam and the shadow of the
+	# boat's underwater body as a distance field instead of as geometry.
+	_water_material.set_shader_parameter("wl_beam", WATERLINE_BEAM)
+	_water_material.set_shader_parameter("wl_bow_z", WATERLINE_BOW_Z)
+	_water_material.set_shader_parameter("wl_taper_z", TAPER_Z)
+	_water_material.set_shader_parameter("wl_stern_z", STERN_Z)
 
 
-## Teak planks along the deck with black caulking between them: eight planks to
-## a 1.2 m tile, each with a butt joint somewhere along it.
-func _teak_image() -> Image:
-	var size := 128
-	var image := Image.create(size, size, false, Image.FORMAT_RGB8)
-	var plank := size / 8
-	for x: int in size:
+## The deck. Photographed teak grain from Poly Haven, the plank layout from
+## arithmetic, and the two multiplied into one texture at load rather than
+## carried as two materials — because the grain has to tile at about two metres
+## and the caulking has to land exactly every 150 mm, and a
+## `StandardMaterial3D` cannot give two textures two different scales.
+##
+## The seams go into the **normal** map as well as the albedo, and that is the
+## half that earns the download. The sun is 38 degrees up: a 3 mm groove every
+## 150 mm across forty metres of deck throws a line of shadow along the whole
+## of it, and a deck with lines of shadow in it reads as laid planks instead of
+## as printed wallpaper. The old procedural deck had the lines and no groove,
+## which is why it looked like lino from anywhere but straight down.
+##
+## 2.4 m to a tile so the photographed grain repeats every 2.4 m rather than
+## every 1.2 — `_planar_uv` projects one UV unit per 1.2 m, so `uv1_scale` is a
+## half. 512 px is 213 px/m, which puts four pixels across a caulk seam.
+const TEAK_TILE := 2.4
+const TEAK_PLANKS := 16
+const TEAK_RES := 512
+## How wide the groove is, in pixels of the baked texture, and how deep it
+## leans the normal.
+const TEAK_SEAM := 0.9
+const TEAK_GROOVE := 0.34
+
+
+## Both deck maps in one pass, because they share the plank arithmetic: albedo
+## with the caulking multiplied into the grain, and a normal with the grooves
+## added to it. Returns [albedo, normal].
+func _teak_maps() -> Array:
+	var res := TEAK_RES
+	var grain := _texture_image(TEAK_GRAIN, res)
+	var bumps := _texture_image(TEAK_NORMAL, res)
+	var albedo := Image.create(res, res, true, Image.FORMAT_RGB8)
+	var normal := Image.create(res, res, true, Image.FORMAT_RGB8)
+	var plank := res / TEAK_PLANKS
+	for x: int in res:
 		var row := x / plank
-		var seam := x % plank == 0
-		var butt := (row * 37) % size
-		for y: int in size:
-			var grain := 0.86 + 0.08 * sin(float(y) * 0.21 + float(row) * 2.3) \
-				+ 0.04 * sin(float(x) * 1.7)
-			var shade := 0.18 if seam or absi(y - butt) == 0 else grain
-			image.set_pixel(x, y, Color(shade, shade, shade))
-	image.generate_mipmaps()
+		var into := x % plank
+		# Pixels to the nearest seam, and which way the groove leans there.
+		var edge := float(mini(into, plank - 1 - into))
+		var groove := clampf(1.0 - edge / TEAK_SEAM, 0.0, 1.0)
+		var lean := groove * (1.0 if into < plank / 2 else -1.0)
+		for y: int in res:
+			# One butt joint per plank, staggered along the deck the way a real
+			# one is so the joints never line up across it.
+			var butt := absf(float((y + row * 97) % res) - float(res) * 0.5)
+			var joint := clampf(1.0 - butt / 1.6, 0.0, 1.0)
+			var dark := maxf(groove, joint)
+			var base := grain.get_pixel(x, y) if grain != null else Color(0.72, 0.55, 0.36)
+			albedo.set_pixel(x, y, base.lerp(Color(0.135, 0.125, 0.115), dark * 0.88))
+			var n := bumps.get_pixel(x, y) if bumps != null else Color(0.5, 0.5, 1.0)
+			normal.set_pixel(x, y, Color(
+				clampf(n.r + lean * TEAK_GROOVE * 0.5, 0.0, 1.0),
+				clampf(n.g - joint * TEAK_GROOVE * 0.25, 0.0, 1.0),
+				n.b))
+	albedo.generate_mipmaps()
+	normal.generate_mipmaps()
+	return [ImageTexture.create_from_image(albedo), ImageTexture.create_from_image(normal)]
+
+
+## An imported texture as a plain RGB8 image at `res`, or null if the import
+## did not produce one — in which case `_teak_maps` falls back to flat colour
+## and a flat normal and the deck is the deck it was before the download.
+static func _texture_image(texture: Texture2D, res: int) -> Image:
+	if texture == null:
+		return null
+	var image := texture.get_image()
+	if image == null:
+		return null
+	image = image.duplicate() as Image
+	if image.is_compressed():
+		if image.decompress() != OK:
+			return null
+	image.convert(Image.FORMAT_RGB8)
+	image.resize(res, res, Image.INTERPOLATE_LANCZOS)
 	return image
-
-
-## Deep open water: dark blue straight down, lighter and bluer toward the
-## horizon, two scrolling ripple normals and a sharp sun glint. Opaque on
-## purpose — it is the floor of the void, not a pool.
-const WATER_SHADER := """
-shader_type spatial;
-render_mode cull_back;
-
-uniform sampler2D ripple : hint_normal, repeat_enable, filter_linear_mipmap;
-uniform vec3 deep : source_color = vec3(0.015, 0.11, 0.24);
-uniform vec3 shallow : source_color = vec3(0.04, 0.34, 0.50);
-
-varying vec3 world;
-
-void vertex() {
-	world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-}
-
-void fragment() {
-	vec2 p = world.xz;
-	vec3 a = texture(ripple, p * 0.035 + vec2(TIME * 0.004, TIME * 0.003)).xyz;
-	vec3 b = texture(ripple, p * 0.09 - vec2(TIME * 0.006, -TIME * 0.005)).xyz;
-	NORMAL_MAP = normalize(a + b - 1.0) * 0.5 + 0.5;
-	NORMAL_MAP_DEPTH = 0.55;
-	float facing = clamp(dot(NORMAL, VIEW), 0.0, 1.0);
-	ALBEDO = mix(shallow, deep, facing);
-	ROUGHNESS = 0.06;
-	SPECULAR = 0.55;
-	METALLIC = 0.0;
-}
-"""
