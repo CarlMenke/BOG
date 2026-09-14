@@ -134,6 +134,13 @@ func _build() -> void:
 	_slider("lightning_delay", "Lightning delay", 0.0, 2.0, 0.05,
 		func(v: float) -> String:
 			return "Instant" if v <= 0.0 else "%.2f s" % v)
+	# Right after the delay, because the two are the whole of how forgiving the
+	# bolt is: how long the target has to move, and how far off you can be and
+	# still have it count (D-053). Zero reads as "Direct hit", which is what it
+	# means — the blast is gone and only the ray kills.
+	_slider("lightning_radius", "Lightning blast", 0.0, 4.0, 0.1,
+		func(v: float) -> String:
+			return "Direct hit" if v <= 0.0 else "%.1f m" % v)
 	_slider("elder_duration", "Elder lasts", 1.0, 120.0, 1.0,
 		func(v: float) -> String: return "%d s" % roundi(v))
 	# Shown as a percentage over the base speed rather than as the bare

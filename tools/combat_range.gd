@@ -102,6 +102,21 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##              standing fourteen metres away to be hit. This prints its own
 ##              verdict, because a still frame of a lightning bolt looks
 ##              identical whether or not anybody died at the end of it.
+##   blast    — the bolt's blast radius (D-053), measured rather than looked at.
+##              The player is made the Elder and fires three bolts straight
+##              through `GubCombat._host_cast_lightning` with an exact origin and
+##              aim, so where they land is a number and not a camera's opinion:
+##              one into the ground between a dummy whose body is
+##              `lightning_radius - 0.2` m from the impact and one that is
+##              `+ 0.2` m from it (the first must die, the second must not); one
+##              into the ground in front of a thin wall with the survivor behind
+##              it, inside the radius through the wall (must not die); and one
+##              straight into the chest of a second Elder (must not die, D-040).
+##              Distances are re-measured at the moment of each cast and printed,
+##              so a dummy that drifted is a FAIL and not a lucky PASS. Also
+##              round-trips `lightning_radius` through `MatchConfig`. The ring is
+##              photographed three ticks after the first bolt:
+##              `snapshot.gd -- res://tools/combat_range.tscn out/blast.png 43 blast`
 ##   ward     — the other half of the Elder, and the half no logic test can
 ##              reach: **a real spear, in the air, thrown at a real Elder**
 ##              (D-040). `tools/match_rules.gd` can assert that `report_kill`
@@ -150,7 +165,7 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##              frames still being processed with no peer to ask.
 ##   free     — no script; play it yourself
 const MODES := ["flight", "hit", "arc", "miss", "aim", "mushroom", "cover",
-	"lure", "lure_self", "letter", "cards", "lightning", "ward", "recharge",
+	"lure", "lure_self", "letter", "cards", "lightning", "blast", "ward", "recharge",
 	"respawn", "walk", "bhop", "leave", "free"]
 
 ## How long after the cast the verdict is taken, in physics ticks. The click
@@ -164,6 +179,27 @@ const MODES := ["flight", "hit", "arc", "miss", "aim", "mushroom", "cover",
 ## nothing" from "the bolt has not gone yet", which is the only way this mode can
 ## lie. If the dial is ever raised past 0.8 s this number has to move with it.
 const LIGHTNING_VERDICT_DELAY := 50
+
+## `blast`'s geometry. How far either side of the radius the two ground dummies
+## stand, measured to the surface of their capsules; the frames the three bolts
+## are fired on; and how long after each the verdict is read. The bolts go
+## straight through the host's cast with no windup, so the kill lands on the
+## cast's own tick and twenty is all margin.
+const BLAST_MARGIN := 0.2
+const BLAST_CASTS: Array[int] = [40, 70, 100]
+const BLAST_VERDICT_DELAY := 20
+## Where the first bolt lands, on open ground six metres ahead of the player.
+const BLAST_GROUND := Vector3(0.0, 0.0, 3.0)
+## Where the second lands: open ground just in front of `BLAST_WALL`, on the
+## player's side of it.
+const BLAST_BY_WALL := Vector3(5.0, 0.0, 3.0)
+## A thin wall 0.35 m behind that impact — thin enough that a body behind it is
+## still well inside the radius in a straight line, which is the case line of
+## sight exists for. Centre and size.
+const BLAST_WALL := Vector3(5.0, 1.1, 2.55)
+const BLAST_WALL_SIZE := Vector3(3.0, 2.2, 0.2)
+## Where the Elder the third bolt is fired into stands.
+const BLAST_ELDER_SPOT := Vector3(-4.0, 0.1, -1.0)
 
 ## How long after the click a spear's verdict is taken, in physics ticks. Same
 ## arithmetic as the bolt's above and one more term: the click starts the
@@ -333,6 +369,11 @@ const VIEWS := {
 	# is the *arrival*: a spear stopping at a robe and a violet flash where it
 	# stopped, with the Gub still on its feet. Down the throw the ward is behind
 	# the shaft; from the side it is the whole picture.
+	# Above and behind the survivor, looking back at the first impact, so the
+	# ring lies open on the ground with one dummy inside it and one just past
+	# its edge — the picture of the rule rather than of the bolt.
+	"blast": {"eye": Vector3(3.2, 4.6, -0.4), "look": Vector3(0.0, 0.2, 3.0),
+		"fov": 55.0},
 	"ward": {"eye": Vector3(6.5, 2.2, -1.5), "look": Vector3(0.0, 1.2, -5.0),
 		"fov": 46.0},
 	# High and off to one side, because a ring lying on the ground is seen
@@ -390,6 +431,10 @@ var _aim_at: Vector3 = Vector3.ZERO
 ## on the robe being picked up and that is an `Area3D` overlap rather than a
 ## countdown.
 var _cast_at: int = 0
+## `blast`'s bookkeeping: the distances read at the moment of the current cast,
+## and how many verdicts have gone against it.
+var _blast_measured: Array[float] = []
+var _blast_failures: int = 0
 var _fixed_camera: Camera3D
 
 ## `cover`'s state machine. It runs on gates rather than on frame numbers
@@ -522,11 +567,18 @@ func _start_session() -> void:
 	# that the clock ends the robe, not how long the clock is.
 	if _mode == "ward":
 		config.elder_duration = WARD_DURATION
+	# Three bolts inside one run, and no loot rolled off the one death in it:
+	# a robe or a letter dropped at a dummy's feet is a claim nobody asked for.
+	if _mode == "blast":
+		config.lightning_cooldown = 0.2
+		config.lightning_radius = 1.5
+		config.elder_drop_chance = 0.0
+		config.letter_drop_chance = 0.0
 
 
 func _dummy_count() -> int:
 	match _mode:
-		"lure":
+		"lure", "blast":
 			return 3
 		"arc", "miss", "mushroom", "cover", "lure_self", "letter", "respawn":
 			return 1
@@ -646,6 +698,9 @@ func _physics_process(_delta: float) -> void:
 		return
 	if _mode == "respawn":
 		_drive_respawn(player, combat)
+		return
+	if _mode == "blast":
+		_drive_blast(player, combat)
 		return
 
 	# Not a `return`: the card has to be put down before there is anything to
@@ -824,6 +879,161 @@ func _drive_lightning(combat: GubCombat) -> void:
 		print("combat_range: the bolt killed %s — lightning PASS" % target.display_name)
 	else:
 		print("combat_range: nothing at the far end died — lightning FAIL")
+
+
+# ------------------------------------------------------------------- blast ---
+
+## See `blast` in the mode list. Each cast is one step: place, measure, fire,
+## and twenty ticks later read who is standing.
+func _drive_blast(player: Gub, combat: GubCombat) -> void:
+	var inside := MatchState.gubs.get(DUMMY_BASE) as Gub
+	var outside := MatchState.gubs.get(DUMMY_BASE + 1) as Gub
+	var elder := MatchState.gubs.get(DUMMY_BASE + 2) as Gub
+	if inside == null or outside == null or elder == null:
+		return
+	var radius := Net.config.lightning_radius
+
+	if _frames == 12:
+		_build_blast_wall()
+		MatchState._make_elder(1)
+		MatchState._make_elder(DUMMY_BASE + 2)
+		# Either side of the first impact, across the line of fire so the bolt
+		# reaches the ground between them rather than through one of them.
+		_place_at_surface_distance(inside, BLAST_GROUND, Vector3.LEFT,
+			radius - BLAST_MARGIN)
+		_place_at_surface_distance(outside, BLAST_GROUND, Vector3.RIGHT,
+			radius + BLAST_MARGIN)
+		elder.global_position = BLAST_ELDER_SPOT
+		_stand_still(elder)
+		return
+
+	if _frames == BLAST_CASTS[0]:
+		_blast_measured = [inside.distance_to_body(BLAST_GROUND),
+			outside.distance_to_body(BLAST_GROUND)]
+		_blast_cast(combat, BLAST_GROUND)
+		return
+	if _frames == BLAST_CASTS[0] + BLAST_VERDICT_DELAY:
+		var landed := _blast_landed().distance_to(BLAST_GROUND) < 0.05
+		if not landed:
+			print("combat_range: the first bolt landed at %s, not %s" % [
+				_blast_landed(), BLAST_GROUND])
+		_blast_verdict("inside", landed and _blast_measured[0] < radius and not inside.alive,
+			"%s %.2f m from the impact, radius %.2f — %s" % [inside.display_name,
+				_blast_measured[0], radius, "dead" if not inside.alive else "STANDING"])
+		_blast_verdict("outside", landed and _blast_measured[1] > radius and outside.alive,
+			"%s %.2f m from the impact — %s" % [outside.display_name,
+				_blast_measured[1], "standing" if outside.alive else "DEAD"])
+		# The survivor goes behind the wall for the second bolt, at the same
+		# inside distance the first dummy died at.
+		_place_at_surface_distance(outside, BLAST_BY_WALL, Vector3.FORWARD,
+			radius - BLAST_MARGIN)
+		return
+
+	if _frames == BLAST_CASTS[1]:
+		_blast_measured = [outside.distance_to_body(BLAST_BY_WALL)]
+		_blast_cast(combat, BLAST_BY_WALL)
+		return
+	if _frames == BLAST_CASTS[1] + BLAST_VERDICT_DELAY:
+		var landed := _blast_landed().distance_to(BLAST_BY_WALL) < 0.05
+		var behind := outside.global_position.z < BLAST_WALL.z - BLAST_WALL_SIZE.z * 0.5
+		_blast_verdict("wall",
+			landed and behind and _blast_measured[0] < radius and outside.alive,
+			"%s %.2f m from the impact, behind a wall — %s" % [outside.display_name,
+				_blast_measured[0], "standing" if outside.alive else "DEAD"])
+		return
+
+	if _frames == BLAST_CASTS[2]:
+		_blast_cast(combat, elder.body_centre())
+		return
+	if _frames == BLAST_CASTS[2] + BLAST_VERDICT_DELAY:
+		var struck := elder.distance_to_body(_blast_landed()) < 0.05
+		_blast_verdict("elder",
+			struck and elder.alive and MatchState.is_elder(DUMMY_BASE + 2),
+			"a bolt %s the Elder %s — %s" % [
+				"landed square on" if struck else "did NOT land on", elder.display_name,
+				"standing" if elder.alive else "DEAD"])
+		_blast_verdict("config", _blast_config_round_trips(),
+			"lightning_radius survives to_dict/apply_dict and clamps to 0..4")
+		if _blast_failures == 0:
+			print("combat_range: every blast verdict held — blast PASS")
+		else:
+			print("combat_range: %d blast verdict(s) failed — blast FAIL" % _blast_failures)
+
+
+## Fire the Elder's bolt from the player's hand at `target`, through the host's
+## own cast. The aim is exact, so the impact is `target` unless the ray meets
+## something before it — which `_blast_landed` is there to catch.
+func _blast_cast(combat: GubCombat, target: Vector3) -> void:
+	if not MatchState.is_elder(1):
+		print("combat_range: the player is not the Elder — blast FAIL")
+		return
+	var origin: Vector3 = combat._throw_origin()
+	combat._host_cast_lightning(origin, (target - origin).normalized())
+	print("combat_range: bolt fired on frame %d at %s, landed %s"
+		% [_frames, target, _blast_landed()])
+
+
+## Where the newest bolt in the scene stopped, or nowhere near anything if there
+## is none.
+func _blast_landed() -> Vector3:
+	for i in range(_items.get_child_count() - 1, -1, -1):
+		var bolt := _items.get_child(i) as LightningBolt
+		if bolt != null:
+			return bolt._to
+	return Vector3.ONE * 1.0e6
+
+
+func _blast_verdict(label: String, ok: bool, detail: String) -> void:
+	if not ok:
+		_blast_failures += 1
+	print("combat_range: %s — %s %s" % [detail, label, "PASS" if ok else "FAIL"])
+
+
+## Stand `dummy` on the ground along `away` from `impact`, with the surface of
+## its capsule `distance` from it. Solved by stepping on the real measurement
+## rather than by formula, so the answer is whatever `Gub.distance_to_body`
+## says it is — which is the thing the rule reads.
+func _place_at_surface_distance(dummy: Gub, impact: Vector3, away: Vector3,
+		distance: float) -> void:
+	var along := distance + Gub.CAPSULE_RADIUS
+	var ground := Vector3(impact.x, PLAYER_SPOT.y, impact.z)
+	for i in 6:
+		dummy.global_position = ground + away * along
+		along += distance - dummy.distance_to_body(impact)
+	dummy.global_position = ground + away * along
+	dummy.velocity = Vector3.ZERO
+	_stand_still(dummy)
+
+
+func _build_blast_wall() -> void:
+	var body := StaticBody3D.new()
+	body.name = "BlastWall"
+	body.collision_layer = 1
+	body.position = BLAST_WALL
+	add_child(body)
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = BLAST_WALL_SIZE
+	shape.shape = box
+	body.add_child(shape)
+	var mesh := MeshInstance3D.new()
+	var cube := BoxMesh.new()
+	cube.size = BLAST_WALL_SIZE
+	mesh.mesh = cube
+	body.add_child(mesh)
+
+
+func _blast_config_round_trips() -> bool:
+	var sent := MatchConfig.new()
+	sent.lightning_radius = 2.7
+	var got := MatchConfig.new()
+	got.apply_dict(sent.to_dict())
+	var ok := is_equal_approx(got.lightning_radius, 2.7)
+	got.apply_dict({"lightning_radius": 9.0})
+	ok = ok and is_equal_approx(got.lightning_radius, 4.0)
+	got.apply_dict({"lightning_radius": -1.0})
+	ok = ok and is_equal_approx(got.lightning_radius, 0.0)
+	return ok and is_equal_approx(MatchConfig.new().lightning_radius, 1.5)
 
 
 # ----------------------------------------------------------------- respawn ---

@@ -977,6 +977,29 @@ func _apply_capsule(height: float) -> void:
 	_collision.position.y = _capsule.height * 0.5
 
 
+## The middle of this Gub's collision capsule, in world space.
+func body_centre() -> Vector3:
+	return _collision.global_position
+
+
+## The point on this Gub's capsule *axis* nearest to `point`: the segment between
+## the centres of its two hemispheres, in world space, at whatever height the
+## stance has made it this frame.
+func body_axis_nearest(point: Vector3) -> Vector3:
+	var centre := _collision.global_position
+	var up := _collision.global_basis.y.normalized()
+	var half := maxf(0.0, _capsule.height * 0.5 - _capsule.radius)
+	return centre + up * clampf((point - centre).dot(up), -half, half)
+
+
+## How far `point` is from the surface of this Gub's collision capsule, and zero
+## from inside it. What the Elder's blast radius is measured against (D-053):
+## the body, not its feet or its middle, so a crouched Gub is a smaller target
+## for it exactly as it is for a spear.
+func distance_to_body(point: Vector3) -> float:
+	return maxf(0.0, point.distance_to(body_axis_nearest(point)) - _capsule.radius)
+
+
 ## The capsule height the two stance blends currently ask for. Two nested
 ## lerps and not one three-way blend: the crouch blend takes standing down to
 ## CROUCH_HEIGHT, and the slide blend takes whatever that produced down to

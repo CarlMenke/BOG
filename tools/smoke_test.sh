@@ -381,6 +381,14 @@ check "lure catches" "combat_range: lure caught 1" \
 #     ... --script tools/snapshot.gd -- res://tools/combat_range.tscn \
 #         out/lightning.png 38 lightning
 check "lightning kills" "lightning PASS"     "$GODOT" --path "$GODOT_ROOT" --resolution 640x360 --script tools/snapshot.gd --     res://tools/combat_range.tscn "$GODOT_LOG_DIR/lightning.png" 90 lightning
+# The bolt's blast radius (D-053), measured: three exact casts through the
+# host's own `_host_cast_lightning`, one between a dummy 0.2 m inside the radius
+# and one 0.2 m outside it, one into the ground in front of a wall with a dummy
+# inside the radius behind it, and one into an Elder's chest. The mode prints a
+# verdict per case and `blast PASS` only if every one held, plus the config
+# field's round trip. 140 ticks: the last verdict is read on 120. The ring:
+#     ... --script tools/snapshot.gd -- res://tools/combat_range.tscn #         out/blast.png 43 blast
+check "lightning blast radius" "blast PASS"     "$GODOT" --path "$GODOT_ROOT" --resolution 640x360 --script tools/snapshot.gd --     res://tools/combat_range.tscn "$GODOT_LOG_DIR/blast.png" 140 blast
 # Kept, and now honest about what it is: this is the *placement* path —
 # `try_place_mushroom`, the two validation rays, the broadcast, the eruption —
 # and `snapshot: wrote` is all it has ever asserted. Fine as half a check and

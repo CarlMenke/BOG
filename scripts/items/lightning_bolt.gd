@@ -31,7 +31,9 @@ extends Node3D
 ##   * one `ImmediateMesh` — ten surfaces, ~450 vertices, rebuilt 7 times;
 ##   * two `OmniLight3D`s (the hand and the impact), both dead by 0.16 s;
 ##   * one `CPUParticles3D` burst of 48 sparks, one-shot, gone by 0.7 s;
-##   * one unshaded quad for the scorch, faded out with the sparks.
+##   * one unshaded quad for the scorch, faded out with the sparks;
+##   * one small `ImmediateMesh` for the blast ring (D-053), built once, gone by
+##     0.5 s, and not there at all when the bolt hit nothing.
 ##
 ## The lights are the part with a real cost, and they are why the flash is
 ## *brief* rather than merely bright: two Elders firing at once is four extra
@@ -151,6 +153,25 @@ const SCORCH_RADIUS := 0.85
 const SCORCH_LIFE := 0.9
 const SCORCH_ALPHA := 0.85
 
+## The blast ring (D-053): a thin bright band whose **outer edge is exactly the
+## kill radius**, over a faint disc filling it. The band is drawn inward from the
+## edge rather than centred on it, so no part of the ring is further out than
+## the rule reaches — a body the band is touching is a body that died.
+##
+## Flat, in the plane of the surface the bolt struck, or level when it struck a
+## Gub. The real zone is a sphere around the impact, and a sphere drawn in the
+## world is a glowing ball that hides the body it is killing; the ring on the
+## ground is the part of that sphere anybody can read a distance off.
+##
+## It holds its full size and fades rather than growing into place, because a
+## ring caught mid-growth in a still frame, or by an eye, is a ring that says
+## the radius is smaller than it is.
+const RING_WIDTH := 0.09
+const RING_SEGMENTS := 48
+const RING_LIFE := 0.5
+const RING_ENERGY := 2.2
+const RING_FILL_ALPHA := 0.16
+
 ## How hard the impact shakes a camera standing on top of it, and how far away
 ## it is felt at all. The caster gets its own, smaller kick — firing this should
 ## feel like holding it, not like being hit by it.
@@ -180,6 +201,9 @@ var _glow_material: StandardMaterial3D
 var _flash: OmniLight3D
 var _muzzle: OmniLight3D
 var _scorch_material: StandardMaterial3D
+var _ring: MeshInstance3D
+var _ring_material: StandardMaterial3D
+var _ring_fill_material: StandardMaterial3D
 
 
 ## Fire one bolt, on this peer, from `from` to `to`.
@@ -193,13 +217,15 @@ var _scorch_material: StandardMaterial3D
 ## `GubCombat._do_cast_lightning`, which is what makes the bolt an event
 ## everybody saw rather than a private animation on the shooter's machine.
 static func strike(parent: Node, from: Vector3, to: Vector3, normal: Vector3,
-		caster: Gub) -> LightningBolt:
+		caster: Gub, radius: float = 0.0) -> LightningBolt:
 	var bolt := LightningBolt.new()
 	bolt.name = "Bolt_%d" % Time.get_ticks_msec()
 	bolt._from = from
 	bolt._to = to
 	parent.add_child(bolt)
 	bolt._build(normal)
+	if radius > 0.0:
+		bolt._build_ring(normal, radius)
 	bolt._thunder()
 	bolt._shake(caster)
 	return bolt
@@ -329,6 +355,51 @@ func _build_scorch(normal: Vector3) -> void:
 	scorch.look_at(scorch.global_position + normal, up)
 
 
+## The blast ring at the impact, `radius` metres to its outer edge. See
+## RING_WIDTH for why it is drawn the way it is.
+func _build_ring(normal: Vector3, radius: float) -> void:
+	var up := normal.normalized() if normal.length_squared() > 0.001 else Vector3.UP
+	var across := up.cross(Vector3.RIGHT if absf(up.dot(Vector3.RIGHT)) < 0.9 		else Vector3.FORWARD).normalized()
+	var other := up.cross(across).normalized()
+	# Lifted off the surface a little further than the scorch, so the two
+	# additive quads do not fight each other as well as the ground.
+	var centre := _to + up * 0.02
+	var inner := maxf(0.0, radius - RING_WIDTH)
+
+	_ring_material = _make_material(GLOW_COLOUR, RING_ENERGY)
+	_ring_fill_material = _make_material(GLOW_COLOUR, 1.0)
+	var mesh := ImmediateMesh.new()
+	# The band: a strip between the inner and the outer circle.
+	mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP, _ring_material)
+	for i in RING_SEGMENTS + 1:
+		var angle := TAU * float(i) / float(RING_SEGMENTS)
+		var spoke := across * cos(angle) + other * sin(angle)
+		mesh.surface_set_color(Color.WHITE)
+		mesh.surface_add_vertex(centre + spoke * radius)
+		mesh.surface_set_color(Color.WHITE)
+		mesh.surface_add_vertex(centre + spoke * inner)
+	mesh.surface_end()
+	# The fill: a fan from the centre out to where the band begins.
+	if inner > 0.0:
+		mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES, _ring_fill_material)
+		var tint := Color(1.0, 1.0, 1.0, RING_FILL_ALPHA)
+		for i in RING_SEGMENTS:
+			var a := TAU * float(i) / float(RING_SEGMENTS)
+			var b := TAU * float(i + 1) / float(RING_SEGMENTS)
+			for vertex: Vector3 in [centre,
+					centre + (across * cos(a) + other * sin(a)) * inner,
+					centre + (across * cos(b) + other * sin(b)) * inner]:
+				mesh.surface_set_color(tint)
+				mesh.surface_add_vertex(vertex)
+		mesh.surface_end()
+
+	_ring = MeshInstance3D.new()
+	_ring.name = "BlastRing"
+	_ring.mesh = mesh
+	_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_ring)
+
+
 ## Two voices at the impact, 3D so they position properly and pitch-varied so
 ## two bolts in one fight do not machine-gun.
 ##
@@ -397,6 +468,18 @@ func _process(delta: float) -> void:
 			_muzzle.queue_free()
 			_flash = null
 			_muzzle = null
+
+	if _ring != null:
+		var ring_left := 1.0 - clampf(_age / RING_LIFE, 0.0, 1.0)
+		if ring_left <= 0.0:
+			_ring.queue_free()
+			_ring = null
+		else:
+			var energy := RING_ENERGY * ring_left * ring_left
+			_ring_material.albedo_color = Color(GLOW_COLOUR.r * energy,
+				GLOW_COLOUR.g * energy, GLOW_COLOUR.b * energy, 1.0)
+			_ring_fill_material.albedo_color = Color(GLOW_COLOUR.r, GLOW_COLOUR.g,
+				GLOW_COLOUR.b, ring_left)
 
 	if _scorch_material != null:
 		var fade := 1.0 - clampf(_age / SCORCH_LIFE, 0.0, 1.0)

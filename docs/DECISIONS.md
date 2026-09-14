@@ -4065,3 +4065,73 @@ the bonus and fails. 47 checks to 48.
   every speed through `target_speed` so that could not happen. A chained
   carrier still reaches 6.32 m/s, above a plain Gub's run. It is 0.7 m/s under
   a hopping chaser, so the carrier can still be caught.
+
+## D-053 — The Elder's bolt has a small blast radius, a hard edge that kills or does nothing
+*Amends D-038's "a ray, and whatever it hits". The ray, the cooldown, cover and
+D-040's ward are unchanged.*
+
+The user: *"the lightning should have an aoe (small blast radius) so that if you
+hit pretty close it still hits them, this should still be a one shot kill, but
+not too far"*.
+
+**The rule** (`GubCombat._host_cast_lightning`, `_blast_victims`):
+- **Where it lands.** The blast is centred on the point the ray stopped at: the
+  world, a deployable, or a Gub. A bolt that hit nothing (sky, or the end of
+  `LIGHTNING_RANGE`) has no blast and no ring. A sphere of death hanging in
+  mid-air 28 m away is a second, invisible weapon, not "hit pretty close".
+- **How far.** Measured from the impact to the **surface of the victim's
+  collision capsule** (`Gub.distance_to_body`: distance to the capsule axis
+  minus its radius). So a crouched or sliding Gub is a smaller target for the
+  blast, as it is for the ray. The drawn ring's outer edge is exactly
+  `lightning_radius` around the impact, which on flat ground is the sphere's
+  own cross-section: a body touching that sphere dies.
+- **No falloff.** Inside the radius it is the same kill a direct hit is.
+  Outside it is nothing. There is no health for a falloff to take.
+- **Line of sight.** A ray from the impact, backed off 0.1 m along the bolt so
+  it does not start inside the surface it struck, to the nearest point on the
+  victim's axis, then to the capsule's centre. Either clear is enough. World
+  and deployables block it, so a wall or a shield mushroom is still cover
+  (D-038). Other Gubs do not block it.
+- **Who.** Every living Gub except the caster and the direct victim (who is
+  already handled). Dead Gubs keep their collision (D-043) and are skipped.
+- **Through `report_kill`**, one call per victim, so spawn protection,
+  friendly fire and the Elder ward (D-040) apply exactly as they do to the ray.
+  An Elder in the blast is warded, not killed. Capture carriers still cannot
+  cast (D-051).
+- **The dial.** `MatchConfig.lightning_radius`, default 1.5 m, range 0 to 4,
+  clamped, in `_FIELDS`. The lobby slider "Lightning blast" sits right after
+  "Lightning delay". 0 reads "Direct hit" and is the old bolt.
+- **The picture.** The host sends the radius with the bolt
+  (`_do_cast_lightning`), so every peer draws the ring the host killed with,
+  not its own config's. The ring is a thin bright band drawn inward from the
+  edge over a faint disc, in the plane of the struck surface (level on a body),
+  at full size from the first frame and fading over 0.5 s. A ring that grows in
+  shows a smaller radius than the rule for most of its life.
+
+**Checked** by `tools/combat_range.tscn -- blast`, in the gate as "lightning
+blast radius". The player is made the Elder and fires three exact casts through
+`_host_cast_lightning`. Distances are re-measured at the cast and printed:
+- ground impact, dummy at 1.30 m (radius − 0.2): dies;
+- same impact, dummy at 1.70 m (radius + 0.2): survives;
+- ground impact 0.35 m in front of a 0.2 m wall, that survivor 1.30 m away
+  behind it: survives. With the line-of-sight test forced clear it dies and
+  the check fails;
+- a bolt into an Elder's chest, landing on its capsule: survives, still Elder;
+- `lightning_radius` round-trips `to_dict`/`apply_dict`, clamps 9 to 4 and −1
+  to 0, and defaults to 1.5.
+
+The ring is photographed at `out/blast.png` (tick 43). 48 checks to 49.
+
+### Rejected
+- **Falloff, or a knock-back ring outside the kill ring.** The user asked for a
+  one-shot kill and "not too far". Two radii would be two things to read.
+- **Distance to the feet or to the chest.** Feet make a jumping Gub immune to a
+  bolt at the ground under it. The chest makes a bolt into the ground at a
+  Gub's toes miss. The capsule surface matches what the ray already hits.
+- **A blast at the end of the range when nothing was hit.** See above.
+- **A fat ray (killing anyone the bolt passes near).** That is a wider beam,
+  not a blast, and it would make the bolt kill through the gap beside cover.
+- **Drawing a sphere.** A glowing ball hides the body it is killing. The ground
+  ring is the part a distance can be read off.
+- **Each peer drawing the ring from its own config.** A client with a stale
+  config would draw a ring that disagrees with who died.

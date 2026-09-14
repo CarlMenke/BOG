@@ -180,6 +180,23 @@ const TEAM_NONE := -1
 ## weapon can be made and is a setting the lobby is allowed to try.
 @export_range(0.2, 10.0) var lightning_cooldown: float = 1.0
 
+## How far from where the bolt lands it still kills, in metres, measured to the
+## surface of a Gub's collision capsule (D-053).
+##
+## The user: *"the lightning should have an aoe (small blast radius) so that if
+## you hit pretty close it still hits them, this should still be a one shot
+## kill, but not too far."* So it is a hard edge with no falloff — inside it is
+## the same kill a direct hit is, outside it is nothing — and 1.5 m is about two
+## Gub-widths of forgiveness either side of the body, which forgives a bolt into
+## the ground at somebody's feet and does not forgive one into the next room.
+## The blast needs a clear line from the impact to the body, so a wall or a
+## shield mushroom is still cover; it only exists where the bolt hit something;
+## and it goes through `report_kill` like every other death, so an Elder is
+## warded against it exactly as against a direct hit (D-040).
+##
+## **Zero is legal** and is the bolt as it was before: a direct hit or nothing.
+@export_range(0.0, 4.0) var lightning_radius: float = 1.5
+
 ## How long the robe lasts before it burns out, in seconds.
 ##
 ## **This supersedes D-038's "the Elder lasts until it dies".** With
@@ -235,7 +252,7 @@ const _FIELDS := [
 	"lure_use_delay", "lure_radius", "lure_hold", "lure_pull_strength", "lure_fuse",
 	"letter_drop_chance", "letter_hold_time",
 	"capture_return_time", "capture_carrier_speed",
-	"elder_drop_chance", "lightning_delay", "lightning_cooldown",
+	"elder_drop_chance", "lightning_delay", "lightning_cooldown", "lightning_radius",
 	"elder_duration", "elder_speed_multiplier", "elder_jump_multiplier",
 	"max_players", "map", "map_seed",
 ]
@@ -305,6 +322,7 @@ func _clamp_all() -> void:
 	# end of its range.
 	lightning_delay = clampf(lightning_delay, 0.0, 2.0)
 	lightning_cooldown = clampf(lightning_cooldown, 0.2, 10.0)
+	lightning_radius = clampf(lightning_radius, 0.0, 4.0)
 	elder_duration = clampf(elder_duration, 1.0, 120.0)
 	elder_speed_multiplier = clampf(elder_speed_multiplier, 1.0, 3.0)
 	elder_jump_multiplier = clampf(elder_jump_multiplier, 1.0, 3.0)

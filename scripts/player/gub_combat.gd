@@ -131,6 +131,11 @@ const LIGHTNING_RANGE := 28.0
 ## should be seen from the other side of the map.
 const LIGHTNING_IMPULSE := 90.0
 
+## How far back along the bolt the blast's line-of-sight rays start from, so a
+## ray fired from a point *on* a wall or on the ground does not begin inside the
+## surface it is testing against and report itself blocked.
+const BLAST_LOS_BACKOFF := 0.1
+
 ## Launch speed of the lure. With LURE_GRAVITY this sets the furthest it can be
 ## thrown at all — `s^2 / g`, about 22 m on the flat, which is a deliberate
 ## limit: the lure is a tool for pulling someone out of nearby cover, not for
@@ -805,23 +810,83 @@ func _host_cast_lightning(origin: Vector3, direction: Vector3) -> void:
 	var normal: Vector3 = Vector3.ZERO
 	if victim == null and hit.has("normal"):
 		normal = hit["normal"]
+	# The blast only exists where the bolt *landed* (D-053). A bolt that ran out
+	# into the sky or to the end of its range struck nothing, and a sphere of
+	# death hanging in mid-air 28 m away is not "hit pretty close", it is a
+	# second, invisible weapon. Zero travels as "no ring".
+	var radius := _config.lightning_radius if not hit.is_empty() else 0.0
 
 	# The bolt is broadcast before the kill is reported, so that on every peer
 	# the light arrives with the body rather than after it. `report_kill` sends
 	# its own death message and both are reliable, so the order they are sent in
 	# is the order they land in.
-	_do_cast_lightning.rpc(origin, point, normal)
-	_do_cast_lightning(origin, point, normal)
+	_do_cast_lightning.rpc(origin, point, normal, radius)
+	_do_cast_lightning(origin, point, normal, radius)
 
-	if victim == null:
+	if victim != null:
+		# Everything about *whether* this is a kill — spawn protection, friendly
+		# fire, a victim who is already dead, an Elder's ward — belongs to
+		# `report_kill` and is not second-guessed here. The bolt landed on them
+		# either way, which is the truthful picture: a protected Gub was struck
+		# and was not hurt.
+		MatchState.report_kill(victim.peer_id, _gub.peer_id, Gub.Cause.LIGHTNING,
+			point, aim * LIGHTNING_IMPULSE,
+			SpearProjectile.nearest_bone(victim, point))
+
+	if radius <= 0.0:
 		return
-	# Everything about *whether* this is a kill — spawn protection, friendly
-	# fire, a victim who is already dead — belongs to `report_kill` and is not
-	# second-guessed here. The bolt landed on them either way, which is the
-	# truthful picture: a protected Gub was struck and was not hurt.
-	MatchState.report_kill(victim.peer_id, _gub.peer_id, Gub.Cause.LIGHTNING,
-		point, aim * LIGHTNING_IMPULSE,
-		SpearProjectile.nearest_bone(victim, point))
+	for other: Gub in _blast_victims(point, point - aim * BLAST_LOS_BACKOFF,
+			radius, victim):
+		# The same door the direct hit goes through, for the same reasons. The
+		# blast is a kill or it is nothing — there is no falloff, because there
+		# is no health in this game for a falloff to take away.
+		var chest := other.body_axis_nearest(point)
+		var shove := chest - point
+		if shove.length_squared() < 0.0001:
+			shove = aim
+		MatchState.report_kill(other.peer_id, _gub.peer_id, Gub.Cause.LIGHTNING,
+			chest, shove.normalized() * LIGHTNING_IMPULSE,
+			SpearProjectile.nearest_bone(other, point))
+
+
+## Every living Gub the blast at `point` reaches, other than the caster and the
+## one the bolt landed on directly (D-053).
+##
+## "Reaches" is two things, both required. The *surface* of the Gub's capsule is
+## within `radius` of the impact — `Gub.distance_to_body`, so the ring drawn at
+## `radius` around the impact is exactly the line a body has to be touching —
+## and there is a clear line from the impact to the body through the world and
+## through deployables. The second is what keeps cover meaning what D-038 says
+## it means: a bolt into the far side of a wall or into a shield mushroom's cap
+## does not kill the Gub crouched behind it.
+##
+## Line of sight is tried to the nearest point on the Gub's axis and then to the
+## middle of the capsule, so a body half behind a low ledge is still in the open
+## by its chest. Other Gubs are not cover — the ray does not test the player
+## layer — because a blast that one body shields another from is a rule nobody
+## could read off the screen.
+func _blast_victims(point: Vector3, los_from: Vector3, radius: float,
+		direct: Gub) -> Array[Gub]:
+	var out: Array[Gub] = []
+	var space := _gub.get_world_3d().direct_space_state
+	for other: Gub in MatchState.gubs.values():
+		# Dead Gubs keep their collision (D-043) and are not there to be killed.
+		if not is_instance_valid(other) or other == _gub or other == direct \
+				or not other.alive:
+			continue
+		if other.distance_to_body(point) > radius:
+			continue
+		var targets: Array[Vector3] = [other.body_axis_nearest(point),
+			other.body_centre()]
+		for target: Vector3 in targets:
+			var query := PhysicsRayQueryParameters3D.create(los_from, target)
+			query.collision_mask = LAYER_WORLD | LAYER_DEPLOYABLE
+			query.collide_with_areas = false
+			query.collide_with_bodies = true
+			if space.intersect_ray(query).is_empty():
+				out.append(other)
+				break
+	return out
 
 
 ## What the bolt hit, or an empty dictionary for thin air.
@@ -849,13 +914,16 @@ func _lightning_hit(origin: Vector3, direction: Vector3) -> Dictionary:
 ## here; the host's copy of this call is not special in any way except that it
 ## is the one that already knew the answer.
 @rpc("authority", "call_remote", "reliable")
-func _do_cast_lightning(origin: Vector3, point: Vector3, normal: Vector3) -> void:
+func _do_cast_lightning(origin: Vector3, point: Vector3, normal: Vector3,
+		radius: float = 0.0) -> void:
 	_lightning_ready_at = _now() + _config.lightning_cooldown
 	cooldowns_changed.emit()
 	# The fist goes dark on every peer's copy, which is the whole point of the
 	# tell: everyone watching an Elder can see that it has just spent its shot.
 	_refresh_hand()
-	LightningBolt.strike(_spawn_root(), origin, point, normal, _gub)
+	# The radius travels with the bolt rather than being read off each peer's
+	# own config, so the ring on every screen is the one the host killed with.
+	LightningBolt.strike(_spawn_root(), origin, point, normal, _gub, radius)
 
 
 ## Put the crackle back when the cooldown ends — and take it away if something
