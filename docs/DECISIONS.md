@@ -4860,3 +4860,119 @@ imperfection rather than zero. And the frame cost was budgeted, not profiled:
 one extra froxel pass, one backdrop draw call, 704 particles, six screen-texture
 reads, three unshadowed lights and eleven decals, none of it measured in an
 eight-player match.
+
+## D-060 — Lantern Wharf gets the hour its name promises: sources, water and a port
+The third of the four atmosphere passes (D-058, D-059). Of the four maps that did
+not feel like places, the box yard had the most in its favour already — a dark
+hour, practical lights inside the fiction, and 36 m in which atmosphere is always
+in frame — and the least of it realised.
+
+The diagnosis was that it was a dusk map in name only. The sun sat 17 degrees up
+at 0.9 energy, which is a mid-afternoon key by any measure; the four corner floods
+at 5.0 under it were lamp heads that happened to glow; the air between them was a
+vacuum; the floor was a two-grey `NoiseTexture2D` at roughness 0.42 that a comment
+called wet; and the walls ended at their own outer face, so a wharf was a room.
+The fix is the hour, the floor, the beams, the air and a world outside the wall,
+and **none of it is geometry**: everything is built after `StaticMap`'s `super()`,
+so collision, landings, sightlines and pads are untouched, and `parkour_report`
+still measures 23.4 m on the ground and 25.0 m from a box top.
+
+**The hour is two numbers.** The sun drops to 8 degrees at 0.55 and the floods
+rise to 7.5. `wharf_sky.tres` points the island's `enchanted_sky.gdshader` at its
+own parameters: the moon disc *is* the sun, pinned to this map's `Sun` by
+`moon_follow_light` so the disc in the sky and the shadows on the ground can never
+disagree; the forest-glow band is the afterglow; the halo is glare through sea air
+at falloff 13 rather than 70; the aurora is off; and cloud drifts at 0.020, nearly
+twice the island's, because a player on a 36 m map looks up for two seconds at a
+time and weather has to move at twice the rate to be seen moving at all.
+
+**The floor is half of every frame on the smallest map in the game, and the four
+brightest things in the scene are above it.** `wharf_wet_concrete.gdshader` carries
+a CC0 Poly Haven concrete set (2k diffuse, normal, roughness; see
+`assets/maps/wharf/SOURCES.md`) and puts back the rain the photographs do not
+have: seeded world-space pools, near-mirror roughness inside them, a flattened
+normal, and two crossed waves so the reflections move. Screen-space reflections
+are on, which no other map here uses, because that is what turns a lamp head into
+the long vertical smear that says standing water. The containers keep their paint
+palette — at dusk it is what tells one aisle from the next, so it is gameplay —
+and take a rust photograph as a *roughness* map instead, which is what stops
+eleven flat paints reading as plastic.
+
+**The floods become sources**: volumetric fog energy, an additive glare billboard
+on each head, a four per cent sodium breath in `_process` (a hum, not a flicker —
+sixteen per cent would make lit floor, which is cover information, pulse), two ages
+of lamp assigned along the two diagonals so the map's 180-degree symmetry holds and
+neither team gets the better corner, and **shadows**, which they did not cast. Four
+shadow atlases is a real cost and the old comment was right about it; it was wrong
+about the trade, because the yard is 1,714 triangles and without shadows the lit
+fog goes straight through solid containers.
+
+`wharf_ambience.gd` adds 143 particles and one `FogVolume` — 104 moths churning in
+the four beams, 30 faint mist sheets drifting east, 9 gulls over the north water,
+and a metre of sea mist for the beams to land in — with audio wired and silent on
+`ambience.gd`'s pattern. `_build_port` puts thirty stacks, five gantries, a moored
+coaster north, a transit shed and two silos south, eleven quay lamps, water and an
+eight-second harbour light outside the walls, in five draw calls and no collision.
+Everything out there clears `1.45 + 0.353 * distance`, which is the only band a Gub
+inside a 7.8 m wall can see, and north and south are deliberately different
+silhouettes so a player standing still can tell which half of a symmetric map he is
+in.
+
+**The numbers were measured rather than chosen**, in `rust_env.tres`'s tradition.
+The five pad views crush 0.00-0.04% of pixels and clip 0.03-0.85%, against 3.0%
+clipped on pad 0 before the pass. Volumetric fog runs at 0.011, a third of the
+island's 0.032, with `volumetric_fog_length` 48 m rather than 96 — the far corner
+is 51 m away, so half the length is twice the froxel resolution for the same cost.
+A Gub-sized target at 25 m reads against its background at a Michelson contrast of
+**0.24 with the fog on and 0.52 with it off**. Half the contrast is the price of
+the halo round every lamp and a middle distance that is not empty; four times the
+density, which is where the island lands, buys a yard you cannot fight in. So the
+answer to "is volumetric fog worth it on a daylight-to-dusk static map" is yes,
+here, at a third of the island's strength, and it is the readability measurement
+that set the number.
+
+Ambient is split half sky, half a stated dusk blue, because at full sky
+contribution the sunset owned the radiance cubemap and every shaded face came out
+orange, which is the opposite of the warm-lit/cool-shaded read the map is built on.
+`ssr_fade_in` 3.5 and `ssr_fade_out` 28 are set against an artefact rather than to
+taste: a screen-space technique fails where the screen runs out, and at the first
+values the reflections stopped in a dead-straight horizontal line across every
+frame — a 0.040 jump in mean row luminance, down to 0.0007, for 2% of the
+reflected pixels.
+
+### What checks it
+No new gate lines, for the reason D-058 gives. The three `wharf` lines added by
+D-056 — the playthrough, `preview_map` on the pads, and `parkour_report` for the
+jump graph and the sightline table — are exactly the ones that would catch dressing
+that became collision or a sightline that moved, and the sightline numbers are
+unchanged. 63 of 63, green.
+
+### Rejected
+- **An HDRI sky.** This map's dome is a strip over the wall tops and contributes
+  less here than on any other map, so a static photograph would have traded away
+  the one thing the island proves matters, which is that the sky moves.
+- **26-degree flood cones.** They gave real visible shafts, and left the corner
+  spawn pockets at 1.5% of pixels crushed. 34 degrees is where beams and spawns
+  both hold.
+- **16x fog energy on the original 48-degree cone.** It proved the scattering works
+  — a hard-edged wall of lit fog — and proved that a 96-degree-wide cone is light
+  from a corner rather than a beam.
+- **Rain.** It stopped an hour ago. Falling water in front of a 25 m sightline is a
+  readability tax with no upside.
+- **A far shore.** At 220 m it would have to be 79 m tall to clear the wall. Eleven
+  quay lamps at 26-50 m do the same job and can actually be seen.
+
+### Left for later
+**The flood beams are not visible as shafts from the ground**, and that was the
+first thing asked for. The yard is dense enough that a lamp head is almost never in
+line of sight from the floor, and at any cone angle wide enough to keep the spawn
+pockets lit, the cone is light from a corner rather than a beam. What the fog buys
+at ground level is the halo round each lamp, the pooling where a beam meets the
+mist, and depth between the near wall and the far one — which is most of the value
+and is not the same thing. The one unambiguous shaft on the map is the lighthouse
+sweep, and it only reads from above the wall tops; from the floor it is a slow
+brightening on the wall tops.
+
+Audio is wiring only, for `ambient_harbour.wav` and `ambient_lamp_hum.wav`. Frame
+cost was budgeted by counts rather than profiled; if it needs cutting on a weak
+GPU, the order is SSR, then the flood shadows, then the volumetric fog.
