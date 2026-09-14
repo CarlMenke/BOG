@@ -294,7 +294,9 @@ plus `match` for real Gubs and the diagnostic flags in its `FLAGS` dictionary.
 lobby_teams lobby_client lobby_map`. `lobby_map` scrolls the Match panel down to
 the Map section, which is the only way to photograph it — the panel scrolls and
 the section is below the fold at every size the game runs at. `hud_range` modes:
-`hud hud_teams hud_cooldown killfeed scoreboard pause results dead spectate`.
+`hud hud_teams hud_cooldown hud_letters hud_hold hud_elder killfeed scoreboard
+scoreboard_letters pause results results_letters dead spectate hud_letters_teams
+scoreboard_letters_teams results_letters_teams`.
 
 **A trap worth knowing in `zsh`:** unquoted `$args` is not word-split, so passing
 several trailing arguments through a variable silently sends them as one string

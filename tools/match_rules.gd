@@ -50,6 +50,8 @@ func _ready() -> void:
 	_run_lives_elimination()
 	_run_letters()
 	_run_team_letters()
+	_run_team_letters_leaver()
+	_run_team_letter_hold()
 	_run_letter_hold()
 	_run_letter_hold_disconnect()
 	_run_elder()
@@ -441,36 +443,122 @@ func _run_letters() -> void:
 		MatchState.award_letter(902, MatchState.LETTER_G), false)
 
 
+func _team_letters_config(c: MatchConfig) -> void:
+	c.mode = MatchConfig.Mode.TEAMS
+	c.team_count = 2
+	c.win_condition = MatchConfig.WinCondition.LETTERS
+	c.kill_limit = 50
+	c.time_limit = 0
+
+
 func _run_team_letters() -> void:
-	_scenario("teams, letters do not pool")
+	_scenario("teams, letters pool")
 	var finished := {}
-	# `_begin` assigns teams round-robin over PEERS, so 1 and 902 are team 0.
-	_begin(4, func(c: MatchConfig) -> void:
-		c.mode = MatchConfig.Mode.TEAMS
-		c.team_count = 2
-		c.win_condition = MatchConfig.WinCondition.LETTERS
-		c.kill_limit = 50
-		c.time_limit = 0)
+	# `_begin` assigns teams round-robin over PEERS, so 1 and 902 are team 0 and
+	# 901 and 903 are team 1.
+	_begin(4, _team_letters_config)
 	MatchState.match_finished.connect(func(s: Dictionary) -> void:
 		finished.merge(s, true), CONNECT_ONE_SHOT)
 
-	# G in one team-mate's hand, U and B in the other's. Between them team 0
-	# holds all three and has won nothing: the card game's ending is one hand
-	# with the whole word in it, and pooling would make a four-player team a
-	# near-certainty against a two-player one.
+	# The same three letters split across two teams spell nothing (D-049): G
+	# and U on team 0, B on team 1. Pooling is within a team, never across.
 	MatchState.award_letter(1, MatchState.LETTER_G)
 	MatchState.award_letter(902, MatchState.LETTER_U)
-	MatchState.award_letter(902, MatchState.LETTER_B)
-	_check("a team holding all three between them has not won",
+	MatchState.award_letter(901, MatchState.LETTER_B)
+	_check("G·U·B split across two teams has not won",
 		MatchState.phase, MatchState.Phase.PLAYING)
+	_check("team 0 pools its two members' letters",
+		MatchState.team_letters(0), MatchState.LETTER_G | MatchState.LETTER_U)
+	_check("team 1 holds only its own",
+		MatchState.team_letters(1), MatchState.LETTER_B)
+	_check("a player's lamps are the team's",
+		MatchState.scoring_letters(1), MatchState.LETTER_G | MatchState.LETTER_U)
+	_check("while their own row keeps what they banked",
+		MatchState.letters_for(1), MatchState.LETTER_G)
 
-	MatchState.award_letter(902, MatchState.LETTER_G)
-	_check("one hand with all three ends it",
+	# Duplicates are judged against the team (D-033, per team since D-049): a G
+	# already banked by a teammate is wasted in the other teammate's hands.
+	_check("a teammate's letter is a duplicate",
+		MatchState.award_letter(902, MatchState.LETTER_G), false)
+	_check("and moves nothing on the team",
+		MatchState.team_letters(0), MatchState.LETTER_G | MatchState.LETTER_U)
+	_check("or on the player",
+		MatchState.letters_for(902), MatchState.LETTER_U)
+	# But the other team's letters are not theirs, so it is not a duplicate there.
+	_check("the other team can still take a G",
+		MatchState.award_letter(903, MatchState.LETTER_G), true)
+
+	# Three teammates-worth of hands, one word: 902 banks the B team 0 was
+	# missing, and team 0 wins without anybody holding all three.
+	MatchState.award_letter(902, MatchState.LETTER_B)
+	_check("G·U·B between teammates ends it",
 		MatchState.phase, MatchState.Phase.POST_MATCH)
 	_check("reason", finished.get("reason"), "letters")
-	_check("the collector leads", _leader(finished), 902)
-	_check("their team-mate kept their own letter",
-		MatchState.letters_for(1), MatchState.LETTER_G)
+	_check("nobody holds all three alone",
+		MatchState.letters_for(1) != MatchState.LETTER_ALL
+		and MatchState.letters_for(902) != MatchState.LETTER_ALL, true)
+	var pooled: Dictionary = finished.get("team_letters", {})
+	_check("the summary carries the winning team's word",
+		int(pooled.get(0, 0)), MatchState.LETTER_ALL)
+	_check("and the losing team's hand",
+		int(pooled.get(1, 0)), MatchState.LETTER_B | MatchState.LETTER_G)
+
+
+func _run_team_letters_leaver() -> void:
+	_scenario("teams, a leaver's letters stay with the team")
+	var finished := {}
+	_begin(4, _team_letters_config)
+	MatchState.match_finished.connect(func(s: Dictionary) -> void:
+		finished.merge(s, true), CONNECT_ONE_SHOT)
+
+	MatchState.award_letter(902, MatchState.LETTER_G)
+	MatchState.award_letter(902, MatchState.LETTER_U)
+	MatchState._on_player_left(902)
+	_check("the leaver's row is gone", MatchState.stats.has(902), false)
+	_check("but their letters are still the team's",
+		MatchState.team_letters(0), MatchState.LETTER_G | MatchState.LETTER_U)
+	_check("the leaver's G is still a duplicate for the team",
+		MatchState.award_letter(1, MatchState.LETTER_G), false)
+	MatchState.award_letter(1, MatchState.LETTER_B)
+	_check("and finishing the word on top of them wins",
+		MatchState.phase, MatchState.Phase.POST_MATCH)
+	_check("reason", finished.get("reason"), "letters")
+
+	# A new match starts from nothing, whoever left the last one.
+	MatchState.reset()
+	_check("reset clears the team's letters", MatchState.team_letters(0), 0)
+
+
+func _run_team_letter_hold() -> void:
+	_scenario("teams, a hold for a letter the team already has")
+	_begin(4, func(c: MatchConfig) -> void:
+		_team_letters_config(c)
+		c.letter_hold_time = 10.0)
+
+	# A card for a letter a teammate already banked is consumed on touch and
+	# starts no hold, exactly as one for your own letter does.
+	MatchState.award_letter(1, MatchState.LETTER_G)
+	var dupe := _drop_card(MatchState.LETTER_G)
+	MatchState.claim_pickup(dupe, 902)
+	_check("a team duplicate is consumed on touch", _card_live(dupe), false)
+	_check("and starts no hold", MatchState.is_holding_letter(902), false)
+
+	# Two teammates standing still for the same letter: the first to finish
+	# banks it and the other one's hold is over, not ten seconds of nothing.
+	var first := _drop_card(MatchState.LETTER_U)
+	var second := _drop_card(MatchState.LETTER_U)
+	MatchState.claim_pickup(first, 1)
+	MatchState.claim_pickup(second, 902)
+	var enemy := _drop_card(MatchState.LETTER_U)
+	MatchState.claim_pickup(enemy, 901)
+	_check("both teammates are holding U",
+		MatchState.is_holding_letter(1) and MatchState.is_holding_letter(902), true)
+	_expire_hold(1)
+	_check("the first to finish banks it",
+		MatchState.team_letters(0), MatchState.LETTER_G | MatchState.LETTER_U)
+	_check("and the teammate's hold for it ends", MatchState.is_holding_letter(902), false)
+	_check("while the other team's hold for U carries on",
+		MatchState.is_holding_letter(901), true)
 
 
 func _run_letter_hold() -> void:

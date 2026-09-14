@@ -1811,7 +1811,10 @@ the only thing on a stats row a respawn does not touch, which is what makes them
 progress rather than a streak. In Teams a team wins when *one of its members*
 completes the set; the letters do not pool. A team of four pooling three letters
 would beat a team of two before anybody had to fight for the third, and the card
-game's ending is one hand with the whole word in it.
+game's ending is one hand with the whole word in it. *(**Superseded by D-049 in
+its Teams half:** a Teams match is now won on the team's pooled letters, and
+duplicates are judged against the team. Letters are still kept on death, and a
+free-for-all is still per player.)*
 
 Stored as a three-bit mask on `MatchState.stats` rather than as a set, because
 `stats` is replicated whole on every score change and an int costs three bits of
@@ -3570,3 +3573,97 @@ cover the ordering across a real socket. That rests on ENet's channel ordering.
 - **Dealing on rematch too.** The user's call.
 - **Balancing by skill or past score.** Nothing records skill, and "random" was
   the request.
+
+## D-049 — In Teams, letters pool across the team, and a leaver's letters stay with it
+The user, after playing: *"for gub game in team, the gub spelling scoring should
+be per team".* Asked what per team meant, the user said pooled means pooled: any
+teammates' letters combine, so three teammates holding G, U and B between them
+win. Asked about a player who leaves mid-match, the user said their letters stay
+counted for the team.
+
+**This reverses a rule.** D-033 said letters are per player even in Teams, and
+`MatchState._check_win` carried a comment saying a team whose members hold G, U
+and B between them "has not won anything: the card game's ending is one hand
+with all three in it". That rule is gone for Teams. The comment was not deleted.
+It was rewritten to say what it used to claim, that D-049 reverses it, and why.
+The reason is the playtest note. A team that had spelled the word between its
+members and was told to keep going read as the game being wrong, not as a
+subtle rule. The old rule's worry was a big team beating a small one on
+arithmetic. That worry is real, but it belongs to the lobby (random teams are
+dealt even, D-048), not to letters that refuse to add up.
+
+**What changed.**
+- `MatchState._team_letters` is a team → three-bit mask, on every peer. In
+  Teams, `_check_win` under LETTERS scans those masks and ends the match when one
+  is complete. Free-for-all still scans players, exactly as before.
+- **Duplicates are judged against the team.** `award_letter` and
+  `_begin_letter_hold` both test `scoring_letters(peer)`, which is the team mask
+  in Teams and the player's own otherwise. A G your teammate already banked is
+  consumed on touch in your hands, starts no hold, and grants nothing: D-033's
+  "duplicates are wasted", per team.
+- **A teammate's hold for the letter just banked ends.** Two teammates standing
+  still for U: the first to finish banks it, and the other's hold is ended with
+  the card spent, not re-dropped. Anything else is ten seconds of standing still
+  for a letter the team already has, the thing `_begin_letter_hold` exists to
+  refuse. The other team's hold for the same letter is untouched.
+- **The ten-second hold and "death returns the card" (D-035) are unchanged.**
+  Only what a banked letter counts toward changed.
+- **Each player's row still keeps the letters they personally banked.** The
+  scoreboard and results show both: the team's word, and who carried it.
+
+**The leaver rule is why the mask is stored, not derived.** `_on_player_left`
+erases the leaver's `stats` row. A team mask OR-ed together from rows would lose
+the leaver's letters the moment they disconnected. That punishes a team for a
+teammate's connection, and takes a letter out of a match that may be a hundred
+deaths from replacing it. So `_team_letters` is written only by `award_letter`
+(through `_sync_letters`) and cleared only by `reset` and a fresh warmup, never
+by a departure. A hold running when somebody leaves is still treated as a death
+(D-035): the card is re-dropped, not banked.
+
+**Replication.** `_sync_letters` now carries `(peer, mask, team, team_mask)`, so
+the player's letters and the team's pooled mask arrive in one reliable message
+and no peer can show one without the other. `reset` runs on every peer on a
+rematch and on the way back to the lobby, so the mask starts empty each match.
+`_finish` adds `team_letters` to the summary under Teams + letters.
+
+**UI.**
+- HUD lamps show `scoring_letters` for the local player: the team's pooled mask
+  in Teams, labelled "TEAM LETTERS" under the lamps when no hold is using that
+  line. The HUD now refreshes the lamps on any peer's `letters_changed`, because
+  a teammate's letter lights your lamps.
+- Scoreboard: each team header carries the pooled letters in the letters column.
+  Under letters, teams sort by pooled count, then kills.
+- Results: under Teams + letters, a row per team (colour, kills, pooled letters)
+  sits above the player rows. The headline crowns the team with the most pooled
+  letters, kills breaking ties. Before this it crowned the team with the most
+  kills even in a letters match. The subtitle reads "The team spelled it between
+  them."
+
+**Checked.** `tools/match_rules.gd`, already in the gate as "match rules" (so the
+gate count stays 38), three scenarios. "teams, letters pool": G and U on team 0
+with B on team 1 does not end the match; a teammate's G is wasted and the other
+team can still take one; team 0 banking B ends it with nobody holding all three
+alone; the summary carries both masks. "teams, a leaver's letters stay with the
+team": a player banks G and U and leaves; the mask survives, G is still a
+duplicate, B wins, and `reset` clears it. "teams, a hold for a letter the team
+already has": a team duplicate card starts no hold; two teammates holding U, the
+first to finish ends the other's hold while an enemy's U hold carries on. The
+free-for-all letters scenarios are untouched and pass. Renders:
+`tools/hud_range.gd` modes `hud_letters_teams`, `scoreboard_letters_teams`,
+`results_letters_teams`.
+
+Writing that third scenario found a bug: `_tick_letter_holds` iterates a copy of
+the hold keys, and banking a letter can now end a *different* row later in that
+copy. It skips rows that are gone.
+
+### Rejected
+- **Deriving the team mask from `stats` rows.** Loses a leaver's letters, which
+  the user ruled out.
+- **Pooling across teams, or in free-for-all.** Nobody asked, and free-for-all
+  has no team to pool into.
+- **Letting a teammate's duplicate hold run to the end.** Ten seconds without a
+  spear for nothing.
+- **Re-dropping that ended hold's card for the other team.** A duplicate is
+  consumed on touch (D-033); holding it is having touched it.
+- **Replacing per-player rows with the team mask.** It would erase who banked
+  what, which is the one interesting thing on a teammate's row.

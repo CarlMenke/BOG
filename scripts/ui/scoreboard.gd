@@ -89,9 +89,15 @@ func rebuild() -> void:
 ## the table answers "are we winning" before it answers "am I winning".
 func _build_teams(config: MatchConfig) -> void:
 	var teams := range(config.team_count)
-	teams.sort_custom(func(a, b): return MatchState.team_score(a) > MatchState.team_score(b))
+	# Under letters the pooled count leads and kills break the tie, which is the
+	# order the results screen crowns them in (D-049).
+	var letters := config.win_condition == MatchConfig.WinCondition.LETTERS
+	teams.sort_custom(func(a, b):
+		if letters and MatchState.team_letter_count(a) != MatchState.team_letter_count(b):
+			return MatchState.team_letter_count(a) > MatchState.team_letter_count(b)
+		return MatchState.team_score(a) > MatchState.team_score(b))
 	for team: int in teams:
-		_rows.add_child(_team_header(team))
+		_rows.add_child(_team_header(team, letters))
 		var any := false
 		for peer_id: int in MatchState.ranking():
 			if Net.player_team(peer_id) == team:
@@ -104,7 +110,7 @@ func _build_teams(config: MatchConfig) -> void:
 			_rows.add_child(empty)
 
 
-func _team_header(team: int) -> Control:
+func _team_header(team: int, letters: bool) -> Control:
 	var row := HBoxContainer.new()
 	row.custom_minimum_size.y = 34
 
@@ -130,6 +136,14 @@ func _team_header(team: int) -> Control:
 	score.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	score.add_theme_color_override("font_color", UIPalette.team_colour(team))
 	row.add_child(score)
+	# The team's pooled letters, in the column its members' letters sit in, so
+	# "are we one away" is answered on the team's own line (D-049). The empty
+	# cell holds the deaths column's place; a team total of deaths is noise.
+	if letters:
+		var gap := Control.new()
+		gap.custom_minimum_size.x = COLUMN_WIDTH
+		row.add_child(gap)
+		row.add_child(_mask_cell(MatchState.team_letters(team)))
 	return row
 
 
@@ -190,11 +204,14 @@ func _player_row(peer_id: int, config: MatchConfig) -> Control:
 ## and a `Label` has one — the alternative is bbcode in a `RichTextLabel`, which
 ## is a markup parser and a second font stack for three characters.
 func _letters_cell(peer_id: int) -> Control:
+	return _mask_cell(MatchState.letters_for(peer_id))
+
+
+func _mask_cell(mask: int) -> Control:
 	var box := HBoxContainer.new()
 	box.custom_minimum_size.x = COLUMN_WIDTH
 	box.alignment = BoxContainer.ALIGNMENT_END
 	box.add_theme_constant_override("separation", 7)
-	var mask := MatchState.letters_for(peer_id)
 	for bit: int in MatchState.LETTERS:
 		var glyph := Label.new()
 		# The one table, shared with the card in the world and the lamps on the

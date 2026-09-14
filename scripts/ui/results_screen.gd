@@ -83,16 +83,21 @@ func _fill_headline(summary: Dictionary) -> void:
 
 	if teams:
 		var scores: Dictionary = summary.get("team_scores", {})
+		# Under letters the pooled masks decide it before kills do (D-049): the
+		# team that spelled GUB won, however few kills it took to do it. Absent
+		# in every other condition, and then every team counts zero letters and
+		# kills decide exactly as they always have.
+		var pooled: Dictionary = summary.get("team_letters", {})
 		var best := -1
-		var best_score := -99999
+		var best_key := [-1, -99999]
 		var drawn := false
 		for team: int in scores:
-			var score := int(scores[team])
-			if score > best_score:
-				best_score = score
+			var key := [_bits(int(pooled.get(team, 0))), int(scores[team])]
+			if key > best_key:
+				best_key = key
 				best = team
 				drawn = false
-			elif score == best_score:
+			elif key == best_key:
 				drawn = true
 		if drawn or best < 0:
 			_headline.text = "DRAW"
@@ -111,6 +116,9 @@ func _fill_headline(summary: Dictionary) -> void:
 			UIPalette.GUB if mine else UIPalette.AMBER)
 
 	_subtitle.text = _reason_text(String(summary.get("reason", "")))
+	# In Teams no one hand needs all three (D-049), so "somebody" would be wrong.
+	if teams and String(summary.get("reason", "")) == "letters":
+		_subtitle.text = "The team spelled it between them."
 
 
 static func _reason_text(reason: String) -> String:
@@ -143,6 +151,22 @@ func _fill_table(summary: Dictionary) -> void:
 	# the match that ended rather than the one being set up.
 	var letters: bool = int(summary.get("win_condition", MatchConfig.WinCondition.KILL_LIMIT)) \
 		== MatchConfig.WinCondition.LETTERS
+	# Under Teams + letters the team is what spelled it, so each team gets a row
+	# of its own above the players, carrying the pooled letters (D-049). The
+	# player rows below still show which letters each member banked — who
+	# carried the team is still worth reading — but it is the team row whose
+	# three glyphs the headline was decided on, and it is the only place a
+	# letter banked by somebody who has since left still shows.
+	if teams and letters:
+		var pooled: Dictionary = summary.get("team_letters", {})
+		var scores: Dictionary = summary.get("team_scores", {})
+		var order := scores.keys()
+		order.sort_custom(func(a, b):
+			var ka := [_bits(int(pooled.get(a, 0))), int(scores[a])]
+			var kb := [_bits(int(pooled.get(b, 0))), int(scores[b])]
+			return ka > kb)
+		for team: int in order:
+			_rows.add_child(_team_row(team, int(pooled.get(team, 0)), int(scores[team])))
 	for place in ranking.size():
 		_rows.add_child(_row(place + 1, int(ranking[place]),
 			stats.get(ranking[place], {}), teams, letters))
@@ -184,6 +208,50 @@ func _row(place: int, peer_id: int, entry: Dictionary, teams: bool,
 	if letters:
 		line.add_child(_letters_stat(int(entry.get("letters", 0))))
 	return row
+
+
+## One team's line: its colour, its kills, and the letters it pooled. Shaped
+## exactly like a player row — same stat widths, same columns — so the glyphs
+## line up down the table and the team's three sit directly over its members'.
+func _team_row(team: int, mask: int, kills: int) -> Control:
+	var row := PanelContainer.new()
+	row.theme_type_variation = "RowPanel"
+	var line := HBoxContainer.new()
+	line.add_theme_constant_override("separation", 14)
+	row.add_child(line)
+
+	var stripe := ColorRect.new()
+	stripe.custom_minimum_size = Vector2(42, 4)
+	stripe.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	stripe.color = UIPalette.team_colour(team)
+	line.add_child(stripe)
+
+	var name_label := Label.new()
+	name_label.text = "TEAM %d" % (team + 1)
+	name_label.theme_type_variation = "LeadLabel"
+	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	name_label.add_theme_color_override("font_color", UIPalette.team_colour(team))
+	line.add_child(name_label)
+
+	line.add_child(_stat("%d" % kills, "KILLS", UIPalette.TEXT))
+	# An empty cell where a team total of deaths would go: nobody reads a team's
+	# deaths, and leaving the column out would pull the letters out of line.
+	var gap := Control.new()
+	gap.custom_minimum_size.x = STAT_WIDTH
+	line.add_child(gap)
+	# "LETTERS", not "TEAM LETTERS": the row already says TEAM, and a wider
+	# caption pushes the column out of line with the player rows below it.
+	line.add_child(_letters_stat(mask))
+	return row
+
+
+static func _bits(mask: int) -> int:
+	var count := 0
+	for bit: int in MatchState.LETTERS:
+		if mask & bit != 0:
+			count += 1
+	return count
 
 
 ## The final hands, in the same three glyphs the scoreboard column and the HUD

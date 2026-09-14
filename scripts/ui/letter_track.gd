@@ -47,8 +47,12 @@ const UNLIT_BORDER := 0.18
 ## not merely as brighter.
 const LIT_WASH := 0.12
 
-## The three-bit mask, straight from `MatchState.letters_for`.
+## The three-bit mask, straight from `MatchState.scoring_letters` — your own in
+## a free-for-all, your team's pooled one in Teams (D-049).
 var _letters: int = 0
+## Whether `_letters` is a team's pooled mask. Said under the lamps, because a
+## lamp lit by a letter you never touched reads as a bug unless it is labelled.
+var _team: bool = false
 ## Which bit is being held up, or 0. Presence of a letter here is presence of a
 ## hold — `letter_hold_letter` is derived from the row's existence rather than
 ## from its clock, which is what stops a client whose countdown ran out a round
@@ -75,16 +79,18 @@ func _ready() -> void:
 ## responding — where "1" reads as the last moment of a wait, which is what it
 ## is. `ceili` gives that for free everywhere except the exact end, and `maxi`
 ## covers the end.
-func set_state(letters: int, hold_letter: int, remaining: float, total: float) -> void:
+func set_state(letters: int, hold_letter: int, remaining: float, total: float,
+		team: bool = false) -> void:
 	var fill := 0.0
 	var seconds := 0
 	if hold_letter != 0:
 		fill = clampf(1.0 - remaining / maxf(0.01, total), 0.0, 1.0)
 		seconds = maxi(1, ceili(remaining))
-	if letters == _letters and hold_letter == _hold_letter \
+	if letters == _letters and hold_letter == _hold_letter and team == _team \
 			and seconds == _hold_seconds and is_equal_approx(fill, _hold_fill):
 		return
 	_letters = letters
+	_team = team
 	_hold_letter = hold_letter
 	_hold_fill = fill
 	_hold_seconds = seconds
@@ -100,6 +106,8 @@ func _draw() -> void:
 		index += 1
 	if _hold_letter != 0:
 		_draw_caption()
+	elif _team:
+		_draw_team_caption()
 
 
 ## One lamp, in whichever of its three states it is in. The hold is tested
@@ -145,3 +153,14 @@ func _draw_caption() -> void:
 	var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, CAPTION_SIZE).x
 	draw_string(font, Vector2((size.x - width) * 0.5, CAPTION_TOP + CAPTION_SIZE),
 		text, HORIZONTAL_ALIGNMENT_LEFT, -1, CAPTION_SIZE, UIPalette.AMBER)
+
+
+## "TEAM LETTERS" under the lamps in Teams, when no hold is using the caption
+## line. The hold's own caption wins that line: while you are holding, the card
+## in your fist is the thing to read, and the lamps have not changed meaning.
+func _draw_team_caption() -> void:
+	var text := "TEAM LETTERS"
+	var font := get_theme_default_font()
+	var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, CAPTION_SIZE).x
+	draw_string(font, Vector2((size.x - width) * 0.5, CAPTION_TOP + CAPTION_SIZE),
+		text, HORIZONTAL_ALIGNMENT_LEFT, -1, CAPTION_SIZE, UIPalette.TEXT_DIM)

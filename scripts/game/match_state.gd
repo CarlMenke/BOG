@@ -134,6 +134,19 @@ var _next_pickup_id: int = 1
 ## a hand before the host says so.
 var _letter_holds: Dictionary = {}
 
+## team -> three-bit mask, on every peer: the letters a team has banked between
+## all of its members, which is what a Teams match is won on (D-049). Empty in a
+## free-for-all.
+##
+## **Kept beside `stats` rather than derived from it**, and that is the leaver
+## rule. `_on_player_left` erases the leaver's stats row, so a mask OR-ed
+## together from rows would lose the G somebody banked the moment they closed
+## the game — a team punished for a teammate's connection, and a letter taken out
+## of a match that may be a hundred deaths from replacing it. Written only by
+## `_sync_letters`, which already carries it to every peer, and cleared only by
+## `reset` and a fresh warmup — never by a departure.
+var _team_letters: Dictionary = {}
+
 ## peer_id -> {ends_at: float}, on every peer, for exactly as long as that Gub
 ## is the Elder.
 ##
@@ -317,6 +330,7 @@ func reset() -> void:
 			gub.queue_free()
 	gubs.clear()
 	stats.clear()
+	_team_letters.clear()
 	# The nodes themselves belong to the arena's `spawned_items` and go with it;
 	# this is only the index. Holding freed pickups across a match would make
 	# `claim_pickup` chase instance ids that no longer resolve.
@@ -348,6 +362,7 @@ func _set_phase(next: Phase) -> void:
 
 func _begin_warmup() -> void:
 	stats.clear()
+	_team_letters.clear()
 	for peer_id: int in Net.peer_ids():
 		stats[peer_id] = _new_stats()
 	_finished = false
@@ -996,12 +1011,26 @@ func award_letter(peer_id: int, letter: int) -> bool:
 	var entry: Dictionary = stats.get(peer_id, {})
 	if entry.is_empty():
 		return false
-	var held := int(entry.get("letters", 0))
-	if held & letter != 0:
+	# Judged against what the *team* holds in Teams (D-049): a G your teammate
+	# already banked is a duplicate in your hands too, wasted exactly as D-033
+	# wastes one of your own. In a free-for-all this is the player's own mask.
+	if scoring_letters(peer_id) & letter != 0:
 		return false
-	var next := held | letter
-	_sync_letters.rpc(peer_id, next)
-	_sync_letters(peer_id, next)
+	var next := int(entry.get("letters", 0)) | letter
+	var team := _pooling_team(peer_id)
+	var team_mask := (team_letters(team) | letter) if team != MatchConfig.TEAM_NONE else 0
+	_sync_letters.rpc(peer_id, next, team, team_mask)
+	_sync_letters(peer_id, next, team, team_mask)
+	# A teammate standing still for the letter that was just banked is now
+	# standing still for nothing. Ended here, and the card spent rather than
+	# re-dropped, for the reason `_begin_letter_hold` refuses to start that hold
+	# at all: a ten-second countdown whose reward is "no change" is the most
+	# miserable thing in the mode, and a duplicate is consumed on touch (D-033).
+	if team != MatchConfig.TEAM_NONE:
+		for other: int in _letter_holds.keys():
+			if other != peer_id and _pooling_team(other) == team \
+					and int(_letter_holds[other]["letter"]) == letter:
+				_end_letter_hold(other)
 	# `stats` rides along with the score push anyway; pushing here keeps the two
 	# from disagreeing for the frame in between.
 	_push_scores()
@@ -1013,12 +1042,17 @@ func award_letter(peer_id: int, letter: int) -> bool:
 ## `_sync_scores`, because a letter is the one score change that has to be
 ## *felt* the instant it happens — the HUD lamp and the sound hang off this
 ## signal, and the next score push may be a whole kill away.
+##
+## The team's pooled mask rides in the same message rather than in a second one,
+## so no peer can ever see a player's lamp lit and their team's not (D-049).
+## `team` is `TEAM_NONE` outside Teams, and then `team_mask` means nothing.
 @rpc("authority", "call_remote", "reliable")
-func _sync_letters(peer_id: int, mask: int) -> void:
+func _sync_letters(peer_id: int, mask: int, team: int, team_mask: int) -> void:
+	if team != MatchConfig.TEAM_NONE:
+		_team_letters[team] = team_mask
 	var entry: Dictionary = stats.get(peer_id, {})
-	if entry.is_empty():
-		return
-	entry["letters"] = mask
+	if not entry.is_empty():
+		entry["letters"] = mask
 	letters_changed.emit(peer_id)
 	scores_changed.emit()
 
@@ -1030,14 +1064,49 @@ func letters_for(peer_id: int) -> int:
 	return int(stats.get(peer_id, {}).get("letters", 0))
 
 
+## The pooled three-bit mask of one team (D-049): every letter any member has
+## banked this match, including members who have since left. 0 for a team with
+## nothing, for `TEAM_NONE`, and for everybody in a free-for-all.
+func team_letters(team: int) -> int:
+	return int(_team_letters.get(team, 0))
+
+
+## The mask a letter is judged against and a match is won on: the player's team's
+## pooled mask in Teams, the player's own everywhere else. What a *duplicate*
+## means, what the HUD lamps show and what `_check_win` tests all read this, so
+## the three cannot disagree about whose letters count.
+func scoring_letters(peer_id: int) -> int:
+	var team := _pooling_team(peer_id)
+	if team != MatchConfig.TEAM_NONE:
+		return team_letters(team)
+	return letters_for(peer_id)
+
+
+## The team whose letters `peer_id` pools into, or `TEAM_NONE` when letters are
+## not pooled — a free-for-all, or a player with no team in the roster.
+func _pooling_team(peer_id: int) -> int:
+	if config().mode != MatchConfig.Mode.TEAMS:
+		return MatchConfig.TEAM_NONE
+	return Net.player_team(peer_id)
+
+
 func has_all_letters(peer_id: int) -> bool:
-	return letters_for(peer_id) & LETTER_ALL == LETTER_ALL
+	return scoring_letters(peer_id) & LETTER_ALL == LETTER_ALL
+
+
+## How many distinct letters a team has pooled. What the scoreboard and the
+## results screen order teams by under the letters condition.
+func team_letter_count(team: int) -> int:
+	return _bit_count(team_letters(team))
 
 
 ## How many distinct letters a player holds. The scoreboard sorts on this, and
 ## "2 of 3" is the only number worth printing beside three lamps.
 func letter_count(peer_id: int) -> int:
-	var mask := letters_for(peer_id)
+	return _bit_count(letters_for(peer_id))
+
+
+static func _bit_count(mask: int) -> int:
 	var count := 0
 	for bit: int in LETTERS:
 		if mask & bit != 0:
@@ -1085,7 +1154,10 @@ func _begin_letter_hold(peer_id: int, letter: int) -> void:
 	# consumed on touch, instantly, the way it always was (D-033). Starting a
 	# ten-second hold whose reward is "no change" would be the single most
 	# miserable thing in the mode.
-	if int(entry.get("letters", 0)) & letter != 0:
+	#
+	# In Teams "already hold" means the team does (D-049): a teammate's banked
+	# G makes the next G card a duplicate for everybody on that team.
+	if scoring_letters(peer_id) & letter != 0:
 		return
 	var seconds := config().letter_hold_time
 	# Zero means grant on touch, which is a legal setting and a supported one.
@@ -1109,6 +1181,10 @@ func _begin_letter_hold(peer_id: int, letter: int) -> void:
 func _tick_letter_holds() -> void:
 	# `.keys()` copies, because completing a hold erases its own row.
 	for peer_id: int in _letter_holds.keys():
+		# Not only its own: in Teams, banking a letter ends every teammate's hold
+		# for the same one (D-049), so a row later in this copy can be gone.
+		if not _letter_holds.has(peer_id):
+			continue
 		var hold: Dictionary = _letter_holds[peer_id]
 		if _now() < float(hold["ends_at"]):
 			continue
@@ -1421,12 +1497,23 @@ func _check_win() -> void:
 		MatchConfig.WinCondition.TIME_ONLY:
 			pass
 		MatchConfig.WinCondition.LETTERS:
-			# Letters are tracked per player even in Teams, so this is a scan of
-			# players either way and the team simply inherits the win. A team
-			# whose three members hold G, U and B between them has not won
-			# anything: the card game's ending is one hand with all three in it,
-			# and pooling them would make a four-player team a near-certainty
-			# against a two-player one.
+			# This comment used to say a team whose three members hold G, U and
+			# B between them had won nothing, because the card game ends on one
+			# hand with the whole word in it. Playtesting said otherwise — the
+			# user's note was that spelling should be scored per team — and
+			# D-049 reverses it: in Teams the letters pool, so the test is the
+			# team's mask. The worry the old rule answered, a big team beating a
+			# small one on arithmetic, is now the lobby's to answer — random teams
+			# are dealt even (D-048) — rather than the letters' to refuse to add up.
+			#
+			# A team's mask survives its members leaving (see `_team_letters`),
+			# which is why this scans teams rather than the rows in `stats`.
+			if config().mode == MatchConfig.Mode.TEAMS:
+				for team: int in _team_letters:
+					if team_letters(team) & LETTER_ALL == LETTER_ALL:
+						_finish("letters")
+						return
+				return
 			for peer_id: int in stats:
 				if has_all_letters(peer_id):
 					_finish("letters")
@@ -1469,6 +1556,14 @@ func _finish(reason: String) -> void:
 		for team in config().team_count:
 			scores[team] = team_score(team)
 		summary["team_scores"] = scores
+		# The pooled masks, so the results screen can crown the team that
+		# spelled it rather than the team with the most kills, and can draw the
+		# team's letters when the member who banked one has already left (D-049).
+		if config().win_condition == MatchConfig.WinCondition.LETTERS:
+			var pooled := {}
+			for team in config().team_count:
+				pooled[team] = team_letters(team)
+			summary["team_letters"] = pooled
 
 	_sync_phase.rpc(Phase.POST_MATCH, 0.0, time_left)
 	_sync_phase(Phase.POST_MATCH, 0.0, time_left)

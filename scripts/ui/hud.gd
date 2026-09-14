@@ -262,8 +262,12 @@ func _refresh_letters() -> void:
 	if not show:
 		return
 	var me := Net.local_id()
-	_letters.set_state(MatchState.letters_for(me), MatchState.letter_hold_letter(me),
-		MatchState.letter_hold_remaining(me), Net.config.letter_hold_time)
+	# `scoring_letters` is your team's pooled mask in Teams and your own in a
+	# free-for-all (D-049) — the lamps show what the match is judged on, which
+	# in Teams is not what you personally banked.
+	_letters.set_state(MatchState.scoring_letters(me), MatchState.letter_hold_letter(me),
+		MatchState.letter_hold_remaining(me), Net.config.letter_hold_time,
+		Net.config.mode == MatchConfig.Mode.TEAMS)
 
 
 ## The robe's countdown, for the local player only (D-040).
@@ -411,13 +415,18 @@ func _on_player_killed(victim_id: int, killer_id: int, cause: int) -> void:
 	_refresh_score()
 
 
-## Both letter signals carry a peer id and fire for everybody. Only your own row
-## is on this HUD: somebody else's hold gets no treatment here at all, because
+## Both letter signals carry a peer id and fire for everybody. Only your own
+## hold is on this HUD: somebody else's gets no treatment here at all, because
 ## the lit card in their fist is the tell and it is meant to be an in-world one
 ## (D-035).
-func _on_letters_changed(peer_id: int) -> void:
-	if peer_id == Net.local_id():
-		_refresh_letters()
+##
+## A teammate's letter does light your lamps in Teams, though, because the lamps
+## are the team's pooled mask there (D-049) — so a letter banked by anybody on
+## your team has to refresh them. Refreshing on every peer is simpler than
+## asking whose team the sender is on, and costs nothing: `LetterTrack.set_state`
+## drops a repaint when nothing moved, and the other team's letters move nothing.
+func _on_letters_changed(_peer_id: int) -> void:
+	_refresh_letters()
 
 
 func _on_local_death(respawn_in: float) -> void:

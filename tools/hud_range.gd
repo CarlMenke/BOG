@@ -19,7 +19,12 @@ extends Node
 ##
 ## Modes: hud, hud_teams, hud_cooldown, hud_letters, hud_hold, hud_elder,
 ##        killfeed, scoreboard, scoreboard_letters, pause, results,
-##        results_letters, dead, spectate.
+##        results_letters, dead, spectate,
+##        hud_letters_teams, scoreboard_letters_teams, results_letters_teams.
+##
+## The three `*_letters_teams` modes are the letters pictures under Teams, where
+## the lamps, a team row on the scoreboard and a team row on the results table
+## all show a team's pooled letters rather than one player's (D-049).
 ##
 ## The `hud*` ones and `scoreboard_letters` are what the D-036 pass was judged
 ## on. `hud_hold` is the slow one on purpose: it collects a real card through
@@ -48,7 +53,12 @@ const EXTRA := [
 ## letter masks, the local player's own, and the results summary — and a mode
 ## that set three of the four would look right and prove nothing.
 const LETTER_MODES := ["hud_letters", "hud_hold", "scoreboard_letters",
-	"results_letters"]
+	"results_letters", "hud_letters_teams", "scoreboard_letters_teams",
+	"results_letters_teams"]
+## The letters modes played as Teams. A subset of `LETTER_MODES`, never a
+## separate list, so a Teams picture cannot forget to be a letters one.
+const TEAM_LETTER_MODES := ["hud_letters_teams", "scoreboard_letters_teams",
+	"results_letters_teams"]
 
 var _mode: String = "hud"
 var _hud: CanvasLayer
@@ -76,7 +86,7 @@ func _stage() -> void:
 	Net.config.time_limit = 600
 	MatchState.time_left = 247.0
 	Net.config.kill_limit = 15
-	if _mode == "hud_teams":
+	if _mode == "hud_teams" or TEAM_LETTER_MODES.has(_mode):
 		Net.config.mode = MatchConfig.Mode.TEAMS
 		Net.config.team_count = 2
 	if _mode == "hud_cooldown":
@@ -104,7 +114,8 @@ func _stage() -> void:
 		_stock_the_bar()
 
 	match _mode:
-		"killfeed", "scoreboard", "scoreboard_letters", "results", "results_letters":
+		"killfeed", "scoreboard", "scoreboard_letters", "results", "results_letters", \
+				"scoreboard_letters_teams", "results_letters_teams":
 			_stage_kills()
 		"hud_cooldown":
 			_stage_throw()
@@ -131,11 +142,11 @@ func _stage() -> void:
 	MatchState.scores_changed.emit()
 
 	match _mode:
-		"scoreboard", "scoreboard_letters":
+		"scoreboard", "scoreboard_letters", "scoreboard_letters_teams":
 			(_hud.get_node("%Scoreboard") as Scoreboard).open()
 		"pause":
 			(_hud.get_node("%PauseMenu") as PauseMenu).open()
-		"results", "results_letters":
+		"results", "results_letters", "results_letters_teams":
 			(_hud.get_node("%Results") as ResultsScreen).show_summary(_summary())
 
 
@@ -160,7 +171,9 @@ func _populate_roster() -> void:
 	if not mine.is_empty():
 		mine["kills"] = 7
 		mine["deaths"] = 4
-	if LETTER_MODES.has(_mode):
+	if TEAM_LETTER_MODES.has(_mode):
+		_deal_team_letters(mine)
+	elif LETTER_MODES.has(_mode):
 		_deal_letters(mine)
 	Net.roster_changed.emit()
 
@@ -198,6 +211,33 @@ func _deal_letters(mine: Dictionary) -> void:
 	# and would do it silently.
 	mine["letters"] = 0 if _mode == "hud_hold" \
 		else MatchState.LETTER_G | MatchState.LETTER_U
+
+
+## The Teams deal. The local player (team 0) and the extras alternate teams, so
+## team 0 is you, Pipwick, Mossback and Nettle, and team 1 is Bramblewick and
+## Toadflax. Within a team no two rows share a letter — a teammate's letter is a
+## duplicate and would never have been banked (D-049) — so the pooled masks are
+## exactly the OR of the rows, and they are written into `_team_letters` the way
+## `_sync_letters` would have written them.
+##
+## Team 0 pools to G·U and is one B short: the picture worth taking is a team
+## lamp lit by a letter the local player never touched. Only the results mode
+## completes the word, for the scar `_deal_letters` records.
+func _deal_team_letters(mine: Dictionary) -> void:
+	var deal := [0, MatchState.LETTER_B, MatchState.LETTER_U, 0, 0]
+	if _mode == "results_letters_teams":
+		deal[0] = MatchState.LETTER_B
+	for i in EXTRA.size():
+		var row: Dictionary = MatchState.stats.get(EXTRA_BASE + i, {})
+		if not row.is_empty():
+			row["letters"] = deal[i]
+	if not mine.is_empty():
+		mine["letters"] = MatchState.LETTER_G
+	MatchState._team_letters.clear()
+	for peer_id: int in MatchState.stats:
+		var team := Net.player_team(peer_id)
+		MatchState._team_letters[team] = MatchState.team_letters(team) \
+			| MatchState.letters_for(peer_id)
 
 
 ## A feed with one row in it proves nothing. Emitted rather than reported so
@@ -308,4 +348,6 @@ func _summary() -> Dictionary:
 		# What the results screen branches its letters column on, so a staged
 		# summary has to carry it exactly as `MatchState._finish` does.
 		"win_condition": Net.config.win_condition,
+		"team_scores": {0: MatchState.team_score(0), 1: MatchState.team_score(1)},
+		"team_letters": {0: MatchState.team_letters(0), 1: MatchState.team_letters(1)},
 	}
