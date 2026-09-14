@@ -39,6 +39,9 @@ properties/7/replication_mode = 2
 properties/8/path = NodePath(".:sync_life")
 properties/8/spawn = true
 properties/8/replication_mode = 1
+properties/9/path = NodePath(".:sync_draw")
+properties/9/spawn = true
+properties/9/replication_mode = 2
 
 [node name="Gub" type="CharacterBody3D"]
 collision_layer = 2

@@ -413,8 +413,47 @@ PACKS = (
     # what belongs in it; none of them builds anything until a `Clip(...)` line
     # is written into it, which is the point — a folder somebody dropped files
     # into is not a promise, and a line in this table is.
+    # The bow, and the third pack with something in it (D-065). Two clips out of
+    # five, and which three are missing is the interesting part.
+    #
+    # `StandingDrawArrow.fbx` is 1.017 s of reach-nock-and-pull. The window
+    # `gub_animator.gd` indexes is **0.567-1.017**, the pull alone: at 0.567 the
+    # drawing hand has arrived at the bow and is doing 0.29 m/s, the slowest it
+    # gets anywhere between the reach (4.19 m/s) and the pull (0.95 m/s steady),
+    # and that frame is the arrow meeting the string. Everything before it is
+    # taking an arrow out of a quiver, which is a lovely flourish and cannot be
+    # in the charge: a bow is *carried*, so charge zero has to be nocked at
+    # brace rather than empty-handed — otherwise a snap shot fires an arrow the
+    # Gub is still reaching for. `align` is 0.567 for the reason every one-shot's
+    # is, even though this one is scrubbed rather than fired.
+    #
+    # `StandingAimRecoil.fbx` is the loose. Window 0.167-0.450: 0.167 is the
+    # last frame the hand is on the string (0.54 m/s, the slowest since the
+    # first frame) and 0.183 is the first frame off it (8.06 m/s). One frame,
+    # which is the whole of `GubAnimator.BOW_RELEASE_TIME`.
+    #
+    # **Three files here are deliberately not declared**, the way
+    # `2_Spear_Suite/SpearThrow.fbx` is not:
+    #
+    # * `StandingAimOverdraw.fbx` was expected to be the clip the charge indexes
+    #   into — this pack's README says so and so did the step brief. Measured, it
+    #   cannot be: it **opens fully drawn** (the drawing hand starts at the exact
+    #   pose `StandingDrawArrow` ends on) and creeps 0.116 m over 3.767 s. A
+    #   charge indexed into it would be a bow at full draw at charge zero, which
+    #   is the one thing the tell must never show. What it really is, is the
+    #   *hold* — and a held pose with a slow creep in it is worth having the day
+    #   somebody minds that a Gub at full draw is perfectly still.
+    # * `StandingEquipBow.fbx` and `StandingDisarmBow.fbx` are the bow coming out
+    #   and going away. The bow is carried, like the spear, and appears and
+    #   disappears the way the spear does — as a visibility toggle off the one
+    #   gate in `GubCombat` (D-035, D-065). An equip clip for the bow and none
+    #   for the spear would be two rules about the same hand.
     Pack("3_Bow_Suite",
-         "draw, a held aim loop, release, and ideally a dry-fire or a recover"),
+         "the bow the game plays: the pull out of a nock-and-draw, and the loose",
+         (
+             Clip("StandingDrawArrow.fbx", "Draw",  False, 0.567),
+             Clip("StandingAimRecoil.fbx", "Loose", False, 0.167),
+         )),
     # The Elder's cast, and the second pack with something in it (D-064).
     #
     # `Standing1HMagicAttack1.fbx` is 2.283 s and the one clip in this build

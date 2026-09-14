@@ -115,6 +115,50 @@ func _build() -> void:
 	# the recharge is what decides how punishing a miss is.
 	_slider("spear_recharge", "Spear recharge", 0.5, 15.0, 0.1, func(v: float) -> String:
 		return "%.1f s" % v)
+	# The bow's eight, under the spear's recharge and above the Elder's, because
+	# that is the order a player meets the three weapons in and because the row
+	# that matters most here is the one right under `spear_recharge`: how long a
+	# full draw takes against how long a spear takes to come back is the whole
+	# of how the two weapons trade (D-065).
+	#
+	# The four pairs are read as pairs — a snap shot and a full draw — so every
+	# one of them shows both ends in one row rather than as two sliders a host
+	# has to hold in their head at once.
+	_slider("bow_draw_time", "Full draw takes", 0.2, 4.0, 0.05,
+		func(v: float) -> String: return "%.2f s" % v)
+	_slider("bow_recharge", "Bow recharge", 0.2, 15.0, 0.1,
+		func(v: float) -> String: return "%.1f s" % v)
+	# Damage as a fraction of a Gub rather than as a bare number, because "80"
+	# means nothing without knowing that a Gub is 100 — and the two numbers a
+	# host is actually tuning against are `Nameplate`'s bands at 50 and 25
+	# (D-062).
+	_slider("bow_damage_snap", "Snap shot hits for", 1.0, 100.0, 1.0,
+		func(v: float) -> String:
+			return "%d  (%d%% of a Gub)" % [roundi(v), roundi(v / Gub.MAX_HEALTH * 100.0)])
+	_slider("bow_damage_full", "Full draw hits for", 1.0, 100.0, 1.0,
+		func(v: float) -> String:
+			return "%d  (%d%% of a Gub)" % [roundi(v), roundi(v / Gub.MAX_HEALTH * 100.0)])
+	# The four flight dials say what they *buy* as well as what they are: the
+	# flat band is the distance inside which you point at a Gub and hit it
+	# (`GubCombat.flat_band`), and it is the only reading of speed-against-drop
+	# that a host can act on. It is also the number the Elder's own range is now
+	# derived from, which is why the full draw's two rows say so.
+	_slider("bow_speed_snap", "Snap shot speed", 5.0, 120.0, 1.0,
+		func(v: float) -> String:
+			return "%d m/s  ·  flat to %.0f m" % [roundi(v),
+				GubCombat.flat_band(v, Net.config.bow_drop_snap)])
+	_slider("bow_drop_snap", "Snap shot drop", 0.5, 40.0, 0.5,
+		func(v: float) -> String:
+			return "%.1f m/s²  ·  flat to %.0f m" % [v,
+				GubCombat.flat_band(Net.config.bow_speed_snap, v)])
+	_slider("bow_speed_full", "Full draw speed", 5.0, 120.0, 1.0,
+		func(v: float) -> String:
+			return "%d m/s  ·  flat to %.0f m" % [roundi(v),
+				GubCombat.flat_band(v, Net.config.bow_drop_full)])
+	_slider("bow_drop_full", "Full draw drop", 0.5, 40.0, 0.5,
+		func(v: float) -> String:
+			return "%.1f m/s²  ·  flat to %.0f m  (and the bolt with it)" % [v,
+				GubCombat.flat_band(Net.config.bow_speed_full, v)])
 	# Directly under the spear's recharge, because the two are one question: how
 	# often anybody can commit to an attack — and since D-040 the Elder's is the
 	# *shorter* of the two, which is exactly the sort of thing a host should

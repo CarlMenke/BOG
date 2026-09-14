@@ -27,7 +27,10 @@ signal threw_spear(origin: Vector3, direction: Vector3)
 ## puts on the wire and what the kill feed switches on. LIGHTNING therefore sits
 ## *after* UNKNOWN rather than beside SPEAR where it belongs by meaning, because
 ## a tidier order would have renumbered every cause already in flight.
-enum Cause { SPEAR, FALL, VOID, UNKNOWN, LIGHTNING }
+## Appended to, never reordered: the ordinal is what travels in
+## `MatchState._do_kill` and in the kill feed, so inserting one in the middle
+## would turn every older peer's lightning into a fall.
+enum Cause { SPEAR, FALL, VOID, UNKNOWN, LIGHTNING, ARROW }
 
 ## Full health, and the unit every damage number in the game is written in
 ## (D-062). A Gub starts each life on exactly this and is dead at zero.
@@ -237,6 +240,29 @@ const LAYER_DEPLOYABLE := 8
 ## two dives in a row have to be two dives on every screen. `GubAnimator` watches
 ## it, so remote Gubs fire the dive from the same value their own client wrote.
 @export var sync_dive_serial: int = 0
+## How far this Gub's bow is drawn, or **-1 for "not drawing"** (D-065).
+##
+## One float and not a float beside a flag, which is the whole of why the charge
+## can be trusted on somebody else's screen. A bow that is 40% drawn and a bow
+## that is not being drawn at all are two states, and with two fields they are
+## two packets that can arrive in either order — so for one tick a Gub would be
+## "not drawing, 40%" or "drawing, 0%", and both of those are a pose. Out of
+## band is the cheapest way to say "neither": `draw_fraction` reads 0 from it
+## and `is_drawing` reads false, off the one number, on every peer.
+##
+## Written by the owner like every other `sync_*` field here. The charge is not
+## health — it is an input the player is holding down, and the peer holding it
+## is the only one that can know. What the *host* does with it is check it: the
+## claim that arrives with a loose is clamped to the draw it has been watching
+## (`GubCombat._host_loose_arrow`), exactly as a throw's origin is clamped to
+## somewhere near the Gub.
+##
+## ON_CHANGE, so a Gub standing about sends nothing and a drawing one sends a
+## float a tick. That is the price of the tell and it is the smallest price
+## there is: no serial, no start time, no clock to keep in step — a peer that
+## misses a packet is corrected by the next one and is wrong about a pose for a
+## sixtieth of a second.
+@export var sync_draw: float = -1.0
 ## Bumped once per ordinary jump, for the same reason and read the same way.
 ## Nothing has to *fire* on a jump — the animator scrubs the jump clip by where
 ## the body is in its arc, and leaving the ground with a positive vertical
@@ -268,8 +294,13 @@ const LAYER_DEPLOYABLE := 8
 var life: int = 0
 
 var display_name: String = "Gub"
-## The spear in the Gub's hand. Hidden while one is in flight.
-var held_spear: HeldSpear
+## Everything in the Gub's two hands. Hidden and shown off the one gate in
+## `GubCombat`.
+var held_gear: HeldGear
+## The local half of `sync_draw`, written by `GubCombat` on the owning client
+## only and published from `_publish` like every other owner-authored value.
+## -1 while nothing is being drawn.
+var draw: float = -1.0
 ## The robe, while this Gub is the Elder (D-038), and null the rest of the time
 ## — which is almost always. Built on demand rather than in `_ready` like the
 ## spear, because seven of every eight Gubs in a match will never wear one and a
@@ -461,10 +492,10 @@ func _build_carrier_marker() -> void:
 
 func _equip_spear() -> void:
 	var skeleton := _model_root.find_child("Skeleton3D", true, false) as Skeleton3D
-	held_spear = HeldSpear.new()
-	held_spear.name = "HeldSpear"
-	add_child(held_spear)
-	held_spear.attach_to(skeleton)
+	held_gear = HeldGear.new()
+	held_gear.name = "HeldGear"
+	add_child(held_gear)
+	held_gear.attach_to(skeleton)
 
 
 ## Put the Elder's robe on this Gub, or take it off again.
@@ -660,6 +691,24 @@ func is_sliding() -> bool:
 
 func is_grounded() -> bool:
 	return is_on_floor() if is_local() else sync_grounded
+
+
+## Is this Gub drawing a bow, and how far?
+##
+## Local value on your own Gub, the replicated one on everybody else's — the
+## same shape `is_crouching` and `is_sliding` have, and the reason this pair is
+## written this way rather than as something the animator asks `GubCombat` for.
+## `GubCombat` on a remote Gub belongs to the host and has no idea what that
+## player is holding down; this field does, on every machine (D-065).
+func is_drawing() -> bool:
+	return (draw if is_local() else sync_draw) >= 0.0
+
+
+## 0 at brace, 1 at full draw, and 0 for a Gub that is not drawing at all — so
+## `GubAnimator.draw_time` can be handed it unconditionally and lands on the
+## first frame of the window.
+func draw_fraction() -> float:
+	return maxf(draw if is_local() else sync_draw, 0.0)
 
 
 func is_crouching() -> bool:
@@ -1080,6 +1129,7 @@ func _publish() -> void:
 	sync_crouching = is_crouching()
 	sync_sliding = is_sliding()
 	sync_grounded = is_on_floor()
+	sync_draw = draw
 	sync_life = life
 
 
@@ -1259,5 +1309,11 @@ func revive_at(spawn: Transform3D, life_number: int = -1) -> void:
 	sync_crouching = false
 	sync_sliding = false
 	sync_grounded = true
+	# A respawning Gub is not drawing anything. Seeded here with the rest rather
+	# than left to the next `_publish`, for the reason the block above exists: a
+	# remote Gub that came back mid-draw would hold a half-drawn bow until its
+	# owner's first snapshot arrived.
+	draw = -1.0
+	sync_draw = -1.0
 	sync_life = life
 	respawned.emit()

@@ -15,14 +15,43 @@ none of them fights the locomotion underneath. Measured by
 | file | frames | length | peak | what it is |
 |---|---:|---:|---:|---|
 | `StandingEquipBow.fbx` | 54 | 0.883 s | 0.059 m | Bow out — the transition into the carry pose. |
-| `StandingDrawArrow.fbx` | 62 | 1.017 s | 0.039 m | Nock and draw. The front half of the charge. |
-| `StandingAimOverdraw.fbx` | 227 | 3.767 s | 0.021 m | The held aim, and the longest clip here by far. This is the one the draw is **indexed into** rather than played: a charge is a pose picked by how far the string is back, the way `arc_time()` picks a jump pose by where the body is in its arc. |
+| `StandingDrawArrow.fbx` | 62 | 1.017 s | 0.039 m | Nock and draw. **The clip the charge is indexed into** (D-065), across its 0.567-1.017 window — the pull alone. |
+| `StandingAimOverdraw.fbx` | 227 | 3.767 s | 0.021 m | The held aim, and the longest clip here by far. It was expected to be the clip the draw is indexed into and it **cannot be** — see below. Not declared in `PACKS`. |
 | `StandingAimRecoil.fbx` | 42 | 0.683 s | 0.024 m | The release, and the shortest — which is right, because the release is the only part of this that is on a clock. |
 | `StandingDisarmBow.fbx` | 66 | 1.083 s | 0.085 m | Bow away. This is what a letter hold plays when it disarms the bow. |
 
 None of these are alternates; there is one of each role. There is **no dry-fire
-or recover** in the set — the brief asked for one "ideally", and `AimRecoil` may
-cover it by being played without an arrow spawned.
+or recover** in the set — the brief asked for one "ideally", and `AimRecoil` does
+in fact cover it: a draw cancelled by a letter hold plays the loose with nothing
+on the string, which is a dry-fire for free (D-065).
+
+## What was measured, and what it changed (D-065)
+
+Two of the five are declared in `build_gub.py`'s `PACKS`: `StandingDrawArrow` as
+`Draw` and `StandingAimRecoil` as `Loose`. The other three are deliberately not,
+and the first of them is the interesting one.
+
+**`StandingAimOverdraw` is the hold, not the charge.** The table above used to
+say it was the clip the draw indexes into, and so did step 6's brief. Measured
+on the built asset with `tools/hand_track.gd`, it **opens fully drawn** — its
+first frame is the pose `StandingDrawArrow` ends on — and the drawing hand then
+creeps 0.116 m over 3.767 s. A charge indexed into it would be a bow at full
+draw at charge zero, which is the one thing the tell must never show. What it
+*is* is the held pose with a slow overdraw in it, and it is worth having the day
+somebody minds that a Gub at full draw is perfectly still.
+
+**The charge is `StandingDrawArrow`'s 0.567-1.017, the pull alone.** The drawing
+hand comes down off the shoulder at over 4 m/s, arrives at the bow at 0.567 s
+doing 0.29 m/s — the slowest frame between the reach and the pull — and then
+draws back at a steady 0.95 m/s. 0.567 is the arrow meeting the string. The
+0.567 s before it is a Gub taking an arrow out of a quiver, which is a lovely
+flourish and cannot be in the charge: a bow is *carried*, so charge zero has to
+be a nocked bow at brace.
+
+**`StandingEquipBow` and `StandingDisarmBow` are not declared** because the bow
+appears and disappears the way the spear does, as a visibility toggle off the
+one gate in `GubCombat` — and an equip clip for the bow with none for the spear
+would be two rules about the same hand.
 
 ## What every clip in every pack has to be
 

@@ -230,12 +230,12 @@ func _build_visual() -> void:
 ##
 ## **The origin of what comes back is the middle of the letter**, not the foot
 ## of it, because that is what both callers place by — `_build_visual` hands
-## this node to the bob, and `HeldSpear` puts it up the shaft — and the glyph
+## this node to the bob, and `HeldGear` puts it up the shaft — and the glyph
 ## it replaces was centred too. So the model is pushed down half its own height
 ## under a pivot rather than the pivot being moved up.
 ##
 ## The scale goes on the model and never on the pivot, for those same two
-## callers. `HeldSpear` *assigns* `_card.scale`, and the grow tween in
+## callers. `HeldGear` *assigns* `_card.scale`, and the grow tween in
 ## `_build_visual` reads `_model.scale` as the size to end at; a pivot that was
 ## not scale 1 would be silently multiplied into both of them.
 ##
@@ -246,7 +246,7 @@ func _build_visual() -> void:
 ## letter at four metres — emit a single colour instead and it is a glyph
 ## again, with worse edges than the glyph had.
 ##
-## **Static and public, because the card has two homes.** `HeldSpear` builds one
+## **Static and public, because the card has two homes.** `HeldGear` builds one
 ## of these into a Gub's fist for the length of a letter hold (D-035), and a
 ## card in the hand that was drawn any differently from the card on the ground
 ## would read as a second kind of object rather than as the one that was just

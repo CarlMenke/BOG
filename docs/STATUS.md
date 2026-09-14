@@ -22,11 +22,11 @@ island and out to a results screen, and two automated checks now walk that path:
 one in a single process, one across two processes over a real socket.
 
 ```
-bash tools/smoke_test.sh        # 72 checks, ~4 minutes, finds Godot by itself
+bash tools/smoke_test.sh        # 77 checks, ~4 minutes, finds Godot by itself
 bash tools/net_test.sh          # two processes, one socket; ~45 s, run by hand
 ```
 
-`smoke_test.sh` is the gate and it passes, 72 of 72. `net_test.sh` is kept out
+`smoke_test.sh` is the gate and it passes, 77 of 77. `net_test.sh` is kept out
 of it to keep the gate fast; run it by hand after touching networking, the lobby
 or the results screen. It passes all eleven stages (186 + 33 assertions), ten of
 which end in a rematch, with the engine quiet in both processes — the error it
@@ -292,6 +292,9 @@ Three tiers, because three different kinds of claim need three different proofs
 | `tools/combat_range.tscn cover` | a mushroom stops a spear, the same throw without one does not, and a Gub cannot walk into the cap (D-039) |
 | `tools/combat_range.tscn recharge` | the spear is back in the fist after twelve throws, and an emptied fist refills itself (D-039) |
 | `tools/combat_range.tscn release` | the shaft appears `THROW_RELEASE_TIME` after the click, the fist is empty on that same tick, and that tick is the one the throwing arm is furthest forward — the only check that reads the animation rather than the constant (D-063) |
+| `tools/combat_range.tscn bow` | the bow, in numbers (D-065): a letter hold refuses the draw and empties the bow hand, a snap shot let go one frame after the key went down takes exactly `bow_damage_snap` and flies the snap dials, and a full draw takes `bow_damage_full` and flies the full ones. Neither flight is read off the arrow — the speed and the drop are fitted off six ticks of its own positions. **In the gate**, headless |
+| `tools/combat_range.tscn draw` | the charge as a *tell*: one float published onto a **remote** Gub, and the two skeletons agreeing about how far the string is back to within a centimetre at five charge levels — with the control that the draw moved the hands 0.41 m, so agreeing means something (D-065). Also prints how far off the Gub's facing the composed bow points, which is step 8's number. **In the gate**, headless; through `snapshot.gd` it renders the two Gubs side by side |
+| `tools/preview_bow.tscn` | the bow in the hand across the charge: `-- measure` solves the grip off the draw clip and prints the three constants `HeldGear` carries, and the default sheet is six Gubs from brace to full draw with the string bending under the blend shape (D-065) |
 | `tools/combat_range.tscn cast` | the Elder's half of the same question, and a different question (D-064): the bolt appears `MatchConfig.lightning_delay` after the click, the composed arm is 83% of the way out when it does, and the tick it appears on is the tick that arm stops going forward — which on `Cast` is a third of a second before it is furthest forward |
 | `tools/combat_range.tscn ward` | a real spear cannot kill an Elder, the robe burns out on its own, and the same throw kills once it has (D-040) |
 | `tools/combat_range.tscn bhop` | timed hops climb to 1.3x run speed and no further, as a Gub, an Elder and a capture carrier; running, one jump, a late hop and a hop out of a dive roll do not beat run speed (D-052). **In the gate**, headless with `--fixed-fps 60` |

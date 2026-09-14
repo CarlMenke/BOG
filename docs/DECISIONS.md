@@ -5829,3 +5829,434 @@ skeleton (D-037), so there is exactly one skeleton, and a cast is a clip on it
 like any other. Nothing about this step touched `build_elder.py`, the bolt's
 hitscan and blast (D-053) or the Elder's invulnerability (D-040), and none of
 the three needed it.
+## D-065 — The bow: a charge everyone can see, a hand rule that generalised, and the Elder's range re-derived off it
+
+Hold to draw, let go to fire, and the longer the draw the faster and harder the
+arrow. 20 damage to 80, 18 m/s to 60, and a drop that goes the *other* way, so
+the two ends of the charge are two different weapons rather than one weapon with
+a bonus. Four things in this were not obvious, and they are the four sections
+below.
+
+### The charge is a float on the body, not a clock in the combat node
+
+D-025's sentence about the spear's windup is the whole brief for this weapon:
+*"a tell only the thrower can see is not a tell."* A spear's windup is half a
+second and can be broadcast as one message; a draw is a **continuous quantity**
+that has to be right on seven other screens for as long as somebody holds a key
+down.
+
+So the draw is a **held pose indexed by the charge**, which is the third kind of
+node `gub_animator.gd`'s header allows — a clip scrubbed to an absolute time
+every frame — and is architecturally the same move as `arc_time()`. That one
+reads the body's place in its arc off the vertical velocity; `draw_time()` reads
+the string's position off `Gub.sync_draw`. Neither can freeze (D-026), and
+neither needs an event to arrive on time.
+
+`Gub.sync_draw` is **one float, ON_CHANGE, and out of band at -1 for "not
+drawing"**. One field and not a float beside a flag, because two fields are two
+packets that can arrive in either order — and for one tick a Gub would be
+"not drawing, 40%" or "drawing, 0%", both of which are a pose. A Gub standing
+about sends nothing; a drawing one sends a float a tick, is corrected by the
+next one if it misses, and is wrong about a pose for a sixtieth of a second. No
+serial, no start time, no second clock.
+
+**The owner writes it and everything else reads it**, including the archer's own
+animator and its own bowstring. That is not tidiness: it is the only way to
+guarantee that what a player sees in their own hands is what the clearing sees
+in them. `GubCombat._tick_draw` is the one place the charge is written and it is
+a poll, the third in that file beside `_tick_hand` and `_tick_charge`, for the
+reason both of those are.
+
+**The loose fires off the same float.** There is no relay for the release
+animation: `GubAnimator._track_draw` watches `is_drawing()` and fires the
+`Loose` one-shot on the frame it goes false, so every peer reaches the same
+conclusion from the same number on the same frame. That is D-026's "remote Gubs
+see it because a number changed, not because a message arrived". A cancelled
+draw fires it too, and that is kept rather than guarded against: walking onto a
+letter card mid-draw takes the bow away and what the hands then do is let go of
+a string with nothing on it. The pack was shopped for with "ideally a dry-fire"
+on the list and did not have one. This is that, for free, on the one occasion
+the game needs it.
+
+**The host checks the charge rather than believing it.** The claim travels with
+the loose, because the client is the only machine that knows when a key came up,
+so it is clamped to the furthest the host *watched* that string go
+(`_watch_draw`) plus `DRAW_CLAIM_GRACE` of 0.1. The grace is slack in the
+measuring and not in the mechanic: `sync_draw` arrives when it arrives, and
+clamping to exactly the last sample would shave every honest shot by whatever
+the network cost. A tenth of a draw is six ticks and about six damage; a full
+draw nobody made is ten times that.
+
+### The hand rule became "one thing per hand", in the same one place
+
+`held_spear.gd` owned the fist and was the single place deciding what was in it
+— shaft, letter card, or Elder crackle, never two. A bow broke that by being
+held in the left while its arrow is drawn by the right, which is two things and
+is not two things in one hand.
+
+So the rule **generalised rather than forked**. The file is `held_gear.gd` and
+the class is `HeldGear`, because "the spear a Gub is carrying" had stopped being
+what it is; there are two `BoneAttachment3D`s; and every carried object hangs
+off exactly one of them — the bow on the left, and the shaft, the card, the
+crackle or the nocked arrow on the right. Nothing can put two objects on one
+attachment.
+
+What did **not** change is the part that matters: `GubCombat._refresh_hand` is
+still the only thing that decides, it sets all four every time it runs, and
+`HeldGear` still decides nothing. `_tick_hand`'s poll grew from one comparison
+to three for the same reason — a bow that should be there and is not is the same
+bug as a shaft that should be there and is not, and a poll that caught only one
+of them would be a poll with a hole in it.
+
+**A letter hold disarms the bow**, which is the decisions table's own call and
+is not a rule bolted on beside the spear's: `has_bow()` is `has_spear()`'s exact
+mirror, it shares both of the spear's clauses, and the reason it refuses is that
+the hand the arrow would be drawn with has a card in it. An Elder has no bow
+either, for D-038's reason: the robe *replaces* the weapons rather than adding
+to them.
+
+**The grip is derived rather than swept.** This is the one way the bow's
+placement differs from the spear's, and the difference is the string. A shaft in
+a fist only has to miss the Gub's own skin, and `tools/preview_grip.tscn` exists
+because there was no better answer than looking; a bowstring's nocking point has
+to be where the drawing fingers are at *every* charge level, which is an
+equation with one answer. `tools/preview_bow.tscn -- measure` solves it — the
+drawing hand's line in the bow hand's own frame, fitted through its two ends —
+and prints the three constants `HeldGear` carries.
+
+The interesting half of that answer is the **scale**. A bow is a lever: this one
+is 0.986 m tip to tip and draws its nocking point 0.285 m, while the Gub's hands
+come 0.495 m apart across this draw. So the model ships at **1.738x**, which is
+a bow 1.71 m tip to tip — a longbow on a 1.80 m Gub. Nobody picked that number;
+it is a measurement of the animation, and it would move if the decimator's
+budget moved (the travel comes from `tools/bow_string.py`'s
+`DRAW_HALF_ANGLE_DEG` applied to whatever tip separation survives).
+
+The fit is exact at both ends and **0.117 m out at 40% of the draw**, because
+the fingers do not travel in a straight line in the bow hand's frame — the wrist
+rolls through the pull. That is printed by the tool at every tenth of a charge
+rather than hidden, and it is the number to improve if the string ever looks
+detached mid-draw. A least-squares line would halve it and give up being exact
+at full draw, which is the frame everybody is looking at.
+
+**What the size costs, measured.** A rigidly attached 1.71 m prop goes wherever
+the hand goes, so the carry was measured the way the spear's was, over 24
+samples of every clip a Gub walks around in: the lower limb tip clears the floor
+by 0.171 m in `Idle`, 0.135 in `Walk` and 0.27-0.29 crouched, and **ploughs it
+by 0.158 m in `Run`**, at the bottom of the arm swing. It is not tunable out —
+every lever that would raise the tip moves the nocking point, because sliding
+the bow up its own limb axis takes the string's V off the fingers and shrinking
+it takes the draw with it. So it is left, and left written down in `HeldGear`
+beside the numbers that cause it rather than found later: the honest fixes are a
+carry pose distinct from the draw, a bone that is not the fist, or the spine aim
+step 8 already owes this weapon.
+
+### The numbers, and the one that is not a dial
+
+Eight lobby dials, in four pairs, and every pair is the same pair: what a snap
+shot does and what a full draw does.
+
+    bow_damage_snap  20     bow_damage_full  80
+    bow_speed_snap   18     bow_speed_full   60      m/s   (spear: 42)
+    bow_drop_snap    16     bow_drop_full     5      m/s²  (spear: 8)
+    bow_draw_time   1.0     bow_recharge    1.2      s
+
+These are the **first damage dials in the game**, which D-062 said the bow would
+bring and said why there is still no `starting_health` beside them: 100 is the
+unit these are written in, not a setting. The spear stays a one-shot because
+`SPEAR_DAMAGE` is `Gub.MAX_HEALTH` and no dial can reach it; the bow is numbers,
+so every dial here can make it anything at all, which is the point of them.
+
+**The drop goes the other way from the speed, and that is not physics.** A real
+arrow falls at g whatever the bow did. It is the same exaggeration
+`SpearProjectile.DROP` already makes in the other direction — a third of world
+gravity, so that a throw has an arc worth reading — applied twice so that the
+two ends of the charge are two *trajectories*. Measured by the gate, a snap shot
+is point-and-click to **8.5 m** and a full draw to **50.6 m**, which is the
+widest spread of any weapon in the game.
+
+**The damage curve is the one number that is not a dial.** `damage = snap +
+(full - snap) · charge³`, and the exponent carries the decisions table's
+"weighted toward the end of the draw": the fraction of the gain arriving in the
+last third is `1 - (2/3)³` = **70%**. A half-drawn bow does 27 of the 80 and a
+two-thirds-drawn one does 38 — both genuinely bad, which is what was asked for.
+
+Three rather than two, and **two is the physical answer**: an arrow's energy
+goes as the square of its speed and the speed is linear in the draw here, so
+damage proportional to energy is `charge²`, which puts 56% in the last third and
+is "a bit more at the end" rather than "most of it at the end". So this is a
+design number sitting one step past a physical one, said out loud here so that
+nobody later corrects it to 2 and halves the reward for a full draw. It is not a
+slider because the ends are balance and the shape is the mechanic, and a slider
+that turns a skill curve into a straight line is not something a host could
+reason about from the lobby.
+
+**Nothing is spent to start a draw.** `try_throw_spear` pays its cooldown on the
+click because the input has been spent either way; a draw can be held, judged,
+and let go for a worse shot or abandoned entirely when the target walks behind a
+tree. The recharge starts at the loose, and what the draw costs is the only
+currency this weapon trades in: standing in the open with a tell on you.
+
+### `LIGHTNING_RANGE` stopped being a constant, and the comment that justified it is answered
+
+It was `28.0`, and the long comment under it was the derivation: hitscan with no
+travel time would be a map-wide delete, so there has to be a number; the number
+is the distance at which a flat *spear* throw stops being flat — 42 m/s falling
+at 8 m/s² is 0.67 s and 1.78 m of drop over 28 m, one Gub's height; so the Elder
+owns exactly the band where the spear is point-and-click, and beyond it the
+spear is still the better tool, which is the shape a power-up should have.
+
+**Every word of that survives.** What stopped being true is that the spear is
+the weapon that defines the band. A full draw is now the flattest thing in the
+game, so leaving the Elder at 28 would have left it owning a band the bow
+already owned better — a power-up that is a downgrade inside fifty metres. The
+user's call was that the Elder's range rises to match the bow and that *nothing
+comes down to compensate*: ship it and playtest.
+
+So the same arithmetic is now written as code:
+
+    FLAT_BAND_DROP := 1.78                       one Gub, unchanged
+    flat_band(speed, drop) = speed · sqrt(2 · FLAT_BAND_DROP / drop)
+    lightning_range() = flat_band(bow_speed_full, bow_drop_full)
+
+    spear       42 m/s,  8 m/s²    28.0 m       <- the constant this replaced
+    bow, snap   18 m/s, 16 m/s²     8.5 m
+    bow, full   60 m/s,  5 m/s²    50.6 m       <- the Elder's range now
+
+`FLAT_BAND_DROP` keeps the original 1.78 rather than being tidied into
+`Gub.STAND_HEIGHT`'s 1.55 m collision capsule, for two reasons: what a player
+aims at is the Gub they can see, which is the 1.80 m rig; and keeping it makes
+the re-derivation *checkable*, because `flat_band` asked of the spear's own two
+constants still comes out at 28.0. `tools/match_rules.gd` asserts exactly that,
+which is the line that fails if anybody ever does the tidying.
+
+And it is a **function** rather than a constant because the bow's speed and drop
+are lobby dials. A typed 50.6 sitting beside two sliders that move it is the
+exact shape of number D-063 and D-064 spent their records turning back into
+derivations; a host who flattens the bow now flattens the Elder with it, on
+every peer, off replicated config.
+
+What it costs, said plainly: 50.6 m against 28. On Rust (42 x 64 m) that is a
+long shot rather than most of a fight; on Lantern Wharf and Halcyon Wake no
+sightline is that long anyway (D-056, D-057); on the island it was already a
+clearing and still is.
+
+### The clips: two of five, and which three are missing
+
+`3_Bow_Suite` is in `PACKS` now, and it declares **`Draw` and `Loose`** out of
+the five files in it.
+
+**`Draw` is `StandingDrawArrow.fbx`, and the window is 0.567-1.017 — the pull
+alone.** Tracking `RightHand` against `Hips` on the built asset, the drawing
+hand comes down off the shoulder at over 4 m/s, arrives at the bow at **0.567 s
+doing 0.29 m/s** — the slowest frame between the reach and the pull — and then
+draws back at a steady 0.95 m/s to the end of the clip. 0.567 is the arrow
+meeting the string, by the same quiet-frame rule `THROW_CLIP_START` and
+`CAST_CLIP_START` were picked by.
+
+The 0.567 s before it is a Gub taking an arrow out of a quiver, and it cannot be
+in the charge however good it looks: **a bow is carried**, so charge zero has to
+be a nocked bow at brace or a snap shot fires an arrow the Gub is still reaching
+for, with no string drawn to fire it off. What covers the raise instead is the
+blend — `DRAW_BLEND_SPEED` brings the layer up over a twelfth of a second out of
+whatever the body was already doing.
+
+**`StandingAimOverdraw.fbx` is not declared, and the step brief and the pack's
+own README both said it would be the clip the charge indexes into.** Measured,
+it cannot be: it **opens fully drawn** — its first frame is the pose `Draw` ends
+on — and creeps 0.116 m over 3.767 s. A charge indexed into it is a bow at full
+draw at charge zero, which is the one thing the tell must never show. What it
+really is, is the *hold*, and it is worth having the day somebody minds that a
+Gub at full draw is perfectly still. That is the third time a clip has been
+measured and found to be something other than what the file list said (D-063's
+`SpearThrow`, D-064's furthest-forward frame), and it is the same lesson each
+time.
+
+`StandingEquipBow.fbx` and `StandingDisarmBow.fbx` are not declared either. The
+bow appears and disappears the way the spear does — a visibility toggle off the
+one gate — and an equip clip for the bow with none for the spear would be two
+rules about the same hand.
+
+**`Loose` is `StandingAimRecoil.fbx`, windowed 0.167-0.450, and its release is
+0.183.** The drawing hand creeps back at about a metre a second for the first
+tenth of a second (the final squeeze), slows to **0.54 m/s at 0.167**, and is
+doing **8.06 m/s at 0.183**. That is D-025's original rule — peak hand speed —
+and it is the fourth clip in this graph and the second time that rule has been
+the right one; unlike the throw and the cast it is not a judgement call, because
+0.54 to 8.06 between two adjacent frames is a discontinuity rather than a peak
+to be picked out of a curve. A string either has the fingers on it or does not.
+
+So **`BOW_RELEASE_TIME` is one frame**, derived from those two constants the way
+`THROW_RELEASE_TIME` is derived from its own pair. That it comes out so small is
+the bow rather than a shortcut: the windup already happened. A spear waits half a
+second because the arm has to travel and an Elder's bolt waits a fifth because
+the dial says so; a bow has been drawn, in the open, for as long as its archer
+chose, and there is nothing left for a delay to announce.
+
+### The bow is a third thing on the one windup path
+
+`_play_windup` asks `is_elder()` once and D-064 kept everything below it single.
+The bow is a third thing on that path and it did not fork it either:
+
+- one `is_winding_up()`, now two terms rather than one, because a draw sets
+  `_draw_started_at` and letting go clears it and sets `_windup_release_at`,
+  and there is never a frame that is neither;
+- one cancel on death, one on a letter, and the draw is cleared in the same
+  three lines that clear the throw;
+- one place the aim is read, at the release, which the bow gets for free;
+- one release tick, which now has **three** outcomes on it. The arrow is asked
+  first because it is the only one of the three that already knows which weapon
+  it is: a shot paid for at the draw cannot become a bolt because a robe
+  arrived, while the other two go on branching at the release exactly as they
+  did.
+
+The bow adds **one line** to `_tick_windup`: a draw has no deadline in it, so
+until the string is let go there is nothing there to have arrived.
+`_is_throw_windup()` is the other half — asked by the three places whose real
+question is "is the right fist holding something it has paid for and not let go
+of", because a drawing Gub has an arrow in that fist and not a shaft.
+
+**Airborne came free**, as the decisions table said it would. The draw is a
+filtered `Blend2` over `UPPER_BODY_BONES` rather than a OneShot — a one-shot has
+a length and this has a duration nobody knows until the archer lets go — so the
+legs keep whatever the locomotion, the air scrub or the slide is producing.
+There is still no grounded check anywhere in `gub_combat.gd`.
+
+**No aim ring for the bow**, and this is a sharper version of the Elder's
+reason. The ring answers "where will this land given the drop", and for a bow
+that answer *slides outward as you charge*, because the drop is a function of
+the draw. A ring creeping toward the horizon while the string came back would be
+a charge meter drawn on the ground — the tell done as UI, which is the thing the
+user ruled out and D-036 threw off the crosshair. The string is the meter.
+
+### What proves it
+
+Five new checks in the gate (72 → 77), all headless.
+
+`combat_range -- bow` fires **the two ends of the charge** and a refusal. A
+letter hold has to refuse the draw and empty the bow hand (`letter`); a snap
+shot let go on the frame after the key went down has to take exactly
+`bow_damage_snap` and fly the snap dials (`snap`); a full draw held past
+`bow_draw_time` has to take `bow_damage_full` and fly the full ones (`full`).
+Neither flight is read off the arrow — asking it for the two numbers it was
+launched with would be asserting an assignment against itself. The damage is
+what the victim actually lost, and the speed and the drop are **fitted off six
+ticks of the arrow's own positions**: consecutive positions give velocities,
+consecutive velocities give the drop, and the launch speed is the horizontal
+component squared up with the vertical one extrapolated back half a tick. What
+it prints, at the defaults:
+
+    snap shot at 1% draw took 20, flew 18.5 m/s falling 15.9 m/s² (flat to 9 m)
+    full shot at 100% draw took 80, flew 60.0 m/s falling 5.0 m/s² (flat to 51 m)
+
+The two shots are fired at different ranges and that is the mechanic rather than
+a convenience: a snap shot drops 4.85 m over the fourteen metres the spear modes
+use, so it is checked at five, which is as far as this weapon reaches without an
+arc.
+
+`combat_range -- draw` is the half `bow` cannot reach: **the charge on a Gub
+nobody is driving**. The dummy is a roster entry with no client behind it, so
+the mode *is* its client and all it publishes is `sync_draw` — the one float the
+real thing would have sent. The two skeletons then have to agree about how far
+the string is back to within a centimetre, at five charge levels; measured,
+0.0026 m at worst over 0.41 m of pull. What is compared is the **draw length**,
+the distance between the two fists, and not the hand against the hips: the hips
+come from the locomotion underneath (D-029), so two Gubs a few frames out of
+phase in one idle cycle disagree about the second without disagreeing about the
+bow. The control is on the same line — the draw has to have moved the hands at
+least 0.20 m, or "they agree" is satisfied by two Gubs standing still.
+
+`tools/match_rules.gd` takes everything that needs no world: both ends of all
+four interpolations, the curve's *shape* rather than its exponent, the clamps
+(including the one with an argument rather than a range behind it — a drop of
+zero is a division by zero in `flat_band`), the spear's flat band still being
+28, and all eight dials round-tripping through `_FIELDS` with values nothing
+else in the file uses.
+
+The `draw` mode also reads the synchroniser's own property list and requires
+`sync_draw` to be on it, which is the one thing about this weapon a testbed
+cannot reach by playing the game: every Gub here is in one process on an
+`OfflineMultiplayerPeer`, so the float is read straight off the object and the
+`MultiplayerSynchronizer` never sees it. Without that line the five pose rows
+above would pass just as happily on a build that had forgotten to list the
+field, and the tell would be invisible to every real client and to nothing else.
+It is `MatchConfig._FIELDS`'s omission, one layer down.
+
+Run against the code without the thing they check (D-015): with the `sync_draw`
+entry deleted from `gub.tscn`, `draw` fails on exactly that line while the poses
+still agree — which is the point of it. With `DAMAGE_CURVE` set to 1, `bow`
+passes at **both** ends, because the ends of a lerp do not depend on its shape,
+and `match_rules` fails on "two thirds of a draw is under a third of the
+damage". That split is deliberate rather than a gap: a curve is arithmetic and
+belongs where arithmetic is checked, and a third shot fired at a half draw could
+not have caught it either — the arrow and the assertion would be asking the same
+function.
+
+### The pictures
+
+    GODOT --headless --path . --script tools/snapshot.gd -- ##         res://tools/preview_bow.tscn out/none.png 4 measure     # the derivation
+
+    GODOT --path . --resolution 2400x820 --script tools/snapshot.gd -- ##         res://tools/preview_bow.tscn out/bow_draw.png 25 sheet 6 0
+
+    GODOT --path . --resolution 1500x900 --script tools/snapshot.gd -- ##         res://tools/combat_range.tscn out/bow_ingame.png 100 draw
+
+The second is the one that answers the question this step had to answer and it
+answers it yes: **the charge reads**. Six Gubs from brace to full draw — the
+arrow out in front at 0%, drawn back across the body by 60%, and the string bent
+into a hard V by 100% — and the string only bends because `HeldGear.set_draw` is
+being handed the same float that scrubbed the pose. A sheet that posed the body
+without pulling the string would have certified a bow that never moves. The
+third is the same thing in a real match, with a **remote** Gub beside a local
+one at the same charge, which is the whole of the tell in one frame.
+
+### Rejected, and one thing knowingly left undone
+
+**The bow pointing where the crosshair points.** Measured and printed by
+`combat_range -- draw`: the composed bow sits **91° off the Gub's own facing**,
+and it is 91° because an archer stands side-on and the whole of that angle lives
+in the shoulders and the arms. Three mask variants were measured and none of
+them moves it — adding `Spine` gives 90°, starting the filter at `Spine2` gives
+93° — because there is no bone between the pelvis and the hands that carries it.
+The two fixes that would work are a constant yaw baked onto `Spine1` in the
+pipeline (which twists a Gub at the waist, and a Gub is a blob with no waist) and
+turning the body 90° while drawing (which is what an archer does, and which
+makes running-while-drawing worse in exactly the way step 8 exists to fix).
+
+So it is **left**, deliberately, because `docs/PLAN_COMBAT.md` already owns it:
+step 8 says *"There is no spine aim... That is right for a throw and wrong for a
+bow: a bow held level at a run needs the torso to track the crosshair. This is a
+`LookAtModifier3D` or an equivalent spine-yaw modifier, and it is the one thing
+in this whole plan the repo genuinely does not have."* The measurement is in the
+gate's own output, so step 8 starts with the number already taken. Where an
+arrow actually goes is read from the camera at the release and never from the
+body (D-025, D-045), so nothing about the shot is wrong — only the pose.
+
+**A fifth ability tile.** The bar is Spear, Shield and Lure in 62 px squares
+with a key cap each, and a bow with a recharge and no tile is a visible
+omission. It is still the wrong call for now: the bow's readiness is **the bow in
+the hand**, which is the readout this game has used since `HeldGear`'s header was
+written ("an empty hand across the clearing is how you know it is safe to
+approach"), and `_wants_bow` takes it away for the whole recharge. A tile is a
+UI decision and this step is a mechanic; it is one line of `_refresh_abilities`
+and a glyph whenever somebody wants it.
+
+**A second windup in `gub_combat.gd`**, which D-064 rejected for the Elder and
+which would have been worse here: the bow's release is an input edge rather than
+a deadline, and a second copy of the cancel-on-death, the cancel-on-letter, the
+aim sample and the cooldown refund is four bugs nobody would find for a month.
+
+**Driving the bowstring off the distance between the hands** rather than off the
+charge. It would make the string meet the fingers exactly at every charge level
+instead of at the two ends, and it would be a second thing that had to be told
+how drawn the bow is — which is a second thing that could be told something
+else. One float scrubs the pose, bends the string and picks the damage.
+
+**A `bow_damage_curve` slider**, and **cross-clamps between the four pairs**. A
+host who wants a bow that hits harder the *less* it is drawn can have one: it is
+a lerp either way round, nothing downstream divides by the difference, and a
+clamp that quietly swapped two sliders somebody had just dragged would be a lobby
+arguing with the person using it.
+
+**`R` for the draw**, which is `respawn`. It is `V` and mouse button 4, both
+held; the whole of that decision is that every other reachable key was taken and
+a hold wants a key the hand is already resting near.

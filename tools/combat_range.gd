@@ -74,6 +74,33 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##              second before it is furthest in front of the hips — so
 ##              `release`'s own rule, asked here, would pass on a bolt fired
 ##              during the recovery.
+##   bow      — the whole of the bow, in numbers (D-065). **Two shots and a
+##              refusal**, and the two shots are deliberately the two ends of
+##              the charge rather than a sample of it: a snap shot let go on the
+##              frame after the key went down, and a full draw held past
+##              `bow_draw_time`. Each one is measured three ways — what the
+##              victim actually lost, and the launch speed and the drop *fitted
+##              off the arrow's own positions* rather than read out of the
+##              object — and each is checked against `ArrowProjectile`'s own
+##              statics at the charge the arrow says it left at. The third
+##              verdict is a letter hold refusing the draw: a Gub with a card up
+##              cannot start one, the bow is out of its hand while it holds, and
+##              both come back when the hold does (D-035).
+##
+##              What this cannot show is the pose. `draw` is that.
+##   draw     — the charge as a **tell**, which is the half of this weapon that
+##              is not a number (D-065). The local Gub is drawn to a series of
+##              charge levels and a *remote* one is handed the same charges over
+##              `Gub.sync_draw`, and the two skeletons have to agree: the
+##              drawing hand in the same place relative to the hips, to a
+##              centimetre, on a Gub nobody is driving. Then the control that
+##              makes that mean anything — the pose at full draw has to be a
+##              long way from the pose at brace, or "they agree" is satisfied by
+##              two Gubs standing still.
+##
+##              It also prints where the composed bow is actually pointing, in
+##              degrees off the Gub's own facing, which is the one thing a
+##              masked layer can silently get wrong (D-029, D-064).
 ##   recharge — throws until the spear has grown back a dozen times and requires
 ##              the shaft to be in the fist at the end of every one of them, then
 ##              takes it out of the fist by hand while the throw gate still says
@@ -219,7 +246,7 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##   free     — no script; play it yourself
 const MODES := ["flight", "hit", "arc", "miss", "aim", "mushroom", "cover",
 	"lure", "lure_self", "letter", "cards", "lightning", "blast", "ward", "recharge",
-	"release", "cast",
+	"release", "cast", "bow", "draw",
 	"respawn", "health", "embed", "hurt", "walk", "bhop", "leave", "free"]
 
 ## How long after the cast the verdict is taken, in physics ticks. The click
@@ -392,6 +419,68 @@ const CAST_ADVANCE_EPSILON := 0.002
 ## How far the hand has to have come out of the cock before a stop is allowed to
 ## count as the end of the whip, in metres. See `_drive_cast`.
 const CAST_ADVANCE_MIN := 0.10
+
+## Where the bow's two targets stand, and why they are not the same place.
+##
+## A snap shot leaves at 18 m/s and falls at 16 m/s², so over the 14 m the spear
+## modes use it would be 4.85 m into the ground before it arrived — the check
+## would be measuring a miss. Five metres is the distance at which an arrow
+## aimed at a Gub's eye still lands on its body (0.62 m of drop over 0.28 s),
+## which is the whole point being made about this weapon rather than a
+## convenience: **a snap shot is a knife**. The full draw keeps the spear modes'
+## own fourteen metres, drops 0.14 m getting there, and hits what it was aimed
+## at.
+const BOW_SNAP_SPOT := Vector3(0.0, 0.1, 4.0)
+const BOW_FULL_SPOT := Vector3(0.0, 0.1, -5.0)
+
+## How many ticks of the arrow's flight are fitted, and how much the fit is
+## allowed to disagree with `ArrowProjectile`'s own arithmetic.
+##
+## Six samples is five velocities and four accelerations, which is plenty for a
+## body under constant gravity and short enough to be over before the arrow
+## reaches anything. The tolerances are small on purpose: this is a fit of an
+## exactly-integrated trajectory, not a physics engine's opinion, so the only
+## error in it is the half-tick offset between "the velocity over this tick" and
+## "the velocity at its start". Three per cent of the speed is nearly two ticks
+## of that.
+const BOW_FLIGHT_SAMPLES := 6
+const BOW_SPEED_TOLERANCE := 0.03
+const BOW_DROP_TOLERANCE := 0.05
+## How far the damage may be from `ArrowProjectile.damage_for` at the charge the
+## arrow says it left at. Half a point, which is rounding and nothing else: the
+## two are the same expression asked twice.
+const BOW_DAMAGE_TOLERANCE := 0.5
+## What counts as a snap shot and what counts as a full draw, as charges. The
+## snap is let go on the frame after the key goes down, so it is one tick of
+## `bow_draw_time`; the full draw is held past the end of it.
+const BOW_SNAP_MAX := 0.05
+const BOW_FULL_MIN := 0.99
+## How long the mode waits for each arrow to land before giving up, in ticks.
+const BOW_HIT_LIMIT := 90
+
+## The charge levels `draw` checks the remote pose at, and how far apart the two
+## skeletons may be at any of them, in metres.
+##
+## A centimetre, which is far tighter than it sounds and is the right number
+## anyway: both Gubs are being scrubbed to the same clip time by the same
+## function off the same float, so a disagreement is not drift, it is a
+## different code path. The one thing that legitimately differs is that a remote
+## Gub's blend into the draw layer is driven by the same `DRAW_BLEND_SPEED` from
+## a different starting frame, which is why the mode holds each level for
+## `DRAW_SETTLE` ticks before reading.
+const DRAW_LEVELS: Array[float] = [0.0, 0.25, 0.5, 0.75, 1.0]
+const DRAW_TOLERANCE := 0.01
+const DRAW_SETTLE := 20
+## How far the drawing hand has to travel between brace and full draw for the
+## agreement above to mean anything, in metres. Without this, two Gubs standing
+## perfectly still agree perfectly.
+const DRAW_SPREAD_MIN := 0.20
+
+## How long a full draw takes in the `draw` mode. See `_start_session`.
+const DRAW_MODE_DRAW_TIME := 2.0
+## Where the remote Gub stands: beside the local one, facing the same way, so
+## the two poses can be read off one frame.
+const DRAW_DUMMY_SPOT := Vector3(2.4, 0.1, 9.0)
 
 ## How long the deliberate desync waits for the hand to notice, in physics
 ## ticks. Half a second is forty times `HAND_SYNC_GRACE` and several times any
@@ -566,6 +655,10 @@ const VIEWS := {
 	# The same shot for the same reason, a little further out and a little
 	# higher: the subject is still an arm, but it is an arm inside a robe, and
 	# the hat is half of what the cast has left to show with.
+	"bow": {"eye": Vector3(4.2, 1.7, 9.6), "look": Vector3(0.0, 1.1, 9.0),
+		"fov": 45.0},
+	"draw": {"eye": Vector3(1.2, 1.5, 3.4), "look": Vector3(1.2, 1.05, 9.0),
+		"fov": 55.0},
 	"cast": {"eye": Vector3(3.8, 1.8, 9.4), "look": Vector3(0.0, 1.15, 9.0),
 		"fov": 50.0},
 }
@@ -610,6 +703,21 @@ var _bhop_hops: int = 0
 var _bhop_was_grounded: bool = true
 var _bhop_row: Dictionary = {}
 var _bhop_failures: int = 0
+## The bow's two shots, step by step, and the flight of whichever one is in the
+## air. `_bow_samples` is positions and nothing else — the fit is done at the
+## end, so the mode measures the arrow rather than asking it.
+var _bow_step: int = 0
+var _bow_at: int = 0
+var _bow_arrow: ArrowProjectile
+var _bow_samples: Array[Vector3] = []
+var _bow_health: float = 0.0
+var _bow_failures: int = 0
+
+## `draw`'s readings: one row per charge level, local hand against remote hand.
+var _draw_step: int = 0
+var _draw_at: int = 0
+var _draw_rows: Array[Dictionary] = []
+
 var _items: Node3D
 var _players: Node3D
 var _aim_at: Vector3 = Vector3.ZERO
@@ -831,6 +939,13 @@ func _start_session() -> void:
 		config.respawn_delay = HEALTH_RESPAWN
 		config.elder_drop_chance = 1.0
 		config.letter_drop_chance = 0.0
+	# The `draw` mode watches a charge *creep*, because what it is comparing is
+	# two skeletons at the same instant and a draw that is over in a second is a
+	# draw the blends are still settling into. Two seconds is slow enough that
+	# every level it samples is a settled pose and short enough that the whole
+	# run is over in three.
+	if _mode == "draw":
+		config.bow_draw_time = DRAW_MODE_DRAW_TIME
 	# Three bolts inside one run, and no loot rolled off the one death in it:
 	# a robe or a letter dropped at a dummy's feet is a claim nobody asked for.
 	if _mode == "blast":
@@ -851,6 +966,10 @@ func _dummy_count() -> int:
 		# would only be something for one of them to find.
 		"recharge", "bhop", "release", "cast":
 			return 0
+		# One each: something to shoot at, and — in `draw` — a *remote* Gub to put
+		# a charge on and read the pose back off.
+		"bow", "draw":
+			return 1
 		_:
 			return 2
 
@@ -966,6 +1085,12 @@ func _physics_process(_delta: float) -> void:
 		return
 	if _mode == "cast":
 		_drive_cast(player, combat)
+		return
+	if _mode == "bow":
+		_drive_bow(player, combat)
+		return
+	if _mode == "draw":
+		_drive_draw(player, combat)
 		return
 	if _mode == "ward":
 		_drive_ward(combat)
@@ -1146,7 +1271,7 @@ func _drive_lightning(combat: GubCombat) -> void:
 		if not MatchState.is_elder(1) or not combat.has_lightning():
 			return
 		_cast_at = _frames
-		var hand := (MatchState.gubs.get(1) as Gub).held_spear
+		var hand := (MatchState.gubs.get(1) as Gub).held_gear
 		print("combat_range: robe claimed on frame %d — Elder, spear %s, crackle %s"
 			% [_frames, combat.has_spear(), hand != null and hand.is_charged()])
 		# The same call a click makes. `try_throw_spear` is the Elder's cast as
@@ -1892,7 +2017,7 @@ func _report_letter(combat: GubCombat) -> void:
 	if _frames != 60:
 		return
 	var player := MatchState.gubs.get(1) as Gub
-	var hand := player.held_spear if is_instance_valid(player) else null
+	var hand := player.held_gear if is_instance_valid(player) else null
 	print("combat_range: holding %s with %.1f s left — can throw %s, shaft shown %s, card shown %s" % [
 		MatchState.letter_name(MatchState.letter_hold_letter(1)),
 		MatchState.letter_hold_remaining(1), combat.has_spear(),
@@ -2186,7 +2311,7 @@ func _report_cover_solid() -> void:
 ## shaft that is never coming back, which is the only distinction that matters
 ## here: "not reliably" is a duration, not a boolean.
 func _drive_recharge(player: Gub, combat: GubCombat) -> void:
-	var hand := player.held_spear
+	var hand := player.held_gear
 	if hand == null or _frames < 20:
 		return
 	if _recharge_cycles >= RECHARGE_CYCLES:
@@ -2236,7 +2361,7 @@ func _drive_recharge(player: Gub, combat: GubCombat) -> void:
 ## the game reaches in and does this to itself; this is the fault stated
 ## directly rather than waited for, and it is the half of this check that cannot
 ## pass by luck.
-func _drive_desync(combat: GubCombat, hand: HeldSpear) -> void:
+func _drive_desync(combat: GubCombat, hand: HeldGear) -> void:
 	if _desync_at == 0:
 		if not combat.has_spear() or not hand.is_carried():
 			return
@@ -2266,7 +2391,7 @@ func _drive_desync(combat: GubCombat, hand: HeldSpear) -> void:
 ## edited in `gub_animator.gd` without `THROW_RELEASE_TIME` following it lands
 ## the shaft somewhere the hand is not, and says so.
 func _drive_release(player: Gub, combat: GubCombat) -> void:
-	var hand := player.held_spear
+	var hand := player.held_gear
 	if hand == null:
 		return
 	if _release_clicked == 0:
@@ -2392,6 +2517,356 @@ func _drive_cast(player: Gub, combat: GubCombat) -> void:
 		return
 	_report_cast()
 	get_tree().quit()
+
+
+## The bow, end to end and in numbers (D-065).
+##
+## Three verdicts out of one run, and the order is the order each one is the
+## control for the last. `letter` first, because a refusal is the cheapest thing
+## to get wrong and the easiest to not notice; then the two shots, which are the
+## two *ends* of the charge and not a sample of it — a snap shot let go on the
+## frame after the key went down, and a full draw held past `bow_draw_time`.
+##
+## Each shot is measured three ways and none of them asks the arrow what it
+## thinks it is doing. The damage is what the victim actually lost; the speed
+## and the drop are **fitted off the arrow's own positions**, six ticks of them,
+## and compared against `ArrowProjectile`'s statics at the charge the arrow
+## reports it left at. So a curve that quietly went linear, a drop that stopped
+## interpolating, or a charge the host clamped to nothing all fail here, and
+## they fail with the number they produced printed beside the number they owed.
+func _drive_bow(player: Gub, combat: GubCombat) -> void:
+	var dummy := MatchState.gubs.get(DUMMY_BASE) as Gub
+	if dummy == null:
+		return
+	var elapsed := _frames - _bow_at
+
+	match _bow_step:
+		0:  # settle, as every other mode does, for the rig and the transforms
+			if _frames >= 20:
+				_bow_next(1)
+		1:  # a card in the hand the arrow would be drawn with (D-035)
+			MatchState._letter_holds[1] = {"letter": 1, "ends_at": INF}
+			MatchState.letter_hold_changed.emit(1)
+			_bow_next(2)
+		2:
+			if elapsed < 4:
+				return
+			combat.try_draw_bow()
+			var refused := not player.is_drawing() and not combat.is_winding_up()
+			var disarmed := player.held_gear != null and not player.held_gear.has_bow()
+			if refused and disarmed:
+				print("combat_range: a letter hold refused the draw and emptied the bow hand — letter PASS")
+			else:
+				_bow_fail("letter", "the draw was %s and the bow hand was %s"
+					% ["refused" if refused else "allowed",
+						"empty" if disarmed else "still holding a bow"])
+			MatchState._letter_holds.erase(1)
+			MatchState.letter_hold_changed.emit(1)
+			_bow_next(3)
+		3:  # the snap shot: a target close enough that 0.6 m of drop still lands
+			if elapsed < 4 or not combat.has_bow():
+				return
+			dummy.revive_at(_facing(BOW_SNAP_SPOT, PLAYER_SPOT))
+			_stand_still(dummy)
+			_bow_next(4)
+		4:
+			if elapsed < 20:
+				return
+			_bow_health = dummy.health
+			combat.try_draw_bow()
+			_bow_next(5)
+		5:  # let go on the very next frame — one tick of `bow_draw_time`
+			combat.release_draw()
+			_bow_next(6)
+		6:
+			if not _bow_collect(dummy):
+				return
+			_report_bow_shot("snap", dummy, 0.0, BOW_SNAP_MAX)
+			_bow_next(7)
+		7:  # the full draw, at the range the spear modes use
+			if not combat.has_bow():
+				return
+			dummy.revive_at(_facing(BOW_FULL_SPOT, PLAYER_SPOT))
+			_stand_still(dummy)
+			_bow_arrow = null
+			_bow_samples.clear()
+			_bow_next(8)
+		8:
+			if elapsed < 20:
+				return
+			_bow_health = dummy.health
+			combat.try_draw_bow()
+			_bow_next(9)
+		9:  # held until the charge says it is full, not until a frame count does
+			if player.draw_fraction() < 1.0:
+				return
+			combat.release_draw()
+			_bow_next(10)
+		10:
+			if not _bow_collect(dummy):
+				return
+			_report_bow_shot("full", dummy, BOW_FULL_MIN, 1.0)
+			if _bow_failures == 0:
+				print("combat_range: bow PASS")
+			get_tree().quit()
+
+
+func _bow_next(step: int) -> void:
+	_bow_step = step
+	_bow_at = _frames
+
+
+## Gather the arrow's flight and wait for it to land. True when there is
+## something to report, whether that is a hit or a timeout.
+func _bow_collect(dummy: Gub) -> bool:
+	if _bow_arrow != null and is_instance_valid(_bow_arrow) \
+			and not _bow_arrow.is_stuck() \
+			and _bow_samples.size() < BOW_FLIGHT_SAMPLES:
+		_bow_samples.append(_bow_arrow.global_position)
+	if dummy.health < _bow_health:
+		return true
+	return _frames - _bow_at > BOW_HIT_LIMIT
+
+
+## Speed, drop and flat band, fitted off the positions this mode collected.
+##
+## Deliberately not read out of the projectile. `ArrowProjectile` holds the two
+## numbers it was launched with, and asking it for them would be asserting an
+## assignment against itself; what has to be true is that the *flight* those
+## numbers produce is the flight the dials describe.
+##
+## The arithmetic is a body under constant acceleration, so it is exact and not
+## a regression: consecutive positions give velocities, consecutive velocities
+## give the drop, and the launch speed is the horizontal component (which never
+## changes) squared up with the vertical one extrapolated back half a tick to
+## the instant of the launch. That half tick is the only approximation in it and
+## is why `BOW_SPEED_TOLERANCE` is three per cent rather than nothing.
+func _fit_flight() -> Dictionary:
+	if _bow_samples.size() < 3:
+		return {}
+	var dt := get_physics_process_delta_time()
+	var horizontal := 0.0
+	var vy: Array[float] = []
+	for i in range(1, _bow_samples.size()):
+		var step: Vector3 = (_bow_samples[i] - _bow_samples[i - 1]) / dt
+		horizontal += Vector2(step.x, step.z).length()
+		vy.append(step.y)
+	horizontal /= float(_bow_samples.size() - 1)
+	var drop := 0.0
+	for i in range(1, vy.size()):
+		drop += (vy[i - 1] - vy[i]) / dt
+	drop /= float(maxi(vy.size() - 1, 1))
+	var speed := Vector2(horizontal, vy[0] + drop * dt * 0.5).length()
+	return {"speed": speed, "drop": drop, "band": GubCombat.flat_band(speed, drop)}
+
+
+func _report_bow_shot(label: String, dummy: Gub, low: float, high: float) -> void:
+	if _bow_arrow == null:
+		_bow_fail(label, "no arrow was ever loosed")
+		return
+	var charge: float = _bow_arrow.charge
+	var taken := _bow_health - dummy.health
+	var owed := ArrowProjectile.damage_for(charge, Net.config)
+	var flight := _fit_flight()
+	var fails: Array[String] = []
+	if charge < low or charge > high:
+		fails.append("the arrow left at %.3f of a draw, wanted %.2f-%.2f"
+			% [charge, low, high])
+	if taken <= 0.0:
+		fails.append("the arrow hit nobody")
+	elif absf(taken - owed) > BOW_DAMAGE_TOLERANCE:
+		fails.append("it took %.1f where %.1f was owed at that draw" % [taken, owed])
+	if flight.is_empty():
+		fails.append("the arrow was never in the air long enough to measure")
+	else:
+		var speed: float = flight["speed"]
+		var drop: float = flight["drop"]
+		var want_speed := ArrowProjectile.speed_for(charge, Net.config)
+		var want_drop := ArrowProjectile.drop_for(charge, Net.config)
+		if absf(speed - want_speed) > want_speed * BOW_SPEED_TOLERANCE:
+			fails.append("it flew at %.1f m/s where the dial says %.1f"
+				% [speed, want_speed])
+		if absf(drop - want_drop) > want_drop * BOW_DROP_TOLERANCE:
+			fails.append("it fell at %.1f m/s² where the dial says %.1f"
+				% [drop, want_drop])
+	if fails.is_empty():
+		print("combat_range: %s shot at %.0f%% draw took %.0f, flew %.1f m/s falling %.1f m/s² (flat to %.0f m) — %s PASS"
+			% [label, charge * 100.0, taken, flight["speed"], flight["drop"],
+				flight["band"], label])
+		return
+	_bow_fail(label, "; ".join(fails))
+
+
+func _bow_fail(label: String, why: String) -> void:
+	_bow_failures += 1
+	print("combat_range: %s FAIL — %s" % [label, why])
+
+
+## The charge as a **tell**, on a Gub nobody is driving (D-065).
+##
+## This is the half of the bow that `bow` cannot reach. Everything that makes
+## the draw a number works on the local Gub by construction — the client that is
+## holding the key computes the charge and hands it to its own animator — and
+## none of that says a word about the seven Gubs whose charge has to arrive over
+## a wire. D-025's rule is that a tell only the attacker can see is not a tell,
+## and the only way to check that here is to have a remote Gub in the room.
+##
+## The dummy is exactly that: a roster entry with no client behind it, so the
+## mode *is* its client, and all it publishes is `sync_draw` — the one float the
+## real thing would have sent. If the pose arrives, it arrives because that
+## float is enough.
+##
+## What is compared is the **draw length**: the distance from the bow fist to
+## the drawing fist. Not the hand's position relative to the hips, which was the
+## first attempt and is the wrong quantity — everything below `Spine1` comes
+## from the locomotion underneath (D-029), so two Gubs a few frames out of phase
+## in the same idle cycle disagree about it without disagreeing about the draw.
+## The distance between two bones the layer fully owns is the thing the eye
+## actually reads, and it is invariant to every part of this that is not the bow.
+func _drive_draw(player: Gub, combat: GubCombat) -> void:
+	var dummy := MatchState.gubs.get(DUMMY_BASE) as Gub
+	if dummy == null:
+		return
+	if _draw_step == 0:
+		if _frames < 20:
+			return
+		# Beside the player rather than down the range, because this mode's
+		# picture is the two of them together: the Gub you are driving and the
+		# Gub you are watching, at the same charge, from the same float.
+		dummy.revive_at(_facing(DRAW_DUMMY_SPOT, DRAW_DUMMY_SPOT + Vector3(0.0, 0.0, -10.0)))
+		_stand_still(dummy)
+		combat.try_draw_bow()
+		_draw_step = 1
+		_draw_at = _frames
+		return
+
+	# The dummy's imaginary client, publishing once a frame. Nothing else about
+	# this Gub is ever written: if the pose appears, one float is what did it.
+	dummy.sync_draw = player.draw_fraction()
+
+	if _draw_step > DRAW_LEVELS.size():
+		return
+	var level: float = DRAW_LEVELS[_draw_step - 1]
+	if player.draw_fraction() < level or _frames - _draw_at < DRAW_SETTLE:
+		return
+	_draw_rows.append({
+		"charge": player.draw_fraction(),
+		"local": _draw_length(player),
+		"remote": _draw_length(dummy),
+		"aim": _aim_offset(player),
+	})
+	_draw_step += 1
+	if _draw_step <= DRAW_LEVELS.size():
+		return
+	combat.release_draw()
+	_report_draw()
+	get_tree().quit()
+
+
+## How far this Gub's string is back, in metres of skeleton: the gap between the
+## two fists. Both bones are above `Spine1` and so both are entirely the draw
+## layer's, which is what makes this the one reading that says something about
+## the bow and nothing about the legs.
+func _draw_length(gub: Gub) -> float:
+	var skeleton := gub.find_child("Skeleton3D", true, false) as Skeleton3D
+	if skeleton == null:
+		return -1.0
+	var left := skeleton.find_bone(HeldGear.BOW_HAND_BONE)
+	var right := skeleton.find_bone(HeldGear.HAND_BONE)
+	if left < 0 or right < 0:
+		return -1.0
+	return skeleton.get_bone_global_pose(left).origin.distance_to(
+		skeleton.get_bone_global_pose(right).origin)
+
+
+## Where the composed bow is actually pointing, in degrees off the Gub's own
+## facing.
+##
+## Printed rather than asserted, and it is the number to read if the bow ever
+## looks like it is aiming at the wrong thing. A masked layer keeps the clip's
+## rotations from `Spine1` up and throws away everything the pelvis was doing
+## (D-029), and an archer's stance is most of a right angle between those two
+## halves — so how much of that right angle survives into the game is a fact
+## about which bones are in `UPPER_BODY_BONES`, not about the clip. D-064
+## measured the same thing for the Elder's cast and found the layer had thrown
+## away the 106° the pelvis turned through.
+##
+## It does not decide where an arrow goes. That is read from the camera at the
+## release and has never come from the body (D-025, D-045).
+func _aim_offset(gub: Gub) -> float:
+	var skeleton := gub.find_child("Skeleton3D", true, false) as Skeleton3D
+	if skeleton == null:
+		return 0.0
+	var left := skeleton.find_bone(HeldGear.BOW_HAND_BONE)
+	var right := skeleton.find_bone(HeldGear.HAND_BONE)
+	if left < 0 or right < 0:
+		return 0.0
+	var along: Vector3 = skeleton.global_transform.basis * (
+		skeleton.get_bone_global_pose(left).origin
+		- skeleton.get_bone_global_pose(right).origin)
+	var flat := Vector3(along.x, 0.0, along.z)
+	if flat.length_squared() < 0.0001:
+		return 0.0
+	return rad_to_deg(flat.normalized().signed_angle_to(gub.facing(), Vector3.UP))
+
+
+## Whether `gub.tscn` actually puts a field on the wire.
+##
+## Off the live node rather than off the file, because what matters is what the
+## synchroniser was handed — a property list edited in the scene and a
+## synchroniser pointed at a different `SceneReplicationConfig` are two
+## different bugs and only this catches both.
+func _replicates(field: String) -> bool:
+	var gub := MatchState.gubs.get(1) as Gub
+	if gub == null:
+		return false
+	var sync := gub.get_node_or_null("Sync") as MultiplayerSynchronizer
+	if sync == null or sync.replication_config == null:
+		return false
+	for path: NodePath in sync.replication_config.get_properties():
+		if String(path).ends_with(":" + field):
+			return true
+	return false
+
+
+func _report_draw() -> void:
+	var worst := 0.0
+	var low := INF
+	var high := -INF
+	for row: Dictionary in _draw_rows:
+		var apart: float = absf(float(row["local"]) - float(row["remote"]))
+		worst = maxf(worst, apart)
+		low = minf(low, float(row["local"]))
+		high = maxf(high, float(row["local"]))
+		print("  charge %.2f   local %.3f m   remote %.3f m   %.4f m apart   bow %+.0f° off facing"
+			% [row["charge"], row["local"], row["remote"], apart, row["aim"]])
+	var spread := high - low
+	var fails: Array[String] = []
+	# The one part of this a testbed cannot reach by playing the game. Every Gub
+	# here is in one process on an `OfflineMultiplayerPeer`, so `sync_draw` is
+	# read straight off the object and the `MultiplayerSynchronizer` never sees
+	# it — which means the rows above would pass just as happily on a build that
+	# had forgotten to list the field in `gub.tscn`'s replication config, and
+	# the bow's tell would be invisible to every real client and to nothing else.
+	# So the list is read and asked directly. It is the same class of omission
+	# `MatchConfig._FIELDS` has, one layer down.
+	if not _replicates("sync_draw"):
+		fails.append("sync_draw is not in gub.tscn's replication config, "
+			+ "so nothing about the draw would ever leave this machine")
+	if _draw_rows.size() < DRAW_LEVELS.size():
+		fails.append("only %d of %d charge levels were reached"
+			% [_draw_rows.size(), DRAW_LEVELS.size()])
+	if worst > DRAW_TOLERANCE:
+		fails.append("the remote Gub was %.3f m out at its worst" % worst)
+	# The control, in D-039's sense: two Gubs standing still agree perfectly.
+	if spread < DRAW_SPREAD_MIN:
+		fails.append("the draw only moved the hands %.3f m, so agreeing means nothing"
+			% spread)
+	if fails.is_empty():
+		print("combat_range: a remote Gub drew the same bow, %.4f m out at worst over %.2f m of pull — draw PASS"
+			% [worst, spread])
+		return
+	print("combat_range: draw FAIL — %s" % "; ".join(fails))
 
 
 func _report_cast() -> void:
@@ -2528,6 +3003,10 @@ func _target_point() -> Vector3:
 			return AIM_TARGET
 		"recharge", "release":
 			return RECHARGE_TARGET
+		"draw":
+			# Straight down the range at nothing, so the aim never wanders onto the
+			# Gub whose *pose* is the subject of this mode.
+			return ARC_TARGET
 		"miss":
 			return Vector3(0.0, 0.05, -14.0)
 		"lure":
@@ -2569,18 +3048,28 @@ func _watch_spawned(node: Node) -> void:
 		_cast_bolt_ms = Time.get_ticks_msec()
 		var caster := MatchState.gubs.get(1) as Gub
 		_cast_bolt_reach = _hand_reach(caster) if caster != null else -INF
+	# Caught before the `SpearProjectile` line below, because an arrow *is* one:
+	# `ArrowProjectile` extends it (D-065), so every `as SpearProjectile` in this
+	# file would match one. Every such cast here is already mode-gated and no mode
+	# fires both weapons, but the one that could go wrong silently is this one, so
+	# the arrow is taken out of the stream first.
+	var arrow := node as ArrowProjectile
+	if arrow != null:
+		if _mode == "bow" and _bow_arrow == null:
+			_bow_arrow = arrow
+		return
 	var spear := node as SpearProjectile
 	if spear != null and _mode == "release" and _release_spear_at == 0:
 		# Read here and nowhere else, because "the fist empties when the spear
 		# leaves" is a statement about one instant and this is that instant.
 		# `GubCombat._do_throw_spear` empties the hand and *then* launches the
 		# shaft, so a fist still holding something on this line is a hand that
-		# is lying about how dangerous its owner is (D-025, `HeldSpear`).
+		# is lying about how dangerous its owner is (D-025, `HeldGear`).
 		var thrower := MatchState.gubs.get(1) as Gub
 		_release_spear_at = _frames
 		_release_spear_ms = Time.get_ticks_msec()
-		_release_fist_full = (thrower != null and thrower.held_spear != null
-			and thrower.held_spear.is_carried())
+		_release_fist_full = (thrower != null and thrower.held_gear != null
+			and thrower.held_gear.is_carried())
 	if spear == null or not _trace:
 		return
 	spear.struck_gub.connect(func(victim: Gub, point: Vector3, bone: String) -> void:

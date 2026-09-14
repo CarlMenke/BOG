@@ -24,6 +24,9 @@ extends AnimationTree
 ##     slide      OneShot        the low part of Slide, full body
 ##     land       OneShot        JumpOne's touchdown and absorb, full body
 ##     roll       OneShot        JumpTwo's ground roll, full body
+##     draw_clip  Animation(Draw) behind draw_seek, scrubbed by the charge
+##     draw       Blend2         the draw pose over everything, upper body only
+##     loose      OneShot        Loose, upper body only
 ##     cast       OneShot        Cast at the Elder's own rate, upper body only
 ##     throw      OneShot        Throw at THROW_RATE, filtered to the upper body
 ##     output   <- throw
@@ -34,6 +37,16 @@ extends AnimationTree
 ## (D-064). What they are not is two *timings* — `GubCombat` fires exactly one of
 ## them per click and has one release tick for both, which is the thing D-025
 ## and D-038 exist to keep single.
+##
+## **The draw is not a one-shot at all, and that is the whole of D-065.** A bow
+## is held, for as long as the archer holds it, and how far it is held is a
+## number the *opponent* has to be able to read. So it is the third kind of node
+## in this graph's opening paragraph — a clip scrubbed to an absolute time every
+## frame — and the time it is scrubbed to is `draw_time(charge)`, exactly as the
+## two jump clips are scrubbed to `arc_time(vy)`. There is no clock anywhere in
+## it, which is what makes it replicate for the price of one float: every peer
+## reaches the same pose from the same charge, and a Gub that is half drawn is
+## half drawn on all eight screens.
 ##
 ## Both blend positions are in **game** metres per second, not in clip units:
 ## each locomotion node carries its own playback rate (`game speed / authored
@@ -54,7 +67,7 @@ extends AnimationTree
 ## moves, with nothing in the log.
 const REQUIRED_CLIPS: Array[String] = [
 	"Idle", "Walk", "Run", "CrouchIdle", "CrouchWalk",
-	"JumpOne", "JumpTwo", "Slide", "Throw", "Cast",
+	"JumpOne", "JumpTwo", "Slide", "Throw", "Cast", "Draw", "Loose",
 ]
 
 # -------------------------------------------------------- the airborne arc ---
@@ -255,6 +268,110 @@ const THROW_RELEASE_MIN := 0.14
 const THROW_RELEASE_TIME := THROW_WINDOW / THROW_RATE
 
 
+# ----------------------------------------------------------------- the bow ---
+
+## The draw, and the two frames of `Draw` the charge is stretched between.
+##
+## `Draw` is `3_Bow_Suite/StandingDrawArrow.fbx`, 1.017 s of reach, nock and
+## pull. **Only the pull is the charge**, and where it starts was measured the
+## way every other window in this file was: tracking `RightHand` against `Hips`
+## on the built asset, the drawing hand comes down off the shoulder at over
+## 4 m/s, arrives at the bow at **0.567 s doing 0.29 m/s** — the slowest frame
+## between the reach and the pull — and then draws back at a steady 0.95 m/s to
+## the end of the clip. 0.567 is the arrow meeting the string.
+##
+## The 0.567 s before it is a Gub taking an arrow out of a quiver, and it cannot
+## be in the charge however good it looks. A bow is **carried**: charge zero has
+## to be a nocked bow at brace, or a snap shot fires an arrow the Gub is still
+## reaching for, and the string has nothing to be drawn from. What covers the
+## raise instead is the blend — `DRAW_BLEND_SPEED` brings this layer up over
+## a twelfth of a second out of whatever the body was already doing.
+##
+## There is no END here to match the other windows' pairs, because this clip is
+## never played: `DRAW_CLIP_FULL` is where the charge *stops*, and the clip runs
+## out one frame later anyway.
+const DRAW_CLIP_START := 0.567
+const DRAW_CLIP_FULL := 1.0167
+
+## How fast the draw layer comes up over the body, in blend per second.
+##
+## Faster than the stance and slower than nothing: the pose has to be *there*
+## early, because the charge is already running and a layer still fading in at
+## 30% charge is a tell arriving late. A twelfth of a second, which is about the
+## length of the raise this blend is standing in for.
+const DRAW_BLEND_SPEED := 12.0
+
+## The loose. `Loose` is `3_Bow_Suite/StandingAimRecoil.fbx`, 0.683 s, and it
+## opens on the fully drawn pose — its first frame is the frame `Draw` ends on,
+## which is what lets the one hand over to the other without a seam.
+##
+## **0.167 is the last frame the hand is on the string.** Tracked the same way:
+## the drawing hand creeps back at about a metre a second for the first tenth of
+## a second (the final squeeze), slows to **0.54 m/s at 0.167**, and is doing
+## **8.06 m/s at 0.183** — off the string and flying back past the ear. Two
+## frames, one of them the loose.
+##
+## 0.450 closes it, and that is the fade-out's number rather than the clip's.
+## Godot fades a one-shot out *inside* its window (see LAND_CLIP_END), so
+## LOOSE_FADE_OUT's 0.18 s runs from 0.270 — a tenth of a second after the arrow
+## has gone, which is the property the throw's and the cast's ends were both
+## picked for. What the fade takes over from is the bow arm coming down, which
+## starts at about 0.36 and is a recovery a Gub still holding a bow has no use
+## for.
+const LOOSE_CLIP_START := 0.167
+const LOOSE_CLIP_END := 0.45
+
+## Where in `Loose` the string leaves the fingers, in the clip's own seconds.
+##
+## Measured on the built asset with `tools/hand_track.gd`, hip-relative, and by
+## **D-025's original rule** — peak hand speed — which is the fourth clip in
+## this file and the second time that rule has been the right one. It is not a
+## judgement call here the way it was on the throw and the cast: 0.54 m/s to
+## 8.06 m/s between two adjacent frames is not a peak to be picked out of a
+## curve, it is a discontinuity. A string either has the fingers on it or does
+## not.
+const LOOSE_RELEASE_IN_CLIP := 0.183
+
+## How long after the string is let go the arrow actually leaves, in real
+## seconds. **One frame**, and that is the answer rather than an approximation
+## of zero.
+##
+## Derived from the two constants above for the reason `THROW_RELEASE_TIME` is
+## derived from its own pair: whoever moves the window cannot leave the arrow
+## and the hand disagreeing. What is different is how small it comes out, and
+## that is the bow rather than a shortcut — **the windup already happened**. A
+## spear waits half a second because the arm has to travel; an Elder's bolt
+## waits a fifth because the dial says so; a bow has been drawn, in the open,
+## for as long as its archer chose, and there is nothing left for a delay to
+## announce. The charge was the announcement (D-065).
+##
+## There is deliberately no rate to divide by. The throw has one because it was
+## windowed to hit half a second and the cast has one because a lobby dial moves
+## it; nothing asks this clip to be anything but the speed a string is.
+const BOW_RELEASE_TIME := LOOSE_RELEASE_IN_CLIP - LOOSE_CLIP_START
+
+## The loose comes in faster than any other one-shot here and leaves at the
+## throw's pace. In, because the pose it is blending out of is the draw's own
+## last frame — the same pose, so there is nothing to protect and everything to
+## gain from the string being gone on the frame it goes. Out, for the
+## arithmetic under LOOSE_CLIP_END.
+const LOOSE_FADE_IN := 0.04
+const LOOSE_FADE_OUT := 0.18
+
+
+## Where in `Draw` a bow drawn `charge` of the way sits, in the clip's own
+## seconds.
+##
+## The bow's `arc_time`, and deliberately the same shape: a pose picked by a
+## continuous quantity the world already knows, rather than a clip run on a
+## clock nobody else can see. `arc_time` reads the body's place in its arc off
+## the vertical velocity; this reads the draw off a float that replicates
+## (`Gub.draw_fraction`). Both are correct on the seven Gubs you are watching
+## for exactly the same reason, and neither can freeze (D-026).
+static func draw_time(charge: float) -> float:
+	return lerpf(DRAW_CLIP_START, DRAW_CLIP_FULL, clampf(charge, 0.0, 1.0))
+
+
 # ---------------------------------------------------------------- the cast ---
 
 ## The Elder's cast. `Cast` is `4_Elder_Suite/Standing1HMagicAttack1.fbx`,
@@ -448,6 +565,10 @@ const P_ROLL := "parameters/roll/request"
 const P_THROW := "parameters/throw/request"
 const P_THROW_ACTIVE := "parameters/throw/active"
 const P_THROW_RATE := "parameters/throw_rate/scale"
+const P_DRAW := "parameters/draw/blend_amount"
+const P_DRAW_SEEK := "parameters/draw_seek/seek_request"
+const P_LOOSE := "parameters/loose/request"
+const P_LOOSE_ACTIVE := "parameters/loose/active"
 const P_CAST := "parameters/cast/request"
 const P_CAST_ACTIVE := "parameters/cast/active"
 const P_CAST_RATE := "parameters/cast_rate/scale"
@@ -459,12 +580,20 @@ var _skeleton_path: String = ""
 var _stance: float = 0.0
 var _airborne: float = 0.0
 var _dive_blend: float = 0.0
+## How far the draw layer is over the body. Not the charge — the charge is the
+## *seek*, and this is only whether the bow pose is being shown at all. Two
+## numbers because they answer two questions, exactly as `_airborne` and
+## `arc_time` do.
+var _draw_blend: float = 0.0
 
 ## What this animator believes about the body. `_grounded` and `_sliding` are
 ## kept rather than read fresh because the interesting thing about both is the
 ## frame they *change*.
 var _grounded: bool = true
 var _sliding: bool = false
+## Whether this Gub was drawing a bow last frame. Kept for the same reason
+## `_sliding` is: the interesting thing about a draw is the frame it *ends*.
+var _drawing: bool = false
 
 ## The current airtime. `_airtime_open` is false while the Gub is standing on
 ## something and nothing is expected to land.
@@ -599,6 +728,13 @@ func _build_graph(player: AnimationPlayer) -> AnimationNodeBlendTree:
 	tree.add_node("roll_clip", _window("JumpTwo", ROLL_CLIP_START, ROLL_CLIP_END),
 		Vector2(960, 700))
 	tree.add_node("roll", _shot(ROLL_FADE_IN, ROLL_FADE_OUT), Vector2(1160, 400))
+	tree.add_node("draw_clip", _scrubbed("Draw"), Vector2(760, 860))
+	tree.add_node("draw_seek", AnimationNodeTimeSeek.new(), Vector2(940, 860))
+	tree.add_node("draw", _upper_body_blend(), Vector2(1160, 460))
+	tree.add_node("loose_clip", _window("Loose", LOOSE_CLIP_START, LOOSE_CLIP_END),
+		Vector2(1160, 1000))
+	tree.add_node("loose", _upper_body_shot(LOOSE_FADE_IN, LOOSE_FADE_OUT),
+		Vector2(1360, 500))
 	tree.add_node("cast_clip", _window("Cast", CAST_CLIP_START, CAST_CLIP_END),
 		Vector2(1160, 860))
 	tree.add_node("cast_rate", AnimationNodeTimeScale.new(), Vector2(1340, 860))
@@ -624,8 +760,19 @@ func _build_graph(player: AnimationPlayer) -> AnimationNodeBlendTree:
 	tree.connect_node("land", 1, "land_clip")
 	tree.connect_node("roll", 0, "land")
 	tree.connect_node("roll", 1, "roll_clip")
+	tree.connect_node("draw_seek", 0, "draw_clip")
+	tree.connect_node("draw", 0, "roll")
+	tree.connect_node("draw", 1, "draw_seek")
+	tree.connect_node("loose", 0, "draw")
+	tree.connect_node("loose", 1, "loose_clip")
 	tree.connect_node("cast_rate", 0, "cast_clip")
-	tree.connect_node("cast", 0, "roll")
+	# The draw and its loose sit *under* the two windups, and the order is the
+	# same argument the throw-over-cast order is (D-064): only one of the three
+	# can be running, the gates see to that, and the one that must win a tie is
+	# the one whose weapon is in the hand on the frame the tie happens. A Gub
+	# that stops being the Elder has a spear again immediately; a Gub that starts
+	# a throw was not drawing a bow a frame ago.
+	tree.connect_node("cast", 0, "loose")
 	tree.connect_node("cast", 1, "cast_rate")
 	tree.connect_node("throw_rate", 0, "throw_clip")
 	# The throw sits *over* the cast rather than beside it, and the order is not
@@ -741,6 +888,26 @@ func _shot(fade_in: float, fade_out: float) -> AnimationNodeOneShot:
 	return shot
 
 
+## The draw is a layer for the same reason the two windups are, and it is a
+## `Blend2` rather than a OneShot because it is *held*: a one-shot has a length
+## and this has a duration nobody knows until the archer lets go. Filtered to
+## the same bones, so the legs go on running, walking or hanging in the air
+## under a Gub at full draw — which is the whole of "every attack works in the
+## air" for this weapon and costs nothing (D-065).
+##
+## `sync` comes from `_blend2` and matters here for its usual reason: the branch
+## underneath has to keep running while the draw is at full weight, or a Gub
+## that draws for a second comes out of it a second behind its own feet.
+func _upper_body_blend() -> AnimationNodeBlend2:
+	var blend := _blend2()
+	if _skeleton_path.is_empty():
+		return blend
+	blend.filter_enabled = true
+	for bone in UPPER_BODY_BONES:
+		blend.set_filter_path(NodePath("%s:%s" % [_skeleton_path, bone]), true)
+	return blend
+
+
 ## The throw and the cast are layers, not states, and the filter is what makes
 ## them so: only `UPPER_BODY_BONES` take the clip, and the legs stay in whatever
 ## the blend below is producing. Which is most of why the Elder can be given a
@@ -769,6 +936,7 @@ func _process(delta: float) -> void:
 
 	_track_airtime(delta)
 	_track_slide()
+	_track_draw()
 	_scrub_air()
 
 	_stance = move_toward(_stance, 1.0 if _body.is_crouching() else 0.0,
@@ -782,6 +950,16 @@ func _process(delta: float) -> void:
 	# into the jump pose on the frame the feet land.
 	var dive_target := 1.0 if (_dived and not _grounded) else 0.0
 	_dive_blend = move_toward(_dive_blend, dive_target, DIVE_BLEND_SPEED * delta)
+
+	# The draw, every frame, on every peer's copy of every Gub — which is the
+	# point of it. `draw_fraction()` answers off the replicated float on a remote
+	# Gub and off the local one on your own, exactly as `is_crouching` does, so
+	# there is one code path for the archer and for the seven people who need to
+	# see how far back that string is (D-065).
+	_draw_blend = move_toward(_draw_blend, 1.0 if _body.is_drawing() else 0.0,
+		DRAW_BLEND_SPEED * delta)
+	set(P_DRAW_SEEK, draw_time(_body.draw_fraction()))
+	set(P_DRAW, _draw_blend)
 
 	set(P_STANCE, _stance)
 	set(P_AIRBORNE, _airborne)
@@ -908,6 +1086,31 @@ func _forget_airtime() -> void:
 	_dive_serial = _body.sync_dive_serial
 
 
+## The loose, fired off the frame the replicated draw ends (D-065).
+##
+## **No message starts this animation**, which is the whole of why a remote
+## Gub's bow snaps on the same frame as the string it is attached to. The draw
+## is a float on the body; when it goes out of band the string is gone; so every
+## peer reaches the same conclusion from the same number on the same frame, and
+## there is no relay that could arrive at a different one. That is D-026's
+## "remote Gubs see it because a number changed, not because a message arrived",
+## which is the same argument that made the jump serials serials.
+##
+## **A cancelled draw fires it too**, and that is kept rather than guarded
+## against: walking onto a letter card mid-draw takes the bow away (D-035) and
+## what the hands then do is let go of a string with nothing on it. The pack
+## this clip came from was shopped for with "ideally a dry-fire or a recover" in
+## the list and did not have one; this is that, for free, on the one occasion
+## the game needs it.
+func _track_draw() -> void:
+	var drawing := _body.is_drawing()
+	if drawing == _drawing:
+		return
+	_drawing = drawing
+	if not drawing:
+		play_loose()
+
+
 ## The slide is the one event with an end as well as a beginning: the clip is
 ## 1.6 s long and the physical slide can be cut short by a wall, a ledge or the
 ## speed dropping, so it is faded out rather than left to finish.
@@ -959,14 +1162,37 @@ func play_cast(rate: float) -> void:
 	set(P_CAST, AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
 
 
-## True from the moment a windup is fired until its fade-out has finished — the
-## throw's or the Elder's cast, because what asks is the camera and what the
-## camera wants to know is whether this Gub is in the middle of an attack it
-## should be kept facing the crosshair through. One question, both answers.
+## Fire the loose. Called on every peer on the frame the string is let go, and
+## re-firing mid-loose restarts it, which is what a second shot out of a fast
+## recharge should do.
+##
+## No rate, and for the opposite reason `play_cast` has none: the cast has no
+## authored speed to fall back on, and this one has nothing that wants it to be
+## anything else. A string is as fast as a string.
+func play_loose() -> void:
+	if tree_root == null:
+		return
+	set(P_LOOSE, AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
+
+
+## True from the moment a windup is fired until its fade-out has finished, or
+## while a bow is being drawn — the throw's, the Elder's cast, or the draw,
+## because what asks is the camera and what the camera wants to know is whether
+## this Gub is in the middle of an attack it should be kept facing the crosshair
+## through. One question, three answers.
+##
+## The draw is the answer that had to be added by hand rather than falling out
+## of an `active` flag, because it is the one attack with no one-shot in it: a
+## `Blend2` has no "is it running", only a weight, and a weight that is on its
+## way down is a Gub whose shot has already gone. So it asks the body, which is
+## the same thing `_process` scrubs the pose from.
 func is_throwing() -> bool:
 	if tree_root == null:
 		return false
-	return bool(get(P_THROW_ACTIVE)) or bool(get(P_CAST_ACTIVE))
+	if _body != null and _body.is_drawing():
+		return true
+	return bool(get(P_THROW_ACTIVE)) or bool(get(P_CAST_ACTIVE)) \
+		or bool(get(P_LOOSE_ACTIVE))
 
 
 ## Airborne, in an airtime a dive was spent in.

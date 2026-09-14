@@ -16,7 +16,7 @@ extends Control
 ## place in the game to put a number that needs interpreting.
 ##
 ## The honest indicator already exists and is better: **the spear in the Gub's
-## own hand.** `held_spear.gd` is driven straight off the same
+## own hand.** `held_gear.gd` is driven straight off the same
 ## `GubCombat.has_spear()` the throw is gated on, which since D-035 covers the
 ## recharge and a letter hold in one expression. One truth, drawn where everyone
 ## — including the Gub facing you — can already see it.

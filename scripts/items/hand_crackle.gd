@@ -4,7 +4,7 @@ extends Node3D
 ##
 ## This exists to keep one sentence true. The spear's whole virtue is that an
 ## empty hand says "harmless" from across a clearing (see the header of
-## `held_spear.gd`, and D-036, which deleted the HUD's recharge ring precisely
+## `held_gear.gd`, and D-036, which deleted the HUD's recharge ring precisely
 ## because the hand already said it better). An Elder has no spear — so without
 ## this, every Elder's hand would be empty all the time and the one readable
 ## thing about an armed opponent would be gone for the most dangerous player in
@@ -29,7 +29,7 @@ extends Node3D
 const ARCS := 3
 const ARC_LIFE := 0.09
 ## How far from the hand's own origin the arcs reach. Small — this is a fist, and
-## the whole effect has to sit in the volume `held_spear.gd` measured as clear of
+## the whole effect has to sit in the volume `held_gear.gd` measured as clear of
 ## the Gub's skin in every carried clip.
 const RADIUS := 0.16
 const ARC_SEGMENTS := 4

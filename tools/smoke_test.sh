@@ -197,6 +197,46 @@ check "the spear leaves when the arm does" "release PASS" \
 # Headless, and it quits itself about a second in.
 check "the bolt leaves when the arm does" "cast PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- cast
+# The bow, in numbers (D-065). Four verdicts out of one run and the first is the
+# cheapest to get wrong: a letter hold has to refuse the draw and empty the bow
+# hand, which is the decisions table's "a letter hold disarms the bow as well as
+# the spear" asserted rather than assumed.
+#
+# Then the two *ends* of the charge, which are two different weapons on purpose.
+# A snap shot let go on the frame after the key went down has to take exactly
+# `bow_damage_snap` and fly the snap dials; a full draw held past
+# `bow_draw_time` has to take `bow_damage_full` and fly the full ones. Neither
+# number is read off the arrow — the damage is what the victim actually lost and
+# the speed and the drop are fitted off six ticks of the arrow's own positions,
+# so a curve that went linear, a drop that stopped interpolating or a charge the
+# host clamped to nothing all fail here with the number they produced printed
+# beside the number they owed.
+#
+# The two shots are fired at different ranges and that is the mechanic rather
+# than a convenience: a snap shot drops 4.85 m over the fourteen metres the
+# spear modes use, so it is checked at five, which is as far as this weapon
+# reaches without an arc. Headless, and it quits itself in about four seconds.
+check "the bow's two ends" "bow PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- bow
+also "the bow's two ends" "letter PASS"
+also "the bow's two ends" "snap PASS"
+also "the bow's two ends" "full PASS"
+# The charge as a tell, on a Gub nobody is driving (D-065). Everything that
+# makes a draw work does so on the client holding the key, and none of it says a
+# word about the seven Gubs whose charge has to arrive over a wire — which is
+# the half D-025 cares about, because a tell only the archer can see is not a
+# tell.
+#
+# So the mode publishes one float onto a dummy, once a frame, and requires the
+# two skeletons to agree about how far the string is back to within a
+# centimetre, at five charge levels. Two controls sit on the same line. The draw
+# has to have moved the hands at least 0.20 m, or "they agree" is satisfied by
+# two Gubs standing still; and the synchroniser's own property list has to carry
+# `sync_draw`, because every Gub in this testbed is in one process and the wire
+# is never involved — without that, a build that had forgotten to replicate the
+# field would pass every pose row and be invisible to every real client.
+check "a remote Gub draws the same bow" "draw PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- draw
 # The Elder's invincibility, asserted against a real spear rather than in logic
 # (D-040). `match_rules` can prove that `report_kill` refuses the kill; only this
 # can prove that a shaft launched at a body fourteen metres away arrives, is

@@ -60,6 +60,24 @@ extends Node
 ## still one piece of code with one set of edge cases; the only thing that
 ## branches is which clip runs, how fast it runs, and when its release lands.
 ##
+## **The bow is the third thing on that one path** (D-065). A click is not what
+## starts it — a *held key* is — and what comes out the other end is an arrow
+## worth anywhere between 20 and 80 depending on how long the key was held. What
+## is the same is everything that has ever mattered here: one `is_winding_up`,
+## one cancel on death, one cancel on a letter, one place the aim is read, one
+## release tick with what is now three outcomes on it. The draw is a windup
+## whose release is a decision instead of a deadline, and that is one extra line
+## in `_tick_windup` rather than a second copy of it.
+##
+## **The charge is on the body, not in here** (D-065). `Gub.sync_draw` is a
+## replicated float and this file writes it on the owning client and reads it
+## nowhere else — because "how far is that bow drawn" is a question the animator
+## has to answer about *seven Gubs it does not own*, and a number that lives on
+## the combat node would have to be broadcast to be worth anything. D-025's rule
+## is that a tell only the attacker can see is not a tell; a bow is the first
+## weapon here whose tell is continuous, and a float that replicates is the
+## cheapest honest way to make a continuous thing visible.
+##
 ## **The clip stopped being shared, and the windup did not** (D-064). Until step
 ## 5 of `docs/PLAN_COMBAT.md` the Elder played the spear's own `Throw` at
 ## whatever rate met the delay, which worked while the throw was a baseball
@@ -77,6 +95,7 @@ signal cooldowns_changed()
 signal inventory_changed()
 
 const SPEAR := preload("res://scripts/items/spear_projectile.gd")
+const ARROW := preload("res://scripts/items/arrow_projectile.gd")
 const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 const LURE := preload("res://scenes/items/lure.tscn")
 
@@ -113,22 +132,74 @@ const MAX_AIM_DISTANCE := 220.0
 ## How far in front the mushroom is planted.
 const MUSHROOM_DISTANCE := 2.1
 
+## How much a shot has to drop before it stops being point-and-click.
+##
+## **One Gub's height**, and the number itself is unchanged from the comment
+## that used to sit under `LIGHTNING_RANGE := 28.0`: *"over 28 m it is in the
+## air 0.67 s and drops 1.78 m — one Gub's height, near enough exactly."* That
+## sentence was the derivation and 28 was its answer, written down. What D-065
+## changed is which end is the constant.
+##
+## It is the visible Gub — the 1.80 m rig `tools/build_gub.py` scales to — and
+## not `Gub.STAND_HEIGHT`'s 1.55 m collision capsule, because what a player
+## aims at is the Gub they can see. Keeping the original figure also keeps the
+## arithmetic checkable: `flat_band(SpearProjectile.SPEED, SpearProjectile.DROP)`
+## still comes out at 28.0, which is the whole proof that nothing was quietly
+## re-tuned on the way past.
+const FLAT_BAND_DROP := 1.78
+
+
+## How far a shot at `speed` falling at `drop` stays flat, in metres.
+##
+## `d = speed · sqrt(2 · FLAT_BAND_DROP / drop)`, which is the time to fall one
+## Gub multiplied by the distance covered in it. Inside it you point at a body
+## and hit it; past it the shot becomes a judgement about arc, which is where
+## D-014 says the skill in this fight lives.
+##
+## Static and public because it is the one sentence three weapons are compared
+## by, and every one of the three should be able to be asked:
+##
+##     spear       42 m/s,  8 m/s²    28.0 m
+##     bow, snap   18 m/s, 16 m/s²     8.5 m
+##     bow, full   60 m/s,  5 m/s²    50.6 m
+##
+## `maxf` on the drop because it is a lobby dial with a floor of 0.5 and this
+## would otherwise be a division by zero the day somebody removes the floor.
+static func flat_band(speed: float, drop: float) -> float:
+	return speed * sqrt(2.0 * FLAT_BAND_DROP / maxf(drop, 0.01))
+
+
 ## How far the Elder's bolt reaches.
 ##
-## Hitscan with no travel time and no drop would be a map-wide delete at any
-## range you can see, so there has to be a number, and this one is *derived from
-## the spear* rather than picked: it is the distance at which a flat spear throw
-## stops being a flat spear throw. A spear leaves at 42 m/s and falls at 8 m/s²
-## (`SpearProjectile.SPEED`/`DROP`), so over 28 m it is in the air 0.67 s and
-## drops 1.78 m — one Gub's height, near enough exactly. Inside 28 m you point
-## at a Gub and hit it; past it the throw becomes a judgement about arc, which
-## is where D-014 says the skill in this fight lives.
+## **It answers the comment that used to be here rather than deleting it**
+## (D-065). That comment said: hitscan with no travel time and no drop would be
+## a map-wide delete at any range you can see, so there has to be a number; the
+## number is not picked, it is the distance at which a flat *spear* throw stops
+## being flat; and the Elder therefore owns exactly the band where the spear is
+## point-and-click, while beyond it the spear is still the better tool — which
+## is the shape a power-up should have.
 ##
-## So the Elder owns exactly the band where the spear is a point-and-click
-## weapon, and beyond it the spear is still the better tool — which is the
-## shape a power-up should have. On Rust (42 x 64 m) that is most of a fight and
-## not the length of the yard; on the island it is a clearing.
-const LIGHTNING_RANGE := 28.0
+## Every word of that survives. What stopped being true is that the spear is the
+## weapon that defines the band. **The bow's full draw is now the flattest thing
+## in the game** — 60 m/s against 42, falling at 5 against 8 — so leaving this
+## at 28 would have left the Elder owning a band the bow already owned better,
+## which is a power-up that is a downgrade inside 50 m. The user's call was that
+## the Elder's range rises to match, and nothing comes down to compensate:
+## playtest it (`docs/PLAN_COMBAT.md`).
+##
+## So it is the same arithmetic on a different weapon, and it is a **function**
+## rather than a constant because the bow's speed and drop are lobby dials now.
+## A host who flattens the bow flattens the Elder with it, on every peer, off
+## replicated config — and a typed 50.6 sitting beside two sliders that move it
+## is exactly the kind of number D-063 and D-064 spent their records turning
+## back into derivations.
+##
+## What it costs: 50.6 m at the defaults against 28. On Rust (42 x 64 m) that is
+## a long shot rather than most of a fight; on Lantern Wharf and Halcyon Wake no
+## sightline is that long anyway (D-056, D-057); on the island it was already a
+## clearing and still is.
+func lightning_range() -> float:
+	return flat_band(_config.bow_speed_full, _config.bow_drop_full)
 
 ## What a spear does to a Gub, and what a bolt does (D-062).
 ##
@@ -181,12 +252,14 @@ var _config: MatchConfig
 
 ## Local, predictive. Drives the HUD.
 var _spear_ready_at: float = 0.0
+var _bow_ready_at: float = 0.0
 var _lightning_ready_at: float = 0.0
 var _mushroom_ready_at: float = 0.0
 var _lure_ready_at: float = 0.0
 
 ## Host-side, authoritative. Never trusted from the wire.
 var _server_spear_ready_at: float = 0.0
+var _server_bow_ready_at: float = 0.0
 var _server_lightning_ready_at: float = 0.0
 var _server_mushroom_ready_at: float = 0.0
 var _server_lure_ready_at: float = 0.0
@@ -214,10 +287,34 @@ var _active_mushrooms: Array[Node] = []
 ## somebody else's and must never build one.
 var _aim_marker: AimMarker = null
 
-## When the spear currently being wound up leaves the hand, or 0 for "no throw
-## in progress". Only ever set on the throwing client: the host is told about
-## the throw when it happens, not while it is being aimed.
+## When the thing currently being wound up leaves the hand, or 0 for "nothing
+## on its way out". Only ever set on the attacking client: the host is told
+## about a shot when it happens, not while it is being aimed.
 var _windup_release_at: float = 0.0
+
+## When this Gub started drawing its bow, or 0 for "not drawing" (D-065).
+##
+## The other half of `is_winding_up`, and the half with no deadline in it: a
+## draw ends when the player lets go, which is a decision and not a time. Local
+## to the drawing client, like `_windup_release_at`; what every *other* peer
+## reads is `Gub.sync_draw`, which this is the source of.
+var _draw_started_at: float = 0.0
+
+## How far the string was back when it was let go, or **-1 for "no arrow on its
+## way"**.
+##
+## This is the whole of the bow's presence on the release tick: one field,
+## carrying one number, latched at the moment the key came up and spent one
+## frame later. Out of band rather than a boolean beside a float, for the reason
+## `Gub.sync_draw` is: "loosing at 0% draw" and "not loosing" are two states and
+## two fields could disagree about which one this is.
+var _loose_charge: float = -1.0
+
+## Host-side. The furthest this Gub's bow has been seen to be drawn during the
+## draw that is running now, off the replicated float rather than off anything a
+## client says about it — see `_host_loose_arrow`, which clamps a claim to it.
+var _server_draw_peak: float = 0.0
+var _server_drawing: bool = false
 
 
 func _ready() -> void:
@@ -250,6 +347,10 @@ func _process(_delta: float) -> void:
 	# middle of a windup has a throw to *cancel*, and the guards are exactly the
 	# conditions under which it has to be cancelled.
 	_tick_windup()
+	# Before the hand, because the hand is drawn off it: `_tick_draw` is what
+	# puts the charge on the body, and on every peer it is what hands the same
+	# number to the bowstring's blend shape.
+	_tick_draw()
 	_tick_hand()
 	_tick_charge()
 	if not _gub.is_local() or not _gub.alive:
@@ -261,6 +362,14 @@ func _process(_delta: float) -> void:
 	_tick_aim_marker()
 	if Input.is_action_just_pressed("throw_spear"):
 		try_throw_spear()
+	# Pressed *and* released, because this is the one attack in the game whose
+	# input has two ends. The release goes through `release_draw` rather than
+	# being read inside `_tick_windup`, so that a testbed can let go of a string
+	# without a keyboard (`tools/combat_range.gd`).
+	if Input.is_action_just_pressed("draw_bow"):
+		try_draw_bow()
+	if Input.is_action_just_released("draw_bow"):
+		release_draw()
 	if Input.is_action_just_pressed("place_mushroom"):
 		try_place_mushroom()
 	if Input.is_action_just_pressed("throw_lure"):
@@ -273,6 +382,10 @@ func spear_cooldown() -> float:
 
 func lightning_cooldown() -> float:
 	return maxf(0.0, _lightning_ready_at - _now())
+
+
+func bow_cooldown() -> float:
+	return maxf(0.0, _bow_ready_at - _now())
 
 
 ## Seconds until another mushroom may be placed. Not a cooldown on the *ability*
@@ -305,6 +418,26 @@ func lure_count() -> int:
 ## that the hand the spear would come out of has a letter in it.
 func has_spear() -> bool:
 	return not is_elder() and spear_cooldown() <= 0.0 and not is_holding_letter()
+
+
+## Whether there is a bow to draw, and the exact mirror of `has_spear()`
+## (D-065): the draw asks it, the host asks it before it will honour a loose,
+## and the left hand is drawn from it. Anything that wants to take a Gub's bow
+## away adds a clause here and gets all three for free.
+##
+## It shares both of the spear's clauses and for both of the spear's reasons. An
+## Elder has lightning *instead of* its weapons, not as well as them (D-038) —
+## two hands full of bow would be the tell for the most dangerous Gub in the
+## match saying the wrong thing. And a letter hold disarms the bow exactly as it
+## disarms the spear, which is the decisions table's own call and is not a rule
+## bolted on beside this one: it is that the hand the arrow would be drawn with
+## has a card in it.
+##
+## What it does **not** share is the recharge. `bow_recharge` is its own dial and
+## is much shorter than the spear's, because a spear is a guaranteed kill and an
+## arrow is not.
+func has_bow() -> bool:
+	return not is_elder() and bow_cooldown() <= 0.0 and not is_holding_letter()
 
 
 ## Is this Gub the Elder? Asked of `MatchState` every time rather than mirrored
@@ -353,6 +486,15 @@ func spear_cycle() -> float:
 	return GubAnimator.THROW_RELEASE_TIME + _config.spear_recharge
 
 
+## The whole bow cycle, and it is the one that is not a constant plus a dial:
+## how long a shot takes depends on how far the archer chose to draw, and the
+## only honest answer for "the tile is empty for this long" is the longest one.
+## So the HUD is told about a full draw, which is what a player who is watching
+## the tile rather than the string is about to pay.
+func bow_cycle() -> float:
+	return _config.bow_draw_time + GubAnimator.BOW_RELEASE_TIME + _config.bow_recharge
+
+
 func lightning_cycle() -> float:
 	return _config.lightning_delay + _config.lightning_cooldown
 
@@ -392,10 +534,49 @@ func release_delay() -> float:
 	return _config.lightning_delay if is_elder() else GubAnimator.THROW_RELEASE_TIME
 
 
-## True between the click and the release. The held spear is still in the hand
-## through this window, which is the point of it.
+## True between the click and the release, for any of the three (D-065). The
+## thing being thrown is still in the hand through this window, which is the
+## point of it.
+##
+## It has two terms now and not three, because the bow's *loose* is already a
+## `_windup_release_at`: a draw sets `_draw_started_at`, letting go clears it and
+## sets the deadline, and there is never a frame that is neither. What asks this
+## is "may a second attack start", and the answer through all of it is no.
 func is_winding_up() -> bool:
-	return _windup_release_at > 0.0
+	return _windup_release_at > 0.0 or _draw_started_at > 0.0
+
+
+## True while a *throw* is between its click and its release — the spear's or
+## the Elder's, and never the bow's.
+##
+## Asked separately from `is_winding_up` by the three places whose question is
+## really "is the right fist holding something it has paid for but not yet let
+## go of" (D-025's carve-out), and by the aim ring. A drawing Gub has an arrow
+## in that fist and not a shaft, so answering yes for it would put two things in
+## one hand — which is the rule this whole node exists to keep.
+func _is_throw_windup() -> bool:
+	return _windup_release_at > 0.0 and _loose_charge < 0.0
+
+
+## True from the moment the string starts back to the moment the arrow leaves.
+## The local half of it; every other peer reads `Gub.is_drawing()`, which is
+## what the hand and the animator are actually drawn from.
+func _bow_in_use() -> bool:
+	return _draw_started_at > 0.0 or _loose_charge >= 0.0
+
+
+## How far this Gub's own bow is drawn, 0 to 1, and 0 when it is not drawing.
+##
+## The one place the charge is computed, and it is computed from a clock rather
+## than accumulated, so a dropped frame cannot leave a draw short. Nothing else
+## reads this: `_tick_draw` puts the answer on the body and everything —
+## including this client's own animator, its own bowstring and its own arrow's
+## damage — reads it back from there. One number, one road (D-065).
+func draw_fraction() -> float:
+	if _draw_started_at <= 0.0:
+		return 0.0
+	return clampf((_now() - _draw_started_at) / maxf(_config.bow_draw_time, 0.01),
+		0.0, 1.0)
 
 
 # ------------------------------------------------------------------- aiming ---
@@ -475,7 +656,15 @@ func _tick_aim_marker() -> void:
 	# "where will this land given the drop", and a hitscan bolt has no drop to
 	# answer about: it lands exactly on the crosshair. Drawing one anyway would
 	# be the HUD promising a ballistic arc for a weapon that has none.
-	if rig == null or not rig.is_aiming() or is_elder() 			or not (has_spear() or is_winding_up()):
+	# A drawing Gub gets no ring either, and for a sharper version of the
+	# Elder's reason (D-065). The ring answers "where will this land given the
+	# drop" — and for a bow that answer *slides outward as you charge*, because
+	# the drop is a function of the draw. A ring that crept toward the horizon
+	# while the string came back would be a charge meter drawn on the ground:
+	# the tell done as UI, which is the one thing the user ruled out and which
+	# D-036 threw off the crosshair. The string is the meter.
+	if rig == null or not rig.is_aiming() or is_elder() \
+			or not (has_spear() or _is_throw_windup()):
 		_stow_aim_marker()
 		return
 	if _aim_marker == null:
@@ -540,7 +729,7 @@ func try_throw_spear() -> void:
 ## The release. Runs on the throwing client only, one THROW_RELEASE_TIME after
 ## the click, and is the first moment anything about the aim is read.
 func _tick_windup() -> void:
-	if _windup_release_at <= 0.0:
+	if not is_winding_up():
 		return
 	# Dead, respawned, or no longer ours: the throw is off. The windup animation
 	# is already playing and is left alone — it is cosmetic and fades out on its
@@ -554,8 +743,22 @@ func _tick_windup() -> void:
 	if not _gub.alive or not _gub.is_local() or is_holding_letter():
 		if _gub.alive and is_holding_letter():
 			_spear_ready_at = 0.0
+			_bow_ready_at = 0.0
 			cooldowns_changed.emit()
 		_windup_release_at = 0.0
+		# A draw abandoned rather than loosed, and the arrow is simply not
+		# there: the same sentence the spear's cancel has said since D-025, one
+		# field further. `_tick_draw` takes the charge off the body on the same
+		# frame, so every peer's copy of this Gub stops drawing at once.
+		_draw_started_at = 0.0
+		_loose_charge = -1.0
+		return
+	# **The one line the bow adds to this function.** A draw is a windup with no
+	# deadline in it — it ends when the player lets go, which happens in
+	# `release_draw` — so until then there is nothing here to have arrived. Put
+	# the other way round: everything below this line is the release tick, and
+	# the bow reaches it by the same door as the other two.
+	if _draw_started_at > 0.0:
 		return
 	if _now() < _windup_release_at:
 		return
@@ -564,6 +767,7 @@ func _tick_windup() -> void:
 	var origin := _throw_origin()
 	var direction := (_aim_point() - origin).normalized()
 	if direction.length_squared() < 0.001:
+		_loose_charge = -1.0
 		return
 	# Asked *here* and not at the click, on purpose. Everything else about this
 	# throw is decided at the release — the aim is, and that is the whole of
@@ -585,6 +789,24 @@ func _tick_windup() -> void:
 	# would be a hand that snaps back to its side and starts again, which is a
 	# worse lie than an arm finishing a motion its owner has changed its mind
 	# about.
+	# The third outcome, and it is here rather than in a path of its own for the
+	# reason the second one is (D-025, D-038, D-064): the aim above it was read
+	# once, the cancels above it were asked once, and a bow that wanted its own
+	# copy of those would be a second set of the same four edge cases.
+	#
+	# It is asked *first* because it is the only one of the three that already
+	# knows which weapon it is. An arrow that is one frame from leaving cannot
+	# become a bolt because a robe arrived — the string has already gone, and
+	# the shot was paid for at the draw. The other two go on branching at the
+	# release exactly as they did, and for the reason written below.
+	if _loose_charge >= 0.0:
+		var charge := _loose_charge
+		_loose_charge = -1.0
+		if Net.is_host:
+			_host_loose_arrow(origin, direction, charge)
+		else:
+			_request_loose_arrow.rpc_id(1, origin, direction, charge)
+		return
 	if is_elder():
 		if Net.is_host:
 			_host_cast_lightning(origin, direction)
@@ -732,10 +954,17 @@ func _do_throw_spear(origin: Vector3, direction: Vector3) -> void:
 ## comparison, doing nothing at all unless the hand and the gate have come
 ## apart. That is a handful of times a second across every Gub in the match.
 func _tick_hand() -> void:
-	if _gub.held_spear == null:
+	if _gub.held_gear == null:
 		return
 	var want := _wants_shaft()
-	if _gub.held_spear.is_carried() == want:
+	# Three questions and not one, because the hands came apart (D-065): a bow
+	# that should be there and is not is the same bug as a shaft that should be
+	# there and is not, and the poll that catches one has to catch all three or
+	# it is a poll with a hole in it. Still one comparison each, still doing
+	# nothing at all on the frames nothing has changed.
+	if _gub.held_gear.is_carried() == want \
+			and _gub.held_gear.has_bow() == _wants_bow() \
+			and _gub.held_gear.has_arrow() == _wants_arrow():
 		return
 	_refresh_hand()
 	cooldowns_changed.emit()
@@ -768,8 +997,226 @@ func _tick_hand() -> void:
 ## already answers no for an Elder, so the extra `is_elder()` is only about that
 ## window — an Elder winding a bolt up must not be handed a shaft by it.
 func _wants_shaft() -> bool:
+	return not is_elder() and not is_holding_letter() and not _gub.is_drawing() \
+		and (has_spear() or _is_throw_windup())
+
+
+# --------------------------------------------------------------------- bow ---
+
+## How much of a draw a client is allowed to claim beyond what the host saw.
+##
+## The charge travels with the loose, because the client is the only machine
+## that knows when a key came up — so like the throw's origin it is **checked
+## rather than believed**. The host watches the same replicated float everybody
+## else does (`_watch_draw`) and clamps the claim to the furthest it saw the
+## string go, plus this.
+##
+## It is not slack in the mechanic, it is slack in the *measuring*. `sync_draw`
+## is ON_CHANGE and arrives when it arrives; the host's last sample of an honest
+## draw is a tick or two behind the value that client loosed at, and clamping to
+## exactly what arrived would shave every shot in the game by whatever the
+## network happened to cost. A tenth of a draw is six ticks at the default draw
+## time, which is several times any plausible lag and is worth, at the top of
+## the curve, about six damage. What it cannot do is let a client claim a full
+## draw it never made: that is the whole 1.0, and it is ten times this.
+const DRAW_CLAIM_GRACE := 0.1
+
+
+## Start drawing. **The one attack in this file that is not started by a click**
+## (D-065), and the one that spends nothing to start.
+##
+## `try_throw_spear` pays its cooldown on the click, because the input has been
+## spent whether or not the spear has left. A draw has not been spent: it can be
+## held, judged, and let go for a worse shot or abandoned entirely when the
+## target walks behind a tree, and every one of those is a decision the player
+## should be able to make for free. So the recharge starts at the *loose*
+## (`release_draw`) and what the draw costs is the only currency this weapon
+## actually trades in, which is standing still in the open with a tell on you.
+func try_draw_bow() -> void:
+	if not has_bow() or is_winding_up():
+		return
+	_draw_started_at = _now()
+	# The arrow appears in the fist on this frame rather than the next, which is
+	# what `_tick_hand`'s poll would otherwise do — a single frame, but the
+	# single frame in which everybody watching would see a string coming back
+	# with nothing on it.
+	_refresh_hand()
+	cooldowns_changed.emit()
+
+
+## Let go of the string.
+##
+## Everything this decides it decides *now* and hands to the release tick one
+## frame later: the charge is latched here because the key came up here, and
+## `GubAnimator.BOW_RELEASE_TIME` is the one frame between the fingers opening
+## and the arrow being gone. Where it goes is still read at the release, like
+## every other weapon's, and is still read in exactly one place (D-025).
+##
+## Called from `_process` on the key-up, and by `tools/combat_range.gd`, which
+## is why it is a function rather than an `Input` read inside `_tick_windup`: a
+## headless harness has to be able to let go of a string.
+func release_draw() -> void:
+	if _draw_started_at <= 0.0:
+		return
+	_loose_charge = draw_fraction()
+	_draw_started_at = 0.0
+	_windup_release_at = _now() + GubAnimator.BOW_RELEASE_TIME
+	# Spent here and not at the draw, for the reason in `try_draw_bow`. The
+	# local prediction covers the release as well as the recharge so the tile
+	# does not blink lit for one frame between the two.
+	_bow_ready_at = _now() + GubAnimator.BOW_RELEASE_TIME + _config.bow_recharge
+	cooldowns_changed.emit()
+
+
+## Put the charge on the body, hand it to the bowstring, and — on the host —
+## remember how far this Gub was actually seen to draw.
+##
+## **A poll, and the third one in this file**, beside `_tick_hand` and
+## `_tick_charge`, for the reason both of those are: there is exactly one clock
+## in a draw and it is `_draw_started_at`; anything that kept a second copy
+## ticking alongside it would be a second opinion about a number eight machines
+## have to agree on.
+##
+## The two halves go in opposite directions and that is the whole design. The
+## owner *writes* `Gub.draw`, because the key it is holding is knowledge only it
+## has. Everything else — this Gub's own animator, this Gub's own bowstring, the
+## seven other people's copies of both — *reads* `Gub.draw_fraction()`, which
+## answers off the replicated value on a copy the local player does not own. One
+## number, one direction, and no path by which what an archer sees in its hands
+## can differ from what the clearing sees in them (D-025).
+func _tick_draw() -> void:
+	if _gub.held_gear == null:
+		return
+	if _gub.is_local():
+		# -1 for "not drawing", which is `Gub.sync_draw`'s out-of-band value and
+		# is why there is no second flag here to disagree with this float. The
+		# frame between letting go and the arrow leaving is *not* a draw: the
+		# string has gone, so it snaps back to brace and the loose fires off the
+		# same edge on every peer (`GubAnimator._track_draw`).
+		_gub.draw = draw_fraction() if _draw_started_at > 0.0 else -1.0
+	_gub.held_gear.set_draw(_gub.draw_fraction())
+	if Net.is_host:
+		_watch_draw()
+
+
+## Host-side: how far this Gub has been seen to draw, so that a loose can be
+## checked against something rather than taken on trust.
+##
+## Off `Gub.is_drawing()`, which on the host's copy of a remote Gub is the
+## replicated float and on its own is the local one — so this is one piece of
+## code for the host's own shots and for everybody else's, which is the same
+## property `windup_rate` has and for the same reason.
+func _watch_draw() -> void:
+	var drawing := _gub.is_drawing()
+	if drawing and not _server_drawing:
+		_server_draw_peak = 0.0
+	if drawing:
+		_server_draw_peak = maxf(_server_draw_peak, _gub.draw_fraction())
+	_server_drawing = drawing
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_loose_arrow(origin: Vector3, direction: Vector3, charge: float) -> void:
+	if not Net.is_host or multiplayer.get_remote_sender_id() != _gub.peer_id:
+		return
+	_host_loose_arrow(origin, direction, charge)
+
+
+## The shot, decided on the host and nowhere else.
+##
+## Three things are checked and not believed, and they are the same three the
+## throw and the cast check: the recharge, the gates, and the origin. The fourth
+## is the bow's own and is the reason this weapon needed a host-side field at
+## all — **the charge**. A client that sent 1.0 the instant it pressed the key
+## would have a free 80-damage snap shot, which is the one thing a lobby dial
+## could never be blamed for, so the claim is clamped to the draw this machine
+## watched happen (`_watch_draw`, `DRAW_CLAIM_GRACE`).
+func _host_loose_arrow(origin: Vector3, direction: Vector3, charge: float) -> void:
+	if not _gub.alive or _now() < _server_bow_ready_at:
+		return
+	# The authoritative half of the two gates the client already refused itself
+	# on (D-035, D-038): a Gub holding a card up has no hand free to draw with,
+	# and an Elder has lightning instead of a bow. Both read the host's own
+	# rows, which are the only copies that can be trusted.
+	if is_holding_letter() or is_elder():
+		return
+	if origin.distance_to(_gub.global_position) > 3.0:
+		origin = _throw_origin()
+	var aim := direction
+	if not aim.is_finite() or aim.length_squared() < 0.0001:
+		aim = _gub.facing()
+	aim = aim.normalized()
+	var drawn := clampf(charge, 0.0, minf(1.0, _server_draw_peak + DRAW_CLAIM_GRACE))
+	_server_draw_peak = 0.0
+	_server_drawing = false
+	_server_bow_ready_at = _now() + _config.bow_recharge
+	# The *charge* travels and the damage does not, which is the same choice
+	# `_play_windup` makes about the rate: every peer works the numbers out for
+	# itself from one replicated float and one replicated config, so there is
+	# nothing on the wire that could arrive as a different number at the far
+	# end. Only the host's copy of the arrow ever reports what it did.
+	_do_loose_arrow.rpc(origin, aim, drawn)
+	_do_loose_arrow(origin, aim, drawn)
+
+
+## The loose, on every machine.
+##
+## There is no `play_loose()` here and that is not an omission — the loose
+## animation fires off the *replicated draw ending*, in `GubAnimator`, the way a
+## remote Gub's dive fires off a serial (D-026). A message would be a second way
+## to start the same animation, arriving at a different time from the float that
+## put the string back at brace.
+@rpc("authority", "call_remote", "reliable")
+func _do_loose_arrow(origin: Vector3, direction: Vector3, charge: float) -> void:
+	_bow_ready_at = _now() + _config.bow_recharge
+	cooldowns_changed.emit()
+	# The nocked arrow goes on the frame the real one appears, exactly as the
+	# shaft does, so nobody ever sees two arrows.
+	_refresh_hand()
+
+	# Borrowed rather than invented, like the Elder's readiness chime: there is
+	# no bow release in `audio/sfx/` and a thrown-shaft sound is the closest
+	# thing in it to a string. Worth replacing the day somebody records one.
+	AudioDirector.play_3d_varied(AudioDirector.SPEAR_THROW, origin)
+	var arrow := ARROW.loose(_spawn_root(), _gub, origin, direction, charge,
+		_config, Net.is_host)
+	arrow.struck_gub.connect(_on_arrow_struck_gub.bind(arrow))
+
+
+func _on_arrow_struck_gub(victim: Gub, point: Vector3, bone: String,
+		arrow: ArrowProjectile) -> void:
+	# Only the host's copy of an arrow is allowed to decide anything.
+	if not arrow.authoritative or not Net.is_host:
+		return
+	# `arrow.damage` and not a constant, which is the whole difference between
+	# this weapon and the spear next door: `SPEAR_DAMAGE` is a whole Gub written
+	# as `Gub.MAX_HEALTH` so that no dial can soften it, and this is a number
+	# eight sliders can move (D-062, D-065). Both go through the same door.
+	MatchState.report_damage(victim.peer_id, _gub.peer_id, arrow.damage,
+		Gub.Cause.ARROW, point, arrow.impact_velocity(), bone)
+
+
+## Should the left fist be holding a bow right now?
+##
+## `_wants_shaft`'s twin, and shorter for one reason: nothing else is ever in
+## this hand, so there is no "or a card, or a crackle" to be exclusive with. The
+## windup carve-out is D-025's, one weapon further along — a bow has to stay in
+## the hand through the draw *and* through the frame between the loose and the
+## arrow, and `is_drawing()` is asked of the **body** rather than of the local
+## `_bow_in_use()` so that it is true on every peer's copy and not only on the
+## archer's.
+func _wants_bow() -> bool:
 	return not is_elder() and not is_holding_letter() \
-		and (has_spear() or is_winding_up())
+		and (has_bow() or _gub.is_drawing())
+
+
+## Should the right fist have an arrow nocked in it?
+##
+## Only while the string is actually back, which is what makes it a tell worth
+## having: a Gub carrying a bow with no arrow on it is a Gub that cannot shoot
+## you this second. Off the replicated draw, like the bow above.
+func _wants_arrow() -> bool:
+	return not is_elder() and not is_holding_letter() and _gub.is_drawing()
 
 
 # --------------------------------------------------------------- lightning ---
@@ -856,7 +1303,7 @@ func _host_cast_lightning(origin: Vector3, direction: Vector3) -> void:
 	_server_lightning_ready_at = _now() + _config.lightning_cooldown
 
 	var hit := _lightning_hit(origin, aim)
-	var point: Vector3 = hit.get("position", origin + aim * LIGHTNING_RANGE)
+	var point: Vector3 = hit.get("position", origin + aim * lightning_range())
 	var victim := hit.get("collider") as Gub
 	# A surface normal, or nothing when the bolt stopped on a body or on thin
 	# air. It decides only whether there is a scorch to draw and which way the
@@ -954,7 +1401,7 @@ func _blast_victims(point: Vector3, los_from: Vector3, radius: float,
 func _lightning_hit(origin: Vector3, direction: Vector3) -> Dictionary:
 	var space := _gub.get_world_3d().direct_space_state
 	var query := PhysicsRayQueryParameters3D.create(
-		origin, origin + direction * LIGHTNING_RANGE)
+		origin, origin + direction * lightning_range())
 	query.collision_mask = LAYER_WORLD | LAYER_PLAYER | LAYER_DEPLOYABLE
 	query.collide_with_areas = false
 	query.collide_with_bodies = true
@@ -1003,10 +1450,10 @@ func _do_cast_lightning(origin: Vector3, point: Vector3, normal: Vector3,
 ## Cheap by construction: one boolean comparison, only on Gubs that are the
 ## Elder, doing nothing at all unless the hand and the gate have come apart.
 func _tick_charge() -> void:
-	if _gub.held_spear == null or not is_elder():
+	if _gub.held_gear == null or not is_elder():
 		return
 	var want := _wants_crackle()
-	if _gub.held_spear.is_charged() == want:
+	if _gub.held_gear.is_charged() == want:
 		return
 	_refresh_hand()
 	cooldowns_changed.emit()
@@ -1032,7 +1479,8 @@ func _tick_charge() -> void:
 ## and a hand that emptied on the click would be an arm going back with nothing
 ## in it.
 func _wants_crackle() -> bool:
-	return is_elder() and not is_holding_letter() 		and (has_lightning() or is_winding_up())
+	return is_elder() and not is_holding_letter() \
+		and (has_lightning() or _is_throw_windup())
 
 
 func _on_elder_changed(peer_id: int) -> void:
@@ -1064,17 +1512,22 @@ func _on_elder_changed(peer_id: int) -> void:
 ## likes: every path that can change the answer ends here, and so does a frame
 ## on which nothing changed except that a deadline passed.
 func _refresh_hand() -> void:
-	if _gub == null or _gub.held_spear == null:
+	if _gub == null or _gub.held_gear == null:
 		return
 	var holding := is_holding_letter()
-	_gub.held_spear.set_carried(_wants_shaft())
+	_gub.held_gear.set_carried(_wants_shaft())
+	# The left fist and the right, set together and every time, which is what
+	# makes "one thing per hand" a property of this one function rather than a
+	# rule spread over two files (D-065). `HeldGear` decides nothing.
+	_gub.held_gear.set_bow(_wants_bow())
+	_gub.held_gear.set_arrow(_wants_arrow())
 	# Runs on every peer's copy of every Gub, which is the point: a Gub ten
 	# seconds from a letter has to be readable from across the clearing by the
 	# people who might stop it, not only by the player holding the card. The
 	# Elder's crackle is the same argument with a shorter fuse.
-	_gub.held_spear.set_letter(
+	_gub.held_gear.set_letter(
 		MatchState.letter_hold_letter(_gub.peer_id) if holding else 0)
-	_gub.held_spear.set_charged(_wants_crackle())
+	_gub.held_gear.set_charged(_wants_crackle())
 
 
 func _on_letter_hold_changed(peer_id: int) -> void:
@@ -1423,6 +1876,19 @@ func reset() -> void:
 	# down. A stale deadline here would only matter on the day *that* stops being
 	# true, which is exactly when nobody would think to look.
 	_lightning_ready_at = 0.0
+	# The bow, with the draw that may have been half way back when the round
+	# ended. `_gub.draw` is put back out of band here as well as in
+	# `Gub.revive_at`, because `reset` runs on every peer from `_do_respawn` and
+	# a remote Gub whose owner has not published yet would otherwise hold a
+	# half-drawn bow for a round trip.
+	_bow_ready_at = 0.0
+	_draw_started_at = 0.0
+	_loose_charge = -1.0
+	_server_bow_ready_at = 0.0
+	_server_draw_peak = 0.0
+	_server_drawing = false
+	if _gub != null:
+		_gub.draw = -1.0
 	_mushroom_ready_at = 0.0
 	_lure_ready_at = 0.0
 	_server_spear_ready_at = 0.0

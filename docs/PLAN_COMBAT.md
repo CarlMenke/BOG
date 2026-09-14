@@ -548,6 +548,13 @@ Wave 1, one by one:         +--> [4] spear <-+            |
                                                          +--> [9] great sword
 ```
 
-Wave 0 is **done and in the gate at 70 checks.** The clips for steps 4–8 have
-arrived and are audited; step 9 additionally needs a sword mesh that does not
-exist yet.
+Wave 0 and **steps 4, 5 and 6 are done, and the gate is at 77 checks.** The
+clips for steps 7 and 8 have arrived and are audited; step 9 additionally needs
+a sword mesh that does not exist yet.
+
+Step 6 handed one thing forward on purpose. The composed bow points **91° off
+the Gub's own facing** — an archer stands side-on, and the whole of that angle
+lives in the shoulders and the arms, so no mask moves it (D-065 has the three
+that were measured). That is step 8's spine aim, which this plan already calls
+"the one thing in this whole plan the repo genuinely does not have", and the
+number is printed by `tools/combat_range.tscn -- draw` every run.

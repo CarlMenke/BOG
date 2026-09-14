@@ -19,13 +19,27 @@ extends Node3D
 ## This is a plain `Node3D` integrated by hand rather than a `RigidBody3D`. At
 ## 42 m/s a physics body covers 0.7 m per tick and tunnels straight through a
 ## Gub; stepping the flight and sweeping the segment between the old and new
-## position is what makes an instant-kill weapon actually hit.
+## position is what makes an instant-kill weapon actually hit. At the bow's full
+## draw it is 60 m/s and a metre a tick, so the sweep matters more rather than
+## less.
+##
+## **`ArrowProjectile` is this class with four things swapped** (D-065): a
+## different mesh, a launch speed and a drop that come off the draw instead of
+## out of a constant, and a damage number that is not a whole Gub. Everything
+## else an arrow needs — the hand-stepped flight, the segment sweep, the three
+## endings in `_stick_in`, the ride on a living skeleton, the glow, the trail —
+## is the same code and not a second copy of it. What made that a small change
+## rather than a refactor is that this file never knew what the shaft was worth:
+## damage has always been the *caller's* to report (`GubCombat`, D-062), and the
+## flight has always been the same flight.
 
 signal struck_gub(victim: Gub, point: Vector3, bone: String)
 signal struck_world(point: Vector3, normal: Vector3)
 
 const MODEL := preload("res://art/generated/spear.glb")
 
+## The spear's own launch speed, and the default for `_speed` below. An arrow
+## overrides both of these per shot; nothing else ever does.
 const SPEED := 42.0
 ## Spears drop, but at a third of world gravity. Enough that a long throw has to
 ## be led and arced — which is where the skill in the fight lives — without
@@ -92,6 +106,13 @@ const LAYER_DEPLOYABLE := 8
 var thrower_id: int = 0
 var authoritative: bool = false
 
+## What this particular shaft flies like. Instance fields defaulting to the
+## constants above, because a bow's arrow is the same flight with two different
+## numbers in it and the numbers are a lobby dial rather than a constant
+## (D-065). Read once at launch and then only by `_physics_process`.
+var _speed: float = SPEED
+var _drop: float = DROP
+
 var _velocity: Vector3 = Vector3.ZERO
 var _previous: Vector3 = Vector3.ZERO
 var _age: float = 0.0
@@ -134,25 +155,69 @@ var _glowing: Array[MeshInstance3D] = []
 static func launch(parent: Node, thrower: Gub, origin: Vector3, direction: Vector3,
 		is_authoritative: bool) -> SpearProjectile:
 	var spear := SpearProjectile.new()
-	spear.name = "Spear_%d_%d" % [thrower.peer_id, Time.get_ticks_msec()]
-	spear.thrower_id = thrower.peer_id
-	spear.authoritative = is_authoritative
-	spear._thrower = thrower
-	parent.add_child(spear)
-	spear.global_position = origin
-	spear._previous = origin
-	spear._velocity = direction.normalized() * SPEED
-	spear._face_travel()
+	spear.begin(parent, thrower, origin, direction, is_authoritative)
 	return spear
 
 
-func _ready() -> void:
-	_model = MODEL.instantiate() as Node3D
+## Put a freshly constructed shaft into the world and start it flying.
+##
+## Split out of `launch` so that `ArrowProjectile.loose` can do the same nine
+## things to a different object without a second copy of them. A static that
+## constructs cannot be overridden usefully in GDScript, and an arrow differs in
+## what it *is* rather than in how it is launched.
+func begin(parent: Node, thrower: Gub, origin: Vector3, direction: Vector3,
+		is_authoritative: bool) -> void:
+	name = "%s_%d_%d" % [_shaft_name(), thrower.peer_id, Time.get_ticks_msec()]
+	thrower_id = thrower.peer_id
+	authoritative = is_authoritative
+	_thrower = thrower
+	parent.add_child(self)
+	global_position = origin
+	_previous = origin
+	_velocity = direction.normalized() * _speed
+	_face_travel()
+
+
+## What this kind of shaft is called in the scene tree. Overridden by the arrow,
+## because a testbed that prints `_items`' children should be able to tell an
+## arrow from a spear without asking the class.
+func _shaft_name() -> String:
+	return "Spear"
+
+
+## The mesh, and how it is turned and slid so its point is at this node's
+## origin. Overridden by the arrow, which is modelled along a different axis and
+## is not modelled down its own centre line.
+##
+## Three small functions rather than three constants because a `const` cannot be
+## overridden in GDScript — and constants are what these want to be, so they are
+## written as constants in the subclass and returned from here.
+func _model_scene() -> PackedScene:
+	return MODEL
+
+
+func _model_rotation() -> Vector3:
 	# The mesh runs along its own +Y from butt to tip, but the projectile flies
-	# along -Z like everything else in Godot, so the model is tipped forward and
-	# slid back to put its point at the origin.
-	_model.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
-	_model.position = Vector3(0.0, 0.0, 0.62)
+	# along -Z like everything else in Godot, so the model is tipped forward.
+	return Vector3(-90.0, 0.0, 0.0)
+
+
+func _model_offset() -> Vector3:
+	return Vector3(0.0, 0.0, 0.62)
+
+
+## How big the mesh is drawn. One for the spear, which is modelled at the size
+## it is carried; the arrow is scaled to the Gub's own draw (`HeldGear`), so the
+## one that leaves the bow is the one that was nocked in it.
+func _model_scale() -> float:
+	return 1.0
+
+
+func _ready() -> void:
+	_model = _model_scene().instantiate() as Node3D
+	_model.rotation_degrees = _model_rotation()
+	_model.position = _model_offset()
+	_model.scale = Vector3.ONE * _model_scale()
 	add_child(_model)
 	_light_up()
 
@@ -171,7 +236,7 @@ func _physics_process(delta: float) -> void:
 		queue_free()
 		return
 
-	_velocity.y -= DROP * delta
+	_velocity.y -= _drop * delta
 	_previous = global_position
 	var next := global_position + _velocity * delta
 

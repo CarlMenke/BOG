@@ -56,6 +56,77 @@ const TEAM_NONE := -1
 ## can commit to an attack, and therefore how punishing a miss is.
 @export_range(0.5, 15.0) var spear_recharge: float = 3.0
 
+# ------------------------------------------------------------------- the bow ---
+#
+# The first damage dials in the game (D-062 said the bow would bring them, and
+# said why there is still no `starting_health` beside them: 100 is the unit
+# these are written in, not a setting).
+#
+# Eight of them, in four pairs, and every pair is the same pair — what a snap
+# shot does and what a full draw does. Everything between is the charge, and
+# **nothing between is a dial**, because the shape of the curve is a design
+# decision with an argument behind it and the ends are balance. See
+# `ArrowProjectile` for the two interpolations and why one of them is not
+# linear.
+
+## How long the string takes to come all the way back.
+##
+## The whole of what a full draw *costs*, and therefore the number that decides
+## whether the bow is a sniper rifle or a shotgun. A second is a long time to
+## stand still in the open with a tell on you, which is the trade this weapon
+## is: the spear's 0.50 s windup is paid after the decision and this is paid
+## before it, in public, and can be abandoned at any point for a worse shot.
+@export_range(0.2, 4.0) var bow_draw_time: float = 1.0
+
+## How long after a shot before the next arrow can be nocked.
+##
+## Shorter than `spear_recharge` by a wide margin, and it has to be: a spear is
+## a guaranteed kill and an arrow at full draw is four fifths of one. What makes
+## the two comparable is the draw — a full-power bow shot is 1.0 + 1.2 s of
+## commitment against the spear's 0.5 + 3.0, and the bow spends most of its own
+## in a pose everybody can see.
+@export_range(0.2, 15.0) var bow_recharge: float = 1.2
+
+## What an arrow does, at no draw and at a full one (D-065).
+##
+## 20 to 80 is the user's own range. What is worth reading off the two numbers
+## is the pair they sit either side of: `Nameplate`'s health bands are amber at
+## 50 and red at 25 (D-062), so a full draw takes a healthy Gub from green to
+## red in one and a snap shot does not quite finish one that is already there.
+## Both are deliberate and both are why the bow is not simply a faster spear.
+##
+## Neither is `Gub.MAX_HEALTH`, and that is the line between this weapon and the
+## spear: `GubCombat.SPEAR_DAMAGE` is a whole body written as the constant, so
+## no dial can make the spear a two-shot. These are numbers, so every dial here
+## can make the bow anything at all — which is the point of them.
+@export_range(1.0, 100.0) var bow_damage_snap: float = 20.0
+@export_range(1.0, 100.0) var bow_damage_full: float = 80.0
+
+## How fast an arrow leaves, at no draw and at a full one, in m/s.
+##
+## Against the spear's 42. A snap shot is slower than a thrown stick and a full
+## draw is half again faster, which is the whole spread the charge buys and is
+## deliberately extreme: the two ends have to be different *weapons*, not the
+## same weapon with a bonus.
+@export_range(5.0, 120.0) var bow_speed_snap: float = 18.0
+@export_range(5.0, 120.0) var bow_speed_full: float = 60.0
+
+## How fast an arrow falls, at no draw and at a full one, in m/s².
+##
+## Against the spear's 8. **The drop goes the other way from the speed**, and
+## that is not physics — a real arrow falls at g whatever the bow did. It is the
+## same exaggeration `SpearProjectile.DROP` already makes in the other
+## direction (a third of world gravity, so that a throw has an arc worth
+## reading), applied twice here so that the two ends of the charge are two
+## trajectories rather than one trajectory at two speeds. At the defaults a snap
+## shot is point-and-click to 8 m and a full draw to 50 (`GubCombat.flat_band`),
+## which is the widest spread of any weapon in the game and is meant to be.
+##
+## The floor is 0.5 rather than 0: `flat_band` divides by this, and a drop of
+## zero is a hitscan weapon with a flight time, which is not an arrow.
+@export_range(0.5, 40.0) var bow_drop_snap: float = 16.0
+@export_range(0.5, 40.0) var bow_drop_full: float = 5.0
+
 ## Not a cooldown, and deliberately not named like one. Mushrooms and lures are
 ## carried stock now (D-032) — there is nothing to recharge, so this is only a
 ## floor on how fast a stack can be spent. Without it a Gub who has just walked
@@ -249,7 +320,10 @@ const TEAM_NONE := -1
 const _FIELDS := [
 	"mode", "win_condition", "team_count", "kill_limit", "lives", "time_limit",
 	"friendly_fire", "random_teams", "respawn_delay", "spawn_protection", "warmup_time",
-	"spear_recharge", "mushroom_use_delay", "mushroom_lifetime", "mushroom_max_active",
+	"spear_recharge",
+	"bow_draw_time", "bow_recharge", "bow_damage_snap", "bow_damage_full",
+	"bow_speed_snap", "bow_speed_full", "bow_drop_snap", "bow_drop_full",
+	"mushroom_use_delay", "mushroom_lifetime", "mushroom_max_active",
 	"lure_use_delay", "lure_radius", "lure_hold", "lure_pull_strength", "lure_fuse",
 	"letter_drop_chance", "letter_hold_time",
 	"capture_return_time", "capture_carrier_speed",
@@ -303,6 +377,19 @@ func _clamp_all() -> void:
 	spawn_protection = clampf(spawn_protection, 0.0, 10.0)
 	warmup_time = clampf(warmup_time, 0.0, 30.0)
 	spear_recharge = clampf(spear_recharge, 0.5, 15.0)
+	bow_draw_time = clampf(bow_draw_time, 0.2, 4.0)
+	bow_recharge = clampf(bow_recharge, 0.2, 15.0)
+	# Each to its own range and **no cross-checks between the pairs**. A host who
+	# wants a bow that hits harder the *less* it is drawn can have one: it is a
+	# lerp either way round, nothing downstream divides by the difference, and a
+	# clamp that quietly swapped two sliders the host had just dragged would be a
+	# lobby arguing with the person using it.
+	bow_damage_snap = clampf(bow_damage_snap, 1.0, 100.0)
+	bow_damage_full = clampf(bow_damage_full, 1.0, 100.0)
+	bow_speed_snap = clampf(bow_speed_snap, 5.0, 120.0)
+	bow_speed_full = clampf(bow_speed_full, 5.0, 120.0)
+	bow_drop_snap = clampf(bow_drop_snap, 0.5, 40.0)
+	bow_drop_full = clampf(bow_drop_full, 0.5, 40.0)
 	mushroom_use_delay = clampf(mushroom_use_delay, 0.1, 10.0)
 	mushroom_lifetime = clampf(mushroom_lifetime, 2.0, 120.0)
 	mushroom_max_active = clampi(mushroom_max_active, 1, 5)

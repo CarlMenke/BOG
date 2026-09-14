@@ -1263,7 +1263,7 @@ func _client_abilities() -> Dictionary:
 	# of the call, because it is not local feedback: `_do_throw_spear` is what
 	# takes the spear out of the hand, and a client whose broadcast never lands
 	# stands there still holding a spear it has already thrown.
-	out["hand_empty"] = gub.held_spear != null and not gub.held_spear.is_carried()
+	out["hand_empty"] = gub.held_gear != null and not gub.held_gear.is_carried()
 	_check("the spear left this client's hand", out["hand_empty"], true)
 
 	# The pull travels the other way: the host decides who the lure caught and

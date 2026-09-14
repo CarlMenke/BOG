@@ -253,9 +253,9 @@ func _combat(peer_id: int) -> GubCombat:
 	return gub.get_node_or_null("Combat") as GubCombat
 
 
-func _hand(peer_id: int) -> HeldSpear:
+func _hand(peer_id: int) -> HeldGear:
 	var gub: Gub = MatchState.gubs.get(peer_id)
-	return gub.held_spear if is_instance_valid(gub) else null
+	return gub.held_gear if is_instance_valid(gub) else null
 
 
 ## Run a hold's clock down to zero and let the host finish it, rather than
@@ -1569,6 +1569,72 @@ func _run_config_validation() -> void:
 		GubAnimator.cast_release_for_rate(GubAnimator.CAST_RATE_MAX),
 		GubAnimator.CAST_RELEASE_MIN)
 
+	# ------------------------------------------------------------- the bow ---
+	#
+	# All of the bow that does not need a world (D-065). The charge curve, the
+	# two flights, the clamps, and the one number that used to be a constant and
+	# is now derived from two lobby dials. `tools/combat_range.gd`'s `bow` mode
+	# is the other half, and the half that measures rather than asserts.
+	config.apply_dict({"bow_drop_snap": 0.0, "bow_draw_time": 90.0})
+	# Not clamped to zero, and this is the one bow clamp with an argument rather
+	# than a range behind it: `GubCombat.flat_band` divides by the drop, and a
+	# drop of zero is a hitscan weapon with a flight time, which is not an arrow.
+	_check("a weightless arrow is clamped off zero", config.bow_drop_snap, 0.5)
+	_check("an absurd draw time is clamped", config.bow_draw_time, 4.0)
+
+	var bow := MatchConfig.new()
+	# The two ends of the charge are the dials themselves and nothing in
+	# between, which is what makes the eight sliders mean what they say.
+	_near("a snap shot does exactly the snap dial",
+		ArrowProjectile.damage_for(0.0, bow), bow.bow_damage_snap)
+	_near("a full draw does exactly the full dial",
+		ArrowProjectile.damage_for(1.0, bow), bow.bow_damage_full)
+	_near("a snap shot leaves at exactly the snap speed",
+		ArrowProjectile.speed_for(0.0, bow), bow.bow_speed_snap)
+	_near("a full draw leaves at exactly the full speed",
+		ArrowProjectile.speed_for(1.0, bow), bow.bow_speed_full)
+	_near("a snap shot falls at exactly the snap drop",
+		ArrowProjectile.drop_for(0.0, bow), bow.bow_drop_snap)
+	_near("a full draw falls at exactly the full drop",
+		ArrowProjectile.drop_for(1.0, bow), bow.bow_drop_full)
+	# Past the ends, both ways: a charge is clamped before it is interpolated,
+	# so a client that claimed 3.0 and got past the host's own clamp would still
+	# only ever buy a full draw.
+	_near("an over-claimed draw is still only a full one",
+		ArrowProjectile.damage_for(9.0, bow), bow.bow_damage_full)
+	_near("and a negative one is still only a snap shot",
+		ArrowProjectile.damage_for(-9.0, bow), bow.bow_damage_snap)
+
+	# **Weighted toward the end of the draw**, which is the decision the curve
+	# carries and the one thing about this weapon a linear lerp would quietly
+	# undo. Asserted as the *shape* rather than as the exponent, so it goes on
+	# meaning something if the exponent is ever re-derived: two thirds of the
+	# way through a draw has to have bought under a third of the damage, and the
+	# last third of the draw has to carry 1 - (2/3)^3 of it.
+	var two_thirds := (ArrowProjectile.damage_for(2.0 / 3.0, bow) - bow.bow_damage_snap) \
+		/ (bow.bow_damage_full - bow.bow_damage_snap)
+	_check("two thirds of a draw is under a third of the damage",
+		two_thirds < 0.34, true)
+	_near("and the last third of it carries the rest",
+		1.0 - two_thirds, 1.0 - pow(2.0 / 3.0, ArrowProjectile.DAMAGE_CURVE))
+
+	# The re-derivation, and the proof that it is the same arithmetic it always
+	# was: `GubCombat.LIGHTNING_RANGE` was a typed 28.0 whose comment derived it
+	# from the spear, and `flat_band` is that comment. Asked of the spear's own
+	# two constants it still comes out at 28, which is the line that fails if
+	# anybody ever "tidies" `FLAT_BAND_DROP` into a Gub's collision height.
+	_check("the spear's flat band is still the 28 m the Elder's range was",
+		absf(GubCombat.flat_band(SpearProjectile.SPEED, SpearProjectile.DROP) - 28.0)
+			< 0.05, true)
+	# And what the re-derivation is *for*: a full draw is the flattest thing in
+	# the game and a snap shot is the least flat, so the Elder's range now rises
+	# to the top of the bow's band rather than sitting inside it.
+	var spear_band := GubCombat.flat_band(SpearProjectile.SPEED, SpearProjectile.DROP)
+	_check("a full draw is flatter than a spear",
+		GubCombat.flat_band(bow.bow_speed_full, bow.bow_drop_full) > spear_band, true)
+	_check("and a snap shot is not",
+		GubCombat.flat_band(bow.bow_speed_snap, bow.bow_drop_snap) < spear_band, true)
+
 	# Regression guard: lure_fuse defaulted to 0.35 while its own range started
 	# at 0.5, so every fresh config was silently raised and the declared default
 	# was never the value anyone played with.
@@ -1586,6 +1652,19 @@ func _run_config_validation() -> void:
 	host.map = MapCatalog.ids()[MapCatalog.ids().size() - 1]
 	host.lure_radius = 12.5
 	host.random_teams = true
+	# All eight bow dials, because a field left out of `_FIELDS` is a setting
+	# the host drags and nobody else ever sees — and eight of them arrived at
+	# once (D-065). Every one is given a value nothing else in this file uses,
+	# so a field that quietly fell back to its default is a failure and not a
+	# coincidence.
+	host.bow_draw_time = 1.35
+	host.bow_recharge = 2.15
+	host.bow_damage_snap = 17.0
+	host.bow_damage_full = 71.0
+	host.bow_speed_snap = 23.0
+	host.bow_speed_full = 57.0
+	host.bow_drop_snap = 13.5
+	host.bow_drop_full = 6.5
 	var arrived := MatchConfig.new()
 	arrived.apply_dict(host.to_dict())
 	_check("mode survives the trip", arrived.mode, host.mode)
@@ -1598,6 +1677,12 @@ func _run_config_validation() -> void:
 	_check("and the map is in the replicated key list",
 		host.to_dict().has("map"), true)
 	_check("floats survive", arrived.lure_radius, host.lure_radius)
+	for field: String in ["bow_draw_time", "bow_recharge", "bow_damage_snap",
+			"bow_damage_full", "bow_speed_snap", "bow_speed_full",
+			"bow_drop_snap", "bow_drop_full"]:
+		_check("%s survives the trip" % field, arrived.get(field), host.get(field))
+		_check("and %s is in the replicated key list" % field,
+			host.to_dict().has(field), true)
 	# A lobby toggle left out of `_FIELDS` is one the host sees and nobody else
 	# does: every client's picker would stay live while the host dealt anyway.
 	_check("random teams survives", arrived.random_teams, true)

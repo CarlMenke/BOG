@@ -99,7 +99,7 @@ func _ready() -> void:
 		player.advance(at)
 		player.pause()
 		if _offset != Vector3.INF:
-			gub.held_spear.set_grip(_offset, _rotation)
+			gub.held_gear.set_grip(_offset, _rotation)
 
 		var stamp := Label3D.new()
 		stamp.text = "%.2f" % at
@@ -127,7 +127,7 @@ static func _parse(text: String) -> Vector3:
 
 func _build_stage(length: float, from: float, to: float, eye: Vector3) -> void:
 	var label := Label3D.new()
-	var grip := "default (%s / %s)" % [HeldSpear.GRIP_OFFSET, HeldSpear.GRIP_ROTATION]
+	var grip := "default (%s / %s)" % [HeldGear.GRIP_OFFSET, HeldGear.GRIP_ROTATION]
 	if _offset != Vector3.INF:
 		grip = "%s / %s" % [_offset, _rotation]
 	label.text = "%s   (%.2fs)   %.2f-%.2f   grip %s" % [clip, length, from, to, grip]

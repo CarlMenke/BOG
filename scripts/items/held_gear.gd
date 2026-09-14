@@ -1,21 +1,32 @@
-class_name HeldSpear
+class_name HeldGear
 extends Node3D
-## The spear a Gub is carrying, pinned to the bone of its right hand.
+## Everything a Gub is carrying, pinned to the bones of its two hands.
 ##
-## A Gub always has one visible unless it is in the air or on cooldown, because
-## the spear is the whole read on whether an opponent is dangerous right now:
-## seeing an empty hand across the clearing is how you know it is safe to
-## approach. That makes this cosmetic node gameplay-critical, so it is driven
-## straight off the same cooldown the throw checks rather than by its own timer.
+## A Gub always has a weapon visible unless it is on cooldown or disarmed,
+## because what is in the hands is the whole read on whether an opponent is
+## dangerous right now: seeing an empty pair of them across the clearing is how
+## you know it is safe to approach. That makes this cosmetic node
+## gameplay-critical, so it is driven straight off the same gates the attacks
+## are refused by rather than by any timer of its own.
 ##
-## It owns the *hand*, not only the spear. Three things can be in it and never
-## more than one: the shaft; a letter card, during a hold (D-035); and the
-## Elder's crackle, which is what an Elder has instead of a spear (D-038). All
-## three hang off the same `BoneAttachment3D`, so nothing can put two of them
-## there, and which one is showing is decided in exactly one place —
-## `GubCombat._refresh_hand`, off the same gates the throw is refused by —
-## because a hand that disagrees with the gate is a Gub that looks armed and is
-## not.
+## **It owns the hands, and the rule is one thing per hand** (D-065). It was
+## "one thing, in the fist", and a bow broke that: a bow is held in the left and
+## its arrow is drawn by the right, which is two things and is not two things in
+## one hand. So the rule generalised rather than forking — there are two
+## `BoneAttachment3D`s and every carried object hangs off exactly one of them:
+##
+##   right hand   the spear shaft; a letter card, during a hold (D-035); the
+##                Elder's crackle, which is what an Elder has instead of a
+##                spear (D-038); or the nocked arrow, while the bow is drawn
+##   left hand    the bow
+##
+## Nothing can put two objects on one attachment, and **which one is showing is
+## still decided in exactly one place** — `GubCombat._refresh_hand`, off the
+## same gates the attacks are refused by — because a hand that disagrees with
+## the gate is a Gub that looks armed and is not. Two rules in two files is the
+## thing that generalisation had to avoid, and the way it avoids it is that this
+## file still decides nothing: every `set_*` below does what it is told and asks
+## no questions, exactly as `set_letter` has always done.
 ##
 ## Attaching to the bone is done in code rather than by adding a
 ## `BoneAttachment3D` inside `gub.tscn`, because that would mean turning on
@@ -23,8 +34,11 @@ extends Node3D
 ## subtree that a re-import can renumber.
 
 const MODEL := preload("res://art/generated/spear.glb")
+const BOW_MODEL := preload("res://art/generated/bow.glb")
+const ARROW_MODEL := preload("res://art/generated/arrow.glb")
 
 const HAND_BONE := "RightHand"
+const BOW_HAND_BONE := "LeftHand"
 
 ## Where the shaft sits in the fist.
 ##
@@ -146,7 +160,18 @@ const CARD_LIGHT_RANGE := 4.0
 
 
 var _attachment: BoneAttachment3D
+## The left fist's attachment. A second attachment and not a second *rule*: the
+## bow is the only thing that ever hangs off it, so "one thing per hand" is
+## still one object per `BoneAttachment3D` (D-065).
+var _bow_attachment: BoneAttachment3D
 var _model: Node3D
+## The bow, and the one mesh inside it that carries the `drawn` blend shape.
+## Held rather than found again per frame: `set_draw` runs on every peer's copy
+## of every drawing Gub, on every frame of every draw.
+var _bow: Node3D
+var _bow_string: MeshInstance3D
+## The nocked arrow, in the right fist while the bow is drawn.
+var _arrow: Node3D
 ## The Elder's crackle, while the bolt is ready (D-038). On the same attachment
 ## as the other two for the reason the card is, and built and freed rather than
 ## toggled for the reason the card is: an Elder is rare, and a `HandCrackle` on
@@ -162,7 +187,7 @@ var _card: Node3D
 
 func attach_to(skeleton: Skeleton3D) -> bool:
 	if skeleton == null or skeleton.find_bone(HAND_BONE) < 0:
-		push_warning("HeldSpear: rig has no %s bone" % HAND_BONE)
+		push_warning("HeldGear: rig has no %s bone" % HAND_BONE)
 		return false
 
 	_attachment = BoneAttachment3D.new()
@@ -173,7 +198,44 @@ func attach_to(skeleton: Skeleton3D) -> bool:
 	_model = MODEL.instantiate() as Node3D
 	_attachment.add_child(_model)
 	set_grip(GRIP_OFFSET, GRIP_ROTATION)
+
+	_arrow = ARROW_MODEL.instantiate() as Node3D
+	_attachment.add_child(_arrow)
+	set_arrow_grip(ARROW_SCALE, ARROW_GRIP_OFFSET, ARROW_GRIP_ROTATION)
+	_arrow.visible = false
+
+	_attach_bow(skeleton)
 	return true
+
+
+## The left fist, and the bow in it (D-065).
+##
+## A warning and not a refusal on a rig with no `LeftHand`: a Gub with a spear
+## and no bow is still a playable Gub, and the pipeline's own
+## `assert_same_character` is what actually guards the bone list.
+func _attach_bow(skeleton: Skeleton3D) -> void:
+	if skeleton.find_bone(BOW_HAND_BONE) < 0:
+		push_warning("HeldGear: rig has no %s bone; no bow" % BOW_HAND_BONE)
+		return
+	_bow_attachment = BoneAttachment3D.new()
+	_bow_attachment.name = "BowHand"
+	_bow_attachment.bone_name = BOW_HAND_BONE
+	skeleton.add_child(_bow_attachment)
+
+	_bow = BOW_MODEL.instantiate() as Node3D
+	_bow_attachment.add_child(_bow)
+	set_bow_grip(BOW_SCALE, BOW_GRIP_OFFSET, BOW_GRIP_ROTATION)
+	_bow.visible = false
+
+	_bow_string = _bow.find_child(STRING_NODE, true, false) as MeshInstance3D
+	if _bow_string == null or _bow_string.mesh == null \
+			or _bow_string.mesh.get_blend_shape_count() <= STRING_SHAPE:
+		# Loud, because the failure is otherwise silent: a bow whose string never
+		# moves still looks like a bow, and the charge stops being visible to the
+		# one person it has to be visible to.
+		push_warning("HeldGear: %s carries no drawn blend shape; the string will not bend"
+			% STRING_NODE)
+		_bow_string = null
 
 
 ## Exposed so `tools/preview_grip.tscn` can sweep values without a rebuild;
@@ -320,3 +382,159 @@ func tip_transform() -> Transform3D:
 	if _model == null:
 		return global_transform
 	return _model.global_transform
+
+
+# --------------------------------------------------------------- the bow ---
+
+## Where the bow sits in the left fist, and how big it is (D-065).
+##
+## **Every number here is derived from the draw clip rather than swept by eye**,
+## and that is the one way this grip differs from the spear's above. A shaft in
+## a fist only has to miss the Gub's own skin, and `tools/preview_grip.tscn`
+## exists because there was no better answer than looking. A bow has a
+## **string**, and the string's nocking point has to be where the drawing hand's
+## fingers are at *every* charge level — otherwise the one tell this whole
+## weapon is built on is a lie, and it is a lie that gets worse the harder
+## somebody is pulling.
+##
+## So the fit is an equation with one answer, solved by
+## `tools/preview_bow.tscn -- measure` and pasted here:
+##
+##     P(c)   the drawing hand, in left-hand-local metres, at charge c, read off
+##            the built `Draw` clip across the window `GubAnimator` indexes
+##     d      normalise(P(1) - P(0)), the line the fingers actually travel
+##     scale  |P(1) - P(0)| / NOCK_TRAVEL
+##     R·Y    -d, because the bow's own -Y is the draw direction
+##     R·X    up, orthogonalised against R·Y — the limb axis, vertical
+##     offset P(0) + scale · STRING_REST_Y · d
+##
+## The scale is the interesting half of that. A bow is a lever, and this one is
+## 0.986 m tip to tip, which draws its nocking point 0.285 m; the Gub's hands
+## come further apart than that across this draw, so the model has to be scaled
+## or the string stops short of the fingers pulling it. **The size of the bow is
+## therefore a measurement of the animation**, not a number anybody picked.
+##
+## Move the window in `GubAnimator` and all three go stale together. Re-run the
+## tool rather than nudging one of them.
+##
+## **What that size costs, measured** (`tools/preview_bow.tscn -- measure`
+## prints this table too, over 24 samples of each clip): how far the lower limb
+## tip is above the floor while a Gub is simply carrying the thing.
+##
+##   Idle        +0.171 m      CrouchIdle  +0.287 m
+##   Walk        +0.135 m      CrouchWalk  +0.269 m
+##   Run         **-0.158 m**
+##
+## So `Run` ploughs, by 16 cm, at the bottom of the arm swing. That is the same
+## fault the spear's own grip was tuned out of — "both ends now stay at least
+## 0.15 m up in every ground clip" — and it is not tunable out here, because
+## every lever that would raise the tip moves the **nocking point**: sliding the
+## bow up its own limb axis takes the string's V off the fingers, and shrinking
+## it takes the draw with it. A rigid attachment cannot hold a 1.71 m prop clear
+## of the floor at a run and meet a string constraint at the same time.
+##
+## Left, and left visible here rather than discovered. The honest fixes are a
+## carry pose (a second grip, and a pop between it and the draw), a bone the bow
+## hangs off that is not the fist, or the spine aim step 8 owes this weapon
+## anyway — and none of them is a constant in this file.
+const BOW_SCALE := 1.7383
+const BOW_GRIP_OFFSET := Vector3(-0.1927, -0.1376, 0.0989)
+const BOW_GRIP_ROTATION := Vector3(10.162, 165.413, 19.573)
+
+## Two facts about `art/generated/bow.glb`, in the model's own units, named here
+## so the derivation above can be read without opening the GLB.
+##
+## The string lies along the model's X at this height, and the `drawn` blend
+## shape pulls its nocking point exactly this far along -Y. Both are measured
+## off the built file, and both move if the decimator's budget does:
+## `tools/bow_string.py` derives the travel from `DRAW_HALF_ANGLE_DEG` and
+## whatever tip separation the decimated body turns out to have.
+const STRING_REST_Y := 0.0363
+const NOCK_TRAVEL := 0.2847
+
+## Where the nocked arrow sits in the right fist, and how long it is.
+##
+## Derived the same way and off the same two frames. The mesh runs 1.000 m along
+## its own X with the head at +X and the nock at -X, and its origin is the
+## middle — so the shaft is aimed by `R·X = the line from this fist to the bow
+## fist` and then slid half its length forward to put its *nock* in the fingers.
+##
+## The length is the draw plus an overhang, because an arrow has to still be on
+## the rest when the string is at brace: it is the hand separation at full draw
+## plus `ARROW_OVERHANG` of head past the riser. Shorter, and the head
+## disappears inside the bow on the one frame everybody is looking at.
+const ARROW_SCALE := 0.8557
+const ARROW_GRIP_OFFSET := Vector3(-0.2024, 0.3853, -0.0069)
+const ARROW_GRIP_ROTATION := Vector3(-29.638, 107.416, 91.184)
+const ARROW_OVERHANG := 0.20
+
+## The name the string mesh takes in the GLB and the index of its one blend
+## shape — `tools/bow_string.py`'s `STRING_NODE` and `SHAPE_NAME`. A rebuild
+## that renamed either would leave a bow whose string never moves, which still
+## looks like a bow, so a miss is a warning here rather than a silent nothing.
+const STRING_NODE := "BowString"
+const STRING_SHAPE := 0
+
+
+## Put a bow in the left fist, or take it away. A visibility toggle for the same
+## reason the spear's is: a Gub draws several times a life, and rebuilding a
+## prop for each of them buys nothing.
+func set_bow(carried: bool) -> void:
+	if _bow != null:
+		_bow.visible = carried
+
+
+func has_bow() -> bool:
+	return _bow != null and _bow.visible
+
+
+## How far this bow is drawn, 0 at brace and 1 at full.
+##
+## One float, straight onto the string's one blend shape — and it is the *same*
+## float that scrubs the draw pose (`GubAnimator.draw_time`) and picks the
+## arrow's damage and speed (`GubCombat`). That is the whole reason the string
+## is a morph and not a bone chain: a second thing that had to be told how drawn
+## the bow is would be a second thing that could be told something else.
+##
+## The morph is exact rather than an approximation. A drawn string is two
+## straight segments meeting at the nocking point; every vertex is displaced by
+## `pull · DRAW · tent(t)`, and a blend weight scales every delta by itself,
+## which scales the tent by itself, which is exactly the V of a string drawn
+## that far. See `tools/bow_string.py`.
+func set_draw(fraction: float) -> void:
+	if _bow_string == null:
+		return
+	_bow_string.set_blend_shape_value(STRING_SHAPE, clampf(fraction, 0.0, 1.0))
+
+
+## Nock an arrow in the right fist, or take it away.
+##
+## On the same attachment as the shaft, the card and the crackle, which is what
+## makes "one thing per hand" a fact about the scene tree rather than a rule
+## somebody has to remember: `GubCombat._refresh_hand` is the only caller and it
+## sets all four of them every time it runs.
+func set_arrow(nocked: bool) -> void:
+	if _arrow != null:
+		_arrow.visible = nocked
+
+
+func has_arrow() -> bool:
+	return _arrow != null and _arrow.visible
+
+
+## Exposed for `tools/preview_bow.tscn`, which sweeps these before they are
+## pasted into the constants above — the same escape hatch `set_grip` is.
+func set_bow_grip(model_scale: float, offset: Vector3, rotation_degrees: Vector3) -> void:
+	if _bow == null:
+		return
+	_bow.scale = Vector3.ONE * model_scale
+	_bow.position = offset
+	_bow.rotation_degrees = rotation_degrees
+
+
+func set_arrow_grip(model_scale: float, offset: Vector3, rotation_degrees: Vector3) -> void:
+	if _arrow == null:
+		return
+	_arrow.scale = Vector3.ONE * model_scale
+	_arrow.position = offset
+	_arrow.rotation_degrees = rotation_degrees

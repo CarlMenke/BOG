@@ -18,7 +18,7 @@ extends Node3D
 ## This scene is not only a camera. **It is the check that the robe binds**, and
 ## it does the attach exactly the way a game would: load the Gub, find its
 ## `Skeleton3D` (`gub.gd:_equip_spear` already does `find_child("Skeleton3D",
-## true, false)`, and `HeldSpear.attach_to` is the precedent for reaching into
+## true, false)`, and `HeldGear.attach_to` is the precedent for reaching into
 ## it), take the `MeshInstance3D` out of the Elder scene and re-parent it under
 ## that skeleton with its `Skin` intact. Nothing copies an animation and nothing
 ## duplicates a bone. The bind names are printed and resolved against the target

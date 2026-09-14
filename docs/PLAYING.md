@@ -72,6 +72,7 @@ same Wi-Fi needs nothing at all. The caption says **LAN**.
 | Sprint | `Shift` | Throw lure | `E` |
 | Crouch | `Ctrl` or `C` | Interact | `F` |
 | Scoreboard | `Tab` (hold) | Respawn | `R` |
+| | | Draw bow | `V` or mouse 4 (**hold**) |
 | Chat | `T` | | |
 | Pause / settings | `Esc` | | |
 
@@ -87,6 +88,24 @@ later, aimed where you are pointing *then*, so a moving target has to be led.
 
 Hold right click and a ring appears on the ground where your spear would
 actually land. Spears drop, and that ring is the only honest answer to how much.
+
+## The bow
+
+**Hold to draw, let go to fire, and the longer you hold the harder it hits.** A
+snap shot does 20 and drops like a stone — it is a knife, good to about five
+metres. A full draw takes a second, does 80, and is the flattest shot in the
+game: you can point at a Gub fifty metres away and hit it. Everything in between
+is worse than you think, because most of the damage arrives in the last third of
+the pull.
+
+**Everyone can see how far you have drawn.** The bow comes up, the arrow goes on
+the string and the string bends back, and all of that is on every screen in the
+clearing and not only on yours. A Gub at full draw standing in the open is the
+most dangerous and the most obvious thing on the map, which is the trade.
+
+You can let go early, and you can walk away from a draw entirely — nothing is
+spent until the arrow leaves. You can draw in the air. You cannot draw while you
+are holding a letter up: the hand the arrow comes off has a card in it.
 
 **Nothing counts your spear down.** Whether you can throw is answered by your
 Gub's own hand — a shaft in it means yes, an empty fist means no — and the Spear
