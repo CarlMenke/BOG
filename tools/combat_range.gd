@@ -163,10 +163,42 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##              nulls the multiplayer peer and `SceneFlow` then fades for 0.22 s
 ##              before the arena is freed, so every Gub in the tree spends those
 ##              frames still being processed with no peer to ask.
+##   health   — the damage model end to end (D-062), in numbers rather than in
+##              pictures, because health is the one thing in this game that has
+##              never been visible on a still frame. Five verdicts out of one
+##              run: a hit that takes 35 leaves a Gub standing on 65 and a
+##              second hit takes it to 25 (`partial`); a third kills it
+##              normally, with a corpse and the kill everyone else hears
+##              (`lethal`); the robe rolled off that death makes an Elder, and
+##              a hit on one takes **nothing** and still flashes the ward
+##              (`elder`); the first dummy comes back on full health
+##              (`respawn`); and a real spear thrown at that full-health Gub
+##              kills it in one (`spear`). The last is the control in D-039's
+##              sense and the one the whole plan turns on — a damage model that
+##              quietly made the spear a two-shot would pass every other line
+##              here.
+##   embed    — a shaft standing in a Gub who is **still alive**, which is what
+##              the bow needs and what nothing could do before D-062. A spear
+##              is launched by hand, with nothing listening for its hit, so it
+##              lands on a dummy that takes no damage at all: it has to stick,
+##              stay visible, and *ride* — the dummy is then moved two metres
+##              and the shaft has to arrive with it, which is the only way to
+##              tell a spear stuck in a body from a spear stuck in the air
+##              where the body was (`embed`). The dummy is then killed and the
+##              same shaft has to be adopted by the corpse and be hanging off a
+##              physical bone of it, with nothing left on the Gub's list
+##              (`adopt`).
+##   hurt     — the bars over other people's heads (D-062), which is the half of
+##              the damage model a number cannot show. Two dummies are hurt by
+##              different amounts through the real door — one to 62, one to 18 —
+##              and then nothing happens, on purpose: the picture is of two
+##              plates, one amber and one red, at the distance a fight actually
+##              happens at. `hud_range hud_health` is the same question for your
+##              own bar. Nothing is asserted here; `health` does the asserting.
 ##   free     — no script; play it yourself
 const MODES := ["flight", "hit", "arc", "miss", "aim", "mushroom", "cover",
 	"lure", "lure_self", "letter", "cards", "lightning", "blast", "ward", "recharge",
-	"respawn", "walk", "bhop", "leave", "free"]
+	"respawn", "health", "embed", "hurt", "walk", "bhop", "leave", "free"]
 
 ## How long after the cast the verdict is taken, in physics ticks. The click
 ## only starts the windup — the bolt leaves at `MatchConfig.lightning_delay`,
@@ -309,6 +341,42 @@ const WARD_DURATION := 3.0
 ## hanging a headless check for ever.
 const WARD_EXPIRY_LIMIT := 420
 
+## The `health` mode's three hits, in the units of `Gub.MAX_HEALTH`.
+##
+## 35, then 40, then 25 — three different numbers summing to exactly a hundred,
+## which is the point of choosing them. Equal hits would pass against a model
+## that ignored the amount entirely and counted hits instead, and a first hit of
+## 50 would pass against one that halved whatever it was given. Landing exactly
+## on zero also pins the boundary: dead is `health <= 0`, not `health < 0`.
+const HEALTH_HITS: Array[float] = [35.0, 40.0, 25.0]
+## What the Elder is hit with. Enough to kill a Gub already down to 25 and not
+## enough to kill a fresh one, so "the Elder took zero" cannot be confused with
+## "the Elder survived because the hit was small".
+const HEALTH_ELDER_HIT := 55.0
+## Short enough that the mode does not spend three seconds of a headless run
+## waiting for one body, long enough that the death, the corpse and the loot
+## roll are all well clear of it.
+const HEALTH_RESPAWN := 0.8
+## How long the mode will wait for that respawn before calling it a failure, in
+## physics ticks. The same argument as `WARD_EXPIRY_LIMIT`: a respawn that never
+## comes has to end the run with a verdict rather than hang the gate.
+const HEALTH_RESPAWN_LIMIT := 240
+
+## How far the `embed` mode teleports the dummy to prove the shaft rides it, and
+## how far the shaft is allowed to be from that move when it gets there.
+##
+## Two metres because it is far larger than any pose change the idle animation
+## can produce in one tick, so a shaft that simply sat where it was cannot pass.
+## The tolerance is a fifth of a metre: the shaft is riding an *animated* bone,
+## which is still breathing while the body is moved, and demanding an exact
+## match would be asserting that the idle clip has no motion in it.
+const EMBED_MOVE := Vector3(2.0, 0.0, 0.0)
+const EMBED_TOLERANCE := 0.2
+## How long the mode waits for the launched spear to cover the fourteen metres
+## to the dummy, in physics ticks. The flight is 0.33 s (20 ticks) with no
+## windup — the spear is put in the air by hand — so this is mostly margin.
+const EMBED_FLIGHT_LIMIT := 60
+
 ## How long the player leans on the mushroom in the `solid` half, in physics
 ## ticks. At `Gub.WALK_SPEED` a Gub covers the `MUSHROOM_DISTANCE` to it in
 ## under a second, so this is most of a second of actually pushing.
@@ -376,6 +444,13 @@ const VIEWS := {
 		"fov": 55.0},
 	"ward": {"eye": Vector3(6.5, 2.2, -1.5), "look": Vector3(0.0, 1.2, -5.0),
 		"fov": 46.0},
+	# Close to the near dummy and angled to keep the far one in frame behind it,
+	# because the subject is two plates at two different distances: a bar has to
+	# be readable at the range a fight happens at, not at the range a screenshot
+	# is composed at. The camera is above eye height looking slightly down, which
+	# is where a player's camera is (D-045).
+	"hurt": {"eye": Vector3(4.2, 2.6, -0.4), "look": Vector3(-2.2, 1.7, -8.0),
+		"fov": 50.0},
 	# High and off to one side, because a ring lying on the ground is seen
 	# edge-on from the thrower's own eye and a still frame of that is a line one
 	# pixel tall. Pass `pov` after the mode to look down the throw anyway — that
@@ -468,6 +543,43 @@ var _recharge_thrown: int = 0
 ## wall clock, and neither of those is a frame number.
 var _ward_step: int = 0
 var _ward_at: int = 0
+
+## `health`'s state machine, on gates for the same reasons as `ward`'s: a robe
+## arrives through an overlap and a respawn arrives on the host's own clock.
+##
+## `_health_took` is what `MatchState.report_damage` *said* it took, kept beside
+## what the body ended up with, because the two are separate claims and a model
+## that returned the right number while writing the wrong one would otherwise
+## pass. `_wards` counts ward flashes seen in the world (see `_watch_spawned`),
+## which is how this mode proves the Elder's feedback survived damage becoming
+## a number rather than a refusal.
+var _health_step: int = 0
+var _health_at: int = 0
+var _health_took: float = -1.0
+var _health_failures: int = 0
+var _wards: int = 0
+## The kill this mode was told about, as the rest of the lobby hears it: victim,
+## killer and cause off `MatchState.player_killed`, which is the signal the kill
+## feed is built on. Empty until something dies.
+var _health_kill: Array = []
+## Ward flashes counted before the Elder was hit, so the verdict is about the
+## flash that hit caused and not about any that came before it.
+var _wards_before: int = 0
+## What went wrong with the verdict currently being built, cleared by each
+## verdict as it is printed.
+var _health_problems: Array[String] = []
+
+## `embed`'s state machine and the one shaft it is about. Launched by hand with
+## nothing listening for its hit, so it damages nobody — this mode is about what
+## becomes of the shaft and not about what the hit did.
+var _embed_step: int = 0
+var _embed_at: int = 0
+var _embed_spear: SpearProjectile
+var _embed_failures: int = 0
+## Where the shaft and the body it is standing in were, immediately before the
+## body was moved.
+var _embed_spear_was: Vector3 = Vector3.ZERO
+var _embed_body_was: Vector3 = Vector3.ZERO
 
 ## `respawn`'s state. `_respawn_loot` is every drop lying on either corpse, held
 ## by reference so the verdict can ask each one whether it was taken.
@@ -567,6 +679,12 @@ func _start_session() -> void:
 	# that the clock ends the robe, not how long the clock is.
 	if _mode == "ward":
 		config.elder_duration = WARD_DURATION
+	# The one death in `health` has to roll a robe, so that the Elder half of the
+	# run has an Elder in it, and the respawn half has to happen inside the run.
+	if _mode == "health":
+		config.respawn_delay = HEALTH_RESPAWN
+		config.elder_drop_chance = 1.0
+		config.letter_drop_chance = 0.0
 	# Three bolts inside one run, and no loot rolled off the one death in it:
 	# a robe or a letter dropped at a dummy's feet is a claim nobody asked for.
 	if _mode == "blast":
@@ -634,6 +752,10 @@ func _stand_still(dummy: Gub) -> void:
 
 
 func _on_player_killed(victim_id: int, killer_id: int, cause: int) -> void:
+	# The same signal `HUD._on_player_killed` builds its feed line out of, kept
+	# here so `health` can assert that a death by damage is announced exactly as a
+	# death by anything else is.
+	_health_kill = [victim_id, killer_id, cause]
 	print("combat_range: %s killed %s (cause %d) at frame %d" % [
 		Net.player_name(killer_id), Net.player_name(victim_id), cause, _frames])
 
@@ -698,6 +820,15 @@ func _physics_process(_delta: float) -> void:
 		return
 	if _mode == "respawn":
 		_drive_respawn(player, combat)
+		return
+	if _mode == "health":
+		_drive_health(combat)
+		return
+	if _mode == "embed":
+		_drive_embed(player)
+		return
+	if _mode == "hurt":
+		_drive_hurt()
 		return
 	if _mode == "blast":
 		_drive_blast(player, combat)
@@ -1294,6 +1425,314 @@ func _robe_at_the_dummys_feet(dummy: Gub) -> void:
 		dummy.global_position, Vector3.FORWARD * 18.0, "Spine1")
 
 
+# ------------------------------------------------------------------ health ---
+
+## The damage model, end to end and in numbers (D-062). See the `health` entry
+## in MODES' notes for the five verdicts and why each is there.
+##
+## Every hit goes through `MatchState.report_damage` — the real door, on the
+## real host, in a real match loop — and nothing here writes a health field or a
+## `stats` row by hand. What the harness does supply is the geometry a weapon
+## would have supplied: a point on the body, a blow and a bone.
+##
+## The killing hit is aimed at the **far** dummy's feet rather than at the body
+## it kills, which is the same trick `_robe_at_the_dummys_feet` uses: the point
+## a death is reported at is where its loot lands, so a robe rolled off the near
+## dummy's corpse comes down under the far one and is picked up by it. That is
+## how a mode with one death in it gets an Elder to shoot at.
+func _drive_health(combat: GubCombat) -> void:
+	var near := MatchState.gubs.get(DUMMY_BASE) as Gub
+	var far := MatchState.gubs.get(DUMMY_BASE + 1) as Gub
+	if near == null or far == null:
+		return
+
+	match _health_step:
+		0:
+			# Late enough for both Gubs to have settled onto the ground and for
+			# the spawn-frame transforms to have been published.
+			if _frames < 12:
+				return
+			_health_took = _hit(near, HEALTH_HITS[0])
+			_health_step = 1
+		1:
+			# A frame later than the hit, deliberately: what is read here is
+			# what the body is carrying into the next tick, not what the call
+			# left behind on its way out.
+			var after_one := Gub.MAX_HEALTH - HEALTH_HITS[0]
+			_health_expect(near.alive, "the first hit killed it")
+			_health_expect(is_equal_approx(near.health, after_one),
+				"the body says %.1f and not %.1f" % [near.health, after_one])
+			_health_expect(is_equal_approx(MatchState.health_of(DUMMY_BASE), after_one),
+				"the host says %.1f" % MatchState.health_of(DUMMY_BASE))
+			_health_expect(is_equal_approx(_health_took, HEALTH_HITS[0]),
+				"report_damage said it took %.1f" % _health_took)
+			_health_expect(_plate_agrees(near),
+				"the bar over its head is at %.2f" % _plate_fraction(near))
+			_health_took = _hit(near, HEALTH_HITS[1])
+			_health_step = 2
+		2:
+			var after_two := Gub.MAX_HEALTH - HEALTH_HITS[0] - HEALTH_HITS[1]
+			_health_expect(near.alive, "the second hit killed it")
+			_health_expect(is_equal_approx(near.health, after_two),
+				"two hits left %.1f and not %.1f" % [near.health, after_two])
+			_health_expect(is_equal_approx(_health_took, HEALTH_HITS[1]),
+				"the second hit reported %.1f" % _health_took)
+			_health_expect(_plate_agrees(near),
+				"the bar over its head is at %.2f" % _plate_fraction(near))
+			_health_verdict("partial", "%.0f then %.0f left %s standing on %.0f"
+				% [HEALTH_HITS[0], HEALTH_HITS[1], near.display_name, near.health])
+			# ...and the third takes it to exactly zero, with the robe it rolls
+			# put down under the far dummy.
+			_health_took = MatchState.report_damage(DUMMY_BASE, 1, HEALTH_HITS[2],
+				Gub.Cause.SPEAR, far.global_position, Vector3.FORWARD * 18.0, "Spine1")
+			_health_at = _frames
+			_health_step = 3
+		3:
+			_health_expect(not near.alive, "the last hit left it standing")
+			_health_expect(not MatchState.is_alive(DUMMY_BASE),
+				"the host still has it alive")
+			_health_expect(is_equal_approx(near.health, 0.0),
+				"it died on %.1f health" % near.health)
+			_health_expect(is_equal_approx(_health_took, HEALTH_HITS[2]),
+				"the killing hit reported %.1f" % _health_took)
+			_health_expect(_corpses() > 0, "no corpse was made")
+			_health_expect(_health_kill == [DUMMY_BASE, 1, Gub.Cause.SPEAR],
+				"the lobby was told %s" % [_health_kill])
+			_health_verdict("lethal", "the third hit killed %s, %d corpse(s), feed says %s"
+				% [near.display_name, _corpses(), _health_kill])
+			_health_step = 4
+		4:
+			# On the Elder state and not on a frame count: what stands between
+			# the drop and the robe is an `Area3D` overlap resolving.
+			if not MatchState.is_elder(DUMMY_BASE + 1):
+				if _frames - _health_at > HEALTH_RESPAWN_LIMIT:
+					_health_expect(false, "no robe ever reached %s — there was no Elder to shoot at"
+						% far.display_name)
+					_health_verdict("elder", "waited %d frames" % HEALTH_RESPAWN_LIMIT)
+					_health_finish()
+				return
+			_wards_before = _wards
+			_health_took = _hit(far, HEALTH_ELDER_HIT)
+			_health_step = 5
+		5:
+			_health_expect(is_equal_approx(_health_took, 0.0),
+				"the Elder took %.1f" % _health_took)
+			_health_expect(far.alive, "the Elder died")
+			_health_expect(is_equal_approx(far.health, Gub.MAX_HEALTH),
+				"the Elder is down to %.1f" % far.health)
+			_health_expect(_wards > _wards_before, "no ward flashed")
+			_health_verdict("elder", "%.0f at an Elder took %.0f and flashed %d ward(s)"
+				% [HEALTH_ELDER_HIT, _health_took, _wards - _wards_before])
+			_health_step = 6
+		6:
+			if not MatchState.is_alive(DUMMY_BASE):
+				if _frames - _health_at > HEALTH_RESPAWN_LIMIT:
+					_health_expect(false, "%s never came back" % near.display_name)
+					_health_verdict("respawn", "waited %d frames" % HEALTH_RESPAWN_LIMIT)
+					_health_finish()
+				return
+			_health_expect(is_equal_approx(near.health, Gub.MAX_HEALTH),
+				"it came back on %.1f" % near.health)
+			_health_expect(_plate_agrees(near),
+				"its bar came back at %.2f" % _plate_fraction(near))
+			_health_verdict("respawn", "%s came back on %.0f of %.0f"
+				% [near.display_name, near.health, Gub.MAX_HEALTH])
+			# Put it back on its own pad before the control throw. A respawn
+			# picks the pad furthest from everybody (`MatchState._next_spawn`),
+			# which can be thirty metres away — and a spear thrown thirty metres
+			# at a chest is a question about drop, not about damage.
+			near.revive_at(_facing(DUMMY_SPOTS[0], PLAYER_SPOT))
+			_stand_still(near)
+			_health_step = 7
+		7:
+			if not combat.has_spear():
+				return
+			combat.try_throw_spear()
+			_health_at = _frames
+			_health_step = 8
+		8:
+			if _frames < _health_at + SPEAR_VERDICT_DELAY:
+				return
+			# The control, in D-039's sense, and the one the whole plan turns
+			# on. A damage model that had quietly made the spear a two-shot
+			# would pass every other line in this mode.
+			_health_expect(not near.alive,
+				"%s survived a spear on %.0f health" % [near.display_name, near.health])
+			_health_verdict("spear", "one thrown spear at a Gub on full health")
+			_health_finish()
+
+
+## One hit through the real door, at the middle of a body, with a weapon's worth
+## of geometry behind it. Returns what the host says it took.
+func _hit(victim: Gub, amount: float) -> float:
+	return MatchState.report_damage(victim.peer_id, 1, amount, Gub.Cause.SPEAR,
+		victim.body_centre(), Vector3.FORWARD * 6.0, "Spine1")
+
+
+## What the bar over a Gub's head is showing, 1 -> 0, read off the plate itself
+## rather than recomputed — the point of asking is that the display path is a
+## second copy of the number and either half can be wrong on its own.
+func _plate_fraction(gub: Gub) -> float:
+	return gub.nameplate._health if gub.nameplate != null else -1.0
+
+
+func _plate_agrees(gub: Gub) -> bool:
+	return is_equal_approx(_plate_fraction(gub), gub.health_fraction())
+
+
+func _corpses() -> int:
+	var found := 0
+	for child in _players.get_children():
+		if child is GubRagdoll:
+			found += 1
+	return found
+
+
+func _health_expect(ok: bool, wrong: String) -> void:
+	if not ok:
+		_health_problems.append(wrong)
+
+
+func _health_verdict(label: String, detail: String) -> void:
+	if _health_problems.is_empty():
+		print("combat_range: %s — %s PASS" % [detail, label])
+	else:
+		_health_failures += 1
+		print("combat_range: %s — %s FAIL (%s)"
+			% [detail, label, "; ".join(_health_problems)])
+	_health_problems.clear()
+
+
+func _health_finish() -> void:
+	print("combat_range: %d health verdict(s) failed" % _health_failures)
+	get_tree().quit()
+
+
+# ------------------------------------------------------------------- embed ---
+
+## A shaft standing in a Gub who is still alive, and then in the corpse that Gub
+## becomes (D-062). See the `embed` entry in MODES' notes.
+##
+## The spear is launched by hand rather than thrown, and that is the whole
+## design of the mode: `GubCombat` connects its own thrown spears to
+## `report_damage`, so a thrown one would kill what it hit and there would be no
+## living victim left to ride. Launched here, with nothing listening to
+## `struck_gub`, it lands on a Gub who takes no damage at all — which is exactly
+## the case every arrow from the bow will be, one step before that bow exists.
+func _drive_embed(player: Gub) -> void:
+	var near := MatchState.gubs.get(DUMMY_BASE) as Gub
+	if near == null:
+		return
+
+	match _embed_step:
+		0:
+			if _frames < 12:
+				return
+			var origin := player.global_position + Vector3.UP * player.eye_height()
+			var target := near.body_centre()
+			_embed_spear = SpearProjectile.launch(_items, player, origin,
+				(target - origin).normalized(), true)
+			_embed_at = _frames
+			_embed_step = 1
+		1:
+			if not is_instance_valid(_embed_spear):
+				_embed_failures += 1
+				print("combat_range: the shaft was freed in flight — embed FAIL")
+				_embed_finish()
+				return
+			if not _embed_spear.is_stuck():
+				if _frames - _embed_at > EMBED_FLIGHT_LIMIT:
+					_embed_failures += 1
+					print("combat_range: the shaft never reached anybody — embed FAIL")
+					_embed_finish()
+				return
+			# It has arrived. Move the body, and require the shaft to arrive
+			# with it: a spear parked in the air where a Gub used to be looks
+			# identical to one riding the Gub right up until the Gub moves.
+			_embed_spear_was = _embed_spear.global_position
+			_embed_body_was = near.global_position
+			near.global_position += EMBED_MOVE
+			_stand_still(near)
+			_embed_at = _frames
+			_embed_step = 2
+		2:
+			# Two ticks, so the skeleton has been posed at the new position and
+			# the shaft has had a physics frame to copy it.
+			if _frames < _embed_at + 2:
+				return
+			var moved := _embed_spear.global_position - _embed_spear_was
+			var wanted := near.global_position - _embed_body_was
+			var slip := (moved - wanted).length()
+			var problems: Array[String] = []
+			if not near.alive:
+				problems.append("the hit killed it")
+			if not _embed_spear.visible:
+				problems.append("the shaft is invisible")
+			if slip > EMBED_TOLERANCE:
+				problems.append("the shaft is %.2f m adrift of the body" % slip)
+			if _embed_spear.get_parent() != _items:
+				problems.append("something re-parented it early")
+			if problems.is_empty():
+				print("combat_range: %s moved %.2f m with a spear in it and the spear came too, %.3f m adrift — embed PASS"
+					% [near.display_name, wanted.length(), slip])
+			else:
+				_embed_failures += 1
+				print("combat_range: embed FAIL (%s)" % "; ".join(problems))
+			# Now kill it, and the same shaft has to end up on the corpse.
+			MatchState.report_damage(DUMMY_BASE, 1, Gub.MAX_HEALTH, Gub.Cause.SPEAR,
+				near.body_centre(), Vector3.FORWARD * 14.0, "Spine1")
+			_embed_at = _frames
+			_embed_step = 3
+		3:
+			var after: Array[String] = []
+			if not is_instance_valid(_embed_spear):
+				after.append("the shaft was freed instead of adopted")
+			else:
+				if not (_embed_spear.get_parent() is PhysicalBone3D):
+					after.append("its parent is %s and not a physical bone"
+						% _embed_spear.get_parent())
+				if not _embed_spear.visible:
+					after.append("it is invisible on the corpse")
+			if _corpses() < 1:
+				after.append("there is no corpse")
+			# Nothing may be left waiting on the Gub: a shaft on an invisible
+			# list is the bug `SpearProjectile._glance_off` was written to avoid
+			# and the one this whole mechanism could quietly reintroduce.
+			if not near.take_embedded_spears().is_empty():
+				after.append("the Gub is still holding one on its list")
+			if after.is_empty():
+				print("combat_range: the corpse took the shaft off the body it was standing in — adopt PASS")
+			else:
+				_embed_failures += 1
+				print("combat_range: adopt FAIL (%s)" % "; ".join(after))
+			_embed_finish()
+
+
+func _embed_finish() -> void:
+	print("combat_range: %d embed verdict(s) failed" % _embed_failures)
+	get_tree().quit()
+
+
+## Two hurt dummies and nothing else happening, for a picture of the plates:
+##
+##     ... --resolution 1600x900 --script tools/snapshot.gd -- ##         res://tools/combat_range.tscn out/health_plates.png 40 hurt
+##
+## Through `report_damage` rather than by writing the field, so what is
+## photographed is the whole path — host, broadcast, `Gub.set_health`, plate —
+## and not a bar this file filled in by hand.
+func _drive_hurt() -> void:
+	if _frames != 12:
+		return
+	var hurt := [38.0, 82.0]
+	for i in hurt.size():
+		var dummy := MatchState.gubs.get(DUMMY_BASE + i) as Gub
+		if dummy == null:
+			continue
+		_hit(dummy, hurt[i])
+		print("combat_range: %s is on %.0f of %.0f"
+			% [dummy.display_name, dummy.health, Gub.MAX_HEALTH])
+
+
 ## Say what the Gub is holding, so a run means something without opening the
 ## PNG. The two halves that must agree are printed together on purpose: a hold
 ## with a spear still in the hand is the bug this mode exists to catch.
@@ -1742,6 +2181,12 @@ func _target_point() -> Vector3:
 
 ## Say what a spear actually hit, which is the one thing a still frame cannot.
 func _watch_spawned(node: Node) -> void:
+	# The Elder's ward, counted rather than described: `health` needs to know
+	# that a hit worth zero still flashed, and a flash is a node appearing in the
+	# world for a third of a second (`MatchState._do_ward`).
+	if node is WardFlash:
+		_wards += 1
+		return
 	if node.has_signal("caught"):
 		node.connect("caught", func(victim_ids: Array) -> void:
 			var names: Array[String] = []

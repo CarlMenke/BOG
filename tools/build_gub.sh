@@ -1,8 +1,18 @@
 #!/usr/bin/env bash
-# Rebuild `art/generated/gub.glb` from the eight Mixamo FBX files.
+# Rebuild `art/generated/gub.glb` from the Mixamo source packs.
 #
 #   bash tools/build_gub.sh                    # the shipped build (emission 0.15)
 #   bash tools/build_gub.sh -- --emission 0.0  # no emission, to re-judge the night
+#   bash tools/build_gub.sh -- --list-packs    # audit assets/source/, build nothing
+#
+# The source is not one folder. `assets/source/` holds a pack per batch of clips
+# — `GUB_2/` and, as they are downloaded, `2_Spear_Suite/`, `3_Bow_Suite/`,
+# `4_Elder_Suite/`, `5_Locomotion/`, `6_Utility/` — and `PACKS` in the Python
+# says which files each one contains and what rules ride on each clip. A pack
+# that declares clips must have them; a pack that declares none is a labelled
+# empty folder and is skipped out loud. `--list-packs` is that audit on its own,
+# without reading an FBX or writing the GLB, which is what to run after dropping
+# a hand-downloaded batch into a folder.
 #
 # All this does is find Blender and hand it `tools/build_gub.py`, which is where
 # the actual work and all the explanation live. It exists for the same reason
@@ -20,7 +30,7 @@
 #   GODOT --path . --resolution 1600x700 --script tools/snapshot.gd -- \
 #       res://tools/preview_anim.tscn out/anim_Run.png 30 Run
 #
-# Inputs:  $BLENDER (optional override).
+# Inputs:  $BLENDER (optional override), the packs under assets/source/.
 # Outputs: art/generated/gub.glb, and (after the import) gub_basecolor.jpg.
 
 set -uo pipefail

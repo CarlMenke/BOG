@@ -250,6 +250,7 @@ roster, `MatchState.register_arena`, kills through `MatchState.report_kill` — 
 a throw that works there works in a match. Pass a mode as the trailing argument
 (`flight`, `hit`, `arc`, `miss`, `aim`, `mushroom`, `cover`, `lure`,
 `lure_self`, `letter`, `cards`, `lightning`, `ward`, `recharge`, `walk`,
+`health`, `embed`, `hurt`,
 `leave`, `free`) and `trace` after it to print the whole flight, which is the
 only way to tell a miss from a hit whose kill was dropped.
 
@@ -279,7 +280,7 @@ left the hand.
 Both are committed, so you only need this if you change a source file:
 
 ```bash
-bash tools/build_gub.sh             # the Gub: eight Mixamo FBX → one .glb. Needs Blender 5.2
+bash tools/build_gub.sh             # the Gub: several Mixamo packs → one .glb. Needs Blender 5.2
 python tools/decimate_assets.py     # spear, lure, mushroom, G, U, B. numpy, scipy, pillow, fast_simplification
 python tools/make_sfx.py            # needs numpy
 python tools/prepare_map.py         # needs numpy, pillow
@@ -296,7 +297,7 @@ embedded image being renamed so Godot extracts it as `letter_g_basecolor.png`
 rather than `letter_g_G_LETTER_basecolor.jpg.png`, and the repack into one
 clean single-buffer `.glb`. **The Gub has its own pipeline** and does
 not go through `decimate_assets` at all: `tools/build_gub.sh` runs
-`tools/build_gub.py` in headless Blender, which consolidates the eight FBX files
+`tools/build_gub.py` in headless Blender, which consolidates the declared FBX files
 in `assets/source/GUB_2/` into one 1.5 MB `art/generated/gub.glb` — one armature,
 one mesh, nine clips, 10.5k triangles, 1.80 m tall, root motion locked, every
 clip's facing aligned — and prints every measurement it takes (**D-029**). Three

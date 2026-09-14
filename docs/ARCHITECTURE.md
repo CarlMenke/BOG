@@ -366,7 +366,7 @@ tools/           dev tools and testbeds — none of this ships
 | `scripts/items/lightning_bolt.gd` | the bolt: one `ImmediateMesh`, two lights, forty sparks |
 | `scripts/items/ward_flash.gd` | what a spear looks like when it fails to kill an Elder (**D-040**) |
 | `scripts/ui/elder_track.gd` | how much of the Elder is left, for its wearer only (**D-040**) |
-| `tools/build_gub.py` | the Gub's whole art pipeline: eight FBX in, one `.glb` out |
+| `tools/build_gub.py` | the Gub's whole art pipeline: several source packs in, one `.glb` out |
 
 `export_presets.cfg` is deliberately committed — it is the only record of what a
 shippable build excludes (`tools/`, `assets/`, `docs/`), and ignoring it would

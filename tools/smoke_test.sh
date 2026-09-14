@@ -210,6 +210,59 @@ also "a spear cannot kill the Elder" "control PASS"
 # Headless, and it quits itself around tick 280.
 check "a respawn hands back nothing" "respawn PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- respawn
+# Health, and the damage model now standing in front of every death (D-062).
+# Five verdicts out of one run, and they are in this order because each one is
+# the control for the last.
+#
+# `partial` is the new thing itself: 35 then 40 through `report_damage` leaves a
+# Gub on its feet with 25, with the host's number, the body's number and the bar
+# over its head all agreeing. `lethal` is the third hit taking it to exactly
+# zero and dying *normally* — a corpse on the ground and the same
+# `player_killed` the kill feed is built out of. `elder` is D-040 restated as a
+# number: 55 at an Elder takes nothing at all and still flashes the ward, which
+# is the one piece of feedback that hit produces. `respawn` is a life beginning
+# full, on a Gub that died on zero.
+#
+# `spear` is the one that would hurt most to lose and the reason this mode ends
+# with a real throw: a spear thrown at a Gub on full health has to kill it, in
+# one, still. Every other line here would pass on a damage model that had
+# quietly turned the spear into a two-shot — which is exactly what a health
+# system is most likely to break, and why the spear's damage is a constant equal
+# to a whole Gub rather than a branch that says "die".
+#
+# Run against the code without the parts they check: with `revive_at` not
+# restoring health `respawn` fails; with the Elder's refusal taken out `partial`
+# and `lethal` fail loudly (every hit wards instead). Headless, and it quits
+# itself around tick 230.
+check "damage leaves a Gub standing" "partial PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- health
+also "damage leaves a Gub standing" "lethal PASS"
+also "damage leaves a Gub standing" "elder PASS"
+also "damage leaves a Gub standing" "respawn PASS"
+also "damage leaves a Gub standing" "spear PASS"
+# A shaft standing in a Gub who is still alive, and then in the corpse that Gub
+# becomes (D-062). This is the half of the damage model that is not a number:
+# until now a projectile that hit somebody who lived had nowhere to go, because
+# `_stick_in` hid it and waited for a corpse, and the Elder was the only case
+# there was. Partial damage makes it the common case, and the bow makes it the
+# rule.
+#
+# The spear is launched by hand with nothing listening for its hit, so it damages
+# nobody — which is the only way to get a *living* victim with a shaft in it in a
+# build whose only weapon is a one-shot. `embed` then moves the dummy two metres
+# and requires the shaft to arrive with it: a spear parked in the air where a Gub
+# used to be looks identical to one riding the Gub until the Gub moves. `adopt`
+# kills that dummy and requires the same shaft to end up hanging off a physical
+# bone of the corpse, with nothing left waiting on the Gub's own list — a shaft
+# on an invisible list is the bug `SpearProjectile._glance_off` was written to
+# avoid and the one this mechanism could quietly reintroduce.
+#
+# With the ride removed, `embed` fails with the shaft 2.00 m adrift; with the
+# hand-over removed, `adopt` fails with the shaft still parented to the arena.
+# Headless, and it quits itself around tick 40.
+check "a shaft rides a living Gub" "embed PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- embed
+also "a shaft rides a living Gub" "adopt PASS"
 # Bunny hopping (D-052). The local Gub runs the range as itself, as the Elder
 # and as a capture carrier: ten hops pressed on the first ground tick have to
 # climb past 1.15x run speed and stop at the 1.3x cap, while running, one jump,

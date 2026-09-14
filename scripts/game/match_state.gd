@@ -528,6 +528,10 @@ func _tick_void() -> void:
 		# If someone lured or spooked you off the edge moments ago, they get it.
 		var attacker: int = entry.get("last_attacker", 0)
 		var recent: bool = _now() - float(entry.get("last_attacker_at", -999.0)) < ASSIST_WINDOW
+		# The one death in the game that is not damage. Nothing hit this Gub;
+		# the map has taken it, and a bar cannot be whittled down by a fall.
+		# `report_kill` is that sentence — a body's worth, through the same door
+		# as everything else, and refused by nothing (see `damage_refusal`).
 		report_kill(peer_id, attacker if recent else peer_id, Gub.Cause.VOID,
 			gub.global_position, Vector3.DOWN, "")
 
@@ -700,55 +704,56 @@ func _do_respawn(peer_id: int, spawn: Transform3D, life: int) -> void:
 		local_respawn.emit()
 
 
-# ------------------------------------------------------------------- kills ---
+# ------------------------------------------------------ damage, and death ---
 
-## Host only. The single place a death is decided.
-## `blow` is the killing blow's velocity — speed as well as direction, because
-## the corpse's flight is the whole feedback for a kill and a spear that has
-## dropped out of a long arc should shove a body far less than a flat one.
-func report_kill(victim_id: int, killer_id: int, cause: Gub.Cause,
-		point: Vector3, blow: Vector3, bone: String) -> void:
-	if not Net.is_host or phase != Phase.PLAYING:
-		return
-	var entry: Dictionary = stats.get(victim_id, {})
-	if entry.is_empty() or not entry["alive"]:
-		return
+## Host only. **The single place a hit is decided** (D-062).
+##
+## Everything that can hurt a Gub comes through here, and the questions that
+## decide whether a hit does anything are asked once, in `damage_refusal`: is
+## there a match on, is the victim there to be hit, are they protected, are they
+## on the attacker's team, are they the Elder. Asking them in one place is the
+## whole point of the function — the alternative is every weapon repeating the
+## rules and the newest weapon getting one of them wrong.
+##
+## **`report_kill` is this function with `Gub.MAX_HEALTH` in it**, and a death
+## is what happens when the number runs out. That order matters: it makes "a
+## spear always kills" a number rather than a branch. There is no
+## `if weapon == SPEAR: die` anywhere to be softened by a future lobby dial,
+## and no `starting_health` slider for the number to be measured against — see
+## `Gub.MAX_HEALTH`.
+##
+## `amount` is in the units of `Gub.MAX_HEALTH`: 100 is a body's worth, and a
+## bow's 20–80 is a fifth to four fifths of one.
+##
+## `point`, `blow` and `bone` describe the hit rather than the death, and they
+## are carried even by a hit nobody dies from because the hit that *does* kill
+## is usually the last of several. `blow` is the blow's velocity — speed as well
+## as direction, because the corpse's flight is the whole feedback for a kill
+## and a spear that has dropped out of a long arc should shove a body far less
+## than a flat one.
+##
+## Returns the damage actually taken. Every refusal returns zero, and so does
+## the Elder — *"damage to an Elder is zero"* is the same rule D-040 always had,
+## said as a number.
+func report_damage(victim_id: int, attacker_id: int, amount: float,
+		cause: Gub.Cause, point: Vector3, blow: Vector3, bone: String) -> float:
+	if not Net.is_host:
+		return 0.0
+	# A heal is not a negative hit. Whatever wants to put health back asks for
+	# it by name (the potion, D-032's stock, step 7 of the combat plan) rather
+	# than by sending a negative through the door that checks friendly fire.
+	if amount <= 0.0:
+		return 0.0
 
-	var victim: Gub = gubs.get(victim_id)
-	if is_instance_valid(victim) and victim.is_invulnerable() and cause != Gub.Cause.VOID:
-		return
-
-	# Friendly fire is off by default, so a team-mate's spear simply stops.
-	if killer_id != victim_id and _same_team(killer_id, victim_id) \
-			and not config().friendly_fire:
-		return
-
-	# **The Elder cannot be killed** (D-040). The user, after playing one:
-	# *"they should be invincible, and it should last for 20 seconds rather then
-	# until they die."* The two halves are one rule — with nothing able to kill
-	# an Elder, "until they die" is "for the rest of the match", so the clock in
-	# `_tick_elders` is what the robe now ends on.
-	#
-	# **The void still kills**, and that carve-out is not a nicety: it is the
-	# same one spawn protection makes two lines above, for the same reason. A
-	# Gub that cannot die to the void falls past the bottom of the island for
-	# ever, alive, unreachable and unrespawnable. So the one thing that can end
-	# an Elder early is the map itself.
-	#
-	# **After the friendly-fire check rather than beside the invulnerability
-	# one**, and the ward below is why. A shot stopped because the thrower is on
-	# your team was never going to kill you and the robe had nothing to do with
-	# it; flashing a ward at it would credit the robe with a save it did not
-	# make, on the one peer best placed to be confused about it. What reaches
-	# here is a shot that would otherwise have landed.
-	if is_elder(victim_id) and cause != Gub.Cause.VOID:
+	var refusal := damage_refusal(victim_id, attacker_id, cause)
+	if refusal == Refusal.ELDER:
 		# Exactly what `note_attack` is for, and this is its clearest case: an
 		# attacker who hurt somebody without killing them is credited if the
 		# victim goes off the edge shortly afterwards. An Elder shoved by a
 		# lightning bolt or lured over a ledge is precisely that, and the void
 		# is the only death it has.
-		if killer_id != victim_id:
-			note_attack(victim_id, killer_id)
+		if attacker_id != victim_id:
+			note_attack(victim_id, attacker_id)
 		# The one piece of feedback there is. A spear that hits an Elder is
 		# turned aside rather than buried (`SpearProjectile._glance_off`), so
 		# without this the strongest weapon in the game would simply vanish
@@ -756,8 +761,171 @@ func report_kill(victim_id: int, killer_id: int, cause: Gub.Cause,
 		# whether the throw had even happened.
 		_do_ward.rpc(victim_id, point)
 		_do_ward(victim_id, point)
-		return
+		return 0.0
+	# Everything else that is not `NONE` simply does nothing, which is also how
+	# a refusal added later behaves until somebody gives it a consequence.
+	if refusal != Refusal.NONE:
+		return 0.0
 
+	# Past here the hit landed, so the attacker is on the hook for the victim's
+	# next thirty seconds whether or not this was the blow that finished them.
+	# It used to be said only in the Elder's branch above, because an Elder was
+	# the only thing in the game a hit could fail to kill; now most hits fail to
+	# kill and the credit has to follow all of them.
+	if attacker_id != victim_id:
+		note_attack(victim_id, attacker_id)
+
+	# A row with no body is a bookkeeping fiction — `tools/match_rules.gd` runs
+	# whole matches out of rows with nothing standing in the world — and health
+	# lives on the body, so there is nowhere to write a partial hit down. Such a
+	# victim is treated as being at full health every time: `report_kill`'s
+	# hundred still kills it, and anything less than a body's worth cannot
+	# whittle down a body that does not exist.
+	var victim: Gub = gubs.get(victim_id)
+	var left := Gub.MAX_HEALTH - amount
+	if is_instance_valid(victim):
+		left = victim.health - amount
+	if left > 0.0:
+		_do_damage.rpc(victim_id, attacker_id, left)
+		_do_damage(victim_id, attacker_id, left)
+		return amount
+
+	_kill(victim_id, attacker_id, cause, point, blow, bone)
+	return amount
+
+
+## Why a hit did nothing. `NONE` means it landed.
+enum Refusal {
+	NONE,
+	NOT_PLAYING,  ## no match is running, so nothing in it can be hurt
+	DEAD,         ## nobody there: no row, or a body already on the ground
+	PROTECTED,    ## spawn protection still on
+	FRIENDLY,     ## the attacker's own team, with friendly fire off
+	ELDER,        ## the robe (D-040): damage to an Elder is zero
+}
+
+## The rules that decide whether a hit does anything, in the order they are
+## asked — and **askable on any peer**, which is the whole reason they live out
+## here rather than inline in `report_damage`.
+##
+## The host asks it to decide the damage. Every other peer asks it to decide
+## what the *shaft* does, because a projectile is simulated on every machine
+## from the same launch (see `SpearProjectile`) and has to choose between
+## burying itself in the body it reached and glancing off it, a round trip
+## before the host's answer could arrive. Both are reading replicated state —
+## the roster, the config, the `stats` table, the Elder rows — so they agree.
+##
+## When they do not, which is a hit that lands within a tick of a robe going on
+## or spawn protection wearing off, the disagreement costs a cosmetic shaft in
+## somebody who was not hurt, cleaned up by their next respawn. It can never
+## cost a damage decision: only the host's copy calls `report_damage`.
+##
+## The order is load-bearing:
+##
+## **Protection before everything.** A protected Gub is not hit at all, by
+## anyone, for any reason, and nothing is drawn on them.
+##
+## **Friendly fire before the Elder**, and the ward is why. A shot stopped
+## because the thrower is on your team was never going to hurt you and the robe
+## had nothing to do with it; flashing a ward at it would credit the robe with a
+## save it did not make, on the one peer best placed to be confused about it.
+## What reaches the Elder line is a shot that would otherwise have landed.
+##
+## **The Elder last** (D-040). The user, after playing one: *"they should be
+## invincible, and it should last for 20 seconds rather then until they die."*
+## The two halves are one rule — with nothing able to kill an Elder, "until they
+## die" is "for the rest of the match", so the clock in `_tick_elders` is what
+## the robe now ends on. Since D-062 it is stated as **damage to an Elder is
+## zero** rather than as "the Elder cannot be killed", and those are the same
+## sentence: a robe that stopped 80 of a bow's 80 and let the last arrow through
+## would be an Elder that dies, and a robe that refused only the *fatal* hit
+## would leave one walking about on 12 health with the bar over its head saying
+## so.
+##
+## **The void is refused by nothing at all**, and that carve-out is not a
+## nicety: a Gub that cannot die to the void falls past the bottom of the island
+## for ever, alive, unreachable and unrespawnable. So the one thing that can end
+## an Elder early is the map itself.
+##
+## That last rule is now stated **once, first**, which fixes a bug it is worth
+## naming because nothing had ever run into it. Spawn protection and the robe
+## each carved the void out for themselves; friendly fire did not, and it was
+## asked of every cause. So in Teams with friendly fire off, a Gub lured or
+## shoved off the edge by a team-mate inside `ASSIST_WINDOW` was reported to the
+## void with a team-mate as its killer — and refused, every frame, for as long
+## as it kept falling. The credit rule (`_tick_void` naming the last attacker)
+## and the friendly-fire rule are both right on their own; the bug was only ever
+## in the order.
+func damage_refusal(victim_id: int, attacker_id: int,
+		cause: Gub.Cause = Gub.Cause.UNKNOWN) -> Refusal:
+	# The warmup is not a fight. The host has always refused damage outside
+	# PLAYING, and asking it here rather than in `report_damage` is what lets
+	# every peer know it too — otherwise a spear thrown during the countdown
+	# buries itself in somebody it could not possibly have hurt.
+	if phase != Phase.PLAYING:
+		return Refusal.NOT_PLAYING
+	if not is_alive(victim_id):
+		return Refusal.DEAD
+	# The map itself, refused by nothing.
+	if cause == Gub.Cause.VOID:
+		return Refusal.NONE
+	var victim: Gub = gubs.get(victim_id)
+	if is_instance_valid(victim) and victim.is_invulnerable():
+		return Refusal.PROTECTED
+	# Friendly fire is off by default, so a team-mate's spear simply stops.
+	if attacker_id != victim_id and _same_team(attacker_id, victim_id) \
+			and not config().friendly_fire:
+		return Refusal.FRIENDLY
+	if is_elder(victim_id):
+		return Refusal.ELDER
+	return Refusal.NONE
+
+
+## Would a hit from `attacker_id` land on `victim_id` at all? The question a
+## projectile asks itself, on every peer, at the moment it reaches a body.
+func damage_would_land(victim_id: int, attacker_id: int,
+		cause: Gub.Cause = Gub.Cause.UNKNOWN) -> bool:
+	return damage_refusal(victim_id, attacker_id, cause) == Refusal.NONE
+
+
+## What is left of one Gub, in the units of `Gub.MAX_HEALTH`.
+##
+## Zero for a peer with nothing standing in the world — a spectator, a peer that
+## has not spawned yet, a row in a harness — which is the same answer `is_alive`
+## gives for the same peer, and the same answer anything drawing a bar wants.
+func health_of(peer_id: int) -> float:
+	var gub: Gub = gubs.get(peer_id)
+	return gub.health if is_instance_valid(gub) else 0.0
+
+
+## Host only. Kill this Gub outright: a body's worth of damage, through the
+## same door as everything else (D-062).
+##
+## Kept, rather than replaced by its callers writing `Gub.MAX_HEALTH` out, for
+## two reasons. It is what "this hit kills, full stop" should look like at a
+## call site — the void, and any weapon whose contract is one shot — and the
+## harnesses stage dozens of deaths through it (`tools/match_rules.gd`,
+## `tools/playthrough.gd`, `tools/net_loopback.gd`), where a death is the thing
+## being tested and a damage number would be noise.
+##
+## Every refusal `report_damage` makes it still makes here: spawn protection,
+## friendly fire and the Elder's ward all answer a hundred exactly as they
+## answer twenty.
+func report_kill(victim_id: int, killer_id: int, cause: Gub.Cause,
+		point: Vector3, blow: Vector3, bone: String) -> void:
+	report_damage(victim_id, killer_id, Gub.MAX_HEALTH, cause, point, blow, bone)
+
+
+## Host only. The single place a death is decided — which is now *this* kill
+## rather than a decision of its own: everything that can refuse a death was
+## asked in `report_damage` on the way here, and reaching this line means the
+## last of a Gub's health has gone.
+##
+## Private on purpose. A weapon that wants somebody dead says so in damage, and
+## `report_kill` above is the way to say "all of it".
+func _kill(victim_id: int, killer_id: int, cause: Gub.Cause,
+		point: Vector3, blow: Vector3, bone: String) -> void:
+	var entry: Dictionary = stats[victim_id]
 	entry["alive"] = false
 	entry["deaths"] += 1
 	entry["respawn_at"] = _now() + config().respawn_delay
@@ -793,6 +961,40 @@ func report_kill(victim_id: int, killer_id: int, cause: Gub.Cause,
 	_drop_loot(cause, point)
 	_push_scores()
 	_check_win()
+
+
+## A hit that did not kill, told to everyone (D-062).
+##
+## What travels is **what is left**, not what was taken. A peer that missed a
+## packet and applied a subtraction would be permanently out by that hit; a peer
+## that missed this one is corrected by the next. It is the same argument the
+## inventory's `_do_set_inventory` makes, and it is why there is no
+## "health_changed(delta)" anywhere in this file.
+##
+## Reliable, and not on the `stats` push. Health changes far more often than a
+## score does — a bow will land three arrows in the time a spear lands one —
+## and `_sync_scores` sends the whole table of every player's row. This is one
+## float and two ints, to a bar that has to be right rather than smooth.
+##
+## `attacker_id` rides along purely for the feedback below: it decides who hears
+## the hitmarker, the same way `_apply_death` decides who hears it for a kill.
+@rpc("authority", "call_remote", "reliable")
+func _do_damage(victim_id: int, attacker_id: int, health: float) -> void:
+	var victim: Gub = gubs.get(victim_id)
+	if not is_instance_valid(victim):
+		return
+	victim.set_health(health)
+	if victim_id == Net.local_id():
+		# Much smaller than a death's 1.4. Being hit should be felt and should
+		# not take the crosshair off the Gub who hit you — a kick big enough to
+		# spoil the answering shot would make the first hit of a fight decide it.
+		_shake(victim, 0.45)
+	elif attacker_id == Net.local_id():
+		# The same 2D hitmarker a kill gives, for the same reason and now for
+		# the far more common case: the victim may be sixty metres away and
+		# behind a tree, still standing, and without this the only difference
+		# between a hit and a miss is a bar four pixels tall at that range.
+		AudioDirector.play_2d(AudioDirector.HITMARKER)
 
 
 @rpc("authority", "call_remote", "reliable")

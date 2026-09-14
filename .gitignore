@@ -43,6 +43,30 @@ assets/Stylized_Nature_MegaKitStandard/Textures/
 assets/source/Mushroom/base.obj
 desktop.ini
 
+# Mixamo pack downloads that arrived Without Skin — 110 files, 54.8 MB. Selecting
+# several animations in My Assets and pressing the one Download button ships the
+# skinned mesh in exactly one file of the batch and the rest as skeleton and
+# animation only; with no skin cluster there are no bind matrices, so Blender
+# rebuilds a different rest pose and every rotation curve in the file means
+# something else on the Gub's skeleton. 105 of the 110 files under here measure
+# 1.39 off `GUB_2/Idle.fbx`'s bind pose against the 1e-5 `assert_same_character`
+# allows, and the delta does not shrink when a uniform scale is divided out — so
+# it is a different rest pose, not a rescale, and no arithmetic puts it back.
+#
+# They are kept on disk rather than deleted, because "we decided against it" and
+# "we threw it away" are different states and only one of them is reversible,
+# and a pack you can still open is worth more than one you only remember. They
+# are kept out of the repository because they can never be built from.
+#
+# MANIFEST.md is the deliberate exception and is negated below: it carries the
+# measured length and travel of every one of these files and the exact settings
+# to re-download any of them with, and that has to outlive the files themselves.
+# The pattern ignores the folder's *contents* rather than the folder — git will
+# not descend into an ignored directory, so `_rejected/` followed by a negation
+# would silently ignore the negation too.
+assets/source/_rejected/*
+!assets/source/_rejected/MANIFEST.md
+
 # The raw Rust arena export: 337 MB, which is over GitHub's 100 MB single-file
 # limit, so it cannot be committed even if we wanted to carry it. 333 MB of that
 # is fifty-two lossless 2K PNGs. `python tools/prepare_map.py` turns it into the

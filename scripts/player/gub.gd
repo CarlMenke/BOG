@@ -29,6 +29,23 @@ signal threw_spear(origin: Vector3, direction: Vector3)
 ## a tidier order would have renumbered every cause already in flight.
 enum Cause { SPEAR, FALL, VOID, UNKNOWN, LIGHTNING }
 
+## Full health, and the unit every damage number in the game is written in
+## (D-062). A Gub starts each life on exactly this and is dead at zero.
+##
+## It is a constant and **not a lobby dial**, which is the whole reason the
+## spear can keep its promise. `GubCombat.SPEAR_DAMAGE` is this same constant,
+## so "a spear always kills" is a number rather than a branch: a spear takes a
+## whole body's worth, so it kills a Gub on 100 and it kills a Gub on 3, and no
+## dial the host can reach makes it less. A `starting_health` slider would
+## quietly turn the spear into a two-shot the first time anybody dragged it, and
+## the balance dial that actually matters — how much damage a weapon does — is
+## per weapon and belongs beside that weapon (the bow brings its own).
+##
+## 100 rather than 1.0 because damage is authored by hand: "an arrow is 20 to
+## 80" is a sentence somebody says out loud, and a bar that is 37 full is a
+## number a player can be told.
+const MAX_HEALTH := 100.0
+
 ## The body in a team's colour; see `set_team_tint` and D-046.
 const TINT_SHADER := preload("res://resources/shaders/gub_team_tint.gdshader")
 ## The body mesh's node name inside `gub.glb`, as `tools/build_gub.py` writes it.
@@ -270,6 +287,22 @@ var body_mesh: MeshInstance3D
 ## tinted and reused after that. Null on a Gub that has never been on a team.
 var _tint_material: ShaderMaterial
 var alive: bool = true
+## What is left of this Gub, from `MAX_HEALTH` down to zero (D-062).
+##
+## **The host owns this number and every copy of it is a copy of the host's.**
+## It is deliberately not one of the `sync_*` fields above: those are written by
+## the peer that *owns* the Gub, and health is the one thing about a body its
+## owner does not get a vote on. It travels instead on
+## `MatchState._do_damage`, an `@rpc("authority")` from peer 1, the same road
+## every other host decision takes (D-004, D-024).
+##
+## It lives on the body rather than in the `stats` row beside kills and deaths,
+## and there is only one of it. The row is the match's ledger — what a player
+## has scored and how many lives they have left, kept across deaths — while
+## health belongs to the Gub standing in the world: it is what the bar over its
+## head draws, it dies with the body and it comes back with `revive_at`. A
+## second copy in the row would be a copy waiting to disagree with this one.
+var health: float = MAX_HEALTH
 ## Set while the round is starting or just after a respawn; blocks damage.
 var invulnerable_until: float = 0.0
 
@@ -314,6 +347,9 @@ var _lure_centre: Vector3 = Vector3.ZERO
 var _lure_strength: float = 0.0
 var _lure_until: float = 0.0
 
+## The floating name, and since D-062 the health bar under it. Held rather than
+## looked up each time because `set_health` pushes to it on every hit.
+@onready var nameplate: Nameplate = $Nameplate
 @onready var _collision: CollisionShape3D = $Collision
 @onready var _model_root: Node3D = $Model
 @onready var _capsule: CapsuleShape3D = ($Collision as CollisionShape3D).shape as CapsuleShape3D
@@ -1092,25 +1128,72 @@ func grant_invulnerability(seconds: float) -> void:
 	invulnerable_until = Time.get_ticks_msec() * 0.001 + seconds
 
 
+## The host's word on what is left of this Gub, applied on every peer (D-062).
+##
+## The single place `health` is written, and the single place the plate is told
+## about it, so the bar over a Gub's head cannot be drawing a different number
+## from the one the host is about to kill it on. Clamped rather than trusted:
+## on every machine but the host's this value arrived over a wire.
+func set_health(value: float) -> void:
+	health = clampf(value, 0.0, MAX_HEALTH)
+	if nameplate != null and is_instance_valid(nameplate):
+		nameplate.set_health(health, MAX_HEALTH)
+
+
+## 1 -> 0, for anything drawing a bar out of it.
+func health_fraction() -> float:
+	return clampf(health / MAX_HEALTH, 0.0, 1.0)
+
+
 ## Server-side. Kills this Gub and tells everyone.
 func kill(killer_id: int, cause: Cause = Cause.UNKNOWN) -> void:
 	if not alive:
 		return
 	alive = false
+	# Zeroed here rather than by a message of its own. `MatchState._apply_death`
+	# runs on every peer, so every copy of this Gub reaches this line on the
+	# death that emptied the bar — a kill costs no health packet at all, and a
+	# void death, which never had a damage number behind it, still leaves the
+	# bar and the body saying the same thing.
+	set_health(0.0)
 	velocity = Vector3.ZERO
 	died.emit(killer_id, cause)
 
 
-## Spears that struck this Gub and are waiting for a corpse to be handed to.
-## Each entry is `{"spear": Node3D, "bone": String}`. It is normally emptied
-## within the same frame by `GubRagdoll`; anything still here at the next
-## respawn belongs to a death that produced no corpse and is thrown away.
+## How many shafts one Gub can be carrying at once, oldest pushed out first.
+##
+## There has to be a cap now that a shaft can stand in a Gub who lives (D-062):
+## the list is emptied by a corpse or by a respawn, and a Gub that keeps getting
+## shot and keeps not dying reaches neither. Four is a porcupine and reads as
+## one; it is also two more than anybody survives today, so the cap is a bound
+## on the absurd rather than a rule anyone plays around.
+const MAX_EMBEDDED_SHAFTS := 4
+
+## Spears and arrows standing in this Gub. Each entry is
+## `{"spear": Node3D, "bone": String}`, in the order they arrived.
+##
+## Until D-062 this was a queue of *hidden* shafts waiting for a corpse, because
+## the only hit there was killed you. Now a hit that leaves you standing puts a
+## visible shaft in you that rides the skeleton — the projectile does the riding
+## itself, see `SpearProjectile._stick_in` — and this list is simply the record
+## of what is in the body, so that whoever has to deal with it next can.
+##
+## Exactly two things ever deal with it. `GubRagdoll` takes the lot while it is
+## building a corpse and hangs each shaft off the bone it went through, and a
+## respawn throws away whatever is left, which is a death that produced no
+## corpse (the void) or a body that was never killed at all.
 var _pending_spears: Array[Dictionary] = []
 
 
-## Park a spear on this Gub until the corpse for this death exists.
+## Put a shaft in this Gub. It stays until the corpse takes it or the Gub
+## respawns — see `MAX_EMBEDDED_SHAFTS` for the one case that is neither.
 func embed_spear(spear: Node3D, bone: String) -> void:
 	_pending_spears.append({"spear": spear, "bone": bone})
+	while _pending_spears.size() > MAX_EMBEDDED_SHAFTS:
+		var oldest: Dictionary = _pending_spears.pop_front()
+		var shaft: Node3D = oldest["spear"]
+		if is_instance_valid(shaft):
+			shaft.queue_free()
 
 
 ## Hand every parked spear to the caller and forget them.
@@ -1138,6 +1221,12 @@ func _drop_pending_spears() -> void:
 func revive_at(spawn: Transform3D, life_number: int = -1) -> void:
 	_drop_pending_spears()
 	alive = true
+	# A life begins full, on every peer, with nothing sent. `revive_at` is
+	# already called on all of them by `_create_gub` and `_do_respawn`, so the
+	# bar over a respawned Gub's head is full everywhere for the same reason its
+	# position is right everywhere — and a health packet that crossed a respawn
+	# in flight cannot leave somebody standing on a pad with 12 health.
+	set_health(MAX_HEALTH)
 	if life_number >= 0:
 		life = life_number
 	velocity = Vector3.ZERO

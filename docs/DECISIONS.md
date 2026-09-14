@@ -5120,3 +5120,244 @@ where they are placed rather than wandering, and the vulture cards bank and bob 
 do not flap. Budget: four particle emitters and 700 particles, two bird multimeshes
 of eleven cards, one extra shadowless light, five backdrop draw calls, one
 screen-texture copy, no volumetrics.
+
+---
+
+## D-062 — Health, and one door for every hit
+There was no health in this game. A hit was a kill, and every weapon said so in
+its own voice: the spear reported one, the bolt reported one, the blast reported
+one, the void reported one. That was fine for a build whose only weapon was a
+spear and it is the wrong shape for the one that comes next — the bow fires
+arrows worth 20 to 80 damage depending on the draw, and the spear has to stay a
+guaranteed one-shot while it does.
+
+So: **100 is a Gub** (`Gub.MAX_HEALTH`), and everything that can hurt one goes
+through `MatchState.report_damage(victim, attacker, amount, cause, point, blow,
+bone)` — host-authoritative, one place, asked once. A death is what happens when
+the number runs out.
+
+### report_kill is now report_damage with a hundred in it
+
+`report_kill` was "the single place a death is decided" and had exactly four
+call sites: the void (`_tick_void`), the bolt's direct hit, the bolt's blast and
+the spear. All four still exist; three of them now name a damage constant
+(`GubCombat.SPEAR_DAMAGE`, `LIGHTNING_DAMAGE`, both `Gub.MAX_HEALTH`) and the
+fourth — the void — still calls `report_kill`, which is one line deep a
+`report_damage` of a full body.
+
+The void keeps the older, shorter call deliberately. It is the one death in the
+game that is not damage: nothing hit that Gub, the map took it, and a bar cannot
+be whittled down by a fall. `report_kill` is that sentence. It is also what the
+harnesses want — `match_rules`, `playthrough` and `net_loopback` stage dozens of
+deaths where the death is the thing under test and a damage number would be
+noise — and keeping it meant thirty call sites across the testbeds did not have
+to be rewritten to say the same thing at more length.
+
+**Why this way round matters more than it looks.** "The spear always kills" is
+now a *number* and not a branch. There is no `if weapon == SPEAR: die` anywhere
+for a future dial to soften: the spear does a full body's worth of damage, so it
+kills a Gub on 100 and it kills a Gub on 3, and the only way to break that is to
+make a Gub worth more than a body — which is why there is no lobby dial for
+health at all.
+
+**Rejected: a `starting_health` slider.** It is the obvious first field and it
+is a trap. The moment a host can drag health to 200 the spear is a two-shot and
+nobody is told. The balance dial that actually matters is how much damage a
+weapon does, that lives beside the weapon, and the bow brings its own (step 6 of
+`docs/PLAN_COMBAT.md`). So this change adds **no** `MatchConfig` field. 100 is
+not a setting; it is the unit the settings will be written in.
+
+### The refusals are one rule, and any peer can ask it
+
+`damage_refusal(victim, attacker, cause)` answers `NONE`, `DEAD`, `PROTECTED`,
+`FRIENDLY` or `ELDER`, in that order, and `report_damage` is a five-line `match`
+over it. The order is the load-bearing part and it is the order the old
+`report_kill` already had, with one exception noted below:
+
+* **protection first** — a protected Gub is not hit by anybody, and nothing is
+  drawn on them;
+* **friendly fire before the Elder**, because the ward is feedback and a shot
+  stopped by your own team was never going to hurt you. Flashing a robe's ward
+  at it would credit the robe with a save it did not make;
+* **the Elder last**, and D-040 is now stated as **damage to an Elder is zero**
+  rather than "the Elder cannot be killed". Those are the same sentence: a robe
+  that stopped 80 of a bow's 80 and let the last arrow through would be an Elder
+  that dies, and a robe that refused only the *fatal* hit would leave one
+  walking about on 12 health with the bar over its head saying so. The ward
+  still flashes, and `note_attack` still runs, exactly as before.
+
+It is a public function because **every peer needs the answer**. A projectile is
+simulated on every machine from the same launch and has to decide, at the moment
+it reaches a body, whether to bury itself in it — a round trip before the host's
+answer could arrive. Both sides read the same replicated state (roster, config,
+`stats`, the Elder rows), so they agree; when they disagree, which is a hit
+inside a tick of a robe going on, the cost is a cosmetic shaft in somebody who
+was not hurt, cleaned up by their next respawn. It can never cost a damage
+decision: only the host's copy calls `report_damage`.
+
+**A bug fell out of writing the order down.** Spawn protection and the robe each
+carved the void out for themselves; friendly fire did not, and was asked of every
+cause. So in Teams with friendly fire off, a Gub lured or shoved off the edge by
+a team-mate inside `ASSIST_WINDOW` was reported to the void *with a team-mate as
+its killer* — and refused, every frame, for as long as it kept falling. Alive,
+unreachable, unrespawnable, under the island. Nothing had ever run into it
+because nothing had played Teams with friendly fire off and a lure near an edge.
+The void is now refused by nothing at all, stated once, first.
+
+### Health lives on the body
+
+`Gub.health`, a float from 100 down to 0, and there is exactly one of it. Not a
+column in the `stats` row beside kills and deaths: that row is the match's
+ledger, kept across deaths, and health belongs to the Gub standing in the world
+— it is what the bar over its head draws, it dies with the body and it comes
+back with `revive_at`. A second copy in the row could only ever be a copy
+waiting to disagree.
+
+It is **not** a `sync_*` field. Those are written by the peer that owns the Gub
+(D-004), and health is the one thing about a body its owner does not get a vote
+on. It travels on `MatchState._do_damage`, `@rpc("authority", "reliable")` from
+peer 1, the road every other host decision takes (D-024).
+
+What travels is **what is left**, not what was taken. A peer that missed a
+packet and applied a subtraction would be out by that hit for ever; a peer that
+missed this one is corrected by the next. It is off the `stats` push for the
+opposite reason: health changes far more often than a score — a bow lands three
+arrows in the time a spear lands one — and `_sync_scores` sends the whole table
+for every player. This is one float and two ints.
+
+**A death and a respawn cost no health message at all.** `Gub.kill` zeroes it
+and `Gub.revive_at` fills it, and both of those already run on every peer
+(`_apply_death`, `_do_respawn`, `_create_gub`). So a void death, which never had
+a damage number behind it, still leaves the bar and the body saying the same
+thing, and a health packet cannot cross a respawn in flight and leave somebody
+standing on a pad with 12.
+
+### The bars
+
+**Over other people's heads: `Nameplate`**, which already draws team-coloured
+names with a through-walls rule for team-mates and a distance fade for enemies
+(D-047). Same node, same rules, no new system: the bar is drawn through walls
+for a team-mate and only for a team-mate, fades with the same alpha as the name
+and disappears with it, and takes the plate's scale so a team-mate's holds its
+size at range. 0.52 m wide at base scale, about a Gub's shoulders. Green above
+50, amber above 25, red below — bands rather than a gradient, because a colour
+that slides continuously is a colour nobody can name and "he's on red" is a
+thing players say out loud, and because those two numbers are the two decisions
+in a fight (at 50 a spear still kills you in one; at 25 an arrow from any draw
+at all does).
+
+**Only a hurt Gub has a bar.** A row of full bars over a lobby says nothing and
+hides the one that matters. The bar *appearing* is itself the information — it
+is how you notice that the Gub you are chasing has already been in a fight.
+
+The bar is a camera-facing node with two flat quads in it rather than two
+billboarded quads like the team stripe above it, and that is not a style
+preference: a billboarded quad has no left edge to measure from — its material
+spins it about its own origin — so a fill offset sideways to keep its left edge
+still would slide along a fixed world direction and the bar would empty toward
+the north-west. One node holding the camera's basis gives both quads a shared
+screen-space x and the offset is then arithmetic.
+
+**Your own: the HUD**, in the bottom-centre column with everything else that is
+about you, above the ability tiles. A number as well as a bar, rounded *up* so
+the last sliver of a Gub reads as 1 and never as 0 (the same rule the letter and
+Elder countdowns use), because with damage running from 20 to 80 "does the next
+arrow kill me" is arithmetic a player can genuinely do. Always up while you are
+alive, unlike the plates, because a missing bar on your own screen is
+indistinguishable from a bar you have not looked at.
+
+**Rejected: a red vignette**, and **rejected: anything on the crosshair**. D-036
+threw the recharge ring out of the middle of the screen and the rule it left
+behind is that the middle of the screen is for aiming; a health readout is
+exactly what gets put there next. The vignette is worse than that for this game
+specifically: Gubs are small, bright and fast against a dark forest, and washing
+the edges of the frame red damages the one thing a hurt player needs most, which
+is seeing the Gub that is hurting them.
+
+**Feedback for a hit that does not kill** is the same hitmarker a kill gives,
+2D, for the attacker only — the victim may be sixty metres away and behind a
+tree, still standing, and at that range the bar is four pixels tall — plus a
+0.45 camera shake for the victim, against a death's 1.4. Deliberately small: a
+kick big enough to spoil the answering shot would let the first hit of a fight
+decide it.
+
+### A shaft can now stand in someone who lived
+
+This is the part that had nothing to do with numbers and would have broken
+first. `SpearProjectile._stick_in` buried the shaft, **hid it**, and parked it on
+the victim for the ragdoll to collect; `_glance_off` existed only because the
+Elder had created a "this hit did not kill" case and there was no corpse for
+that shaft to be adopted by. With partial damage most hits are that case.
+
+A shaft now **rides the living skeleton**: it stands in the victim, copies the
+pose of the bone it went through every physics tick, and stays there whether
+they die in a second or walk the rest of the round off with it. Three endings —
+the victim lives and it rides until they respawn; the victim dies with a corpse
+and `GubRagdoll` hangs it off the matching physical bone; the victim dies with no
+corpse (the void) and it gives up after `ADOPTION_GRACE` rather than hanging in
+the air where a body used to be.
+
+**Rejected: `BoneAttachment3D`.** It is the engine-native answer and it costs a
+node per hit that somebody has to free, and `GubRagdoll._adopt_spears` re-parents
+out of whatever the shaft's parent is and would have had to tear the mount down
+as well. Copying one transform per tick keeps the shaft parented to the arena,
+which makes its world transform trivially true for the ragdoll, the fade and the
+audio — and the whole mechanism lives in the projectile, which is where it can
+be read.
+
+The two rules that keep it honest: `Gub.MAX_EMBEDDED_SHAFTS` is **4**, oldest
+pushed out first, because the list is emptied by a corpse or a respawn and a Gub
+that keeps getting shot and keeps not dying reaches neither; and `ADOPTION_GRACE`
+now only counts while the Gub the shaft is standing in is *dead*, because a shaft
+waiting for nothing was the invisible-list bug in the first place.
+`_glance_off` survives, generalised: it is the ending for every refused hit — a
+robe, a team-mate with friendly fire off, a Gub the host had already killed —
+because what they have in common is now a number, zero, and a shaft standing in
+somebody who was not hurt is a lie the bar over their head immediately
+contradicts.
+
+### What proves it
+
+Seven new checks in the gate (63 → 70), all headless.
+`combat_range -- health` lands 35 then 40 and requires the Gub to be standing on
+25 with the host, the body and the bar agreeing (`partial`); takes it to exactly
+zero and requires a normal death with a corpse and the `player_killed` the feed
+is built on (`lethal`); hits an Elder for 55 and requires it to take **nothing**
+and still flash a ward (`elder`); requires the life that follows to begin full
+(`respawn`); and ends by throwing a **real spear** at that full-health Gub and
+requiring it to die in one (`spear`) — the control, in D-039's sense, and the
+one the whole plan turns on, because every other line here would pass on a model
+that had quietly made the spear a two-shot.
+
+`combat_range -- embed` launches a spear by hand with nothing listening for its
+hit, so it lands on a Gub who takes no damage at all — the only way to get a
+living victim with a shaft in it in a build whose one weapon is a one-shot —
+then moves that Gub two metres and requires the shaft to arrive with it, 0.006 m
+adrift in practice against a 0.2 m tolerance (`embed`); then kills it and
+requires the same shaft to be hanging off a physical bone of the corpse with
+nothing left on the Gub's list (`adopt`).
+
+Each was run against the code without the thing it checks (D-015): with
+`revive_at` not restoring health `respawn` fails; with the Elder's refusal
+removed `partial` and `lethal` fail loudly; with the ride removed `embed` fails
+with the shaft 2.00 m adrift; with the hand-over removed `adopt` fails with the
+shaft still parented to the arena.
+
+**The wire is `tools/net_loopback.gd`**, which is the only place in this repo
+where anything is actually serialized — every other harness runs on an
+`OfflineMultiplayerPeer`, where the `rpc()` half of the `rpc()`-then-call-locally
+pattern does nothing. Stage 8 now takes 40 off the client before killing it and
+asks the client what its own body and its own plate say; stage 9 asks again after
+the respawn. Both sides say 60, then 100. It is out of the gate for the same
+reason it always was (45 s, two processes) — run `bash tools/net_test.sh`.
+
+### Deliberately not in this
+
+No healing (the potion is step 7 of the plan, channelled, and it will ask for
+health back **by name** rather than by sending a negative through the door that
+checks friendly fire — `report_damage` refuses anything at or below zero). No
+falloff on the bolt's blast: D-053 chose "a kill or nothing" because there was no
+health for a falloff to take away, and there is now, so it is a live question —
+but the Elder is a twenty-second power-up that already cannot die, and that is a
+change to make with a playtest behind it rather than on the way past. And no
+damage dials of any kind; the bow brings the first ones.

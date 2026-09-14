@@ -1,6 +1,12 @@
 class_name SpearProjectile
 extends Node3D
-## A thrown spear. One hit anywhere is a kill.
+## A thrown spear. One hit anywhere is a kill — `GubCombat.SPEAR_DAMAGE` is a
+## whole Gub's health, so the promise is kept by the number and not by a rule in
+## here (D-062).
+##
+## The shaft itself makes no such assumption. It sticks in whoever it lands on,
+## living or dying, and rides them until a corpse takes it or they respawn,
+## which is what the bow's arrows will need and what `_stick_in` describes.
 ##
 ## Every peer spawns and simulates its own copy from the same launch parameters.
 ## The flight is pure ballistics with no randomness, so all peers agree on where
@@ -31,11 +37,20 @@ const STUCK_LINGER := 7.0
 const STUCK_FADE := 1.2
 ## How far past the impact point the head sinks.
 const BURY_DEPTH := 0.12
-## How long a spear that struck a Gub waits for a corpse to claim it before
-## giving up and removing itself. The host adopts it within the same frame; a
-## client has to wait for the death to arrive over the network. Anything still
-## unclaimed after this hit someone who did not die — a team-mate with friendly
-## fire off, or a kill the host declined — and must not be left in them.
+## How long a shaft standing in a Gub that has **died** waits for a corpse to
+## claim it before giving up and removing itself. The host builds the ragdoll
+## within the same frame; a client has to wait for the death to arrive over the
+## network.
+##
+## It used to time every hit, because until D-062 a shaft went invisible the
+## instant it struck a body and every one of them was waiting for a corpse — the
+## grace was what stopped a hit that killed nobody leaving a spear parked on an
+## invisible list for ever. A shaft now rides a living Gub in plain sight and
+## waits for nothing, so this is down to the one case that still has a corpse
+## coming and no corpse yet: the window between a death and the body that
+## follows it. Past the window there is no ragdoll coming at all — a void death,
+## or a client that never saw one — and a shaft hanging in the air where a body
+## used to be is exactly the thing this number exists to prevent.
 const ADOPTION_GRACE := 0.75
 
 ## How much brighter the spear burns while it is in the air.
@@ -84,8 +99,26 @@ var _stuck: bool = false
 var _stuck_age: float = 0.0
 ## Set once a corpse has taken ownership of this spear.
 var _embedded: bool = false
-## Seconds spent waiting for a corpse to claim this spear.
+## Seconds spent waiting for a corpse to claim this spear. Only ever counts up
+## while the Gub it is standing in is dead — see `ADOPTION_GRACE`.
 var _pending_age: float = 0.0
+## The Gub this shaft is standing in, while it is standing in a living one
+## (D-062), and the bone it is riding.
+##
+## The shaft keeps its own parent and copies the bone's pose every tick rather
+## than being re-parented under a `BoneAttachment3D`. Three reasons, and the
+## third is the one that decided it: a bone attachment is a node per hit that
+## somebody has to remember to free, `GubRagdoll._adopt_spears` re-parents out
+## of *whatever* this is and would have to tear the mount down as well, and a
+## shaft whose parent is still the arena keeps its world transform trivially
+## true — which is what the ragdoll, the fade and the audio all read.
+var _rider: Gub
+var _rider_skeleton: Skeleton3D
+var _rider_bone: int = -1
+## Where the shaft sits in the bone's own space, taken once at the moment of
+## impact and never recomputed. The hit is a fact about a pose; re-deriving it
+## from the world each tick would let it creep.
+var _rider_local: Transform3D = Transform3D.IDENTITY
 ## The velocity this spear was carrying at the moment it struck something.
 ## `_velocity` is zeroed on impact, so without this the momentum of the hit is
 ## gone by the time anyone downstream asks about it.
@@ -179,19 +212,25 @@ func _resolve(hit: Dictionary) -> void:
 		# through rather than stopping short and looking like a miss.
 		if victim.alive and not victim.is_invulnerable():
 			var bone := nearest_bone(victim, point)
-			# The Elder is not invulnerable in the sense above — it is *solid*,
-			# and a spear that passed through one would be the worst of both
-			# readings (D-040). It simply cannot be killed, which is a decision
-			# `MatchState.report_kill` makes and this does not second-guess: the
-			# signal is emitted either way, the host asks its own question, and
-			# the ward flash comes back from there.
+			# Whether the hit *hurts* is the host's decision and is not
+			# second-guessed here: the signal is emitted either way, the host
+			# asks its own question in `report_damage`, and the ward flash comes
+			# back from there.
 			#
-			# What is different is what becomes of the shaft. `_stick_in` hides
-			# a spear and parks it on the victim for the ragdoll to adopt, and
-			# there is no ragdoll coming — so against an Elder it would hang on
-			# an invisible list until `ADOPTION_GRACE` quietly freed it, once per
-			# hit, for as long as anyone kept shooting.
-			if MatchState.is_elder(victim.peer_id):
+			# What this has to decide, locally, on every peer, is what becomes
+			# of the shaft — and it cannot wait a round trip to be told, because
+			# the answer is what the next frame draws. So it asks the same
+			# question the host is about to ask, off the same replicated state
+			# (`MatchState.damage_refusal`): a hit that lands stands in the
+			# body, and a hit that does not leaves nothing behind.
+			#
+			# An Elder is the loudest case and the one this was written for
+			# (D-040). It is not invulnerable in the sense above — it is
+			# *solid*, and a spear that passed through one would be the worst of
+			# both readings — so the shaft stops dead and is gone, and the ward
+			# is the feedback.
+			if not MatchState.damage_would_land(victim.peer_id, thrower_id,
+					Gub.Cause.SPEAR):
 				_glance_off(point)
 				struck_gub.emit(victim, point, bone)
 				return
@@ -231,15 +270,29 @@ static func nearest_bone(victim: Gub, point: Vector3) -> String:
 	return best
 
 
-## Bury the spear in the Gub it just killed and hand it to the corpse.
+## Bury the shaft in the Gub it just hit and leave it there.
 ##
-## Freeing it here instead — which is what used to happen — threw away the
-## clearest read in the game: a body on the ground with a spear through it says
-## who died and roughly how, from across the arena, for as long as the corpse
-## lasts. The ragdoll does not exist yet at this moment (the kill has not been
-## reported), so the spear parks itself on the victim and `GubRagdoll` collects
-## it while it is building the body. If no corpse ever appears — a void death,
-## or a client that never sees one — `Gub` drops it on its next respawn.
+## Freeing it instead — which is what the very first version did — threw away
+## the clearest read in the game: a body on the ground with a spear through it
+## says who died and roughly how, from across the arena, for as long as the
+## corpse lasts.
+##
+## Since D-062 it does not wait for that corpse to exist, and that is the change
+## the bow needed. The shaft **rides the living skeleton**: it stands in the
+## victim, moves with the bone it went through, and is still there whether the
+## victim dies in a second or walks the rest of the round off with it. A Gub
+## with three arrows in it and a short bar is the best read this game has, and
+## it costs one matrix multiply a tick.
+##
+## Three endings, and only the first is new:
+##
+## * the victim lives — the shaft rides until they respawn, and `Gub`
+##   (`MAX_EMBEDDED_SHAFTS`) is what stops a Gub becoming a hedgehog;
+## * the victim dies with a corpse — `GubRagdoll` takes it off the list while it
+##   is building the body and hangs it off the matching physical bone, so it
+##   tumbles with the limb;
+## * the victim dies with no corpse — a void death — and `_tick_stuck` gives up
+##   after `ADOPTION_GRACE` rather than leaving a shaft hanging in the air.
 func _stick_in(victim: Gub, point: Vector3, bone: String) -> void:
 	_stuck = true
 	_stuck_age = 0.0
@@ -252,22 +305,41 @@ func _stick_in(victim: Gub, point: Vector3, bone: String) -> void:
 	if _trail != null:
 		_trail.begin_fade()
 		_trail = null
-	# Hidden until a corpse claims it. Whether this hit is a kill at all is the
-	# host's decision and has not been made yet — with friendly fire off, a
-	# spear thrown at a team-mate stops here and nobody dies. Staying visible
-	# through that would leave a spear sticking out of a living player forever.
-	# On the host, adoption happens inside the same frame, so this is invisible
-	# in both senses.
-	visible = false
+	_mount_on(victim, bone)
 	victim.embed_spear(self, bone)
 
 
-## Stop dead against an Elder and cease to exist (D-040).
+## Note where in the victim's skeleton this shaft has ended up, so `_tick_stuck`
+## can keep it there. A rig with no skeleton, or no such bone, simply leaves the
+## shaft standing in the world at the point of impact — wrong, but only visibly
+## wrong on a broken model, and better than refusing the hit.
+func _mount_on(victim: Gub, bone: String) -> void:
+	var skeleton := victim.find_child("Skeleton3D", true, false) as Skeleton3D
+	if skeleton == null:
+		return
+	var index := skeleton.find_bone(bone)
+	if index < 0:
+		return
+	_rider = victim
+	_rider_skeleton = skeleton
+	_rider_bone = index
+	_rider_local = (skeleton.global_transform \
+		* skeleton.get_bone_global_pose(index)).affine_inverse() * global_transform
+
+
+## Stop dead against a body the hit did nothing to, and cease to exist.
 ##
-## Neither of the other two endings fits. `_stick_in` waits for a corpse that is
-## never coming, and `_stick` would leave a shaft hanging in mid-air at chest
-## height while the Gub it hit walks out from behind it — a spear stuck in
-## nothing, which reads as the game having lost track of the body.
+## Written for the Elder (D-040) and now the ending for every refused hit: a
+## robe, a team-mate with friendly fire off, a Gub the host had already killed.
+## What they have in common since D-062 is a number — the damage was zero — and
+## a shaft standing in somebody who was not hurt is a lie about the fight that
+## the bar over their head then contradicts.
+##
+## Neither of the other two endings fits. `_stick_in` puts the shaft *in* them,
+## which is the thing that must not happen here, and `_stick` would leave one
+## hanging in mid-air at chest height while the Gub it hit walks out from behind
+## it — a spear stuck in nothing, which reads as the game having lost track of
+## the body.
 ##
 ## `_impact_velocity` is recorded before the velocity is cleared even though
 ## nothing will use it: the host reads it out of `struck_gub`'s handler on the
@@ -314,16 +386,12 @@ func _stick(normal: Vector3) -> void:
 
 
 func _tick_stuck(delta: float) -> void:
-	# A spear that ended up in a body is owned by the corpse and disappears when
-	# the corpse does; only one stuck in the scenery times itself out.
+	# A spear that ended up on a corpse is owned by the corpse and disappears
+	# when the corpse does; only one stuck in the scenery times itself out.
 	if _embedded:
 		return
-	if not visible:
-		# Waiting to be adopted. If that never happens, the Gub it struck did
-		# not die and this spear has no business existing any more.
-		_pending_age += delta
-		if _pending_age > ADOPTION_GRACE:
-			queue_free()
+	if _rider != null:
+		_tick_rider(delta)
 		return
 	_stuck_age += delta
 	if _stuck_age < STUCK_LINGER:
@@ -334,6 +402,41 @@ func _tick_stuck(delta: float) -> void:
 		return
 	if _model != null:
 		_model.scale = Vector3.ONE * maxf(fade, 0.01)
+
+
+## One tick of standing in somebody (D-062).
+##
+## Three states, in the order they can happen:
+##
+## **The Gub is gone.** Its peer left, or the arena was torn down under it.
+## Nothing to ride and nothing to be adopted by.
+##
+## **The Gub is dead and this has not been adopted yet.** The shaft goes
+## invisible immediately rather than at the end of the grace, because the body
+## it is standing in has already been hidden (`MatchState._apply_death`) and a
+## spear left visible for even a few frames is a spear hanging in mid-air. On
+## the host the ragdoll claims it inside the same frame and it is never seen
+## missing; on a client it comes back the moment the death arrives. If nothing
+## claims it inside `ADOPTION_GRACE` there is no corpse coming.
+##
+## **The Gub is alive.** Copy the bone's pose and stay in it. The skeleton's
+## pose is in the *skeleton's* space, so the world transform is the skeleton's
+## own global transform through the bone and then through the offset taken at
+## the moment of impact — which is why a shaft in a running Gub swings with the
+## arm rather than sliding about on the surface of it.
+func _tick_rider(delta: float) -> void:
+	if not is_instance_valid(_rider) or not is_instance_valid(_rider_skeleton):
+		queue_free()
+		return
+	if not _rider.alive:
+		visible = false
+		_pending_age += delta
+		if _pending_age > ADOPTION_GRACE:
+			queue_free()
+		return
+	_pending_age = 0.0
+	global_transform = _rider_skeleton.global_transform \
+		* _rider_skeleton.get_bone_global_pose(_rider_bone) * _rider_local
 
 
 ## Put the flight glow on every surface of the model.
@@ -417,6 +520,11 @@ func is_stuck() -> bool:
 
 ## Called by `GubRagdoll` once the spear has been re-parented onto a physical
 ## bone, so it stops running its own fade-out timer.
+##
+## The ride ends here: the physics carries the shaft from now on, and a pose
+## copied off the animated skeleton it came out of would fight it.
 func mark_embedded() -> void:
 	_embedded = true
+	_rider = null
+	_rider_skeleton = null
 	visible = true

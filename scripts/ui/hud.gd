@@ -25,6 +25,13 @@ extends CanvasLayer
 ## it is on a short leash.
 const FLASH_TIME := 1.4
 
+## Your own health bar, in pixels. The same 224 wide as the Elder's track and
+## the letter hold's, because they stack in one column and a column of bars of
+## three different widths reads as three unrelated things. Taller than either,
+## at 22, because it carries a number inside it and because it is the one thing
+## in that column you are always looking at.
+const HEALTH_BAR := Vector2(224.0, 22.0)
+
 ## Everything drawn *during* play lives under this one node — clock, score, kill
 ## feed, crosshair, banner, ability bar, chat. The scoreboard, pause menu and
 ## results screen are its siblings, so any of them can take the screen by
@@ -66,6 +73,14 @@ var _respawn_clock: float = 0.0
 var _spectate_index: int = 0
 var _spectating: bool = false
 var _flash: float = 0.0
+## Your own health, built in `_build_health` rather than in `hud.tscn`.
+var _health: Control
+var _health_fill: ColorRect
+var _health_value: Label
+## What the bar and the number are currently showing, so a per-frame refresh of
+## something that changes a few times a minute costs a comparison.
+var _health_fraction: float = -1.0
+var _health_shown: int = -1
 
 
 func _ready() -> void:
@@ -104,6 +119,7 @@ func _ready() -> void:
 	Net.rematch_requested.connect(_on_rematch)
 
 	_banner.visible = false
+	_build_health()
 	_refresh_score()
 	_refresh_letters()
 	_on_phase_changed(MatchState.phase)
@@ -112,6 +128,7 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	_tick_clocks(delta)
 	_refresh_crosshair()
+	_refresh_health()
 	_refresh_abilities()
 	_refresh_letters()
 	_refresh_elder()
@@ -215,6 +232,99 @@ func _tick_clocks(delta: float) -> void:
 ## denominator left to get wrong for a third time.
 func _refresh_crosshair() -> void:
 	_crosshair.set_state(_local_combat() != null and MatchState.is_alive(Net.local_id()))
+
+
+## Your own health (D-062), in the bottom-centre column with everything else the
+## local player owns.
+##
+## **Not on the crosshair, and not a vignette.** D-036 threw the recharge ring
+## out of the middle of the screen and the rule it left behind is that the
+## middle of the screen is for aiming; a health readout is exactly the thing
+## that gets put there next. A red edge on the screen was the other candidate
+## and is worse for this game: Gubs are small, bright and fast against a dark
+## forest, and washing the edges of the frame red hurts the one thing a hurt
+## player needs most, which is seeing the Gub that is hurting them.
+##
+## **A number as well as a bar.** The bar is what you glance at; the number is
+## what tells you whether the next arrow kills you, and with damage running from
+## 20 to 80 that is arithmetic a player can genuinely do. It is your own health
+## only — nobody else's number is ever shown as a number, because a bar over a
+## body is a read and a number over a body is a spreadsheet.
+##
+## Unlike the plate over a Gub's head, this is **always** up while you are
+## alive. A missing bar on your own screen is indistinguishable from a bar you
+## have not looked at, and "am I hurt" has to be answerable without remembering.
+func _refresh_health() -> void:
+	var gub := MatchState.local_gub()
+	var alive := gub != null and MatchState.is_alive(Net.local_id())
+	_health.visible = alive and MatchState.phase != MatchState.Phase.IDLE
+	if not _health.visible:
+		return
+	var fraction := gub.health_fraction()
+	var shown := maxi(1, ceili(gub.health)) if gub.health > 0.0 else 0
+	# Rounded *up*, so the last sliver of a Gub is a 1 and never a 0. A player
+	# reading "0" while still standing believes the HUD has broken; the same
+	# rule the letter and Elder countdowns use for the same reason.
+	if shown != _health_shown:
+		_health_shown = shown
+		_health_value.text = str(shown)
+	if is_equal_approx(fraction, _health_fraction):
+		return
+	_health_fraction = fraction
+	_health_fill.anchor_right = fraction
+	var colour := UIPalette.GOOD
+	if fraction < Nameplate.HEALTH_LOW_AT:
+		colour = UIPalette.DANGER
+	elif fraction < Nameplate.HEALTH_HURT_AT:
+		colour = UIPalette.AMBER
+	_health_fill.color = colour
+
+
+## Built here rather than in `hud.tscn` for the same reason the lives pips are:
+## it is one row of two rectangles and a number whose whole behaviour is in this
+## file, and a scene node for it would be a second place to look.
+##
+## It goes in immediately above the ability tiles, which is the bottom of the
+## column and the closest this HUD has to "about you, right now".
+func _build_health() -> void:
+	var column := _abilities.get_parent() as Control
+	_health = Control.new()
+	_health.name = "Health"
+	_health.custom_minimum_size = HEALTH_BAR
+	_health.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_health.visible = false
+
+	var back := ColorRect.new()
+	back.set_anchors_preset(Control.PRESET_FULL_RECT)
+	back.color = UIPalette.faded(UIPalette.VOID, 0.72)
+	back.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_health.add_child(back)
+
+	_health_fill = ColorRect.new()
+	_health_fill.anchor_right = 1.0
+	_health_fill.anchor_bottom = 1.0
+	_health_fill.color = UIPalette.GOOD
+	_health_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_health.add_child(_health_fill)
+
+	_health_value = Label.new()
+	_health_value.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_health_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_health_value.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_health_value.add_theme_font_size_override("font_size", UIPalette.FONT_SMALL)
+	# The number stays white while the bar changes colour, and that is not an
+	# oversight: it sits *on* the fill, so a number tinted to match it would be
+	# green on green at full health — the one state a player glances at most.
+	# The colour is the bar's job and the outline is what keeps the number
+	# legible over either it or the dark backing.
+	_health_value.add_theme_color_override("font_color", UIPalette.TEXT)
+	_health_value.add_theme_color_override("font_outline_color", UIPalette.VOID)
+	_health_value.add_theme_constant_override("outline_size", 5)
+	_health_value.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_health.add_child(_health_value)
+
+	column.add_child(_health)
+	column.move_child(_health, _abilities.get_index())
 
 
 func _refresh_abilities() -> void:

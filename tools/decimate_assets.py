@@ -18,8 +18,8 @@ skinned photogrammetry mesh whose hand-made rig had to be repaired on the way
 past, which is what the skin binding, the animation-curve cleanup, the clip
 facing alignment and the root-motion stripping in this script existed for. It is
 now built from Mixamo FBX by `tools/build_gub.py`, which does all of that at the
-source instead, so all of it is gone from here and each remaining target is one
-unskinned mesh with one material and no animation.
+source instead, so all of it is gone from here and every remaining *source* is
+one unskinned mesh with one material and no animation.
 
 Pipeline, per mesh:
 
@@ -33,6 +33,15 @@ Pipeline, per mesh:
   4. Recompute smooth normals from the new geometry, accumulated by position so
      shading stays continuous across the seams from step 1.
   5. Repack into a fresh single-buffer GLB in `art/generated/`.
+
+The bow gets a sixth step, which is a separate module for a reason spelled out
+at length in `tools/bow_string.py`: `fast_simplification` renumbers vertices and
+knows nothing about morph targets, so anything carrying a shape key has to be
+built *after* the decimation and never go through it. The string is therefore a
+second mesh in the bow's file rather than part of the mesh that was decimated,
+and `verify_blend_shapes` reads the written `.glb` back off disk afterwards and
+prints the deltas it finds, because a dead shape key is invisible everywhere
+else.
 
 Sources in `assets/` are never touched; re-running this is always safe.
 
@@ -52,6 +61,7 @@ from scipy.spatial import cKDTree
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import bow_string  # noqa: E402
 import fast_simplification  # noqa: E402
 from gltf_io import ARRAY_BUFFER, ELEMENT_ARRAY_BUFFER, Gltf, GltfBuilder  # noqa: E402
 
@@ -72,13 +82,91 @@ OUT_DIR = os.path.join(REPO, "art", "generated")
 # inside of its curve is a C, and no texture puts that back. 512 for all three
 # on the spear's and the lure's argument: a 0.6 m prop, looked at from metres
 # away, on a mesh with one material and nothing but base colour on it.
+# The bow brought three more, and the same argument sets all three.
+#
+# The arrow is now the tightest case in the table, tighter than the spear. There
+# is one nocked on every drawn bow, one in flight for every shot taken, and —
+# since a shaft can stick in a victim who lives through it — every arrow
+# standing in every Gub still walking around. Eight Gubs with three apiece is
+# the ordinary case rather than the bad one, and none of those are in flight
+# yet. 1200, which the shaft can afford because most of it is a cylinder; what
+# the budget is actually protecting is the fletching and the knapped head, which
+# are the two things that still say "arrow" at forty metres.
+#
+# Its texture stays at the spear's 512 all the same, because a texture is paid
+# for once per asset and not once per instance — the count argument that sets
+# the triangle budget has nothing to say about it. What does: an arrow standing
+# in the shoulder of a Gub next to you is looked at as closely as anything in
+# this game, and a Gub walking around with three of them in it is the whole
+# read that partial damage exists to give.
+#
+# The bow is the other end of it. At most one per Gub, never one in flight, and
+# it is the prop that spends the longest large and still in frame — held across
+# the body for the whole of every draw, on a mesh the camera is behind. 4000,
+# and the mushroom's 1024 rather than the spear's 512 on the mushroom's own
+# argument: a bow being aimed is nearer the camera than a mushroom you are
+# standing over, and the carving down the limbs is most of what it has.
+#
+# The great sword is the bow's case by the counting rule and nothing like it by
+# the geometry. One per Gub at most, never one in flight — a sword is swung, not
+# thrown — so the bow's argument transfers whole and 4000/1024 is the precedent.
+# What the model says against that: it arrives at 9912 triangles to the bow's
+# 10188, over the same 1 m span, but with **3.5 times the surface** (0.475
+# against 0.135 in model units squared). A bow is a stick; a great sword is a
+# slab, and the same triangle budget has three and a half times as much of it to
+# cover. So equal budgets do not buy equal quality here: at 4000 the sword's mean
+# deviation from its source measures 0.67 mm against the bow's 0.44.
+#
+# The cut comes out of the blade and only the blade. Seventy per cent of this
+# model's length is a taper between two near-flat faces, and quadric-error
+# decimation gets that for almost nothing: at 3000 the decimator hands the whole
+# 0.7 m of blade 901 triangles and it still holds 0.88 mm. The other 30% — the
+# crossguard at 0.21 m across, the grip, the pommel — takes the remaining 2099,
+# because that is doubly curved and it is what says "great sword" rather than
+# "plank". The budget is buying the hilt; the blade is nearly free. That is what
+# "mostly long flat planes" is worth, measured rather than assumed.
+#
+# 3000, which is also the spear's number for the spear's reason: a long thing
+# whose silhouette is a straight edge with its detail gathered at one end. It
+# puts the whole model at 0.77 mm mean and 2.8 mm at the 99th percentile —
+# coarser than the bow's 0.37/1.24, finer than the arrow's shipping 1.00/4.45,
+# and the arrow is the prop in this table that gets looked at closest of all.
+#
+# 1024 for the texture, the bow's and the mushroom's, not the spear's 512. A
+# texture is paid for once per asset and never once per instance, so the counting
+# rule has nothing to say about it; what does is that this prop spends the whole
+# of a slow swing large and in frame, and that having just taken the triangles
+# out of the blade, the fuller, the edge and the grip wrap are all now texture on
+# a flat plane rather than geometry. The texture is what is holding the blade up.
+#
+# The potion is the lure's case exactly — a small thing on the ground, a handful
+# at a time, collected by running over it — so it takes the lure's numbers and
+# not the spear's. For the letters' reason as well as the lure's: a bottle is a
+# surface of revolution, and a circle goes visibly faceted long before a stick
+# does.
 TARGETS = {
-    "spear":    ("assets/source/Spear.glb", 3000, 512),
-    "lure":     ("assets/source/Lure.glb", 6000, 512),
-    "mushroom": ("assets/source/Mushroom/base_basic_pbr.glb", 10000, 1024),
-    "letter_g": ("assets/source/G_LETTER.glb", 6000, 512),
-    "letter_u": ("assets/source/U_LETTER.glb", 6000, 512),
-    "letter_b": ("assets/source/B_LETTER.glb", 6000, 512),
+    "spear":       ("assets/source/Spear.glb", 3000, 512),
+    "lure":        ("assets/source/Lure.glb", 6000, 512),
+    "mushroom":    ("assets/source/Mushroom/base_basic_pbr.glb", 10000, 1024),
+    "letter_g":    ("assets/source/G_LETTER.glb", 6000, 512),
+    "letter_u":    ("assets/source/U_LETTER.glb", 6000, 512),
+    "letter_b":    ("assets/source/B_LETTER.glb", 6000, 512),
+    "arrow":       ("assets/source/ARROW.glb", 1200, 512),
+    "bow":         ("assets/source/BOW.glb", 4000, 1024),
+    "heal_potion": ("assets/source/HEAL_POTION.glb", 6000, 512),
+    "greatsword":  ("assets/source/GreatSword.glb", 3000, 1024),
+}
+
+# Targets that get something added after the decimator has finished with them.
+#
+# Only the bow, and only because its string carries a shape key. The whole
+# reason this is a hook rather than four more lines inside `process` is that the
+# order is load-bearing: a morph target authored before `fast_simplification`
+# comes out the far side pointing at vertices that no longer exist. Running the
+# addition from here, on the mesh the decimator has already written into the
+# builder, makes that ordering the only one expressible.
+AFTER_DECIMATION = {
+    "bow": bow_string.add_string,
 }
 
 
@@ -238,6 +326,74 @@ def resize_texture(data, max_edge):
     return out.getvalue(), before, img.size
 
 
+def verify_blend_shapes(name, path, expect):
+    """Read the written file back and prove the shape key in it is alive.
+
+    `fast_simplification` destroys morph targets silently — it renumbers the
+    vertices and there is nowhere in glTF for the file to say that its deltas
+    now point at nothing. A build that merely *intended* to write a shape key
+    therefore looks exactly like one that wrote a working one, in the log, in
+    the file size, and in Godot's import dialog. So this opens the `.glb` that
+    was just written, off disk, as a stranger would, and prints what is actually
+    in it: the target names, how many deltas are non-zero, and every distinct
+    delta with the number of vertices that share it. Then it rebuilds
+    `base + delta` and compares that against the shape the caller meant to
+    write. Same argument as `check_ground` in `tools/build_gub.py` — a judgement
+    that is only documented is a judgement nobody is checking.
+    """
+    g = Gltf.load(path)
+    found = []
+    for mi, mesh in enumerate(g.doc.get("meshes", [])):
+        for prim in mesh["primitives"]:
+            if prim.get("targets"):
+                found.append((mi, mesh, prim))
+
+    if expect is None:
+        if found:
+            log("  shape keys: %d, none expected for %s" % (len(found), name))
+        return
+
+    want = [(mi, mesh, prim) for mi, mesh, prim in found if mi == expect["mesh"]]
+    if not want:
+        raise SystemExit("%s: mesh %d was written without a morph target; the "
+                         "shape key did not survive the build"
+                         % (name, expect["mesh"]))
+    mi, mesh, prim = want[0]
+    names = mesh.get("extras", {}).get("targetNames", [])
+    base = g.read_accessor(prim["attributes"]["POSITION"]).astype(np.float64)
+    delta = g.read_accessor(prim["targets"][0]["POSITION"]).astype(np.float64)
+
+    log("  shape key, read back out of the written file:")
+    log("    mesh %d %r, %d target(s) named %s, weights %s"
+        % (mi, mesh.get("name"), len(prim["targets"]), names, mesh.get("weights")))
+    if names[:1] != [expect["shape"]]:
+        raise SystemExit("%s: shape key is named %s, expected %r"
+                         % (name, names, expect["shape"]))
+
+    moved = np.linalg.norm(delta, axis=1) > 1e-9
+    log("    %d verts, %d with a non-zero POSITION delta" % (len(base), int(moved.sum())))
+    if not moved.any():
+        raise SystemExit("%s: every delta in the shape key is zero" % name)
+
+    keys, counts = np.unique(np.round(delta, 6), axis=0, return_counts=True)
+    order = np.argsort(np.linalg.norm(keys, axis=1))
+    for k in order:
+        log("      %2d verts move %6.1f mm  %s"
+            % (counts[k], 1000.0 * float(np.linalg.norm(keys[k])),
+               np.round(keys[k], 4).tolist()))
+
+    err = float(np.abs((base + delta) - expect["drawn"].astype(np.float64)).max())
+    log("    base + delta reproduces the intended drawn string to %.2e m" % err)
+    if err > 1e-5:
+        raise SystemExit("%s: the shape key in the file is not the shape key "
+                         "that was authored (off by %.3e m)" % (name, err))
+    rest_err = float(np.abs(base - expect["rest"].astype(np.float64)).max())
+    if rest_err > 1e-5:
+        raise SystemExit("%s: the rest pose in the file moved (%.3e m)" % (name, rest_err))
+    log("    at rest the string is straight between the nocks; at weight 1.0 the "
+        "nocking point is %.3f m back" % expect["draw"])
+
+
 def process(name, src_path, target_tris, max_texture):
     started = time.time()
     src_full = os.path.join(REPO, src_path)
@@ -338,7 +494,11 @@ def process(name, src_path, target_tris, max_texture):
                                          target=ELEMENT_ARRAY_BUFFER)
     b.doc["meshes"][0]["primitives"] = [new_prim]
 
-    # The only thing in the file that is not the mesh is the embedded texture,
+    # 6. anything that could not survive the decimation ---------------------
+    extra = AFTER_DECIMATION.get(name)
+    expect = extra(b, g, out_pos, out_faces, log) if extra else None
+
+    # The only thing else in the file that is not the mesh is the embedded texture,
     # which is copied across (downscaled, and renamed) into the new buffer.
     source_stem = os.path.splitext(os.path.basename(src_path))[0]
     for image in b.doc.get("images", []):
@@ -365,6 +525,7 @@ def process(name, src_path, target_tris, max_texture):
     src_size = os.path.getsize(src_full)
     log("  wrote art/generated/%s.glb  %.1f MB (from %.1f MB)  in %.1fs"
         % (name, size / 1e6, src_size / 1e6, time.time() - started))
+    verify_blend_shapes(name, out_path, expect)
 
 
 def main(argv):

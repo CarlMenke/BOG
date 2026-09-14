@@ -17,11 +17,17 @@ extends Node
 ##     Godot --path . --resolution 1600x900 --script tools/snapshot.gd -- \
 ##         res://tools/hud_range.tscn out.png 110 <mode>
 ##
-## Modes: hud, hud_teams, hud_cooldown, hud_letters, hud_hold, hud_elder,
-##        killfeed, scoreboard, scoreboard_letters, pause, results,
+## Modes: hud, hud_teams, hud_cooldown, hud_health, hud_letters, hud_hold,
+##        hud_elder, killfeed, scoreboard, scoreboard_letters, pause, results,
 ##        results_letters, dead, spectate,
 ##        hud_letters_teams, scoreboard_letters_teams, results_letters_teams,
 ##        reload_timer.
+##
+## `hud_health` is your own health bar part-empty (D-062). `hud` has it full,
+## which is the state it spends most of a match in and the least interesting one
+## to look at: the question this mode answers is whether a number sitting on an
+## amber bar is legible, and whether the bar reads as *yours* where it sits in
+## the column rather than as another cooldown.
 ##
 ## `reload_timer` is the one mode here that prints a verdict and sits in the
 ## gate (D-054). It throws a real spear and reads the spear tile every frame of
@@ -149,6 +155,9 @@ func _stage() -> void:
 		"hud_elder":
 			_stage_kills()
 			_stage_elder()
+		"hud_health":
+			_stage_kills()
+			_stage_hurt()
 		"reload_timer":
 			_stage_kills()
 			_run_reload_timer()
@@ -322,6 +331,40 @@ func _stage_hold() -> void:
 	# can be put down in front of the player without moving anybody.
 	MatchState.report_kill(victim, Net.local_id(), Gub.Cause.SPEAR,
 		player.global_position + player.facing() * 1.2, Vector3.FORWARD * 18.0, "Spine1")
+
+
+## Take a bite out of the local player, for real, so the health bar has
+## something to draw (D-062).
+##
+## Through `MatchState.report_damage` like any weapon, rather than by writing
+## `Gub.health` — the same argument `_stage_hold` and `_stage_elder` make. A
+## number staged directly would draw identically and would prove nothing about
+## the thing being drawn, and this way the picture also shows what the *plates*
+## do, since the damage lands on the dummies as well.
+##
+## 62 down to 38 puts the bar in its amber band with a two-digit number on it,
+## which is the case worth looking at: green is unmistakable and red is nearly
+## empty, and the middle is where legibility is actually decided.
+func _stage_hurt() -> void:
+	var player := MatchState.local_gub()
+	if player == null or MatchState.phase != MatchState.Phase.PLAYING:
+		return
+	MatchState.report_damage(1, EXTRA_BASE, 62.0, Gub.Cause.SPEAR,
+		player.body_centre(), Vector3.FORWARD * 6.0, "Spine1")
+	# ...and the range's dummies hurt by different amounts, so the plates in the
+	# same frame are not all one colour. Found by walking `MatchState.gubs`
+	# rather than by naming the range's own peer ids, which are its business.
+	var hurt := [38.0, 82.0]
+	var at := 0
+	for peer_id: int in MatchState.gubs:
+		if peer_id == Net.local_id() or at >= hurt.size():
+			continue
+		var dummy := MatchState.gubs[peer_id] as Gub
+		if dummy == null or not dummy.alive:
+			continue
+		MatchState.report_damage(peer_id, 1, hurt[at], Gub.Cause.SPEAR,
+			dummy.body_centre(), Vector3.FORWARD * 6.0, "Spine1")
+		at += 1
 
 
 ## Put the robe on the local Gub, for real, and then stand there wearing it.

@@ -104,6 +104,21 @@ const WARMUP_TIME := 1.0
 ## near its cause. `tools/playthrough.gd` carries the same note.
 const SPAWN_PROTECTION := 0.0
 
+## What the host takes out of the client in stage 8 before killing it (D-062).
+##
+## Health is host-authoritative and lives on the body, so the *only* way a
+## client learns what it has left is `MatchState._do_damage` arriving over this
+## socket — and until this stage existed, that message had never been
+## serialized. Every other harness in the repo runs on an
+## `OfflineMultiplayerPeer`, where the `rpc()` half of every
+## `rpc()`-then-call-locally pair does nothing at all.
+##
+## 40 rather than a round half, so a client that quietly kept its own count
+## cannot land on the right number by halving something, and so that the kill
+## that follows is a hit on a Gub that is *already hurt* — which is the case a
+## spear must still be one shot against.
+const WIRE_DAMAGE := 40.0
+
 ## Stage 10: how many times a match is run to a result and rematched in a row.
 ## Ten because the report was "only works 50% of the time" — ten clean rounds
 ## is what a coin flip does one time in a thousand.
@@ -576,7 +591,7 @@ func _stage_abilities() -> bool:
 ## 8/11. The host decides a death through `MatchState.report_kill` — the same
 ## call a landed spear makes — and the client is asked what it saw.
 func _stage_kill() -> bool:
-	print("net_loopback: stage 8/11 — a kill over the wire")
+	print("net_loopback: stage 8/11 — a hit and then a kill, over the wire")
 	# Somewhere that is not the client's own spawn pad. Left where it spawned,
 	# the client dies on its pad and `_next_spawn` hands the same pad straight
 	# back — it is the one furthest from the host — so the respawn in stage 9
@@ -604,6 +619,28 @@ func _stage_kill() -> bool:
 	var victim_gub: Gub = MatchState.gubs.get(_client_id)
 	var point := victim_gub.global_position if is_instance_valid(victim_gub) else Vector3.ZERO
 	_death_point = point
+
+	# A hit first, and it is not a warm-up for the kill: this is the one place
+	# in the repo where a health number is actually put on a wire (D-062). The
+	# host subtracts, broadcasts what is left, and the client is asked what its
+	# own body says — if those two ever disagree, a player is fighting with a
+	# bar that is lying to them.
+	var took := MatchState.report_damage(_client_id, 1, WIRE_DAMAGE,
+		Gub.Cause.SPEAR, point + Vector3.UP, Vector3.FORWARD * 6.0, "Spine1")
+	_check("the host's hit landed", took, WIRE_DAMAGE)
+	_check("the host took it off the body",
+		MatchState.health_of(_client_id), Gub.MAX_HEALTH - WIRE_DAMAGE)
+	_check("the hit did not kill", MatchState.is_alive(_client_id), true)
+	var hurt := await _request("health", {}, STEP_TIMEOUT)
+	if hurt.is_empty():
+		return false
+	_check("the client's health matches the host's",
+		float(hurt.get("health", -1.0)), Gub.MAX_HEALTH - WIRE_DAMAGE)
+	_check("the client's bar matches its health",
+		float(hurt.get("bar", -1.0)), (Gub.MAX_HEALTH - WIRE_DAMAGE) / Gub.MAX_HEALTH)
+	_check("the client is still on its feet", bool(hurt.get("alive", false)), true)
+	print("net_loopback:   %.0f damage crossed the wire: both sides say %.0f left"
+		% [WIRE_DAMAGE, float(hurt.get("health", -1.0))])
 	# The corpse has to leave the two things stage 9 needs lying on it: a robe,
 	# because the loot roll is forced to one (host only — `_drop_loot` is the
 	# only reader and it runs here), and a mushroom beside it, put down through
@@ -691,6 +728,13 @@ func _stage_respawn() -> bool:
 		gub.global_position.distance_to(there) < 1.0, true)
 	_check("the host's copy is in the life the client is in",
 		gub.sync_life == gub.life and gub.life == MatchState.deaths(_client_id), true)
+	# A life begins full on both machines, and neither was sent a number to say
+	# so: `Gub.revive_at` runs on every peer and sets it there (D-062). This is
+	# what proves that, over a socket, on a Gub that died on 60 health.
+	_check("the host's copy came back on full health",
+		MatchState.health_of(_client_id), Gub.MAX_HEALTH)
+	_check("the client's own body came back on full health",
+		float(seen.get("health", -1.0)), Gub.MAX_HEALTH)
 	var taken := 0
 	for item: Pickup in loot:
 		if not is_instance_valid(item) or item.is_taken():
@@ -1068,6 +1112,22 @@ func _serve(message: Dictionary) -> void:
 				reply["victim"] = int(kill[0])
 				reply["killer"] = int(kill[1])
 				reply["cause"] = int(kill[2])
+		"health":
+			var mine := MatchState.local_gub()
+			# Awaited rather than read straight off, because the damage message
+			# and this question are two different trips over the same socket and
+			# nothing says the first has landed when the second arrives.
+			await _await_until("the host's hit to arrive", STEP_TIMEOUT,
+				func() -> bool: return is_instance_valid(mine) 					and mine.health < Gub.MAX_HEALTH)
+			_check("the client's own body was hurt",
+				is_instance_valid(mine) and mine.health < Gub.MAX_HEALTH, true)
+			reply["health"] = mine.health if is_instance_valid(mine) else -1.0
+			# The plate is hidden on your own screen (you do not need a label
+			# telling you your own name) but it is still fed, and it is the same
+			# node every *other* peer is looking at. Reading it here is how the
+			# thing a player actually sees gets checked over a wire.
+			reply["bar"] = mine.nameplate._health if is_instance_valid(mine) else -1.0
+			reply["alive"] = is_instance_valid(mine) and mine.alive
 		"move":
 			var body := MatchState.local_gub()
 			if is_instance_valid(body):
@@ -1087,6 +1147,7 @@ func _serve(message: Dictionary) -> void:
 				combat = mine.get_node_or_null("Combat") as GubCombat
 			reply["mushrooms"] = combat.mushroom_count() if combat != null else -1
 			reply["lures"] = combat.lure_count() if combat != null else -1
+			reply["health"] = mine.health if is_instance_valid(mine) else -1.0
 			reply["elder"] = MatchState.is_elder(Net.local_id())
 			reply["robe"] = is_instance_valid(mine) and mine.elder_robe != null
 			reply["pos"] = mine.global_position if is_instance_valid(mine) else Vector3.INF

@@ -22,13 +22,13 @@ island and out to a results screen, and two automated checks now walk that path:
 one in a single process, one across two processes over a real socket.
 
 ```
-bash tools/smoke_test.sh        # 63 checks, ~4 minutes, finds Godot by itself
+bash tools/smoke_test.sh        # 70 checks, ~4 minutes, finds Godot by itself
 bash tools/net_test.sh          # two processes, one socket; ~45 s, run by hand
 ```
 
-`smoke_test.sh` is the gate and it passes, 63 of 63. `net_test.sh` is kept out
+`smoke_test.sh` is the gate and it passes, 70 of 70. `net_test.sh` is kept out
 of it to keep the gate fast; run it by hand after touching networking, the lobby
-or the results screen. It passes all eleven stages (177 + 32 assertions), ten of
+or the results screen. It passes all eleven stages (186 + 33 assertions), ten of
 which end in a rematch, with the engine quiet in both processes — the error it
 had reported at "match start" since D-022 was its own teardown. Rematch was stalling for 25 s whenever a
 client had pressed BACK TO LOBBY; D-044 is the fix and the measurement.

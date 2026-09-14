@@ -122,7 +122,25 @@ const MUSHROOM_DISTANCE := 2.1
 ## not the length of the yard; on the island it is a clearing.
 const LIGHTNING_RANGE := 28.0
 
-## How hard a bolt throws the body, as the velocity handed to `report_kill`.
+## What a spear does to a Gub, and what a bolt does (D-062).
+##
+## Both are `Gub.MAX_HEALTH` — a full body — and both are written as that
+## constant rather than as the number 100, which is the entire mechanism
+## protecting the one-shot. A spear takes everything a Gub can have, so it kills
+## a Gub at full health and it kills one at 3 health, and no arithmetic anywhere
+## can make it do otherwise. Type 100 here instead and the promise survives only
+## until somebody changes what a full Gub is worth.
+##
+## The bolt is the same for now, and deliberately so: D-053 chose "the blast is
+## a kill or it is nothing — there is no falloff, because there is no health in
+## this game for a falloff to take away". There is one now, and falloff is
+## suddenly possible — but the Elder is a twenty-second power-up that already
+## cannot die, and a bolt that only wounds is a different weapon, to be decided
+## with a playtest behind it rather than on the way past.
+const SPEAR_DAMAGE := Gub.MAX_HEALTH
+const LIGHTNING_DAMAGE := Gub.MAX_HEALTH
+
+## How hard a bolt throws the body, as the velocity handed to `report_damage`.
 ##
 ## The ragdoll turns a blow into motion at `GubRagdoll.IMPACT_TRANSFER` = 0.15,
 ## so a flat spear arriving at its full 42 m/s gives a corpse about 6.3 m/s.
@@ -825,13 +843,13 @@ func _host_cast_lightning(origin: Vector3, direction: Vector3) -> void:
 	_do_cast_lightning(origin, point, normal, radius)
 
 	if victim != null:
-		# Everything about *whether* this is a kill — spawn protection, friendly
-		# fire, a victim who is already dead, an Elder's ward — belongs to
-		# `report_kill` and is not second-guessed here. The bolt landed on them
-		# either way, which is the truthful picture: a protected Gub was struck
-		# and was not hurt.
-		MatchState.report_kill(victim.peer_id, _gub.peer_id, Gub.Cause.LIGHTNING,
-			point, aim * LIGHTNING_IMPULSE,
+		# Everything about *whether* this hit does anything — spawn protection,
+		# friendly fire, a victim who is already dead, an Elder's ward — belongs
+		# to `report_damage` and is not second-guessed here. The bolt landed on
+		# them either way, which is the truthful picture: a protected Gub was
+		# struck and was not hurt.
+		MatchState.report_damage(victim.peer_id, _gub.peer_id, LIGHTNING_DAMAGE,
+			Gub.Cause.LIGHTNING, point, aim * LIGHTNING_IMPULSE,
 			SpearProjectile.nearest_bone(victim, point))
 
 	if radius <= 0.0:
@@ -839,14 +857,16 @@ func _host_cast_lightning(origin: Vector3, direction: Vector3) -> void:
 	for other: Gub in _blast_victims(point, point - aim * BLAST_LOS_BACKOFF,
 			radius, victim):
 		# The same door the direct hit goes through, for the same reasons. The
-		# blast is a kill or it is nothing — there is no falloff, because there
-		# is no health in this game for a falloff to take away.
+		# blast is a kill or it is nothing — no falloff with distance from the
+		# impact, which was forced when the game had no health in it and is a
+		# choice now that it has: see `LIGHTNING_DAMAGE`. Everything inside the
+		# ring takes a full body's worth.
 		var chest := other.body_axis_nearest(point)
 		var shove := chest - point
 		if shove.length_squared() < 0.0001:
 			shove = aim
-		MatchState.report_kill(other.peer_id, _gub.peer_id, Gub.Cause.LIGHTNING,
-			chest, shove.normalized() * LIGHTNING_IMPULSE,
+		MatchState.report_damage(other.peer_id, _gub.peer_id, LIGHTNING_DAMAGE,
+			Gub.Cause.LIGHTNING, chest, shove.normalized() * LIGHTNING_IMPULSE,
 			SpearProjectile.nearest_bone(other, point))
 
 
@@ -1049,8 +1069,11 @@ func _on_spear_struck_gub(victim: Gub, point: Vector3, bone: String,
 	# The full velocity, not a direction: its magnitude is what makes the corpse
 	# fly rather than sag, and a spear that has dropped out of a long arc should
 	# shove one much less than a flat throw from close range.
-	MatchState.report_kill(victim.peer_id, _gub.peer_id, Gub.Cause.SPEAR,
-		point, spear.impact_velocity(), bone)
+	#
+	# `SPEAR_DAMAGE` and not a kill: a spear is one shot because of what the
+	# number is, not because this line says "die" (D-062).
+	MatchState.report_damage(victim.peer_id, _gub.peer_id, SPEAR_DAMAGE,
+		Gub.Cause.SPEAR, point, spear.impact_velocity(), bone)
 
 
 # --------------------------------------------------------------- inventory ---

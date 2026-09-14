@@ -1,4 +1,4 @@
-"""Build the Gub — one skinned mesh, one skeleton, nine clips — from eight Mixamo FBX files.
+"""Build the Gub — one skinned mesh, one skeleton, every clip — from packs of Mixamo FBX.
 
 `assets/source/GUB_2/` holds the same character exported eight times, one animation
 per file: Idle, Walking, Run, CrouchWalking, Slide, JumpOne, JumpTwo, Throw. Each
@@ -8,21 +8,59 @@ skeleton and a 2048² base-colour JPEG. Godot wants the opposite shape: one
 between them. This script is that conversion, and it is the only place the Gub's
 art is prepared — re-running it is always safe and never touches `assets/`.
 
+Clips arrive in batches, months apart, and every batch is downloaded by hand: a
+spear suite, a bow suite, an Elder cast, the strafes, a drink. So the source is
+not one folder but a list of **packs** — `PACKS` below — each one a folder under
+`assets/source/` and the clips declared to be in it, each clip carrying its own
+rules. Every pack is imported into the one Blender session, measured against the
+same body and landed on the one skeleton, because every interesting thing this
+script does is cross-clip and therefore cross-pack.
+
 Run it as:
 
     "$BLENDER" --background --python tools/build_gub.py [-- --emission FLOAT]
+    "$BLENDER" --background --python tools/build_gub.py [-- --list-packs]
 
 or `bash tools/build_gub.sh` to have Blender located for you. `--emission`
 defaults to 0.15 (see *Material* below), so a plain rebuild reproduces the
-asset that is in the tree.
+asset that is in the tree. `--list-packs` audits `assets/source/` against the
+table and exits without building anything, which is the question to ask after
+dropping a hand-downloaded batch into a folder.
 
 What it does, and why each step is needed:
 
-*Consolidate.* All eight files are imported into one scene, their bind poses and
-meshes compared (they must be identical, or the clips would not be talking about
-the same body), then seven of the eight armatures and meshes are deleted and
-their actions re-targeted onto the survivor. Actions address bones by name, so
-this is a rename problem, not a re-rig problem.
+*Packs, and the difference between an empty one and a broken one.* A pack that
+declares clips is a **promise**: its folder must exist and every file it names
+must be in it, or the build stops and prints the pack, the folder and every
+missing file. A pack that declares none is a **placeholder** — a labelled place
+for a download that has not happened yet — and it is skipped, out loud, with a
+line in the log. There is no third state and no `optional` flag, because a flag
+is one more thing that can disagree with the table beside it: the clips are the
+flag. That is what makes "never a silently smaller build" something you can
+check rather than hope for — the only way a clip is missing from `gub.glb` is
+that nobody wrote it down, and the `-- packs` section of the log says how many
+clips came from how many packs before a single file is opened. A folder holding
+`.fbx` files the table does not name is reported in the same pass: that is what
+"I downloaded the clips and nothing changed" looks like from in here, and it is
+the single most likely thing to go wrong next.
+
+*Consolidate.* Every file of every pack is imported into one scene, their bind
+poses and meshes compared (they must be identical, or the clips would not be
+talking about the same body), then all but one of the armatures and meshes are
+deleted and their actions re-targeted onto the survivor. Actions address bones by
+name, so this is a rename problem, not a re-rig problem.
+
+That comparison is **across packs, not within one**. The reference is the first
+clip of the first pack — `GUB_2/Idle.fbx`, the Gub as uploaded to Mixamo — and
+every other file in every other pack is measured against it: same vertex count,
+same bone list, same vertex groups, bind poses agreeing to 1e-5. A clip taken
+from a different Mixamo character, or from the same Gub re-uploaded, or from a
+CC0 pack anywhere else, fails there on its first import instead of shipping a
+subtly broken skin in one clip and nowhere else. `assert_same_character` is the
+one assertion that guarantees every clip in the file is talking about the same
+body, and because it is the failure a hand-downloaded pack actually hits, its
+messages say what a replacement download has to be rather than only that this
+one was wrong.
 
 *Strip `mixamorig:`.* Godot mangles the colon in a bone name to an underscore,
 so every script naming a bone would have to spell `mixamorig_RightHand`. The
@@ -51,7 +89,9 @@ grip instead of skating.
 less and Slide drops half a metre — that is pose, and it stays. Only the two
 jumps rise above standing (JumpOne 0.46 m, JumpTwo 0.62 m), and whether that rise
 belongs to the animation or to the physics body is **not the same question for
-both clips**, which is why `VERTICAL_RISE_KEPT` is a table and not a flag:
+both clips**, which is why the rise a clip keeps is written on the clip — the
+`rise_kept` field of `Clip` in `PACKS` below, the rule the rest of the repo still
+calls `VERTICAL_RISE_KEPT` — and not decided once for the build:
 
 *JumpOne keeps the clamp* (0.0). It is a vertical hop whose pelvis rise is
 exactly the ballistic motion the physics capsule already performs, so leaving it
@@ -71,7 +111,8 @@ than as a body punched through the floor.
 
 Because that is a judgement about one clip at a time, it is checked rather than
 trusted: once the vertical is processed, every bone head is sampled over each
-jump and the deepest one is measured against `FLOOR_LIMIT`, reported either side
+jump and the deepest one is measured against the clip's own `floor_limit`,
+reported either side
 of the frame the hands take the ground so the log says plainly which side of the
 landing a dip happened on. With the rise kept, JumpTwo's flight clears the floor
 and only the authored ground roll dips under it (−0.167 m, a knuckle at 1.40 s);
@@ -131,13 +172,55 @@ in the tree instead of 1.1 KB, rewritten on every import, and the answer to "doe
 this clip loop?" split across two files that nobody re-syncs. So the five loops
 are declared in the GLB instead, by exporting them under Godot's own name suffix
 (`Idle-loop`): the scene importer strips the suffix and sets LOOP_LINEAR, which
-leaves `_subresources` empty and the CLIPS table below as the only place the loop
-flags are written down. `nodes/use_name_suffixes` has to stay true in
+leaves `_subresources` empty and the `loop` field of each clip in `PACKS` below
+as the only place the loop flags are written down. `nodes/use_name_suffixes` has to stay true in
 `gub.glb.import`, or the clips arrive in Godot still called `Idle-loop`.
+
+*One file, not a mesh plus animation-only libraries.* Godot can load clips out of
+a second GLB with `AnimationPlayer.add_animation_library()`, and
+`tools/build_elder.py` already proves a second file can bind to this very
+skeleton, so "the mesh here, each pack's clips beside it" was a real option and
+it was measured rather than waved off. The usual argument for splitting is that
+clips are small and a mesh with a texture is not. **On this asset that is
+false.** The 1,528,180-byte `gub.glb` in the tree is 584 KB of animation (38%),
+522 KB of mesh, 115 KB of texture, 3 KB of inverse bind matrices and 341 KB
+(22%) of JSON that is almost entirely animation channel and sampler bookkeeping
+— 49 bones × 9 clips × 3 channels. Nine clips already outweigh the body they
+move, and every pack in the plan makes that worse, so the size argument runs the
+other way from the way it is usually told. What settled it is that splitting
+buys nothing this pipeline actually wants:
+
+- *It saves no build time.* The 14 s is dominated by importing FBX and sampling
+  every bone of every frame twice — once to measure the authored motion, once to
+  check the floor — and that happens per clip no matter what is written at the
+  end. The glTF export is 4 s of it and would still have to run.
+- *Everything before the export is one Blender session anyway.* The bind-pose
+  comparison needs every pack open at once, the 1.903149 scale factor comes off
+  the mesh, and the facing correction is measured against the consolidated
+  armature's rest pose. Splitting would change only `stage_nla` and `export_glb`,
+  which is exactly why it can be done later if it is ever worth it.
+- *`tools/build_elder.py` reads the clips out of `gub.glb`* and plays every one
+  of them to check the robe hem does not walk through a knee. Split them out and
+  that check quietly gets weaker, or a second script grows a list of files to
+  keep in step with this one — the duplicated-search failure `find_blender.sh`
+  exists to avoid, in a worse place.
+- *Loading libraries costs runtime code that does not exist today.* An `.import`
+  per animation file, an `add_animation_library` in `gub_animator.gd`, and
+  `REQUIRED_CLIPS` becoming a question spanning several files rather than one
+  check against one AnimationPlayer.
+
+So it stays one file — and rather than leave that as a paragraph that goes stale,
+the export step reads the GLB it just wrote back in and prints the split, so the
+trade can be re-judged from a build log. The number to watch is the JSON chunk:
+it grows with bones × clips × channels and is already the second largest thing in
+the file.
 """
 
+import collections
+import json
 import math
 import os
+import struct
 import sys
 import time
 
@@ -149,7 +232,7 @@ from mathutils import Matrix, Quaternion, Vector
 # ---------------------------------------------------------------------------
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SOURCE_DIR = os.path.join(REPO, "assets", "source", "GUB_2")
+SOURCE_ROOT = os.path.join(REPO, "assets", "source")
 OUT_PATH = os.path.join(REPO, "art", "generated", "gub.glb")
 
 # Mixamo exports at 60 fps and Blender numbers frames from 1, so a key on frame
@@ -166,49 +249,154 @@ HIP_JOINTS = ("LeftUpLeg", "RightUpLeg")
 # body-and-camera rig valid. Everything else in this script is derived from it.
 TARGET_HEIGHT = 1.80
 
-# (file, clip name, loops, alignment reference)
+# ---------------------------------------------------------------------------
+# The packs, and the rules that ride on each clip
 #
-# The reference is the moment whose facing is made to match the rest pose. For a
-# cycle that is the mean over the whole clip, because a walk sways ±10° either
-# side of where it is going and picking one frame would bake half a sway in. For
-# a one-shot it is the first frame of the window `gub_animator.gd` plays, so the
-# pose that appears when the OneShot fires is the aligned one.
-LOOP_MEAN = None
-CLIPS = (
-    ("Idle.fbx",           "Idle",       True,  LOOP_MEAN),
-    ("Walking.fbx",        "Walk",       True,  LOOP_MEAN),
-    ("Run.fbx",            "Run",        True,  LOOP_MEAN),
-    ("CrouchWalking.fbx",  "CrouchWalk", True,  LOOP_MEAN),
-    ("Slide.fbx",          "Slide",      False, 0.10),
-    ("JumpOne.fbx",        "JumpOne",    False, 0.60),
-    ("JumpTwo.fbx",        "JumpTwo",    False, 0.58),
-    ("Throw.fbx",          "Throw",      False, 0.50),
-)
+# A **pack** is one folder under `assets/source/` and the clips declared to be in
+# it. A **clip** is one FBX file together with every per-clip rule the pipeline
+# needs, written beside the file rather than in a table keyed by the clip's name
+# somewhere further down. Those rules used to be three parallel structures —
+# `CLIPS`, `VERTICAL_RISE_KEPT`, `FLOOR_LIMIT` — and a `check_tables` whose whole
+# job was to catch a clip renamed in one of them and not the others. With the
+# rule on the clip there is no name left to get wrong:
+#
+#   VERTICAL_RISE_KEPT[clip]  is now  clip.rise_kept
+#   FLOOR_LIMIT[clip]         is now  clip.floor_limit
+#
+# (Anything in the repo still naming the old constants — `gub_animator.gd` cites
+# VERTICAL_RISE_KEPT where it explains why the two jumps are scrubbed
+# differently — means this block.)
+#
+# The first pack is the body of record: `assert_same_character` measures every
+# other file in every other pack against its first clip, so `GUB_2/Idle.fbx` is
+# what "the same Gub" means here. Declaring a clip is a promise that the file is
+# there; declaring none is a placeholder folder waiting for a download, and
+# `resolve_packs` is where those two come apart.
+# ---------------------------------------------------------------------------
 
-# How much of a clip's hips rise above its own first key survives, per clip.
+# The alignment reference is the moment whose facing is made to match the rest
+# pose. For a cycle that is the mean over the whole clip, because a walk sways
+# ±10° either side of where it is going and picking one frame would bake half a
+# sway in. For a one-shot it is the first frame of the window `gub_animator.gd`
+# plays, so the pose that appears when the OneShot fires is the aligned one.
+LOOP_MEAN = None
+
+
+class Clip(collections.namedtuple(
+        "Clip", "file name loop align rise_kept floor_limit authored_as")):
+    """One source file, the name it takes in Godot, and its per-clip rules.
+
+    `file`         the FBX, inside its pack's folder.
+    `name`         the animation's name in `gub.glb`, and so in
+                   `gub_animator.gd`'s REQUIRED_CLIPS. One namespace across every
+                   pack, because every clip lands in one AnimationPlayer.
+    `loop`         exported with LOOP_SUFFIX, so Godot marks it LOOP_LINEAR.
+    `align`        LOOP_MEAN, or a time in seconds — see the comment above.
+    `rise_kept`    how much of the clip's own hips rise above its first key
+                   survives, 0.0..1.0. None means "leave the vertical alone",
+                   which is what everything but the two jumps wants. Setting it
+                   requires a `floor_limit`; see the next comment block.
+    `floor_limit`  how far below the floor the lowest bone head may reach once
+                   the vertical rule has been applied. Setting it runs
+                   `check_ground` on the clip, which can stop the build.
+    `authored_as`  the constant in `gub.gd` that this clip's measured travel
+                   speed feeds, or None. Locking the root motion throws away the
+                   travel Mixamo baked into the Hips, and the whole point of
+                   measuring it first is that it is the speed the feet were drawn
+                   for: `AUTHORED_RUN = 4.314` is this field on Run, and it is
+                   what stops the feet skating. A new locomotion clip that names
+                   no constant is a clip whose authored speed nobody will ever
+                   match, so the field exists to make that omission visible in
+                   the table rather than invisible in the game.
+    """
+    __slots__ = ()
+
+    def __new__(cls, file, name, loop, align,
+                rise_kept=None, floor_limit=None, authored_as=None):
+        return super().__new__(cls, file, name, loop, align,
+                               rise_kept, floor_limit, authored_as)
+
+    def rise(self):
+        """The fraction of the rise to keep — 1.0, untouched, when unset."""
+        return 1.0 if self.rise_kept is None else self.rise_kept
+
+
+class Pack(collections.namedtuple("Pack", "folder what clips")):
+    """One folder under `assets/source/`, and what is declared to be in it.
+
+    `what` is a sentence for the log and for the folder's own README: somebody
+    reading `--list-packs` after downloading half a suite needs to be told what
+    the empty folder in front of them is for.
+    """
+    __slots__ = ()
+
+    def __new__(cls, folder, what, clips=()):
+        return super().__new__(cls, folder, what, tuple(clips))
+
+
+# What `rise_kept` and `floor_limit` are for, one clip at a time.
+#
 # 0.0 pins the pelvis flat (the rise is the physics body's job, and doing it in
 # both places at once launches the Gub through ceilings); 1.0 leaves the clip
-# alone. A clip not named here keeps its vertical untouched — only the two jumps
-# rise at all, and they need opposite answers, for the reasons in the module
-# docstring. FLOOR_LIMIT below is the check that each answer is the right one.
-VERTICAL_RISE_KEPT = {"JumpOne": 0.0, "JumpTwo": 1.0}
+# alone; unset is the same as 1.0. Only the two jumps rise above standing at all,
+# and they need opposite answers, for the reasons in the module docstring.
+#
+# `floor_limit` is how far below the floor the lowest bone head may reach once
+# that rule has been applied — the check that each answer is the right one. A
+# centimetre or two under is normal and authored into the Mixamo source (a
+# planted toe joint rests at 0.035 m and Run dips 2 cm), and these two clips go
+# deeper for reasons that are not the pipeline's to fix: JumpOne's push-off
+# extends the legs below the pelvis they are pinned to (−0.141 m at the toe tips
+# at 0.58 s — real, and skipped by the window the animator plays), and JumpTwo
+# ends in a ground roll authored with the hands and back through the plane
+# (−0.167 m at a knuckle at 1.40 s: a human-proportioned roll retargeted onto a
+# body whose head is a 0.8 m blob). Each limit sits just under what its source
+# authors, which is what makes it a check rather than a wish — build JumpTwo with
+# its rise clamped away instead and the same measurement reads −0.410 m, in
+# mid-air, well past the limit. (§P of the fix spec asked for −0.08 on JumpTwo;
+# that was written before the roll was measured and no build of this clip can
+# meet it.) A clip that sets `rise_kept` and no `floor_limit` is refused by
+# `check_declarations`, or its rule would ship unchecked; a `floor_limit` on its
+# own is allowed, and simply floor-checks a clip whose vertical is untouched.
 
-# How far below the floor the lowest bone head may reach in a clip once the rule
-# above has been applied. A centimetre or two under is normal and authored into
-# the Mixamo source (a planted toe joint rests at 0.035 m and Run dips 2 cm), and
-# these two clips go deeper for reasons that are not the pipeline's to fix:
-# JumpOne's push-off extends the legs below the pelvis they are pinned to
-# (−0.141 m at the toe tips at 0.58 s — real, and skipped by the window the
-# animator plays), and JumpTwo ends in a ground roll authored with the hands and
-# back through the plane (−0.167 m at a knuckle at 1.40 s: a human-proportioned
-# roll retargeted onto a body whose head is a 0.8 m blob). Each limit sits just
-# under what its source authors, which is what makes it a check rather than a
-# wish — build JumpTwo with its rise clamped away instead and the same
-# measurement reads −0.410 m, in mid-air, well past the limit. (§P of the fix
-# spec asked for −0.08 on JumpTwo; that was written before the roll was measured
-# and no build of this clip can meet it.) Every clip in VERTICAL_RISE_KEPT needs
-# a limit, or its rule would ship unchecked — see check_tables.
-FLOOR_LIMIT = {"JumpOne": -0.15, "JumpTwo": -0.20}
+PACKS = (
+    Pack("GUB_2",
+         "the Gub as uploaded to Mixamo — the body every other pack is measured "
+         "against, and the eight clips the game shipped with",
+         (
+             Clip("Idle.fbx",          "Idle",       True,  LOOP_MEAN),
+             Clip("Walking.fbx",       "Walk",       True,  LOOP_MEAN,
+                  authored_as="AUTHORED_WALK"),
+             Clip("Run.fbx",           "Run",        True,  LOOP_MEAN,
+                  authored_as="AUTHORED_RUN"),
+             Clip("CrouchWalking.fbx", "CrouchWalk", True,  LOOP_MEAN,
+                  authored_as="AUTHORED_CROUCH_WALK"),
+             Clip("Slide.fbx",         "Slide",      False, 0.10),
+             Clip("JumpOne.fbx",       "JumpOne",    False, 0.60,
+                  rise_kept=0.0, floor_limit=-0.15),
+             Clip("JumpTwo.fbx",       "JumpTwo",    False, 0.58,
+                  rise_kept=1.0, floor_limit=-0.20),
+             Clip("Throw.fbx",         "Throw",      False, 0.50),
+         )),
+
+    # Declared and empty. Each folder exists in the tree with a README saying
+    # what belongs in it; none of them builds anything until a `Clip(...)` line
+    # is written into it, which is the point — a folder somebody dropped files
+    # into is not a promise, and a line in this table is.
+    Pack("2_Spear_Suite",
+         "a javelin-style throw with a plant and a full extension at the release, "
+         "so the moment the spear leaves the hand has a silhouette of its own"),
+    Pack("3_Bow_Suite",
+         "draw, a held aim loop, release, and ideally a dry-fire or a recover"),
+    Pack("4_Elder_Suite",
+         "a short one-handed cast or point — the Elder's bolt leaves 0.2 s after "
+         "the click, so the whole clip is about that long"),
+    Pack("5_Locomotion",
+         "strafe left, strafe right and run backward, and their walk equivalents: "
+         "the set that stops the feet skating sideways"),
+    Pack("6_Utility",
+         "a drink or a quaff, for the heal potion"),
+)
 
 # A palm flat on the floor leaves the wrist joint about this far above it (the
 # hand is a quarter of a metre long on this cartoon body and the joint sits
@@ -227,8 +415,8 @@ HAND_JOINTS = ("LeftHand", "RightHand")
 # which works, but Godot then rewrites that file with every default it can think
 # of for each animation it mentions, all 256 possible slices apiece: 348 KB of
 # generated noise in the tree instead of 1.1 KB. It also splits the answer to
-# "does this clip loop?" across two files that nobody re-syncs. Here the CLIPS
-# table above is the only place it is written down. The cost is that the names
+# "does this clip loop?" across two files that nobody re-syncs. Here the `loop`
+# field of each clip in PACKS is the only place it is written down. The cost is that the names
 # inside the GLB carry the suffix; the names in Godot do not.
 LOOP_SUFFIX = "-loop"
 
@@ -332,87 +520,219 @@ def action_frame_span(action):
 
 
 # ---------------------------------------------------------------------------
-# 1-2. Import the eight files and prove they are the same character
+# 0. What is on disk, against what the table says is on disk
 # ---------------------------------------------------------------------------
 
-def import_sources():
-    """Import every FBX, returning [(clip, armature, mesh, action)] in clip order."""
+# Every one of `assert_same_character`'s failures means the same thing, and it is
+# the failure a hand-downloaded pack actually hits, so it is said once and said
+# in full. The person reading it is standing in front of a browser with a Mixamo
+# account open and needs to be told what to download, not only that this file was
+# wrong.
+SAME_CHARACTER = (
+    "\n    Every clip has to come off the *same upload*: the Gub as uploaded to "
+    "Mixamo, in that\n    same Adobe account, downloaded again with the new "
+    "animation applied to it. A stock\n    Mixamo character, a CC0 pack from "
+    "anywhere else, or even the same Gub uploaded a\n    second time gives a "
+    "different vertex count or a bind pose a fraction out, and this\n    "
+    "pipeline has no retarget stage to bridge that — which is the whole reason "
+    "it can do\n    the five things Godot's import-time retargeter cannot."
+    "\n    Export settings, matching assets/source/GUB_2: FBX Binary, With Skin, "
+    "60 fps,\n    no keyframe reduction, one animation per file."
+)
+
+
+def pack_folder(pack):
+    return os.path.join(SOURCE_ROOT, pack.folder)
+
+
+def source_name(pack, clip):
+    """How a source file is named in every log line and every error."""
+    return "%s/%s" % (pack.folder, clip.file)
+
+
+def resolve_packs():
+    """Audit `assets/source/` against PACKS, and say what is going to be built.
+
+    This runs before Blender opens a single file, so the ways a pack can be
+    wrong are reported together and in full rather than one import at a time.
+
+    *A pack that declares clips is a promise.* A missing folder, or any named
+    file that is not in it, stops the build here with the pack, the folder and
+    every missing file listed — not merely the first, because somebody who has
+    just unpacked a download wants the whole list in one go.
+
+    *A pack that declares none is a placeholder.* It is skipped, and the skip is
+    printed with what the folder is for, because the one thing this must never do
+    is quietly build a smaller asset than the table describes.
+
+    Either way, a folder holding `.fbx` files the table does not name is
+    reported. That is what "I downloaded the clips and nothing changed" looks
+    like from in here, and with five empty packs waiting for hand-downloads it is
+    the single most likely thing to go wrong next.
+    """
+    selection = []
+    broken = []
+    for pack in PACKS:
+        folder = pack_folder(pack)
+        here = sorted(f for f in os.listdir(folder)
+                      if f.lower().endswith(".fbx")) if os.path.isdir(folder) else []
+        declared = set(c.file for c in pack.clips)
+        extra = [f for f in here if f not in declared]
+
+        if not pack.clips:
+            log("  %-15s declared, no clips yet — skipped" % (pack.folder + "/"))
+            log("  %-15s   for: %s" % ("", pack.what))
+            if not os.path.isdir(folder):
+                log("  %-15s   the folder is not in the tree yet" % "")
+            elif extra:
+                log("  %-15s   %d FBX here that PACKS does not name: %s"
+                    % ("", len(extra), ", ".join(extra)))
+                log("  %-15s   nothing is built from them until a Clip(...) line "
+                    "names them" % "")
+            continue
+
+        if not os.path.isdir(folder):
+            broken.append("%s/ is not in the tree, but %d clip%s %s declared in it"
+                          % (pack.folder, len(pack.clips),
+                             "" if len(pack.clips) == 1 else "s",
+                             "is" if len(pack.clips) == 1 else "are"))
+            continue
+        missing = [c.file for c in pack.clips
+                   if not os.path.isfile(os.path.join(folder, c.file))]
+        if missing:
+            broken.append("%s/ is missing %d of the %d files it declares: %s"
+                          % (pack.folder, len(missing), len(pack.clips),
+                             ", ".join(missing)))
+            continue
+
+        log("  %-15s %d clip%s: %s"
+            % (pack.folder + "/", len(pack.clips),
+               "" if len(pack.clips) == 1 else "s",
+               ", ".join(c.name for c in pack.clips)))
+        if extra:
+            log("  %-15s   %d FBX here that PACKS does not name: %s"
+                % ("", len(extra), ", ".join(extra)))
+        selection.append(pack)
+
+    if broken:
+        raise SystemExit(
+            "these packs declare clips that are not on disk:\n    %s\n"
+            "Every pack is a folder under assets/source/. A pack that is not "
+            "ready yet declares\nno clips at all and is skipped; naming a file "
+            "that is not there is how a build ends\nup quietly smaller than the "
+            "table says, so it stops here instead." % "\n    ".join(broken))
+    if not selection:
+        raise SystemExit("no pack declares a clip, so there is nothing to build")
+    clips = [c for p in selection for c in p.clips]
+    log("  %d clips from %d of %d packs" % (len(clips), len(selection), len(PACKS)))
+    return selection
+
+
+# ---------------------------------------------------------------------------
+# 1-2. Import every declared file and prove they are all the same character
+# ---------------------------------------------------------------------------
+
+def import_sources(selection):
+    """Import every declared FBX, returning [(pack, clip, armature, mesh, action)].
+
+    In table order: pack by pack, clip by clip, so the first entry is the first
+    clip of the first pack and everything downstream that says "the reference"
+    means that one.
+    """
     bpy.ops.wm.read_factory_settings(use_empty=True)
     scene = bpy.context.scene
     scene.render.fps = FPS
     scene.render.fps_base = 1.0
 
+    # One column width for the whole run, so a long pack name does not stagger
+    # the block and the numbers stay in line whatever is being built.
+    width = max(len(source_name(p, c)) for p in selection for c in p.clips)
     imported = []
-    for filename, clip, _loop, _ref in CLIPS:
-        path = os.path.join(SOURCE_DIR, filename)
-        if not os.path.isfile(path):
-            raise SystemExit("missing source: %s" % path)
-        before_objects = set(bpy.data.objects.keys())
-        before_actions = set(bpy.data.actions.keys())
-        bpy.ops.import_scene.fbx(filepath=path, use_anim=True)
-        objects = [bpy.data.objects[n] for n in bpy.data.objects.keys()
-                   if n not in before_objects]
-        actions = [bpy.data.actions[n] for n in bpy.data.actions.keys()
-                   if n not in before_actions]
+    for pack in selection:
+        for clip in pack.clips:
+            where = source_name(pack, clip)
+            path = os.path.join(pack_folder(pack), clip.file)
+            if not os.path.isfile(path):
+                raise SystemExit("missing source: %s" % path)
+            before_objects = set(bpy.data.objects.keys())
+            before_actions = set(bpy.data.actions.keys())
+            bpy.ops.import_scene.fbx(filepath=path, use_anim=True)
+            objects = [bpy.data.objects[n] for n in bpy.data.objects.keys()
+                       if n not in before_objects]
+            actions = [bpy.data.actions[n] for n in bpy.data.actions.keys()
+                       if n not in before_actions]
 
-        armatures = [o for o in objects if o.type == 'ARMATURE']
-        meshes = [o for o in objects if o.type == 'MESH']
-        if len(armatures) != 1 or len(meshes) != 1 or len(actions) != 1:
-            raise SystemExit("%s: expected 1 armature, 1 mesh and 1 action, got "
-                             "%d/%d/%d" % (filename, len(armatures), len(meshes),
-                                           len(actions)))
-        first, last = action_frame_span(actions[0])
-        log("  imported %-18s -> %-11s %d verts, %d bones, frames %d..%d (%.3f s)"
-            % (filename, clip, len(meshes[0].data.vertices),
-               len(armatures[0].data.bones), first, last, (last - first) / FPS))
-        imported.append((clip, armatures[0], meshes[0], actions[0]))
+            armatures = [o for o in objects if o.type == 'ARMATURE']
+            meshes = [o for o in objects if o.type == 'MESH']
+            if len(armatures) != 1 or len(meshes) != 1 or len(actions) != 1:
+                raise SystemExit("%s: expected 1 armature, 1 mesh and 1 action, "
+                                 "got %d/%d/%d%s"
+                                 % (where, len(armatures), len(meshes),
+                                    len(actions), SAME_CHARACTER))
+            first, last = action_frame_span(actions[0])
+            log("  imported %-*s -> %-11s %d verts, %d bones, frames %d..%d (%.3f s)"
+                % (width, where, clip.name, len(meshes[0].data.vertices),
+                   len(armatures[0].data.bones), first, last, (last - first) / FPS))
+            imported.append((pack, clip, armatures[0], meshes[0], actions[0]))
     return imported
 
 
 def assert_same_character(imported):
-    """Refuse to build if the eight files do not share a body.
+    """Refuse to build unless every file, in every pack, shares one body.
 
-    The clips only make sense on one skeleton, and a silently different bind
-    pose would show up as a subtly broken skin in one clip and nowhere else.
+    This is the assertion that makes packs legitimate. The clips only mean
+    anything on one skeleton, and a silently different bind pose would show up as
+    a subtly broken skin in one clip and nowhere else — so it is checked
+    **across packs**, not within one, against the first clip of the first pack.
+    Nothing here cares which pack a file came from except when it has to name it.
     """
-    ref_clip, ref_arm, ref_mesh, _ = imported[0]
+    ref_pack, ref_clip, ref_arm, ref_mesh, _ = imported[0]
+    reference = source_name(ref_pack, ref_clip)
     ref_bones = [b.name for b in ref_arm.data.bones]
     ref_groups = sorted(g.name for g in ref_mesh.vertex_groups)
     worst = 0.0
-    for clip, arm, mesh, _action in imported[1:]:
+    for pack, clip, arm, mesh, _action in imported[1:]:
+        where = source_name(pack, clip)
         if len(mesh.data.vertices) != len(ref_mesh.data.vertices):
-            raise SystemExit("%s: %d verts, %s has %d"
-                             % (clip, len(mesh.data.vertices), ref_clip,
-                                len(ref_mesh.data.vertices)))
+            raise SystemExit("%s: %d verts, %s has %d%s"
+                             % (where, len(mesh.data.vertices), reference,
+                                len(ref_mesh.data.vertices), SAME_CHARACTER))
         if [b.name for b in arm.data.bones] != ref_bones:
-            raise SystemExit("%s: skeleton differs from %s" % (clip, ref_clip))
+            raise SystemExit("%s: skeleton differs from %s%s"
+                             % (where, reference, SAME_CHARACTER))
         if sorted(g.name for g in mesh.vertex_groups) != ref_groups:
-            raise SystemExit("%s: vertex groups differ from %s" % (clip, ref_clip))
+            raise SystemExit("%s: vertex groups differ from %s%s"
+                             % (where, reference, SAME_CHARACTER))
         for name in ref_bones:
             a = ref_arm.data.bones[name].matrix_local
             b = arm.data.bones[name].matrix_local
             for row in range(4):
                 for col in range(4):
                     worst = max(worst, abs(a[row][col] - b[row][col]))
-    log("  %d files agree: %d verts, %d bones, %d vertex groups, bind pose within %.2g"
-        % (len(imported), len(ref_mesh.data.vertices), len(ref_bones),
-           len(ref_groups), worst))
+    packs = len(set(p.folder for p, _c, _a, _m, _x in imported))
+    log("  %d files across %d pack%s agree with %s: %d verts, %d bones, "
+        "%d vertex groups, bind pose within %.2g"
+        % (len(imported), packs, "" if packs == 1 else "s", reference,
+           len(ref_mesh.data.vertices), len(ref_bones), len(ref_groups), worst))
     if worst > 1e-5:
-        raise SystemExit("bind poses differ by %.4g — these are not the same rig" % worst)
+        raise SystemExit("bind poses differ by %.4g — these are not the same "
+                         "rig%s" % (worst, SAME_CHARACTER))
 
 
 def consolidate(imported):
     """Keep one armature and one mesh; every action moves onto the survivor.
 
     An action addresses bones by name through `pose.bones["..."]`, so an action
-    imported alongside armature #7 drives armature #1 unchanged. Nothing is
-    re-rigged here; seven duplicate bodies are deleted.
+    imported alongside the seventh armature drives the first one unchanged.
+    Nothing is re-rigged here; every duplicate body is deleted. A pack adds
+    duplicate bodies, not a second skeleton — which is why several packs cost
+    nothing at all downstream of this function.
     """
-    clip, arm, mesh, _ = imported[0]
+    _pack, _clip, arm, mesh, _ = imported[0]
     actions = {}
-    for clip_name, other_arm, other_mesh, action in imported:
-        action.name = clip_name
-        actions[clip_name] = action
+    for _p, clip, other_arm, other_mesh, action in imported:
+        action.name = clip.name
+        actions[clip.name] = action
         if other_arm is arm:
             continue
         if other_arm.animation_data:
@@ -741,10 +1061,11 @@ def report_measurements(rows):
 def check_ground(arm, action, clip):
     """Prove the vertical rule left the clip standing on the floor, and say where.
 
-    VERTICAL_RISE_KEPT is a judgement per clip, so this is the part that keeps it
+    `rise_kept` is a judgement about one clip, so this is the part that keeps it
     honest rather than merely documented. Every bone head is sampled in world
-    space over the whole clip; the lowest one anywhere in it is compared with the
-    clip's FLOOR_LIMIT and the build stops if it is deeper. That is the check
+    space over the whole clip; the lowest one anywhere in it is compared with
+    that clip's own `floor_limit` and the build stops if it is deeper. That is
+    the check
     that catches a pelvis pinned under a body that then rotates over it — the
     dive's head 0.41 m through the floor — at build time instead of in a render.
 
@@ -789,15 +1110,14 @@ def check_ground(arm, action, clip):
             % (what.ljust(26), low[0], low[1], low[2]))
 
     worst = deepest(range(count))
-    limit = FLOOR_LIMIT[clip]
+    limit = clip.floor_limit
     log("              deepest anywhere %+.3f m against a %+.3f m limit — %s"
         % (worst[0], limit, "ok" if worst[0] >= limit else "TOO DEEP"))
     if worst[0] < limit:
         raise SystemExit(
             "%s: %s reaches %+.3f m at %.3f s, past this clip's %+.3f m floor "
-            "limit — VERTICAL_RISE_KEPT[%r] = %.2f is wrong for it"
-            % (clip, worst[1], worst[0], worst[2], limit, clip,
-               VERTICAL_RISE_KEPT.get(clip, 1.0)))
+            "limit — rise_kept=%.2f is the wrong rule for it, in PACKS"
+            % (clip.name, worst[1], worst[0], worst[2], limit, clip.rise()))
     return {"lowest": worst[0], "lowest_bone": worst[1], "lowest_at": worst[2],
             "hand_min": hands[lowest_hand], "hand_min_at": seconds[lowest_hand],
             "plant": plant}
@@ -813,15 +1133,17 @@ def lock_root_motion(action, clip):
 
     The two horizontal axes are locked to their first key on every clip. The up
     axis is scaled toward that same first key by whatever fraction of the rise
-    VERTICAL_RISE_KEPT says to keep, so `0.0` is the flat clamp, `1.0` is
-    untouched, and anything between is a rise the animation and the physics body
-    share. Only keys *above* the first one move: the downward half of a jump —
-    the landing absorb, the ground roll — is motion the physics body is standing
-    on the floor for and cannot produce, so it is never scaled away.
+    the clip's own `rise_kept` says to keep, so `0.0` is the flat clamp, `1.0`
+    (and unset) is untouched, and anything between is a rise the animation and
+    the physics body share. Only keys *above* the first one move: the downward
+    half of a jump — the landing absorb, the ground roll — is motion the
+    physics body is standing on the floor for and cannot produce, so it is never
+    scaled away.
     """
     curves = bone_curves(action, HIPS, "location")
     if len(curves) != 3:
-        raise SystemExit("%s: Hips has %d location curves, wanted 3" % (clip, len(curves)))
+        raise SystemExit("%s: Hips has %d location curves, wanted 3"
+                         % (clip.name, len(curves)))
     first = [c.keyframe_points[0].co.y for c in curves]
 
     for axis in (0, 2):
@@ -829,7 +1151,7 @@ def lock_root_motion(action, clip):
             kp.co.y = first[axis]
         linearise(curves[axis])
 
-    kept = VERTICAL_RISE_KEPT.get(clip, 1.0)
+    kept = clip.rise()
     pulled = 0
     if kept < 1.0:
         for kp in curves[1].keyframe_points:
@@ -1124,6 +1446,82 @@ def export_glb(path):
     return os.path.getsize(path)
 
 
+def animation_budget(path):
+    """Read the written GLB back and say how much of it is animation.
+
+    The module docstring argues that this stays one file rather than a mesh plus
+    animation-only libraries, and half of that argument is a set of proportions
+    that move every time a pack is added. So they are measured from the file that
+    was just written instead of asserted in a comment that goes stale: a GLB's
+    JSON chunk names, for every animation, the accessors its samplers read, and
+    an accessor names a buffer view with a byte length. Nothing is needed beyond
+    the standard library and nothing goes back through Blender.
+
+    This is a report and not a rule, so a GLB shaped in a way this does not
+    expect (a future exporter packing Draco, say) returns None and the build
+    carries on. The asset is already written by the time it runs.
+    """
+    with open(path, "rb") as handle:
+        blob = handle.read()
+    if blob[:4] != b"glTF":
+        return None
+    offset, doc, json_bytes = 12, None, 0
+    while offset + 8 <= len(blob):
+        length, kind = struct.unpack_from("<II", blob, offset)
+        if kind == 0x4E4F534A:          # 'JSON'
+            json_bytes = length
+            doc = json.loads(blob[offset + 8:offset + 8 + length].decode("utf-8"))
+            break
+        offset += 8 + length
+    if doc is None:
+        return None
+
+    views = doc.get("bufferViews", [])
+    accessors = doc.get("accessors", [])
+    counted = set()
+
+    def take(index):
+        """A buffer view's bytes, once — several accessors can share one."""
+        if index is None or index in counted:
+            return 0
+        counted.add(index)
+        return views[index].get("byteLength", 0)
+
+    clips = []
+    for anim in doc.get("animations", []):
+        total = 0
+        for sampler in anim.get("samplers", []):
+            for end in ("input", "output"):
+                total += take(accessors[sampler[end]].get("bufferView"))
+        clips.append((anim.get("name", "?"), total))
+    animation = sum(n for _c, n in clips)
+    image = sum(take(im.get("bufferView")) for im in doc.get("images", []))
+    return {"bytes": len(blob), "json": json_bytes, "animation": animation,
+            "image": image, "rest": len(blob) - json_bytes - animation - image,
+            "clips": clips}
+
+
+def report_budget(path):
+    """The split, and the one number that decides whether to revisit the shape."""
+    try:
+        split = animation_budget(path)
+    except Exception as err:            # a report, not a rule — see above
+        log("  (could not read the animation budget back: %s)" % err)
+        return
+    if split is None:
+        log("  (the written GLB is not shaped the way animation_budget expects)")
+        return
+    whole = float(split["bytes"])
+    log("  of that: %.0f%% animation (%d clips), %.0f%% JSON (mostly animation "
+        "channels), %.0f%% texture, %.0f%% mesh and the rest"
+        % (100.0 * split["animation"] / whole, len(split["clips"]),
+           100.0 * split["json"] / whole, 100.0 * split["image"] / whole,
+           100.0 * split["rest"] / whole))
+    biggest = sorted(split["clips"], key=lambda pair: -pair[1])[:4]
+    log("  heaviest clips: %s"
+        % ", ".join("%s %.0f KB" % (name, n / 1000.0) for name, n in biggest))
+
+
 # ---------------------------------------------------------------------------
 
 def parse_args(argv):
@@ -1142,8 +1540,21 @@ def parse_args(argv):
     clipped no pixels — it is still shaded, not a lamp. So a plain `build_gub.sh`
     reproduces the asset in the tree, and any other number is somebody
     deliberately re-judging night readability.
+
+    `--list-packs` prints the same `-- packs` audit a build opens with and then
+    stops, without reading an FBX or writing the GLB. It is the question to ask
+    after dropping a hand-downloaded batch into a folder, and the answer to "is
+    this build about to be smaller than I think it is".
+
+    There is deliberately **no** flag for building a subset of the packs. It
+    would write the real `art/generated/gub.glb` with clips missing from it,
+    which is the one outcome the pack rules above exist to prevent, and the
+    saving would be minutes at most. Iterating on one pack means commenting the
+    others out of `PACKS`, where the change shows up in a diff and cannot be left
+    on by accident.
     """
     emission = 0.15
+    listing = False
     argv = argv[argv.index("--") + 1:] if "--" in argv else []
     i = 0
     while i < len(argv):
@@ -1152,40 +1563,104 @@ def parse_args(argv):
         elif argv[i] == "--emission" and i + 1 < len(argv):
             emission = float(argv[i + 1])
             i += 2
+        elif argv[i] == "--list-packs":
+            listing = True
+            i += 1
         else:
-            raise SystemExit("usage: build_gub.py [-- --emission FLOAT] (got %r)" % argv[i])
-    return emission
+            raise SystemExit("usage: build_gub.py [-- --emission FLOAT] "
+                             "[-- --list-packs] (got %r)" % argv[i])
+    return emission, listing
 
 
-def check_tables():
-    """Catch a clip renamed in CLIPS but not in the tables that key off it.
+def check_declarations():
+    """Catch a PACKS table that cannot mean what it says, before anything opens.
 
-    Both tables are looked up with `.get`, so a stale name would silently mean
-    "no rule" instead of failing, and the rule it was meant to express would be
-    missing from the shipped asset with nothing in the log to say so.
+    This is what is left of `check_tables`, and it is a smaller job than that was.
+    Most of what that function guarded against — a clip renamed in `CLIPS` and not
+    in `VERTICAL_RISE_KEPT`, a `FLOOR_LIMIT` keyed on a clip nobody builds — is
+    now unrepresentable: the rules live on the clip, so there is no second place
+    for a name to be stale in. What remains are the things that can only be wrong
+    in the table taken as a whole:
+
+    *Two clips with one name.* Every clip of every pack lands in one
+    AnimationPlayer, so clip names are one flat namespace across packs however
+    separate the folders look. Two packs each declaring a `Throw` would export
+    two NLA tracks called Throw and Godot would keep whichever it read last —
+    silently, and with the wrong one just as likely.
+
+    *A vertical rule with nothing checking it.* `rise_kept` is a judgement about a
+    single clip and `floor_limit` is what keeps it honest; a rise rule with no
+    limit would ship unchecked. That is not hypothetical — it is exactly the
+    failure D-029 records, where clamping JumpTwo's rise put its head 0.41 m
+    through the floor and only a floor check found it.
+
+    *A body of record that builds nothing.* `assert_same_character` measures every
+    file against the first clip of the first pack, so PACKS[0] has to declare one.
+
+    *A CrouchIdle with no source.* The synthesised crouch is cut from a frame of
+    another clip, and that clip has to be in the build.
     """
-    names = set(clip for _f, clip, _l, _r in CLIPS)
-    for table, what in ((VERTICAL_RISE_KEPT, "VERTICAL_RISE_KEPT"),
-                        (FLOOR_LIMIT, "FLOOR_LIMIT")):
-        unknown = sorted(set(table) - names)
-        if unknown:
-            raise SystemExit("%s names clips that are not built: %s"
-                             % (what, ", ".join(unknown)))
-    missing = sorted(set(VERTICAL_RISE_KEPT) - set(FLOOR_LIMIT))
-    if missing:
-        raise SystemExit("no FLOOR_LIMIT for %s, so its vertical rule would go "
-                         "unchecked" % ", ".join(missing))
+    if not PACKS[0].clips:
+        raise SystemExit("%s declares no clips, but it is the pack every other "
+                         "pack is measured against" % PACKS[0].folder)
+    names = {}
+    folders = set()
+    for pack in PACKS:
+        if pack.folder in folders:
+            raise SystemExit("two packs share the folder %s" % pack.folder)
+        folders.add(pack.folder)
+        files = set()
+        for clip in pack.clips:
+            where = source_name(pack, clip)
+            if clip.name in names:
+                raise SystemExit(
+                    "two clips are called %r: %s and %s. Clip names are one "
+                    "namespace across every pack, because every clip lands in "
+                    "one AnimationPlayer." % (clip.name, names[clip.name], where))
+            names[clip.name] = where
+            if clip.file in files:
+                raise SystemExit("%s is declared twice in its pack" % where)
+            files.add(clip.file)
+            if clip.rise_kept is not None:
+                if not 0.0 <= clip.rise_kept <= 1.0:
+                    raise SystemExit("%s: rise_kept=%.2f is outside 0..1"
+                                     % (clip.name, clip.rise_kept))
+                if clip.floor_limit is None:
+                    raise SystemExit(
+                        "%s keeps %.0f%% of its rise and sets no floor_limit, so "
+                        "its vertical rule would ship unchecked"
+                        % (clip.name, clip.rise_kept * 100.0))
+            if clip.align is not LOOP_MEAN and not isinstance(clip.align, (int, float)):
+                raise SystemExit("%s: align must be LOOP_MEAN or a time in "
+                                 "seconds, not %r" % (clip.name, clip.align))
+    source = CROUCH_IDLE[0]
+    if source not in names:
+        raise SystemExit("CrouchIdle is cut from %r, which no pack builds" % source)
 
 
 def main():
     started = time.time()
-    check_tables()
-    emission = parse_args(list(sys.argv))
-    log("=== build_gub  Blender %s, %d source files, target %.2f m, emission %.2f"
-        % (bpy.app.version_string, len(CLIPS), TARGET_HEIGHT, emission))
+    emission, listing = parse_args(list(sys.argv))
+    check_declarations()
+
+    if listing:
+        log("=== build_gub --list-packs  %d packs under %s, nothing will be built"
+            % (len(PACKS), os.path.relpath(SOURCE_ROOT, REPO).replace("\\", "/")))
+        log()
+        resolve_packs()
+        log("\ndone.")
+        return
+
+    log("=== build_gub  Blender %s, target %.2f m, emission %.2f"
+        % (bpy.app.version_string, TARGET_HEIGHT, emission))
+
+    log("\n-- packs")
+    selection = resolve_packs()
+    clips = [c for pack in selection for c in pack.clips]
+    by_name = dict((c.name, c) for c in clips)
 
     log("\n-- import")
-    imported = import_sources()
+    imported = import_sources(selection)
     assert_same_character(imported)
     arm, mesh, actions = consolidate(imported)
 
@@ -1197,37 +1672,39 @@ def main():
     report_rest_pose(arm, mesh)
 
     log("\n-- authored motion (measured before anything is locked or clamped)")
-    rows = [measure_clip(arm, actions[clip], clip) for _f, clip, _l, _r in CLIPS]
-    report_measurements(rows)
+    rows = dict((c.name, measure_clip(arm, actions[c.name], c.name)) for c in clips)
+    report_measurements([rows[c.name] for c in clips])
 
     log("\n-- root motion")
     ground = {}
-    for _f, clip, _loop, _ref in CLIPS:
-        pulled = lock_root_motion(actions[clip], clip)
-        row = next(r for r in rows if r["clip"] == clip)
+    for clip in clips:
+        pulled = lock_root_motion(actions[clip.name], clip)
+        row = rows[clip.name]
         note = ""
-        if clip in VERTICAL_RISE_KEPT:
-            kept = VERTICAL_RISE_KEPT[clip]
+        if clip.rise_kept is not None:
             note = (", %.0f%% of its %.3f m rise kept"
-                    % (kept * 100.0, row["hips_max"] - row["hips_first"]))
+                    % (clip.rise_kept * 100.0, row["hips_max"] - row["hips_first"]))
             if pulled:
                 note += " (%d up keys pulled toward %.3f m)" % (pulled, row["hips_first"])
         log("  %-11s locked %.3f m of travel (%.3f m/s over %.3f s)%s"
-            % (clip, row["travel"], row["speed"], row["duration"], note))
-        if clip in VERTICAL_RISE_KEPT:
-            ground[clip] = check_ground(arm, actions[clip], clip)
+            % (clip.name, row["travel"], row["speed"], row["duration"], note))
+        # A floor_limit on its own floor-checks a clip whose vertical was left
+        # alone; a rise_kept cannot exist without one (check_declarations), so
+        # every vertical rule in the build is checked by this line.
+        if clip.floor_limit is not None:
+            ground[clip.name] = check_ground(arm, actions[clip.name], clip)
 
     log("\n-- CrouchIdle")
     source_clip, source_frame, hold = CROUCH_IDLE
     actions["CrouchIdle"] = synth_crouch_idle(arm, actions, source_clip, source_frame, hold)
 
     log("\n-- facing")
-    references = dict((clip, ref) for _f, clip, _l, ref in CLIPS)
+    references = dict((c.name, c.align) for c in clips)
     references["CrouchIdle"] = LOOP_MEAN
     align_facing(arm, actions, references)
 
     log("\n-- loops")
-    loops = set(clip for _f, clip, loop, _r in CLIPS if loop)
+    loops = set(c.name for c in clips if c.loop)
     loops.add("CrouchIdle")
     ranges = {}
     for clip, action in actions.items():
@@ -1253,23 +1730,37 @@ def main():
     log("  wrote %s  %.2f MB in %.1f s"
         % (os.path.relpath(OUT_PATH, REPO).replace("\\", "/"), size / 1e6,
            time.time() - started))
+    report_budget(OUT_PATH)
 
+    # The authored speed of a clip is the speed its feet were drawn for, and the
+    # clip says which constant in `gub.gd` it feeds rather than this loop naming
+    # them: a strafe pack added later gets its number printed here for free, and
+    # a locomotion clip that names no constant is visibly missing from this list.
     log("\n=== for gub.gd: authored ground speeds (m/s at %.2f m)" % TARGET_HEIGHT)
-    for name, clip in (("AUTHORED_WALK", "Walk"), ("AUTHORED_RUN", "Run"),
-                       ("AUTHORED_CROUCH_WALK", "CrouchWalk")):
-        row = next(r for r in rows if r["clip"] == clip)
+    for clip in clips:
+        if clip.authored_as is None:
+            continue
+        row = rows[clip.name]
         log("    %-22s := %.3f   # %s: %.3f m over %.3f s"
-            % (name, row["speed"], clip, row["travel"], row["duration"]))
+            % (clip.authored_as, row["speed"], clip.name, row["travel"],
+               row["duration"]))
+
     # A moment that never happens in a clip prints as "n/a" rather than
-    # crashing the summary after the asset has already been written.
+    # crashing the summary after the asset has already been written. So does a
+    # clip that is not in this build at all: everything below is named by hand
+    # because `gub_animator.gd` names it by hand too, and a table that has moved
+    # on should say so rather than end the run with a KeyError.
     def at(row, key):
         return "%.3f" % row[key] if row[key] is not None else "  n/a"
 
     log("=== for gub_animator.gd: the moments its windows are cut from")
-    for clip in ("JumpOne", "JumpTwo"):
-        row = next(r for r in rows if r["clip"] == clip)
+    for name in ("JumpOne", "JumpTwo"):
+        row, rule = rows.get(name), ground.get(name)
+        if row is None or rule is None:
+            log("    %-11s not in this build" % name)
+            continue
         log("    %-11s length %.3f  feet leave %s  apex %.3f  feet touch %s%s"
-            % (clip, row["duration"], at(row, "leave_wide"), row["hips_apex"],
+            % (name, row["duration"], at(row, "leave_wide"), row["hips_apex"],
                at(row, "land_wide"),
                "  roll %s..%s, up %s" % (at(row, "low_from"), at(row, "low_to"),
                                          at(row, "stood_up"))
@@ -1277,8 +1768,7 @@ def main():
         # The same clip after the vertical rule, which is the one the game plays:
         # the hips apex is the APEX the airborne scrub interpolates through, and
         # the hand plant is where the landing has to have happened by.
-        rule = ground[clip]
-        kept = VERTICAL_RISE_KEPT[clip]
+        kept = by_name[name].rise()
         log("    %-11s rise kept %3.0f%%, hips %s at the %.3f s apex, hands plant "
             "%s, lowest joint %+.3f m at %.3f s"
             % ("", kept * 100.0,
@@ -1287,15 +1777,21 @@ def main():
                row["hips_apex"],
                "%.3f..%.3f" % rule["plant"] if rule["plant"] else "never",
                rule["lowest"], rule["lowest_at"]))
-    row = next(r for r in rows if r["clip"] == "Slide")
-    log("    %-11s length %.3f  low %s..%s (hips %.3f m)  standing again %s"
-        % ("Slide", row["duration"], at(row, "low_from"), at(row, "low_to"),
-           row["hips_min"], at(row, "stood_up")))
-    row = next(r for r in rows if r["clip"] == "Throw")
-    log("    %-11s length %.3f  release %.3f (right hand at peak %.2f m/s), "
-        "furthest forward %.3f"
-        % ("Throw", row["duration"], row["hand_peak_at"], row["hand_peak"],
-           row["hand_reach_at"]))
+    row = rows.get("Slide")
+    if row is None:
+        log("    %-11s not in this build" % "Slide")
+    else:
+        log("    %-11s length %.3f  low %s..%s (hips %.3f m)  standing again %s"
+            % ("Slide", row["duration"], at(row, "low_from"), at(row, "low_to"),
+               row["hips_min"], at(row, "stood_up")))
+    row = rows.get("Throw")
+    if row is None:
+        log("    %-11s not in this build" % "Throw")
+    else:
+        log("    %-11s length %.3f  release %.3f (right hand at peak %.2f m/s), "
+            "furthest forward %.3f"
+            % ("Throw", row["duration"], row["hand_peak_at"], row["hand_peak"],
+               row["hand_reach_at"]))
     log("\ndone.")
 
 
