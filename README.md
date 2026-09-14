@@ -270,14 +270,21 @@ Both are committed, so you only need this if you change a source file:
 
 ```bash
 bash tools/build_gub.sh             # the Gub: eight Mixamo FBX → one .glb. Needs Blender 5.2
-python tools/decimate_assets.py     # spear, lure, mushroom. numpy, scipy, pillow, fast_simplification
+python tools/decimate_assets.py     # spear, lure, mushroom, G, U, B. numpy, scipy, pillow, fast_simplification
 python tools/make_sfx.py            # needs numpy
 python tools/prepare_map.py         # needs numpy, pillow
 python tools/rig_report.py          # checks the Gub's rig; prints, changes nothing
 ```
 
 The three props arrive at ~500k triangles each and leave at 19k between them,
-with UVs transferred back seam-aware. **The Gub has its own pipeline** and does
+with UVs transferred back seam-aware. The **three letter cards** — the meshes
+the letters win condition puts on the ground and in a fist (**D-039**) — go
+through the same script for the other half of what it does. They arrive from
+Tripo at 8.5k–10.6k triangles, so 6000 is barely a decimation; what they are in
+the target list for is the 4096-square base colour coming down to 512, the
+embedded image being renamed so Godot extracts it as `letter_g_basecolor.png`
+rather than `letter_g_G_LETTER_basecolor.jpg.png`, and the repack into one
+clean single-buffer `.glb`. **The Gub has its own pipeline** and does
 not go through `decimate_assets` at all: `tools/build_gub.sh` runs
 `tools/build_gub.py` in headless Blender, which consolidates the eight FBX files
 in `assets/source/GUB_2/` into one 1.5 MB `art/generated/gub.glb` — one armature,

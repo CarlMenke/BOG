@@ -1,10 +1,17 @@
-"""Turn the raw 500k-triangle source props into game-ready meshes.
+"""Turn the raw source props into game-ready meshes.
 
-Every prop `.glb` the project was handed (Spear, Lure, Mushroom) is a
-photogrammetry-style mesh of roughly half a million triangles. One spear per
-Gub, every projectile in flight, and a scattering of deployed mushrooms would be
-millions of triangles per frame before shadow passes. This script reduces each
-one to a sane budget while keeping it visually identical at gameplay distance.
+The three the project was handed first (Spear, Lure, Mushroom) are
+photogrammetry-style meshes of roughly half a million triangles each. One spear
+per Gub, every projectile in flight, and a scattering of deployed mushrooms
+would be millions of triangles per frame before shadow passes. This script
+reduces each one to a sane budget while keeping it visually identical at
+gameplay distance.
+
+Not everything that comes through here arrives that heavy. The three letter
+cards are 9k-triangle Tripo exports, and they are in the target list for the
+4096-square texture, the image rename and the single-buffer repack rather than
+for the decimation: the same treatment, applied to a mesh whose triangle count
+was never the problem.
 
 Static, unskinned meshes only. The Gub came through here too until D-029: a
 skinned photogrammetry mesh whose hand-made rig had to be repaired on the way
@@ -56,12 +63,22 @@ OUT_DIR = os.path.join(REPO, "art", "generated")
 # Budgets are set by how many of each thing can be on screen at once. The spear
 # is tiny on screen but there is one per Gub plus every projectile in flight, so
 # it gets the tightest budget; the mushroom is a placed object you walk right up
-# to and gets the loosest. Every source texture is 2048x2048, which is far more
-# than a thrown stick needs.
+# to and gets the loosest. The props arrive at 2048x2048 and the letters at
+# 4096x4096, which is far more than a thrown stick needs.
+#
+# The letters arrive at a tenth of the props' triangle count, so 6000 is barely
+# a reduction — and it is deliberately the lure's number rather than the spear's
+# tighter one, because a letter is read for its *shape*. A G that has lost the
+# inside of its curve is a C, and no texture puts that back. 512 for all three
+# on the spear's and the lure's argument: a 0.6 m prop, looked at from metres
+# away, on a mesh with one material and nothing but base colour on it.
 TARGETS = {
     "spear":    ("assets/source/Spear.glb", 3000, 512),
     "lure":     ("assets/source/Lure.glb", 6000, 512),
     "mushroom": ("assets/source/Mushroom/base_basic_pbr.glb", 10000, 1024),
+    "letter_g": ("assets/source/G_LETTER.glb", 6000, 512),
+    "letter_u": ("assets/source/U_LETTER.glb", 6000, 512),
+    "letter_b": ("assets/source/B_LETTER.glb", 6000, 512),
 }
 
 
@@ -185,6 +202,28 @@ def dedup_corners(corner_arrays):
     return inverse.astype(np.uint32), first
 
 
+def clean_image_name(name, source_stem):
+    """What the embedded image should be called, so the extracted file is sane.
+
+    Godot extracts an embedded texture to `<glb stem>_<image name>`, and the
+    image name is treated as a filename whether it looks like one or not. The
+    letters arrive named `G_LETTER_basecolor.jpg`, which comes back out of the
+    importer as `art/generated/letter_g_G_LETTER_basecolor.jpg.png` — the
+    source's name, this script's name for it, and a stale extension, all in one
+    filename. Dropping the extension and then the source stem leaves
+    `basecolor`, so the file on disk is `letter_g_basecolor.png`.
+
+    A no-op for the three props: their images are already called `shaded`,
+    `texture_diffuse` and the like, with no extension and no source stem in
+    front of them, so nothing here changes what they extract to.
+    """
+    cleaned = os.path.splitext(name)[0]
+    prefix = source_stem + "_"
+    if cleaned.startswith(prefix):
+        cleaned = cleaned[len(prefix):]
+    return cleaned or name
+
+
 def resize_texture(data, max_edge):
     """Downscale an embedded texture to `max_edge`, returning PNG bytes."""
     img = Image.open(io.BytesIO(data))
@@ -300,7 +339,8 @@ def process(name, src_path, target_tris, max_texture):
     b.doc["meshes"][0]["primitives"] = [new_prim]
 
     # The only thing in the file that is not the mesh is the embedded texture,
-    # which is copied across (downscaled) into the new buffer.
+    # which is copied across (downscaled, and renamed) into the new buffer.
+    source_stem = os.path.splitext(os.path.basename(src_path))[0]
     for image in b.doc.get("images", []):
         if "bufferView" not in image:
             continue
@@ -311,6 +351,11 @@ def process(name, src_path, target_tris, max_texture):
                 % (image.get("name", "?"), before[0], before[1], after[0], after[1],
                    len(raw) // 1024, len(data) // 1024))
             image["mimeType"] = "image/png"
+        cleaned = clean_image_name(image.get("name", ""), source_stem)
+        if cleaned and cleaned != image.get("name"):
+            log("  image %s -> %s (Godot will extract %s_%s.png)"
+                % (image["name"], cleaned, name, cleaned))
+            image["name"] = cleaned
         image["bufferView"] = b.add_view(data)
 
     if not os.path.isdir(OUT_DIR):

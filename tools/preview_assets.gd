@@ -1,13 +1,22 @@
 extends Node3D
 ## Lines the generated meshes up under a neutral light so the art pipeline's
-## results can be eyeballed: the three props out of `tools/decimate_assets.py`
-## and the Gub out of `tools/build_gub.py`. Development tool, not shipped.
+## results can be eyeballed: the three props and the three letter cards out of
+## `tools/decimate_assets.py`, and the Gub out of `tools/build_gub.py`.
+## Development tool, not shipped.
+##
+## Everything here is normalised to about two metres, so what this answers for
+## the letters is whether they came out of the pipeline gold, upright, unbroken
+## and the right way round. It says nothing about how big one stands in the
+## world — `tools/combat_range.tscn cards` is where that is looked at.
 
 const MODELS := [
 	"res://art/generated/gub.glb",
 	"res://art/generated/spear.glb",
 	"res://art/generated/lure.glb",
 	"res://art/generated/mushroom.glb",
+	"res://art/generated/letter_g.glb",
+	"res://art/generated/letter_u.glb",
+	"res://art/generated/letter_b.glb",
 ]
 
 ## Which frame of which animation to pose the Gub in, so the preview shows the
@@ -96,8 +105,17 @@ func _build_stage() -> void:
 	add_child(fill)
 
 	var cam := Camera3D.new()
-	cam.position = Vector3(0.4, 1.7, 8.6)
 	cam.rotation_degrees = Vector3(-5, 0, 0)
 	cam.fov = 45.0
+	# Backed off the row rather than parked at a distance that happened to suit
+	# four models. Seven of them span 15.6 m, and at the old 8.6 m the Gub at one
+	# end and the B at the other were both cut in half by the frame. Derived from
+	# the row's own width and the viewport's aspect — `fov` is the *vertical*
+	# angle and this lineup is judged on its width — so adding an eighth model
+	# moves the camera instead of cropping the picture.
+	var half_row := spacing * (MODELS.size() - 1) * 0.5 + 1.8
+	var aspect := maxf(1.0, get_viewport().get_visible_rect().size.aspect())
+	var half_angle := atan(tan(deg_to_rad(cam.fov * 0.5)) * aspect)
+	cam.position = Vector3(0.4, 1.7, maxf(8.6, half_row / tan(half_angle)))
 	add_child(cam)
 	cam.make_current()
