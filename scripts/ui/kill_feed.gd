@@ -108,6 +108,11 @@ static func _cause_glyph(cause: int) -> String:
 	match cause:
 		Gub.Cause.SPEAR:
 			return "⟶"
+		Gub.Cause.LIGHTNING:
+			# The one cause with a mark of its own rather than the generic
+			# arrow, because it is the one kill in the game that is worth
+			# reading the feed to find out about (D-038).
+			return "⚡"
 		Gub.Cause.VOID:
 			return "pushed off"
 		Gub.Cause.FALL:

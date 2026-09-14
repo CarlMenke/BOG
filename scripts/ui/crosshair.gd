@@ -1,14 +1,31 @@
 class_name Crosshair
 extends Control
-## The reticle, and the single most important thing on the HUD: it is also the
-## spear-ready indicator (PLAN 3.4, 6.1).
+## The reticle. Only the reticle (PLAN 3.4, 6.1).
 ##
-## Spears are the only weapon and they always kill, so "am I dangerous right
-## now" is the one piece of state a Gub must never have to look away to read.
-## Putting it in the crosshair rather than in a corner means it is answered
-## wherever the eye already is: armed, the ticks are the Gub's own yellow and
-## the centre is a filled dot; empty, they go grey and hollow and an amber ring
-## closes around them as the spear grows back.
+## It used to answer "am I dangerous right now" as well: an amber ring closed
+## around the ticks as the spear grew back. **That ring is gone, and it is the
+## second version of it to be thrown away rather than a third to be fixed**
+## (D-036). The recharge fraction it fed is gone with it, so nothing drawn here
+## is tied to a timer in any form.
+##
+## The reason is the 0.71 s windup. A ring that measured only the recharge sat
+## full through the windup and then dropped, which read as a stall; a ring that
+## measured the whole cycle swept from the click, which read as a spear that was
+## already gone. Both are honest about a different half of the throw and neither
+## is honest about the throw, and the thing sitting under your aim is the worst
+## place in the game to put a number that needs interpreting.
+##
+## The honest indicator already exists and is better: **the spear in the Gub's
+## own hand.** `held_spear.gd` is driven straight off the same
+## `GubCombat.has_spear()` the throw is gated on, which since D-035 covers the
+## recharge and a letter hold in one expression. One truth, drawn where everyone
+## — including the Gub facing you — can already see it.
+##
+## What is left is armed or not, and that is kept because it is not a timer and
+## never was: it says whether there is a living Gub behind this crosshair at
+## all. Alive, the ticks are the Gub's own yellow and the centre is a filled
+## dot; dead or spectating, they go grey and the centre empties, because a
+## crosshair with nothing behind it invites you to aim.
 ##
 ## Drawn rather than assembled from textures because every part of it is a
 ## rectangle or an arc, and because a crosshair that has to stay crisp at any
@@ -22,22 +39,16 @@ const TICK := 8.0
 const THICKNESS := 2.0
 const DOT_RADIUS := 1.7
 
-## The recharge ring sits outside the ticks with clear air between, so a
-## half-full ring is never mistaken for a longer tick.
-const RING_RADIUS := 21.0
-const RING_WIDTH := 2.5
-
 ## The hitmarker: four short diagonals that snap in on a kill and fade. Purely
 ## visual — `MatchState` already plays the sound, and doubling it up would be
-## two hitmarkers for one kill.
+## two hitmarkers for one kill. Deliberately untouched by the removal above: a
+## hitmarker is feedback for something that has already happened, not a gauge
+## for something that has not.
 const MARK_INNER := 9.0
 const MARK_OUTER := 17.0
 const MARK_FADE := 0.4
 
-## Fraction of the spear cooldown remaining, 0 when armed. Set by the HUD.
-var recharge: float = 0.0
-## Hidden entirely while dead or spectating: a crosshair with nothing behind it
-## invites you to aim.
+## Hidden entirely while dead or spectating. Set by the HUD.
 var armed: bool = true
 
 var _mark: float = 0.0
@@ -49,11 +60,11 @@ func _ready() -> void:
 
 
 ## Called by the HUD every frame. Repaints only when something changed, because
-## this is a `_draw` on top of a running game.
-func set_state(new_recharge: float, is_armed: bool) -> void:
-	if is_equal_approx(new_recharge, recharge) and is_armed == armed:
+## this is a `_draw` on top of a running game — and with the ring gone that is
+## now almost never, where it used to be every frame of every recharge.
+func set_state(is_armed: bool) -> void:
+	if is_armed == armed:
 		return
-	recharge = new_recharge
 	armed = is_armed
 	queue_redraw()
 
@@ -74,8 +85,7 @@ func _process(delta: float) -> void:
 
 func _draw() -> void:
 	var centre := size * 0.5
-	var ready := recharge <= 0.0
-	var tint := UIPalette.GUB if ready and armed else UIPalette.faded(UIPalette.TEXT, 0.5)
+	var tint := UIPalette.GUB if armed else UIPalette.faded(UIPalette.TEXT, 0.5)
 
 	# Four ticks. The vertical pair is drawn the same length as the horizontal
 	# one; a "T" crosshair reads as broken rather than as deliberate at this size.
@@ -83,21 +93,8 @@ func _draw() -> void:
 		draw_line(centre + direction * GAP, centre + direction * (GAP + TICK),
 			tint, THICKNESS)
 
-	if ready and armed:
+	if armed:
 		draw_circle(centre, DOT_RADIUS, tint)
-	elif armed:
-		# Hollow while the hand is empty: the missing dot is the missing spear.
-		draw_arc(centre, DOT_RADIUS + 0.8, 0.0, TAU, 10,
-			UIPalette.faded(UIPalette.TEXT, 0.45), 1.0)
-		# The ring fills clockwise from twelve o'clock, which is the direction
-		# every cooldown sweep in every game fills, and therefore the one that
-		# needs no explaining.
-		var swept := (1.0 - recharge) * TAU
-		draw_arc(centre, RING_RADIUS, -PI * 0.5, -PI * 0.5 + TAU, 48,
-			UIPalette.faded(UIPalette.TEXT, 0.14), RING_WIDTH)
-		if swept > 0.01:
-			draw_arc(centre, RING_RADIUS, -PI * 0.5, -PI * 0.5 + swept, 48,
-				UIPalette.AMBER, RING_WIDTH)
 
 	if _mark > 0.0:
 		var alpha := _mark / MARK_FADE

@@ -17,8 +17,18 @@ extends Node
 ##     Godot --path . --resolution 1600x900 --script tools/snapshot.gd -- \
 ##         res://tools/hud_range.tscn out.png 110 <mode>
 ##
-## Modes: hud, hud_teams, hud_cooldown, killfeed, scoreboard, pause, results,
-##        dead, spectate.
+## Modes: hud, hud_teams, hud_cooldown, hud_letters, hud_hold, hud_elder,
+##        killfeed, scoreboard, scoreboard_letters, pause, results,
+##        results_letters, dead, spectate.
+##
+## The `hud*` ones and `scoreboard_letters` are what the D-036 pass was judged
+## on. `hud_hold` is the slow one on purpose: it collects a real card through
+## the real pickup path and then stands there, so its shot has to be taken a few
+## seconds in to catch the hold part-way rather than at the very start of it —
+## and `hud_elder` is slow for the same reason and takes the same care: it
+## claims a real robe off a real death so the countdown it draws is the host's
+## own clock (D-040), and its shot wants to land a few seconds in so the bar is
+## part-drained rather than full.
 
 const RANGE_SCENE := preload("res://tools/combat_range.tscn")
 const HUD_SCENE := preload("res://scenes/ui/hud.tscn")
@@ -32,6 +42,13 @@ const EXTRA := [
 	{"name": "Toadflax", "kills": 2, "deaths": 8},
 	{"name": "Nettle", "kills": 1, "deaths": 9},
 ]
+
+## Every mode whose picture is of the letters condition. Listed once because
+## four separate things have to agree about it — the win condition, the roster's
+## letter masks, the local player's own, and the results summary — and a mode
+## that set three of the four would look right and prove nothing.
+const LETTER_MODES := ["hud_letters", "hud_hold", "scoreboard_letters",
+	"results_letters"]
 
 var _mode: String = "hud"
 var _hud: CanvasLayer
@@ -63,19 +80,40 @@ func _stage() -> void:
 		Net.config.mode = MatchConfig.Mode.TEAMS
 		Net.config.team_count = 2
 	if _mode == "hud_cooldown":
-		# Long enough that the recharge is still visibly running when the
-		# snapshot is taken; the range's own 1.5 s is over before then.
+		# Long enough that the recharge is still running when the snapshot is
+		# taken; the range's own 1.5 s is over before then. Since D-036 all this
+		# proves is that the spear tile goes dark and stays dark — there is no
+		# ring left to time, which is the whole point of keeping the shot.
 		Net.config.spear_recharge = 6.0
+	if LETTER_MODES.has(_mode):
+		Net.config.win_condition = MatchConfig.WinCondition.LETTERS
 	if _mode == "spectate":
 		Net.config.win_condition = MatchConfig.WinCondition.LIVES
 		Net.config.lives = 3
+	if _mode == "hud_elder":
+		# The shipping twenty, so the picture is of the bar a player actually
+		# sees rather than of one this file invented a length for.
+		Net.config.elder_duration = 20.0
 	_populate_roster()
+	# Every mode but one. `hud_cooldown` is the bar with *nothing* available —
+	# spear recharging, both stacks at zero — which is not a corner case but
+	# what a Gub looks like for the first minute of every life since D-032, and
+	# the one shot that proves an empty slot reads as empty rather than as
+	# broken. The full bar is covered by `hud` and the mixed case by `hud_hold`.
+	if _mode != "hud_cooldown":
+		_stock_the_bar()
 
 	match _mode:
-		"killfeed", "scoreboard", "results":
+		"killfeed", "scoreboard", "scoreboard_letters", "results", "results_letters":
 			_stage_kills()
 		"hud_cooldown":
 			_stage_throw()
+		"hud_hold":
+			_stage_kills()
+			_stage_hold()
+		"hud_elder":
+			_stage_kills()
+			_stage_elder()
 		"dead":
 			_stage_kills()
 			var dying: Dictionary = MatchState.stats.get(1, {})
@@ -93,11 +131,11 @@ func _stage() -> void:
 	MatchState.scores_changed.emit()
 
 	match _mode:
-		"scoreboard":
+		"scoreboard", "scoreboard_letters":
 			(_hud.get_node("%Scoreboard") as Scoreboard).open()
 		"pause":
 			(_hud.get_node("%PauseMenu") as PauseMenu).open()
-		"results":
+		"results", "results_letters":
 			(_hud.get_node("%Results") as ResultsScreen).show_summary(_summary())
 
 
@@ -122,7 +160,44 @@ func _populate_roster() -> void:
 	if not mine.is_empty():
 		mine["kills"] = 7
 		mine["deaths"] = 4
+	if LETTER_MODES.has(_mode):
+		_deal_letters(mine)
 	Net.roster_changed.emit()
+
+
+## Hand out G/U/B masks, so the lamps, the scoreboard column and the results
+## table have a spread to draw instead of six empty rows.
+##
+## Deliberately not "everybody has two". The interesting read on all three of
+## those screens is *which* letters somebody is missing, so the roster is built
+## so that is the only thing telling two of them apart: the two players on two
+## letters are not on the same two.
+##
+## **A completed set is only dealt to the results mode**, and that is a scar.
+## Dealt to every letters mode, it took the *live* ones down with it: the first
+## real kill in `hud_hold` ran `_check_win`, which found a row holding G, U and
+## B and quite correctly ended the match — so the mode that exists to photograph
+## a hold photographed the results screen instead. A staged roster is still real
+## state, and the win check does not care that a tool wrote it.
+func _deal_letters(mine: Dictionary) -> void:
+	var deal := [MatchState.LETTER_U | MatchState.LETTER_B,
+		MatchState.LETTER_G | MatchState.LETTER_B,
+		MatchState.LETTER_U, 0, MatchState.LETTER_G]
+	if _mode == "results_letters":
+		deal[0] = MatchState.LETTER_G | MatchState.LETTER_U | MatchState.LETTER_B
+	for i in EXTRA.size():
+		var row: Dictionary = MatchState.stats.get(EXTRA_BASE + i, {})
+		if not row.is_empty():
+			row["letters"] = deal[i]
+	if mine.is_empty():
+		return
+	# `hud_hold` starts from nothing, and has to. A card is `randi() % 3` with no
+	# idea who is about to walk into it (D-033), and one for a letter you already
+	# hold is consumed on touch without starting a hold — so a local player
+	# already holding two would fail to produce the picture two times in three,
+	# and would do it silently.
+	mine["letters"] = 0 if _mode == "hud_hold" \
+		else MatchState.LETTER_G | MatchState.LETTER_U
 
 
 ## A feed with one row in it proves nothing. Emitted rather than reported so
@@ -135,21 +210,102 @@ func _stage_kills() -> void:
 	MatchState.player_killed.emit(1, EXTRA_BASE, Gub.Cause.SPEAR)
 
 
-## Throw a real spear, so the crosshair ring and the spear slot are showing an
-## actual `GubCombat` cooldown rather than a number this tool made up.
+## Throw a real spear, so the spear tile is dark because a real `GubCombat` says
+## so rather than because this tool set a flag.
 func _stage_throw() -> void:
-	var gub := MatchState.local_gub()
-	if gub == null:
-		return
-	var combat := gub.get_node_or_null("Combat") as GubCombat
+	var combat := _local_combat()
 	if combat != null:
 		combat.try_throw_spear()
 
 
+## Two mushrooms and one lure into the local Gub's pack.
+##
+## Not decoration. A Gub spawns carrying nothing (D-032), so without this every
+## reference shot of the ability bar is two empty slots — a real state, and the
+## least informative one to photograph. Handed over exactly the way
+## `tools/combat_range.gd` hands one over: through the host-only `grant_*` the
+## pickup path itself calls, so the counts on screen arrived the way a player's
+## would.
+func _stock_the_bar() -> void:
+	var combat := _local_combat()
+	if combat == null:
+		return
+	combat.grant_mushroom(2)
+	combat.grant_lure(1)
+
+
+## Collect a letter card for real, and then stand there holding it.
+##
+## The card comes out of an actual death with `letter_drop_chance` forced to 1
+## so the roll cannot come up a mushroom, and it is claimed by the player's own
+## body walking into the `Pickup` area. That is the same chain
+## `tools/combat_range.gd letter` exercises, and it is why neither of them
+## writes into `MatchState._letter_holds` by hand: a hold staged directly would
+## draw identically and would prove nothing about the thing being drawn.
+func _stage_hold() -> void:
+	var player := MatchState.local_gub()
+	var victim := _a_dummy()
+	if player == null or victim == 0:
+		return
+	if MatchState.phase != MatchState.Phase.PLAYING:
+		push_warning("hud_range: nothing to hold — the match has not started yet")
+		return
+	Net.config.letter_drop_chance = 1.0
+	# The drop lands where the blow struck rather than at the body, so the card
+	# can be put down in front of the player without moving anybody.
+	MatchState.report_kill(victim, Net.local_id(), Gub.Cause.SPEAR,
+		player.global_position + player.facing() * 1.2, Vector3.FORWARD * 18.0, "Spine1")
+
+
+## Put the robe on the local Gub, for real, and then stand there wearing it.
+##
+## The same argument `_stage_hold` makes, one feature along: the robe comes out
+## of an actual death with `elder_drop_chance` forced to 1 and is claimed by the
+## player's own body walking into the `Pickup` area, so the countdown the HUD
+## draws is `MatchState`'s own host-owned clock rather than a number staged into
+## `_elders` by hand. A bar filled directly would draw identically and would
+## prove nothing about the thing being drawn — which is the whole of D-039.
+##
+## It also happens to be the one picture that shows the ability bar's first tile
+## as a *bolt*: an Elder has no spear (D-038), and until now nothing in this file
+## had ever put one on screen.
+func _stage_elder() -> void:
+	var player := MatchState.local_gub()
+	var victim := _a_dummy()
+	if player == null or victim == 0:
+		return
+	if MatchState.phase != MatchState.Phase.PLAYING:
+		push_warning("hud_range: nothing to wear — the match has not started yet")
+		return
+	Net.config.elder_drop_chance = 1.0
+	MatchState.report_kill(victim, Net.local_id(), Gub.Cause.SPEAR,
+		player.global_position + player.facing() * 1.2, Vector3.FORWARD * 18.0, "Spine1")
+
+
+## Somebody for the local Gub to kill. Found rather than named: the combat range
+## owns those peer ids, and a copy of the number in this file would be a second
+## place to change the day it moves.
+func _a_dummy() -> int:
+	for peer_id: int in MatchState.gubs:
+		if peer_id != Net.local_id():
+			return peer_id
+	return 0
+
+
+func _local_combat() -> GubCombat:
+	var gub := MatchState.local_gub()
+	if gub == null:
+		return null
+	return gub.get_node_or_null("Combat") as GubCombat
+
+
 func _summary() -> Dictionary:
 	return {
-		"reason": "limit",
+		"reason": "letters" if LETTER_MODES.has(_mode) else "limit",
 		"ranking": MatchState.ranking(),
 		"stats": MatchState.stats,
 		"mode": Net.config.mode,
+		# What the results screen branches its letters column on, so a staged
+		# summary has to carry it exactly as `MatchState._finish` does.
+		"win_condition": Net.config.win_condition,
 	}

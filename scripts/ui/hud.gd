@@ -11,11 +11,15 @@ extends CanvasLayer
 ## it works over any scene that has registered an arena — including
 ## `tools/hud_range.tscn`, which is how every screen in it was looked at.
 ##
-## Two things are read every frame rather than driven by signals: the cooldowns
-## and the clock. Cooldowns are wall-clock deadlines inside `GubCombat` with no
-## per-frame signal to hang off, and the clock is broadcast twice a second, so
-## polling is both simpler and smoother than the alternative. Everything else —
-## kills, scores, phases, deaths — arrives as a signal and is handled once.
+## Four things are read every frame rather than driven by signals: the ability
+## bar, the clock, the seconds left on a letter hold, and the seconds left on the
+## Elder's robe. Three of those are wall-clock deadlines with no per-frame signal
+## to hang off — inside `GubCombat` for the bar, on the host for the other two —
+## and the clock is broadcast twice a second, so polling is both simpler and
+## smoother than the alternative.
+## Everything else — kills, scores, phases, deaths, letters — arrives as a signal
+## and is handled once. The controls being pushed to all early-out when nothing
+## has actually moved, which is what keeps a per-frame push cheap.
 
 ## The banner is the only element that ever covers the middle of the screen, so
 ## it is on a short leash.
@@ -31,6 +35,8 @@ const FLASH_TIME := 1.4
 @onready var _score_line: RichTextLabel = %ScoreLine
 @onready var _kill_feed: KillFeed = %KillFeed
 @onready var _lives: HBoxContainer = %Lives
+@onready var _letters: LetterTrack = %Letters
+@onready var _elder: ElderTrack = %Elder
 @onready var _abilities: HBoxContainer = %Abilities
 @onready var _spear_slot: AbilitySlot = %SpearSlot
 @onready var _mushroom_slot: AbilitySlot = %MushroomSlot
@@ -84,6 +90,8 @@ func _ready() -> void:
 	MatchState.match_finished.connect(_on_match_finished)
 	MatchState.local_death.connect(_on_local_death)
 	MatchState.local_respawn.connect(_on_local_respawn)
+	MatchState.letters_changed.connect(_on_letters_changed)
+	MatchState.letter_hold_changed.connect(_on_letters_changed)
 	Net.chat_received.connect(_chat.add_message)
 	Net.left_lobby.connect(_on_left_lobby)
 	Net.return_to_lobby_requested.connect(_go_to_lobby)
@@ -91,6 +99,7 @@ func _ready() -> void:
 
 	_banner.visible = false
 	_refresh_score()
+	_refresh_letters()
 	_on_phase_changed(MatchState.phase)
 
 
@@ -98,6 +107,8 @@ func _process(delta: float) -> void:
 	_tick_clocks(delta)
 	_refresh_crosshair()
 	_refresh_abilities()
+	_refresh_letters()
+	_refresh_elder()
 	_refresh_clock()
 	if _spectating:
 		_apply_spectator()
@@ -191,31 +202,85 @@ func _tick_clocks(delta: float) -> void:
 		SceneFlow.recapture_cursor("chat")
 
 
+## Armed means "there is a living Gub behind this crosshair", and since D-036
+## that is the whole of what the crosshair says. Whether that Gub has a spear is
+## answered by the spear in its hand, which is drawn off the one gate the throw
+## is (`GubCombat.has_spear`) — so there is nothing here to divide, and no
+## denominator left to get wrong for a third time.
 func _refresh_crosshair() -> void:
-	var combat := _local_combat()
-	var alive := combat != null and MatchState.is_alive(Net.local_id())
-	if combat == null:
-		_crosshair.set_state(0.0, false)
-		return
-	# The whole cycle, windup included — see `GubCombat.spear_cycle`. Dividing by
-	# the recharge alone would peg the ring at full through the windup and then
-	# drop it, which reads as a stall rather than as a throw being made.
-	var total := maxf(0.01, combat.spear_cycle())
-	_crosshair.set_state(clampf(combat.spear_cooldown() / total, 0.0, 1.0), alive)
+	_crosshair.set_state(_local_combat() != null and MatchState.is_alive(Net.local_id()))
 
 
 func _refresh_abilities() -> void:
 	var combat := _local_combat()
-	var config := Net.config
 	if combat == null:
 		# Spectating: the bar stays on screen but plainly inert, rather than
 		# vanishing and taking the layout with it.
 		_abilities.modulate = Color(1, 1, 1, 0.25)
 		return
 	_abilities.modulate = Color(1, 1, 1, 1.0 if MatchState.is_alive(Net.local_id()) else 0.3)
-	_spear_slot.set_cooldown(combat.spear_cooldown(), combat.spear_cycle())
-	_mushroom_slot.set_cooldown(combat.mushroom_cooldown(), config.mushroom_cooldown)
-	_lure_slot.set_cooldown(combat.lure_cooldown(), config.lure_cooldown)
+	# One call, one boolean. `has_spear()` already covers the recharge *and* a
+	# letter hold (D-035), so the bar never has to decide which of the two is
+	# taking the spear away — and cannot disagree with the hand about it.
+	#
+	# For an Elder the tile is a different weapon and the same sentence: the
+	# glyph swaps to a bolt and `has_lightning()` is the one boolean, covering
+	# the longer recharge and the hold in exactly the same way (D-038). No
+	# sweep, no countdown, no second kind of readout on this bar — which is the
+	# condition D-036 kept the tile on in the first place.
+	if combat.is_elder():
+		# "Bolt" rather than "Lightning": the tile is 62 px wide and the other
+		# three labels are Spear, Shield and Lure. A caption that overhangs its
+		# own square would be the one thing on this bar that does not line up.
+		_spear_slot.set_kind(AbilitySlot.Kind.LIGHTNING, "Bolt")
+		_spear_slot.set_armed(combat.has_lightning())
+	else:
+		_spear_slot.set_kind(AbilitySlot.Kind.SPEAR, "Spear")
+		_spear_slot.set_armed(combat.has_spear())
+	# Stock, not cooldowns (D-032). The count is the readout; the use-delay only
+	# dims the tile, because it is a floor on spend rate and not something worth
+	# timing a fight around. Note what is *not* passed: no totals, because
+	# nothing here divides any more.
+	_mushroom_slot.set_stock(combat.mushroom_count(), combat.mushroom_use_cooldown() > 0.0)
+	_lure_slot.set_stock(combat.lure_count(), combat.lure_use_cooldown() > 0.0)
+
+
+## The G/U/B lamps and the hold, for the local player only.
+##
+## Polled here as well as driven by the two signals, and both are wanted.
+## `letters_changed` is what lights a lamp on the frame the host says so; the
+## poll is for `letter_hold_remaining`, which is a deadline on the host with no
+## per-frame signal behind it, so a countdown that only moved when a letter
+## changed hands would sit perfectly still for the whole ten seconds.
+## `LetterTrack.set_state` throws away the repaint when nothing actually moved,
+## which is what makes paying for both free.
+func _refresh_letters() -> void:
+	var show := Net.config.win_condition == MatchConfig.WinCondition.LETTERS
+	_letters.visible = show
+	if not show:
+		return
+	var me := Net.local_id()
+	_letters.set_state(MatchState.letters_for(me), MatchState.letter_hold_letter(me),
+		MatchState.letter_hold_remaining(me), Net.config.letter_hold_time)
+
+
+## The robe's countdown, for the local player only (D-040).
+##
+## Polled rather than driven by `elder_changed`, for exactly the reason the
+## letter hold's countdown is: `elder_remaining` is a deadline on the host with
+## no per-frame signal behind it, so a bar that only moved when somebody picked
+## a robe up would sit perfectly still for the whole twenty seconds. There is no
+## signal connection at all here — the signal only says the row appeared or went,
+## which the poll notices on the next frame anyway.
+##
+## Unlike the letter track this is not gated on a win condition. The robe drops
+## in every mode (D-038), so the row is shown whenever there is one and is
+## invisible the rest of the time; `ElderTrack._draw` returns immediately when
+## the robe is off, so an empty control costs a call and nothing else.
+func _refresh_elder() -> void:
+	var me := Net.local_id()
+	_elder.set_state(MatchState.is_elder(me), MatchState.elder_remaining(me),
+		Net.config.elder_duration)
 
 
 func _refresh_clock() -> void:
@@ -316,6 +381,15 @@ func _on_player_killed(victim_id: int, killer_id: int, cause: int) -> void:
 	if killer_id == Net.local_id() and victim_id != killer_id:
 		_crosshair.strike()
 	_refresh_score()
+
+
+## Both letter signals carry a peer id and fire for everybody. Only your own row
+## is on this HUD: somebody else's hold gets no treatment here at all, because
+## the lit card in their fist is the tell and it is meant to be an in-world one
+## (D-035).
+func _on_letters_changed(peer_id: int) -> void:
+	if peer_id == Net.local_id():
+		_refresh_letters()
 
 
 func _on_local_death(respawn_in: float) -> void:

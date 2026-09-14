@@ -100,6 +100,14 @@ theme_type_variation = &"SectionLabel"
 text = "DEATHS"
 horizontal_alignment = 2
 
+[node name="LettersHeading" type="Label" parent="Center/Card/Body/ColumnHeadings"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(92, 0)
+layout_mode = 2
+theme_type_variation = &"SectionLabel"
+text = "LETTERS"
+horizontal_alignment = 2
+
 [node name="LivesHeading" type="Label" parent="Center/Card/Body/ColumnHeadings"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(92, 0)

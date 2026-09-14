@@ -1972,3 +1972,81 @@ finds the hold miserable. Zero is taken as a special case in
 because a one-frame hold is one frame of the spear leaving the hand and coming
 back: a visible flicker for the one setting chosen precisely so that there is
 nothing to see.
+
+## D-036 — The crosshair's recharge ring was deleted rather than fixed a third time, and the hand is the only spear indicator left
+The crosshair used to close an amber ring around itself while the spear grew
+back. It is gone, and so is every other timer on the HUD bar one — no ring, no
+fill, no fade tied to a clock, and nothing on the ability bar that sweeps or
+counts down.
+
+**This is the second version of that ring to be thrown away, and that is the
+argument.** The first divided by the recharge alone, so the ring sat full
+through the 0.71 s windup and then dropped, which reads as a stall rather than
+as a throw being made. The second divided by `spear_cycle()` — windup included —
+so it swept from the click, which reads as a spear that has already gone while
+it is still visibly in the hand. The comment that used to sit at `hud.gd:200`
+was the record of that second attempt. Both are honest about a different half of
+one throw and neither is honest about the throw, because the windup makes
+"recharge" two different questions with one answer expected. A third
+denominator would have been a third wrong one.
+
+**The honest indicator already existed and is better: the spear in the Gub's
+hand.** `held_spear.gd` has insisted since it was written that it be driven
+straight off the cooldown the throw checks rather than by a timer of its own,
+and after D-035 `GubCombat.has_spear()` is one expression covering the recharge
+*and* a letter hold. So there is one truth, it is drawn in the world, and it is
+drawn where the Gub facing you can read it too — which a ring on your own screen
+never was. Two indicators for one fact is one too many the moment they can
+disagree, and across a 0.71 s windup they did.
+
+**The spear tile stays and goes binary.** The first instinct was to delete it
+with the ring; the user corrected that directly — *"we can just indicate it down
+their. i think i over complicated saying just remove the reload ring from the
+cursor"* — on the condition that the hand is genuinely empty while reloading,
+which was checked and is true. So the tile is lit when `has_spear()` and dark
+when not, with no arc, no seconds and no number, and that one call covers a
+recharge and a hold without the bar ever having to decide which is taking the
+spear away.
+
+**The mushroom and lure tiles show counts, because they are stock and not
+cooldowns** (D-032). `set_cooldown(remaining, total)` was the wrong shape for
+them the moment the ability stopped refilling: the number that decides anything
+is how many you are holding. Zero is drawn as plainly empty — dimmer than a tile
+merely waiting out its use-delay — because you now spawn with none and spend
+down to none regularly, and "you have none" and "not for another second" are
+different answers that a player who cannot tell apart will keep pressing the key
+for. The use-delay itself only dims the tile. It is a floor on spend rate, not a
+resource anybody plans a fight around, and drawing a wedge for it would be
+re-importing the thing this entry removes.
+
+**The letter hold is the one timer still drawn, and it is a deliberate
+exception.** A card being held up shows as three G/U/B lamps with the one being
+earned filling from the bottom in amber, plus the exact seconds under it. That
+is not the ring wearing a different hat: it is a single ten-second commitment
+rather than a per-throw rhythm, there is no windup for it to be misread against,
+and it is nowhere near the aim point. Standing unable to throw for ten seconds
+with nothing on screen saying how much longer would read as the game having
+broken, which is the failure this exception is spent on. It fills upward rather
+than draining, because it is a thing being earned rather than a thing running
+out — and nothing on this HUD drains any more.
+
+Two smaller decisions inside it. **Nobody else's hold gets a HUD element**: the
+lit card in their fist is the tell and it is meant to be an in-world one
+(D-035), so the announcement is made to the clearing rather than to a corner of
+your screen. And **the seconds never show zero while a hold is running**,
+because `is_holding_letter` is the presence of the host's row rather than
+`remaining > 0` — a client whose copy of the clock expires a round trip early
+would otherwise print "0" over a Gub the host still refuses to throw with.
+
+The armed/disarmed distinction on the crosshair is kept, and it is worth saying
+why it survived a cull of everything around it: it is not a timer and never was.
+It says whether there is a living Gub behind the crosshair at all, which is why
+a dead or spectating player gets grey ticks and an empty centre instead of an
+invitation to aim.
+
+What the UI had to be given to do this: one field. `MatchState._finish` now puts
+`win_condition` in the summary beside `mode`, because the results screen is
+driven entirely from that snapshot rather than from live state — the host can be
+changing the next match's settings while people are still reading the table —
+and without it the screen cannot tell a letters match from any other one.
+Nothing else moved, and no rule moved into the UI.

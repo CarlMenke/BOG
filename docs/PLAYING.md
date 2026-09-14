@@ -83,6 +83,50 @@ later, aimed where you are pointing *then*, so a moving target has to be led.
 Hold right click and a ring appears on the ground where your spear would
 actually land. Spears drop, and that ring is the only honest answer to how much.
 
+**Nothing counts your spear down.** Whether you can throw is answered by your
+Gub's own hand — a shaft in it means yes, an empty fist means no — and the Spear
+tile at the bottom of the screen says the same thing, lit or dark. That is on
+purpose: the throw has a wind-up, and every version of a reload timer drawn
+around the crosshair was wrong about one half of it. The other two tiles show
+how many mushrooms and lures you are carrying, and go dark at zero, which is
+what every life starts on.
+
+In a **Collect G·U·B** match, three lamps sit above those tiles. Walk over a
+card and your Gub holds it up for ten seconds before the letter counts — you
+cannot throw for any of them, the card lights you up for everyone in the
+clearing, and if somebody kills you it drops where you fell for whoever reaches
+it first. The lamp you are earning fills up, with the seconds left under it.
+
+**The Elder.** About one death in fifty leaves a purple robe and a wizard hat on
+the ground, in every mode. Walk over it and for **twenty seconds you cannot be
+killed.**
+
+Nothing anybody throws at you will do it. A spear that hits you stops dead in a
+violet flash and you keep walking. You move about a third faster, you jump half
+again as high, and you have **no spear at all** — what you have instead is
+lightning, on the same button, and it comes out of your hand about a fifth of a
+second after you click. It kills whatever it touches and throws the body, it
+reaches about thirty metres, and it is back in about a second. A shield mushroom
+still stops it, so cover still works.
+
+Everybody can see the robe, which is the point: they know what is coming and you
+know they know. The countdown above your ability bar is yours alone — it goes
+amber for the last three seconds.
+
+**Two things can still end you early.** Falling off the map counts, robe or no
+robe — so a lure will still drag you over an edge, and that is the play against
+an Elder. And whoever hit you last gets the kill if you go over within a few
+seconds of it.
+
+When the twenty seconds are up the robe burns off and you are an ordinary Gub
+again, standing exactly where you were with your spear back, your letters still
+yours and whatever you were carrying still in your pockets. Running out is not
+dying. The robe itself is gone for good either way — it never drops for anybody
+else — so the only way another one appears is for somebody to die.
+
+The other thing to know, if you are on the other side of one: **you do not beat
+an Elder, you outlast one.** Twenty seconds is long enough to be somewhere else.
+
 ---
 
 ## If something goes wrong
