@@ -259,6 +259,17 @@ check "lightning kills" "lightning PASS"     "$GODOT" --path "$GODOT_ROOT" --res
 check "mushroom deploys" "snapshot: wrote" \
     "$GODOT" --path "$GODOT_ROOT" --resolution 640x360 --script tools/snapshot.gd -- \
     res://tools/combat_range.tscn "$GODOT_LOG_DIR/mushroom.png" 40 mushroom
+# One of each letter on the ground, measured rather than looked at (D-039).
+# `match_rules` builds real cards headless, so it already proves the builder
+# does not throw; what it has no way of seeing is that what came back is a mesh
+# and that the mesh stands 0.60 m. That is the failure a screenshot cannot see
+# either — a letter at half the height it should be is still, unmistakably, a
+# letter — so the mode prints its own verdict off the mesh's own AABB. 60 ticks:
+# the cards go down on 20 and the verdict is taken on 60, a quarter turn into
+# the spin.
+check "letter cards are meshes" "cards PASS" \
+    "$GODOT" --path "$GODOT_ROOT" --resolution 640x360 --script tools/snapshot.gd -- \
+    res://tools/combat_range.tscn "$GODOT_LOG_DIR/cards.png" 60 cards
 # Holds W and requires the Gub to have gone somewhere. Movement was wired into
 # the testbeds and nowhere else, so every testbed could be walked around while
 # the real arena could not, and the abilities — which read their own keys —

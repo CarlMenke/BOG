@@ -77,6 +77,21 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##              is the state the mechanic is about: a Gub in the open with a
 ##              letter up and no spear (D-035). The only mode here whose picture
 ##              is of a Gub doing nothing, on purpose.
+##   cards    — one of each letter set down on the ground in front of the
+##              player, which is the picture of the three meshes themselves
+##              (D-039). It is the only mode here that reaches past a public API
+##              into `MatchState._spawn_drop`, and the reason is the roll: a
+##              card's letter is `randi() % 3` and nothing else (D-033), so
+##              `letter` above photographs whichever letter came up — and a
+##              picture of one random letter is not a picture of the asset.
+##              Everything except the choosing is the real thing: real spawn,
+##              real `Pickup`, real bob, real spin, real catch volume.
+##              They spin from zero at `Pickup.SPIN_SPEED`, so a still is a
+##              question of when: tick 363 is one full turn after the drop on
+##              tick 20 and catches all three face-on, while the gate's own
+##              frame 60 is a quarter of the way round, which is the more
+##              honest picture of a letter on the ground and the worse one for
+##              reading it.
 ##   lightning— the whole Elder, end to end: a robe dropped out of a real death
 ##              with `elder_drop_chance` forced to 1, walked over by the
 ##              player's own body, and then one bolt at the middle dummy. It is
@@ -113,8 +128,8 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##              frames still being processed with no peer to ask.
 ##   free     — no script; play it yourself
 const MODES := ["flight", "hit", "arc", "miss", "aim", "mushroom", "cover",
-	"lure", "lure_self", "letter", "lightning", "ward", "recharge", "walk",
-	"leave", "free"]
+	"lure", "lure_self", "letter", "cards", "lightning", "ward", "recharge",
+	"walk", "leave", "free"]
 
 ## How long after the cast the verdict is taken, in physics ticks. The click
 ## only starts the windup — the bolt leaves at `MatchConfig.lightning_delay`,
@@ -263,6 +278,10 @@ const VIEWS := {
 	# this one answers is whether a card in a fist reads as a card in a fist,
 	# and from any distance that flatters it every glyph reads fine.
 	"letter": {"eye": Vector3(4.0, 1.9, 12.0), "look": Vector3(0.0, 1.5, 9.0), "fov": 45.0},
+	# Square on to the row and level with it, because the question is whether
+	# three 0.6 m letters read as G, U and B — which is a question about the
+	# meshes and not about the Gub, so the player stays behind the camera.
+	"cards": {"eye": Vector3(2.2, 1.5, 8.6), "look": Vector3(0.0, 0.75, 6.0), "fov": 45.0},
 	# Square on to the bolt and well back from it. The bolt runs the fourteen
 	# metres from the player at z=9 to the dummy at z=-5, so the one view that
 	# shows it is from the side: down the throw it is a bright dot, and from
@@ -569,6 +588,11 @@ func _physics_process(_delta: float) -> void:
 	if _mode == "letter":
 		_report_letter(combat)
 
+	# Same shape and the same reason: the cards go down in the acted block below,
+	# so there is nothing to measure until they are there.
+	if _mode == "cards":
+		_report_cards()
+
 	# Two actions, not one — the robe has to be on the ground and picked up
 	# before there is anything to fire — so the cast lives outside the `_acted`
 	# block and waits on the Elder state rather than on a frame number.
@@ -600,6 +624,8 @@ func _physics_process(_delta: float) -> void:
 			combat.try_throw_lure()
 		"letter":
 			_drop_a_letter()
+		"cards":
+			_drop_the_alphabet()
 		"lightning":
 			_drop_a_robe()
 		_:
@@ -630,6 +656,56 @@ func _drop_a_letter() -> void:
 	MatchState.report_kill(DUMMY_BASE, 1, Gub.Cause.SPEAR,
 		player.global_position + player.facing() * 1.2,
 		Vector3.FORWARD * 18.0, "Spine1")
+
+
+## Put one of each letter on the ground, three metres in front of the player.
+##
+## The one call in this file that reaches into a private. `_drop_a_letter` above
+## goes the long way round on purpose — a real death, a real roll — and it gets
+## whatever letter `randi() % 3` handed it, which is exactly right for a mode
+## about the *hold* and useless for a mode about the three meshes. Naming them
+## is the only way to have G, U and B in one frame.
+##
+## z = 6.0 is three metres ahead of `PLAYER_SPOT`, comfortably outside
+## `Pickup.CATCH_RADIUS`, so the player standing there cannot collect one out of
+## the shot. The win condition is set first because a letter that drops in a
+## kills match is a letter nothing will do anything with.
+func _drop_the_alphabet() -> void:
+	Net.config.win_condition = MatchConfig.WinCondition.LETTERS
+	for i in MatchState.LETTERS.size():
+		MatchState._spawn_drop(Pickup.Kind.LETTER, MatchState.LETTERS[i],
+			Vector3(-1.2 + 1.2 * i, PLAYER_SPOT.y, 6.0))
+
+
+## Say how tall the three cards actually stand.
+##
+## The one thing a still frame of this cannot settle: a letter at half the
+## height it should be is still, unmistakably, a letter. So the height is
+## measured off the mesh itself — its own AABB times whatever scale it ended up
+## with — rather than read back off the constant that put it there, which would
+## prove only that the constant equals itself.
+func _report_cards() -> void:
+	if _frames != 60:
+		return
+	var cards: Array = MatchState._pickups.values()
+	var parts: Array[String] = []
+	var reason := ""
+	if cards.size() != MatchState.LETTERS.size():
+		reason = "%d on the ground, wanted %d" % [cards.size(), MatchState.LETTERS.size()]
+	for card: Pickup in cards:
+		var glyph := MatchState.letter_name(card.letter)
+		var meshes := card.find_children("*", "MeshInstance3D", true, false)
+		if meshes.is_empty():
+			parts.append("%s no mesh" % glyph)
+			reason = "the %s has no mesh under it" % glyph
+			continue
+		var mesh := meshes[0] as MeshInstance3D
+		var tall := mesh.get_aabb().size.y * mesh.global_basis.get_scale().y
+		parts.append("%s %.2f m" % [glyph, tall])
+		if absf(tall - Pickup.LETTER_HEIGHT) > 0.05:
+			reason = "the %s stands %.2f m, wanted %.2f" % [glyph, tall, Pickup.LETTER_HEIGHT]
+	var verdict := "cards PASS" if reason.is_empty() else "cards FAIL (%s)" % reason
+	print("combat_range: cards on the ground — %s — %s" % [", ".join(parts), verdict])
 
 
 ## Put one Elder robe down at the player's feet and let them walk into it.

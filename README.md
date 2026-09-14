@@ -238,10 +238,9 @@ and `tools/` is full of scenes for it:
 roster, `MatchState.register_arena`, kills through `MatchState.report_kill` — so
 a throw that works there works in a match. Pass a mode as the trailing argument
 (`flight`, `hit`, `arc`, `miss`, `aim`, `mushroom`, `cover`, `lure`,
-`lure_self`, `letter`, `lightning`, `ward`, `recharge`, `walk`, `leave`, `free`)
-and
-`trace` after it to print the whole flight, which is the only way to tell a miss
-from a hit whose kill was dropped.
+`lure_self`, `letter`, `cards`, `lightning`, `ward`, `recharge`, `walk`,
+`leave`, `free`) and `trace` after it to print the whole flight, which is the
+only way to tell a miss from a hit whose kill was dropped.
 
 Several modes print their own verdict and need no picture, so they are run
 headless straight from the scene rather than through `snapshot.gd`:

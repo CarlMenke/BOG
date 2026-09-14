@@ -85,12 +85,26 @@ const CATCH_HEIGHT := 2.2
 const ROBE_SCALE := 0.34
 
 ## Letter cards are what players sprint across the map for, so they have to be
-## readable at a glance from a few metres. That is a label and a light, not a
-## model — there is no card mesh in `art/generated/` and a glyph on a billboard
-## is legible at any distance a mesh would be a blob at.
-const LETTER_FONT_SIZE := 160
-const LETTER_PIXEL_SIZE := 0.0042
-const LETTER_OUTLINE := 26
+## readable at a glance from a few metres. That used to argue for a glyph on a
+## billboard, and the reason it gave was the honest one: there was no card mesh
+## in `art/generated/`. There is one per letter now (D-039), out of the same
+## pipeline the spear and the lure come through, so what is lying in the grass
+## is the letter rather than a picture of one.
+const LETTER_G_MODEL := preload("res://art/generated/letter_g.glb")
+const LETTER_U_MODEL := preload("res://art/generated/letter_u.glb")
+const LETTER_B_MODEL := preload("res://art/generated/letter_b.glb")
+## How tall a letter stands on the ground, in metres. The sources are exactly
+## one metre with the origin at the base, so this is also the scale.
+##
+## 0.60 and not the glyph's 0.47, for two reasons that point the same way. A
+## shaded solid has less presence at a given height than an outlined, unshaded
+## glyph does — it is lit like the world instead of shouting over it — and the
+## other things that fall out of a corpse stand 0.5 to 0.7 m (the lure 0.49, the
+## robe 0.70). At the glyph's height a card would be the one drop on the map
+## that reads as smaller than the rest of them. This one sits among them.
+const LETTER_HEIGHT := 0.60
+## How much of its own colour a letter emits, 0..1.
+const LETTER_SELF_LIGHT := 0.7
 const LETTER_COLOUR := Color(1.00, 0.84, 0.26)
 const MUSHROOM_COLOUR := Color(0.92, 0.52, 0.44)
 const LURE_COLOUR := Color(0.55, 0.85, 1.00)
@@ -202,11 +216,26 @@ func _build_visual() -> void:
 	grow.tween_property(_model, "scale", target, GROW_TIME)
 
 
-## The letter itself: one glyph, billboarded, with an outline thick enough to
-## survive being seen against grass, a sunlit container, or the sky.
+## The letter itself: the mesh, at `LETTER_HEIGHT`, lighting itself out of its
+## own texture.
 ##
-## Unshaded on purpose — a card whose brightness depends on which side of the
-## island it landed on is a card you can miss.
+## **The origin of what comes back is the middle of the letter**, not the foot
+## of it, because that is what both callers place by — `_build_visual` hands
+## this node to the bob, and `HeldSpear` puts it up the shaft — and the glyph
+## it replaces was centred too. So the model is pushed down half its own height
+## under a pivot rather than the pivot being moved up.
+##
+## The scale goes on the model and never on the pivot, for those same two
+## callers. `HeldSpear` *assigns* `_card.scale`, and the grow tween in
+## `_build_visual` reads `_model.scale` as the size to end at; a pivot that was
+## not scale 1 would be silently multiplied into both of them.
+##
+## **Lit from inside on purpose**, which is the glyph's argument outliving the
+## glyph: a card whose brightness depends on which side of the island it landed
+## on is a card you can miss. What it emits is its own albedo rather than a flat
+## gold, because the ornament is most of what makes one of these read as a
+## letter at four metres — emit a single colour instead and it is a glyph
+## again, with worse edges than the glyph had.
 ##
 ## **Static and public, because the card has two homes.** `HeldSpear` builds one
 ## of these into a Gub's fist for the length of a letter hold (D-035), and a
@@ -215,22 +244,63 @@ func _build_visual() -> void:
 ## picked up. One builder is what stops the two drifting apart the first time
 ## either colour is adjusted.
 static func build_card(of_letter: int) -> Node3D:
-	var label := Label3D.new()
-	label.text = MatchState.letter_name(of_letter)
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.fixed_size = false
-	label.font_size = LETTER_FONT_SIZE
-	label.outline_size = LETTER_OUTLINE
-	label.outline_modulate = Color(0.02, 0.03, 0.04, 0.9)
-	label.pixel_size = LETTER_PIXEL_SIZE
-	label.modulate = LETTER_COLOUR
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.shaded = false
-	label.double_sided = true
-	# Occluded like anything else. A letter visible through a hill would tell
-	# you where every fight on the map just ended.
-	label.no_depth_test = false
-	return label
+	var pivot := Node3D.new()
+	pivot.name = "LetterCard"
+	var model := _letter_model(of_letter).instantiate() as Node3D
+	model.scale = Vector3.ONE * LETTER_HEIGHT
+	model.position = Vector3(0.0, -0.5 * LETTER_HEIGHT, 0.0)
+	pivot.add_child(model)
+	_light_from_within(model)
+	return pivot
+
+
+## Which of the three scenes a letter bit stands for.
+##
+## Answers a bad one with the G and a warning rather than with nothing. `drop`
+## clamps `kind`, because a kind off the wire with no model behind it leaves
+## `_build_visual` with nothing to add; a letter cannot be clamped the same way,
+## since the bits are 1, 2 and 4 and there is no range to squeeze a stray byte
+## into. One card showing the wrong glyph is a far smaller thing than a SCRIPT
+## ERROR on every client in the match at the same instant.
+static func _letter_model(of_letter: int) -> PackedScene:
+	match of_letter:
+		MatchState.LETTER_G:
+			return LETTER_G_MODEL
+		MatchState.LETTER_U:
+			return LETTER_U_MODEL
+		MatchState.LETTER_B:
+			return LETTER_B_MODEL
+	push_warning("Pickup: no model for letter %d, showing a G" % of_letter)
+	return LETTER_G_MODEL
+
+
+## Turn every surface of the letter into something that emits its own texture.
+##
+## The material is duplicated first, and that is not tidiness. An imported
+## `.glb` hands the *same* `StandardMaterial3D` to every instance of the scene,
+## so setting emission on the one that arrived with the mesh would light every
+## other card of that letter on the map — and every one built after it — out
+## of whichever copy happened to be made last.
+static func _light_from_within(model: Node3D) -> void:
+	for node in model.find_children("*", "MeshInstance3D", true, false):
+		var mesh := node as MeshInstance3D
+		for i in mesh.get_surface_override_material_count():
+			var mat := mesh.get_active_material(i) as StandardMaterial3D
+			if mat == null:
+				continue
+			mat = mat.duplicate() as StandardMaterial3D
+			mat.emission_enabled = true
+			mat.emission = Color.WHITE
+			mat.emission_texture = mat.albedo_texture
+			# MULTIPLY, and this is the whole thing working or not. The default
+			# operator *adds* the emission colour to the emission texture, so a
+			# white one means a flat white term on top of the gold — which at any
+			# energy worth having turns all three letters into cream-coloured
+			# blobs. Multiplied, `Color.WHITE` means what it is here to mean: emit
+			# the albedo, unaltered, at `LETTER_SELF_LIGHT` of it.
+			mat.emission_operator = BaseMaterial3D.EMISSION_OP_MULTIPLY
+			mat.emission_energy_multiplier = LETTER_SELF_LIGHT
+			mesh.set_surface_override_material(i, mat)
 
 
 func _tint() -> Color:
@@ -273,13 +343,17 @@ func _process(delta: float) -> void:
 	# stays where it was put. An item whose hitbox rides up and down with it
 	# would be collectable on half the frames.
 	_model.position.y = sin(_age * BOB_SPEED + _phase) * BOB_HEIGHT
-	# A billboarded glyph is already facing you; spinning it does nothing but
-	# cost a matrix. The robe turns at a third of the rate — it is a tall object
-	# with a front, and a wizard's hat revolving at mushroom speed is a joke the
-	# map only wants to make once.
+	# Letters turn now, like everything else. The glyph did not, and was right
+	# not to: a billboard is already facing you and spinning one costs a matrix
+	# for nothing. A mesh is the other case — it has a front and a back, and a
+	# letter seen from behind is a mirrored letter — so turning it is what makes
+	# it readable from whichever side you came at it from, and it is what a thing
+	# lying on the ground waiting to be collected has always done. The robe keeps
+	# its third of the rate: it is a tall object with a front, and a wizard's hat
+	# revolving at mushroom speed is a joke the map only wants to make once.
 	if kind == Kind.ELDER_ROBE:
 		_model.rotate_y(SPIN_SPEED * ROBE_SPIN_SCALE * delta)
-	elif kind != Kind.LETTER:
+	else:
 		_model.rotate_y(SPIN_SPEED * delta)
 	if _age >= LIFETIME:
 		wither()

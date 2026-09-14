@@ -115,12 +115,13 @@ const GRIP_FRACTION := 0.55
 ## the shaft it would plough the grass in exactly the clips a Gub is most likely
 ## to be running a hold out in. Measured with a Gub holding W through a full run
 ## cycle in `tools/combat_range.tscn letter`: the card's lowest centre is 0.44 m
-## and its half-height is 0.235 m, so the bottom of the glyph stays 20 cm up.
+## and its half-height is half of `Pickup.LETTER_HEIGHT` at `CARD_SCALE`, which
+## is 0.21 m, so the bottom of the letter stays 23 cm up.
 const CARD_ABOVE_FIST := 0.22
 
 ## The card in the hand against the card on the ground. Smaller on purpose: the
 ## world card is sized to be *found*, legible across the island as the only
-## thing in a patch of grass, and at that size in a fist it is a glyph wider
+## thing in a patch of grass, and at that size in a fist it is a letter wider
 ## than the Gub holding it. This one only has to be seen on a Gub that is
 ## already in view.
 const CARD_SCALE := 0.70
@@ -128,13 +129,14 @@ const CARD_SCALE := 0.70
 ## The card lights the Gub holding it, and this is the part that actually
 ## carries.
 ##
-## A glyph does not read at thirty metres — it was checked, with
-## `tools/combat_range.tscn letter` from the touchline, and a gold G in a gold
-## Gub's fist is a gold smudge on a gold body. What reads at that range is that
-## the whole Gub is *lit*. So the card borrows the trick the card on the ground
-## already uses for the same reason ("a drop nobody can see is a drop nobody
-## collects") and brings its own light, which is what turns "somebody over there
-## is holding something" into a thing you notice without looking for it.
+## A card does not read at thirty metres — it was checked, back when it was a
+## glyph, with `tools/combat_range.tscn letter` from the touchline, and a gold G
+## in a gold Gub's fist is a gold smudge on a gold body whether it is drawn or
+## modelled. What reads at that range is that the whole Gub is *lit*. So the card
+## borrows the trick the card on the ground already uses for the same reason ("a
+## drop nobody can see is a drop nobody collects") and brings its own light,
+## which is what turns "somebody over there is holding something" into a thing
+## you notice without looking for it.
 ##
 ## Dimmer and shorter than the ground card's 2.4 over 6 m: this one is 30 cm
 ## from a body it must rim rather than flood, and there is at most one per
@@ -229,6 +231,37 @@ func set_letter(letter: int) -> void:
 
 func has_letter() -> bool:
 	return _card != null
+
+
+## Keep the letter upright in the world and turned the way the Gub is facing.
+##
+## Only the orientation is taken back off the hand. The *position* is untouched
+## and goes on coming from `_card_offset()` through the bone, so the card still
+## rides the one line around this fist that has been measured clear of the Gub's
+## own skin in every clip it is carried through.
+##
+## The billboard needed none of this, because a billboard has no back. A mesh
+## does, and a letter seen from behind is a mirrored letter, so something has to
+## decide which way it points. Two obvious answers were rejected. **Aligned to
+## the shaft** it inherits the wrist, and `Walk` and `Run` lay that over far
+## enough to tip the card 60 degrees forward — a letter lying on its face reads
+## as one that has been dropped, not one that is being held. **Spun like the
+## card on the ground** it reads as a trophy being shown off, which is the
+## opposite of what a hold is: ten seconds of standing in the open with no
+## spear. Upright and forward is what the billboard already gave players, minus
+## the part that tracked the camera.
+##
+## `Basis.looking_at` aims **−Z** at what it is handed and these letters front
+## on **+Z**, so the target is the facing *negated*: point the back away down
+## the facing and the front comes round to it.
+func _process(_delta: float) -> void:
+	if _card == null:
+		return
+	var gub := get_parent() as Gub
+	if gub == null:
+		return
+	var upright := Basis.looking_at(-gub.facing(), Vector3.UP)
+	_card.global_transform.basis = upright.scaled(Vector3.ONE * CARD_SCALE)
 
 
 ## Arc energy around this fist, or take it away again.

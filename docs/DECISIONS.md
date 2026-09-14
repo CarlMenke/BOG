@@ -2887,3 +2887,96 @@ the first verdict proves nothing at all.
 Both were run against the code without them first (D-015): with the invincibility
 clause removed `ward` fails and the other two still pass; with `_tick_elders`
 removed `expiry` fails. The gate goes from 18 checks to 21.
+
+## D-039 — A letter card is a letter: three meshes through the prop pipeline, self-lit, spun on the ground and held upright in the fist
+The card the letters mode is about (D-033, D-035) was a `Label3D` glyph on a
+billboard, and the comment above the constants gave the honest reason: *there is
+no card mesh in `art/generated/`*. That was a placeholder with an expiry date on
+it. The user has now supplied `G_LETTER`, `U_LETTER` and `B_LETTER` — Tripo
+exports, exactly one metre tall with the origin at the base, ornate gold,
+fronting on +Z.
+
+**They go through `decimate_assets.py`, which is only half a decimator.** 6000
+triangles and a 512-square texture each. The budget is barely a reduction — they
+arrive at 8.5k–10.6k against the props' half a million — and it is deliberately
+the *lure's* number rather than the spear's tighter one, because a letter is
+read for its shape: a G that has lost the inside of its curve is a C, and no
+texture puts that back. What they are really in the target list for is the other
+half of that script, the 4096-square base colour coming down to 512 and the
+repack into one clean single-buffer `.glb`.
+
+One thing had to be taught: Godot extracts an embedded texture as
+`<glb stem>_<image name>`, and these arrive named `G_LETTER_basecolor.jpg`, so
+the file landing beside the mesh was `letter_g_G_LETTER_basecolor.jpg.png`. The
+script now strips the extension and a leading source stem off the image name
+before repacking — a no-op for the three props, and those three were **not**
+re-run, their outputs being committed from whatever libraries were current then.
+
+### 0.60 m on the ground, which is bigger than the glyph was
+The glyph stood about 0.47 m. A shaded solid has less presence at a given height
+than an outlined unshaded one — it is lit like the world instead of shouting
+over it — and the other things that fall out of a corpse stand 0.5 to 0.7 m (the
+lure 0.49, the robe 0.70), so at the glyph's height a card would have been the
+one drop on the map reading as smaller than the rest. The sources being a metre
+tall means the height *is* the scale, and it goes on the model rather than on
+the pivot `build_card` returns, which both callers place by and would otherwise
+multiply into.
+
+### It emits its own albedo, and the operator is the whole trick
+The glyph was unshaded and that argument outlives it: a card whose brightness
+depends on which side of the island it landed on is a card you can miss. So
+every surface gets a **duplicated** material — the imported one is shared by
+every instance of the scene, and setting emission on it would light every card
+of that letter ever built — with `emission_texture` set to the albedo at 0.7.
+
+The albedo rather than a flat gold, because the ornament is most of what makes
+one of these read as a letter at four metres; emit one colour instead and it is
+a glyph again with worse edges. And `emission_operator` must be **MULTIPLY**:
+the default *adds* the emission colour to the emission texture, so `Color.WHITE`
+— which is there to mean "the texture, unaltered" — instead means a flat white
+term on top of the gold. It was looked at that way at 0.7, 0.3 and 0.15 and all
+three were cream-coloured blobs. The fix was the operator, not the energy.
+
+### On the ground it spins; in the fist it stands still and faces forward
+A billboard is already facing you and spinning one costs a matrix for nothing,
+which is why the card never turned. A mesh is the other case — it has a back,
+and a letter seen from behind is a mirrored letter — so the ground card now
+turns at `SPIN_SPEED` like the mushroom and the lure, which is what lets it be
+read from whichever side you came at it from.
+
+In the hand it is instead held **upright in the world and square to the Gub's
+own facing**, every frame, off `Gub.facing()`; `Basis.looking_at` aims −Z and
+these letters front on +Z, so the target is the facing negated. Position is
+untouched and still comes from `_card_offset()` through the bone, so the card
+rides the one line around that fist already measured clear of the Gub's skin in
+every carried clip — its half-height is now 0.21 m, leaving the bottom about
+23 cm up through a full run cycle. Two alternatives were rejected. **Aligned to
+the shaft** it inherits the wrist, and `Walk` and `Run` lay that over far enough
+to tip the letter 60 degrees forward, which reads as dropped rather than held.
+**Spun like the ground card** it reads as a trophy, the opposite of what a hold
+is.
+
+### What checks it
+`tools/combat_range.tscn cards` puts one of each letter on the ground three
+metres in front of the player and prints how tall each actually stands, measured
+off the mesh's own AABB. It is the one mode in that file reaching past a public
+API — straight at `MatchState._spawn_drop` — and the roll is why: a card's
+letter is `randi() % 3` and nothing else (D-033), so the existing `letter` mode
+photographs whichever letter came up, and a picture of one random letter is not
+a picture of the asset. The gate runs it, 14 checks to 15, and it prints a
+verdict because a letter at half the height it should be is still,
+unmistakably, a letter.
+
+The cards spin from zero at spawn, so a still is a question of when: tick 363 is
+one full turn after the drop on tick 20 and catches all three face-on.
+`out/cards.png` is that frame and `out/cards_turned.png` the gate's own;
+`out/letter_hold.png`, `out/letter_pov.png`, `out/hud_hold.png` and
+`out/assets.png` are the card in a fist from the touchline, the same from the
+holder's own camera, the letter row unchanged with a letter in the hand, and all
+seven generated meshes in a row.
+
+One thing worth writing down rather than fixing: from the holder's **own**
+camera the letter is mostly behind the Gub's head. That is not new — the
+position is `CARD_ABOVE_FIST`, exactly where the glyph hung — and it is the
+right way round anyway, because the hold is an announcement aimed at everybody
+else (D-035).
