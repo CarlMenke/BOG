@@ -1,5 +1,12 @@
 # Plan — health, the bow, and a spear you can see leave the hand
 
+> **COMPLETE.** All nine steps are done and the gate is at **100 checks**, green.
+> The plan added **D-062..D-068**: health and one door for every hit, a throw you
+> can see leave the hand, the Elder's own cast, the bow, the locomotion plane and
+> the aiming spine, the heal potion, and the great sword. What each step left
+> open is written into its own record; what the *plan* leaves open is collected
+> at the bottom of this file.
+
 *Written 2026-09-14. This is an orchestration plan, not a design document: it
 says what each step is for, what it may touch, what it must not touch, and how
 we know it is done. **Every step's own planning is the step's job.** Each one
@@ -8,7 +15,7 @@ which reads the code, writes its own plan, implements it, and comes back. The
 orchestrator reviews, runs the gate, and decides.*
 
 *Decision records D-001..D-061 existed on `main` when this was written; the
-steps below have since added D-062..D-067. Gate was 63 checks then and is 92
+steps below have since added D-062..D-068. Gate was 63 checks then and is 100
 now, green.*
 
 ---
@@ -48,7 +55,7 @@ after it is sequential, because it all lands in `gub_combat.gd`,
 `gub_animator.gd`, `match_state.gd` and `docs/DECISIONS.md` — the exact overlap
 that produced three agents all claiming D-040 in one day.
 
-**The gate is the definition of done.** `bash tools/smoke_test.sh` — 92 checks
+**The gate is the definition of done.** `bash tools/smoke_test.sh` — 100 checks
 today. Run it after every step, before starting the next. A step that adds
 behaviour worth asserting adds a check, and the count in `docs/STATUS.md` moves
 with it (two places: the command comment near line 25 and the "passes, N of N"
@@ -57,7 +64,8 @@ sentence near line 29). Never start a step on a red tree.
 **Decision numbers are claimed at commit time, never reserved.** Immediately
 before writing a record, run
 `grep -oE '^## D-0[0-9]+' docs/DECISIONS.md | tail -1`, take the next number,
-and commit it with the code. Next free at the time of writing is **D-068**.
+and commit it with the code. Next free at the time of writing is **D-069**;
+D-068 was the last step's.
 
 **Commit style.** Read the last few `git log` entries first. Titles are a
 sentence with a clause; bodies explain the *why* and what was rejected, at
@@ -550,12 +558,17 @@ Wave 1, one by one:         +--> [4] spear <-+            |
                                                          +--> [9] great sword
 ```
 
-Wave 0 and **steps 4, 5, 6, 7 and 8 are done, and the gate is at 92 checks.**
-Step 8 was run **before step 7**, deliberately: two of step 6's visible defects
-were its to fix and both are (D-066). Step 7 is closed out as D-067 — the potion
-is carried stock, the heal arrives *over* the channel so an interrupted drink
-keeps the fraction that had landed, and being lured is pointedly not moving.
-**Only step 9 is left**, and it now has the sword mesh it was waiting for.
+**Every step is done and the gate is at 100 checks.** Step 8 was run **before**
+step 7, deliberately: two of step 6's visible defects were its to fix and both
+are (D-066). Step 7 is closed out as D-067 — the potion is carried stock, the
+heal arrives *over* the channel so an interrupted drink keeps the fraction that
+had landed, and being lured is pointedly not moving. Step 9 is closed out as
+D-068 — the great sword is a one-shot that *advances*, its sweep is read off the
+bone attachment because the clip turns the body 365° inside its own skeleton
+(**55–66° off the Gub's facing at the release**, measured), and chained swings feed
+D-052's momentum budget under D-052's ceiling: **7.02 m/s top sustainable speed,
+which is 1.30x run, from a standing start and from a full-speed hop chain
+alike**.
 
 Step 6's handover is closed. The composed bow pointed **91° off the Gub's own
 facing** — an archer stands side-on, and the whole of that angle lives above a
@@ -565,6 +578,35 @@ three spine bones, brings it to **3°** while also giving the torso the pitch a
 the number every run, and `-- spine` sweeps it. The 1.71 m longbow that ploughed
 `Run` by 0.158 m is out of the grass too, by a carry tilt that is blended away
 as the draw comes up — so it meets no string and D-065's grip is untouched.
+
+## What the whole plan leaves undone
+
+Four things, none of them blocking and all of them the user's call.
+
+**The strafe axis, which is step 8's and is the oldest of the four.** See the
+paragraph below: four lowercase diagonals are standing in for a lateral, and
+closing it is three downloads.
+
+**A playtest of the four weapons against each other**, which is the one thing
+none of this could settle. Three of the nine steps end with a note saying so and
+they are all the same note: the Elder's range went up and *nothing came down to
+compensate* (D-065), the potion is 40 health for two seconds of standing still in
+a game with two one-shots in it (D-067), and the great sword is a chainable
+mobility tool that is also a guaranteed kill (D-068). Every one of those is a
+number in `MatchConfig` with a lobby dial on it, so the fix for whichever turns
+out to be wrong is a slider and not a step.
+
+**Sounds.** The bow's loose, the sword's swing and the sword's connect are all
+`SPEAR_THROW` and `SPEAR_HIT_BODY` borrowed, because `audio/sfx/` has a spear in
+it and nothing else. Three recordings would close it.
+
+**A sheathe for the great sword**, if it is ever meant to be carried rather than
+appearing for the length of a swing. There is no sheathe clip anywhere in the
+pack, so that is a fresh Mixamo search — and it is a different weapon, because
+carrying a two-handed sword means choosing between it and the spear, which means
+a weapon select this game does not have (D-068).
+
+---
 
 **What step 8 leaves open, and it is the user's call:** the four lowercase
 strafes are forward-leaning diagonals (27°-47° off forward, read off the chest),

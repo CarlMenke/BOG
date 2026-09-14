@@ -138,6 +138,11 @@ static func _cause_glyph(cause: int) -> String:
 			# at you" — and the feed is where a player works out which of the
 			# two they keep dying to (D-065).
 			return "↣"
+		Gub.Cause.SWORD:
+			# Not an arrow at all, because nothing flew: the great sword is the
+			# one kill in this game that happened at arm's length, and the feed
+			# is where a player finds out that somebody got that close (D-068).
+			return "⚔"
 		Gub.Cause.LIGHTNING:
 			# The one cause with a mark of its own rather than the generic
 			# arrow, because it is the one kill in the game that is worth

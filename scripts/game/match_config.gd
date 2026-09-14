@@ -132,6 +132,48 @@ const TEAM_NONE := -1
 ## floor on how fast a stack can be spent. Without it a Gub who has just walked
 ## over four mushroom drops empties all four into the same square metre on one
 ## frame, which is neither cover nor a decision.
+## How long after a swing's blade connects before another swing may be asked
+## for, in seconds (D-068).
+##
+## **0.800 is not a feel number — it is what is left of the clip.**
+## `GubAnimator.SWING_SECONDS` is 1.867 s and `SWING_RELEASE_TIME` is 1.067, so
+## this default puts the earliest second click on the exact tick the first
+## swing's spin ends. That is what makes the sword chainable at all: `Gub`
+## opens `LANDING_GRACE` on that frame, so a player who clicks then keeps the
+## speed the last swing built and a player who is late loses it — the same
+## window a bunny hop gets, off the same field (D-052).
+##
+## Dragged up, the chain gets harder and then impossible. Dragged down, a swing
+## can be cut short by the next one, which costs whatever part of the advance
+## had not happened yet. Both are the right way round, and
+## `tools/combat_range.tscn -- sword` asserts the relationship rather than
+## trusting this comment: the default plus the release has to come out at the
+## clip's own length.
+@export_range(0.0, 10.0) var sword_recharge: float = 0.8
+
+## How far a great sword reaches, in metres from the swinging Gub's own body
+## centre to the *surface* of whatever it catches (D-068).
+##
+## **Measured with the animation rather than typed beside it.** At the release
+## frame the point of the blade is 1.433 m from the Gub's own axis — that is
+## `tools/preview_sword.tscn -- measure`, off a sword whose size is itself a
+## measurement of how far apart the two fists are in `Swing` — and this is that
+## number. `tools/combat_range.tscn -- sword` reads it again in a running match,
+## through the bone attachment, and fails if the two have come apart, so the dial
+## and the clip are checked against each other from both ends.
+##
+## What a player actually feels is **this plus the advance**: the body covers
+## `Gub.SPIN_ADVANCE`'s 1.712 m during the swing, so a swing started 3.1 m away
+## connects. That is the whole of what the spinning clip was chosen for, and it
+## is why the two numbers have to move together — shorten the window and the
+## advance shrinks while this stays where it was.
+##
+## It is a lobby dial because it is the balance number: the sword is a one-shot
+## by construction (`GubCombat.SWORD_DAMAGE`), so the only things a host can
+## trade are how long it commits you for and how far it reaches. The arc is
+## deliberately *not* a dial — see `GubCombat.SWORD_ARC`.
+@export_range(0.5, 6.0) var sword_reach: float = 1.43
+
 @export_range(0.1, 10.0) var mushroom_use_delay: float = 1.5
 @export_range(2.0, 120.0) var mushroom_lifetime: float = 25.0
 @export_range(1, 5) var mushroom_max_active: int = 2
@@ -377,6 +419,7 @@ const _FIELDS := [
 	"spear_recharge",
 	"bow_draw_time", "bow_recharge", "bow_damage_snap", "bow_damage_full",
 	"bow_speed_snap", "bow_speed_full", "bow_drop_snap", "bow_drop_full",
+	"sword_recharge", "sword_reach",
 	"mushroom_use_delay", "mushroom_lifetime", "mushroom_max_active",
 	"lure_use_delay", "lure_radius", "lure_hold", "lure_pull_strength", "lure_fuse",
 	"letter_drop_chance", "letter_hold_time",
@@ -445,6 +488,8 @@ func _clamp_all() -> void:
 	bow_speed_full = clampf(bow_speed_full, 5.0, 120.0)
 	bow_drop_snap = clampf(bow_drop_snap, 0.5, 40.0)
 	bow_drop_full = clampf(bow_drop_full, 0.5, 40.0)
+	sword_recharge = clampf(sword_recharge, 0.0, 10.0)
+	sword_reach = clampf(sword_reach, 0.5, 6.0)
 	mushroom_use_delay = clampf(mushroom_use_delay, 0.1, 10.0)
 	mushroom_lifetime = clampf(mushroom_lifetime, 2.0, 120.0)
 	mushroom_max_active = clampi(mushroom_max_active, 1, 5)

@@ -22,11 +22,11 @@ island and out to a results screen, and two automated checks now walk that path:
 one in a single process, one across two processes over a real socket.
 
 ```
-bash tools/smoke_test.sh        # 92 checks, ~4 minutes, finds Godot by itself
+bash tools/smoke_test.sh        # 100 checks, ~5 minutes, finds Godot by itself
 bash tools/net_test.sh          # two processes, one socket; ~45 s, run by hand
 ```
 
-`smoke_test.sh` is the gate and it passes, 92 of 92. `net_test.sh` is kept out
+`smoke_test.sh` is the gate and it passes, 100 of 100. `net_test.sh` is kept out
 of it to keep the gate fast; run it by hand after touching networking, the lobby
 or the results screen. It passes all eleven stages (186 + 33 assertions), ten of
 which end in a rematch, with the engine quiet in both processes — the error it
@@ -284,7 +284,7 @@ Three tiers, because three different kinds of claim need three different proofs
 
 | tool | proves |
 |---|---|
-| `tools/smoke_test.sh` | **the gate** — import, and ninety-two checks |
+| `tools/smoke_test.sh` | **the gate** — import, and one hundred checks |
 | `tools/cursor_flow.tscn` | entering a match takes the mouse, and leaving gives it back |
 | `tools/playthrough.tscn` | the whole path, menu to results; 50 assertions on the island, 58 on Rust. Takes a map id after a `--` |
 | `tools/match_rules.tscn` | 195 assertions across 14 scoring scenarios |
@@ -297,6 +297,9 @@ Three tiers, because three different kinds of claim need three different proofs
 | `tools/preview_bow.tscn` | the bow in the hand across the charge: `-- measure` solves the grip off the draw clip and prints the three constants `HeldGear` carries, and the default sheet is six Gubs from brace to full draw with the string bending under the blend shape (D-065). `-- measure` also checks the **carry**: the lowest limb tip over all eleven clips a Gub walks around in, which has to stay 0.15 m off the ground and now reaches 0.284 m where `Run` used to plough by 0.158 (D-066). **In the gate**, headless |
 | `tools/combat_range.tscn strafe` | the feet, round the compass (D-066): eight bearings at walking and running speed on a Gub held facing one way, with the slower of its two toes measured every tick. Forward and backward plant at 0.28 of body speed or better and no leg passes 1.25, against 1.36 for the one-dimensional space this replaced — and the crouch, which is still one clip behind a line, is the control that spreads 0.21 to 1.41. **In the gate**, headless with `--fixed-fps 60`; `-- strafing` is the picture |
 | `tools/combat_range.tscn spine` | the torso that aims (D-066), swept round the whole horizon and through the camera's whole pitch range at a full draw: the bow holds within 3° of bearing and 5° in space of the crosshair (against D-065's **91°**), tracks 123° of elevation, and two arrows fired from one spot at the two ends of that range leave from the *same point* 122° apart — D-025 and D-045 asserted against the thing most likely to break them. **In the gate**, headless; `-- aiming` is the picture |
+| `tools/combat_range.tscn sword` | the great sword, end to end (D-068). It opens with a **rehearsal** — one swing at nobody, with the blade read off the bone attachment at the release — because nothing in the mode can be placed until that number exists: `Swing` turns the body through a revolution inside the skeleton, and at the release the blade is **55–66° off the Gub's own facing**, so a sweep along `-basis.z` would point at empty grass. Then the fists are checked on all 112 ticks of a swing, the kill is required to land `SWING_RELEASE_TIME` after the click and *within three ticks of the blade's own full extension*, 0.35 m inside the reach dies and 0.35 m outside lives, and an Elder takes nothing and wards. **In the gate**, headless |
+| `tools/combat_range.tscn chain` | the swing as a movement tech, measured the way D-052 measured the hop and against the same ceiling (D-068). A Gub at a dead stop chains seven swings — 0.00, then 2.00 after the first, then **7.02** from the last, which is 1.30x run and is exactly `HOP_SPEED_CAP` — and a Gub that builds 7.02 with ten timed hops first has to *keep* it when it swings. Neither may pass the cap. **In the gate**, headless and deliberately **not** `--fixed-fps`: the spin and the recharge are wall-clock deadlines |
+| `tools/preview_sword.tscn` | the great sword in the hands (D-068): `-- measure` solves the grip as an equation — a two-handed hilt has to reach from the fist that holds it to the fist that joins it, so the sword's **size is a measurement of the swing** (1.26 m, from fists 0.096–0.231 m apart) — and prints the three constants `HeldGear` carries, the point's 1.443 m reach at the release, and how far the blade dips. The default sheet is seven Gubs across the swing, each set back by the advance it has covered by then, with a compass ring and a hip-line spoke under every one. **In the gate**, headless |
 | `tools/combat_range.tscn cast` | the Elder's half of the same question, and a different question (D-064): the bolt appears `MatchConfig.lightning_delay` after the click, the composed arm is 83% of the way out when it does, and the tick it appears on is the tick that arm stops going forward — which on `Cast` is a third of a second before it is furthest forward |
 | `tools/combat_range.tscn potion` | the heal potion, end to end (D-067): a real death rolls the fifth `Pickup.Kind` and a dummy standing on the corpse collects it through its own `Area3D`; drinking it delivers **no** health on the frame of the click, some of it half way through and all forty at the end; a hit half way in ends the channel, spends the potion and keeps the half that had arrived; running ends a channel and a *lure* dragging the same Gub at 4.5 m/s does not; two potions are lost on death; and the three lobby dials survive `to_dict`/`apply_dict` and both clamps. **In the gate**, headless, with the channel shortened to 1.5 s |
 | `tools/combat_range.tscn ward` | a real spear cannot kill an Elder, the robe burns out on its own, and the same throw kills once it has (D-040) |

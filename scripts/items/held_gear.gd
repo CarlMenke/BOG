@@ -17,8 +17,18 @@ extends Node3D
 ##
 ##   right hand   the spear shaft; a letter card, during a hold (D-035); the
 ##                Elder's crackle, which is what an Elder has instead of a
-##                spear (D-038); or the nocked arrow, while the bow is drawn
+##                spear (D-038); the nocked arrow, while the bow is drawn; or
+##                the great sword, for the length of a swing (D-068)
 ##   left hand    the bow
+##
+## **A great sword is two-handed and still hangs off one attachment** (D-068).
+## The rule is one *object* per hand, not one hand per object: the sword is
+## gripped by the right fist and the left goes to it in the animation, which
+## costs nothing here because the left hand is a bone the clip already moves.
+## What the rule does buy is the exclusion — the sword and the bow cannot be out
+## together, because `GubCombat._wants_bow` says so in the same place it says
+## everything else about that hand, and not because two attachments happened to
+## be free.
 ##
 ## Nothing can put two objects on one attachment, and **which one is showing is
 ## still decided in exactly one place** — `GubCombat._refresh_hand`, off the
@@ -36,6 +46,7 @@ extends Node3D
 const MODEL := preload("res://art/generated/spear.glb")
 const BOW_MODEL := preload("res://art/generated/bow.glb")
 const ARROW_MODEL := preload("res://art/generated/arrow.glb")
+const SWORD_MODEL := preload("res://art/generated/greatsword.glb")
 
 const HAND_BONE := "RightHand"
 const BOW_HAND_BONE := "LeftHand"
@@ -189,6 +200,11 @@ var _crackle: HandCrackle
 ## card and the shaft cannot end up in it together and there is no second
 ## attachment to keep in step with the first.
 var _card: Node3D
+## The great sword, while a swing is running (D-068). Same attachment again, and
+## for the fifth time the same reason: whatever is in this fist is in it because
+## `GubCombat._refresh_hand` put it there, and there is nowhere for a second
+## opinion to live.
+var _sword: Node3D
 
 
 func attach_to(skeleton: Skeleton3D) -> bool:
@@ -209,6 +225,11 @@ func attach_to(skeleton: Skeleton3D) -> bool:
 	_attachment.add_child(_arrow)
 	set_arrow_grip(ARROW_SCALE, ARROW_GRIP_OFFSET, ARROW_GRIP_ROTATION)
 	_arrow.visible = false
+
+	_sword = SWORD_MODEL.instantiate() as Node3D
+	_attachment.add_child(_sword)
+	set_sword_grip(SWORD_SCALE, SWORD_GRIP_OFFSET, SWORD_GRIP_ROTATION)
+	_sword.visible = false
 
 	_attach_bow(skeleton)
 	return true
@@ -354,7 +375,7 @@ func set_charged(charged: bool) -> void:
 	_crackle = HandCrackle.new()
 	_crackle.name = "Crackle"
 	_attachment.add_child(_crackle)
-	_crackle.position = _fist_offset()
+	_crackle.position = fist_offset()
 
 
 func is_charged() -> bool:
@@ -365,7 +386,12 @@ func is_charged() -> bool:
 ## before the shaft was slid down through it. Written as the same expression
 ## rather than as a fourth vector, so re-aiming the grip carries the crackle
 ## with it the way it already carries the card.
-func _fist_offset() -> Vector3:
+##
+## Static and public since D-068, because the great sword's fit is solved
+## outside this file (`tools/preview_sword.tscn -- measure`) and starts from the
+## same point: a hand holds a hilt where it holds a shaft, and a second palm
+## measured separately would be a second opinion about where this fist is.
+static func fist_offset() -> Vector3:
 	var shaft := Basis.from_euler(GRIP_ROTATION * (PI / 180.0)) * Vector3.UP
 	return GRIP_OFFSET + shaft * (GRIP_FRACTION * SHAFT_LENGTH)
 
@@ -388,6 +414,134 @@ func tip_transform() -> Transform3D:
 	if _model == null:
 		return global_transform
 	return _model.global_transform
+
+
+# -------------------------------------------------------- the great sword ---
+
+## Landmarks on `art/generated/greatsword.glb`, in the model's own units,
+## measured off the built file by slicing its 5,295 vertices along Y (D-068).
+##
+## The mesh runs 0.000 to 1.000 along its own **+Y with the point at zero**, so
+## +Y runs tip to pommel and the blade direction is **-Y**. Along it:
+##
+##   0.000..0.710   blade — 0.13 wide, 0.04 thick, the near-flat 901 triangles
+##                  the decimator's own budget note is about
+##   0.710..0.832   crossguard — the widest part of the model at 0.21
+##   0.832..0.913   grip — the narrow section, radius 0.019
+##   0.913..1.000   pommel — radius 0.046
+##
+## Named here rather than left as numbers in the solver, for the reason
+## `STRING_REST_Y` and `NOCK_TRAVEL` are: the tool that fits the grip and the
+## game that draws it have to agree about where on this model a fist goes, and
+## two copies of that would not.
+const SWORD_LENGTH := 1.000
+const SWORD_GUARD := 0.832
+const SWORD_POMMEL := 0.913
+
+## Where the two fists sit on the hilt, in model units.
+##
+## The forward hand is just above the crossguard and the rear hand is on the
+## pommel, which is how a sword this size is actually held — and, more to the
+## point here, it is the **longest** span the hilt offers. That matters because
+## the span is the denominator of `SWORD_SCALE`: the Gub's fists are a fixed
+## distance apart in the clip, so a shorter span buys a longer sword, and the
+## honest answer is the one that puts both fists on hilt rather than the one
+## that flatters the size.
+const SWORD_FORE_HAND := 0.850
+const SWORD_REAR_HAND := 0.980
+
+## How big the sword is, and where it sits in the right fist (D-068).
+##
+## **Every number here is a measurement of the swing**, the way the bow's three
+## are a measurement of the draw — and it is the same construction, because it
+## is the same problem: a prop held in one hand whose *other* end has to meet a
+## second hand the animation is moving. `tools/preview_sword.tscn -- measure`
+## solves it and prints these three lines:
+##
+##     P(t)   the left fist, in right-hand-local metres, sampled across the
+##            window `GubAnimator` plays of `Swing`
+##     d      normalise(mean P(t)), the line from the gripping fist to the one
+##            that joins it — which is the hilt
+##     scale  |mean P(t)| / (SWORD_REAR_HAND - SWORD_FORE_HAND)
+##     R·Y    d, because the model's +Y runs from the point to the pommel
+##     R·X    the blade's flat, squared up against d — taken from the hand's own
+##            "across the palm", because a sword's edge is square to the knuckles
+##            and nothing about the two fists decides the roll
+##     offset the palm point (`fist_offset`, the same one the crackle uses)
+##            minus scale · SWORD_FORE_HAND · d, which puts the model's origin —
+##            its **point** — the length of the fore-hilt below the fist
+##
+## The scale is the interesting half, as it was for the bow. This model is
+## 1.000 long with 0.130 of hilt between the two grip points; the Gub's fists
+## are further apart than that through the whole swing, so the sword has to be
+## scaled up or the left hand closes on empty air a long way from the pommel.
+## **The size of this sword is therefore a measurement of the animation**, not a
+## number anybody picked — and what it buys is the reach, which is why
+## `MatchConfig.sword_reach` is checked against it rather than typed beside it.
+##
+## Move `SWING_CLIP_START`/`SWING_CLIP_END` in `GubAnimator` and all three go
+## stale together. Re-run the tool rather than nudging one of them.
+const SWORD_SCALE := 1.2586
+const SWORD_GRIP_OFFSET := Vector3(0.6116, 0.4206, -0.8159)
+const SWORD_GRIP_ROTATION := Vector3(65.102, -180.000, -143.141)
+
+
+## Put a great sword in the right fist, or take it away. A visibility toggle for
+## the spear's reason: a Gub swings several times a life and rebuilding a prop
+## for each of them buys nothing.
+##
+## **This does not touch the spear, the card or the crackle**, exactly as
+## `set_letter` does not touch the spear. Which of the five is in this hand
+## belongs to `GubCombat._refresh_hand`, and a second opinion here is how the
+## hand and the gate end up disagreeing.
+func set_sword(carried: bool) -> void:
+	if _sword != null:
+		_sword.visible = carried
+
+
+func has_sword() -> bool:
+	return _sword != null and _sword.visible
+
+
+## The blade, in world space, as [the point, the crossguard] (D-068).
+##
+## **Read off the bone attachment and not off the Gub's basis**, which is the
+## whole reason this function exists. `Swing` turns the body through a full
+## revolution inside the skeleton, so at the moment the blade connects the Gub's
+## own `body_yaw` is pointing wherever it was when the player clicked and the
+## sword is pointing somewhere else entirely. A sweep along `-basis.z` would be
+## a sweep at nothing.
+##
+## `_sword.global_transform` is what a player can actually see, for D-066's
+## reason as well: `Skeleton3D.get_bone_global_pose()` does not see a
+## `SkeletonModifier3D` — the skeleton writes the modified pose into the skin and
+## restores the animation's own behind it — while `BoneAttachment3D` updates off
+## `skeleton_updated`, which fires *after* the modifier stack. So this is the one
+## reading that includes `GubAim` and is the one the sword is drawn from.
+##
+## Returns two points and not a point and a direction, because what the hit is
+## resolved against is a **segment**: a two-metre blade whose tip is past a
+## victim and whose middle is through them has hit them.
+func sword_blade() -> Array:
+	if _sword == null:
+		return [global_position, global_position]
+	# No `* SWORD_SCALE` on the guard: `set_sword_grip` puts the scale on the
+	# node itself, so it is already in this transform's basis. The bow's own
+	# measurements multiply it back in because that grip carries its scale in a
+	# hand-built basis instead, which is the kind of difference worth a line.
+	var at := _sword.global_transform
+	return [at.origin, at * Vector3(0.0, SWORD_GUARD, 0.0)]
+
+
+## Exposed for `tools/preview_sword.tscn`, which solves these before they are
+## pasted into the constants above — the same escape hatch `set_bow_grip` is.
+func set_sword_grip(model_scale: float, offset: Vector3,
+		rotation_degrees: Vector3) -> void:
+	if _sword == null:
+		return
+	_sword.scale = Vector3.ONE * model_scale
+	_sword.position = offset
+	_sword.rotation_degrees = rotation_degrees
 
 
 # --------------------------------------------------------------- the bow ---

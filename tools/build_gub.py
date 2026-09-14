@@ -306,7 +306,8 @@ LOOP_MEAN = None
 
 
 class Clip(collections.namedtuple(
-        "Clip", "file name loop align face rise_kept floor_limit authored_as")):
+        "Clip", "file name loop align face rise_kept floor_limit authored_as "
+                "advance_as")):
     """One source file, the name it takes in Godot, and its per-clip rules.
 
     `file`         the FBX, inside its pack's folder.
@@ -335,13 +336,32 @@ class Clip(collections.namedtuple(
                    no constant is a clip whose authored speed nobody will ever
                    match, so the field exists to make that omission visible in
                    the table rather than invisible in the game.
+    `advance_as`   **the travel exception** (D-068), and the one field in this
+                   table that is about a clip's metres surviving rather than its
+                   speed. See the block over `lock_root_motion` for the argument;
+                   in one sentence, a clip that names one is declaring that its
+                   horizontal travel is *not thrown away* — a **one-shot** whose
+                   advance the physics body reproduces for the length of the
+                   clip, so the feet stay planted through a motion that was drawn
+                   moving. The named constant is the metres, and the build prints
+                   it the way `authored_as` prints a speed. `Swing` is the only
+                   clip in the game that names one, and the field exists so that
+                   a second one has to be written down here rather than
+                   discovered in a match.
+
+                   The two are mutually exclusive and `check_declarations` says
+                   so: `authored_as` is a *cycle's* speed, matched by a playback
+                   rate that runs for ever, and `advance_as` is a *one-shot's*
+                   distance, produced once by the body. A clip claiming both
+                   would be claiming to be both kinds of thing.
     """
     __slots__ = ()
 
     def __new__(cls, file, name, loop, align, face=None,
-                rise_kept=None, floor_limit=None, authored_as=None):
+                rise_kept=None, floor_limit=None, authored_as=None,
+                advance_as=None):
         return super().__new__(cls, file, name, loop, align, face,
-                               rise_kept, floor_limit, authored_as)
+                               rise_kept, floor_limit, authored_as, advance_as)
 
     def rise(self):
         """The fraction of the rise to keep — 1.0, untouched, when unset."""
@@ -588,6 +608,64 @@ PACKS = (
          "a drink or a quaff, for the heal potion",
          (
              Clip("Drinking.fbx", "Drink", False, 1.267),
+         )),
+    # The great sword's one swing, and the only clip in the game whose travel is
+    # **kept** (D-068).
+    #
+    # `GreatSwordHighSpinAttack.fbx` is 1.867 s and is not an in-place swing: the
+    # body turns through a whole revolution — 350° of spread by the hip line,
+    # overshooting past 415° mid-swing — *and* arrives **1.712 m** from where it
+    # started, at 0.917 m/s. The user chose it over the in-place `great sword
+    # attack` (1.183 s, 0.092 m, 0° net turn, in `_rejected/`) for exactly that:
+    # *"the melee can spin forward, not in place, to give it some more range."*
+    #
+    # So it names an `advance_as`, and that field's whole purpose is this clip.
+    # The Hips are still clamped — they have to be, or the mesh leaves the
+    # capsule it is standing on — and what the declaration changes is that the
+    # 1.712 m is *not discarded*: it is printed at the end of the build as
+    # `Gub.SPIN_ADVANCE`, and `Gub._handle_spin` drives the body through exactly
+    # that distance over exactly this clip's length. See `lock_root_motion` for
+    # why those are two halves of one number and why keeping the fcurve instead
+    # would be the wrong half.
+    #
+    # The window is the **whole clip**, which no other one-shot in this table
+    # can say. The throw opens after a run-up the game can never show and the
+    # cast closes before a recovery a standing body has nowhere to go with; this
+    # clip has neither, because its recovery *is* the advance — the body is still
+    # travelling through the last third of it, and a window cut short would cut
+    # the metres the reach is built on. `align` is 0.000 for the reason every
+    # one-shot's is: the first frame of the window is the pose the OneShot fires
+    # into.
+    #
+    # It is grounded throughout — the build's own airborne table gives it a peak
+    # foot clearance of 0.019 m — which is what lets the physics body carry it:
+    # there is no leap in the clip for the capsule to have to reproduce.
+    #
+    # **Two files here are deliberately not declared**, the way
+    # `2_Spear_Suite/SpearThrow.fbx` and three of the bow's five are not:
+    #
+    # * `GreatSwordJumpAttack.fbx` was downloaded for the airborne case and
+    #   measured for it. It cannot serve: its feet peak **0.130 m** off the
+    #   ground and are down again 0.148 s later, and its hips rise 0.163 m — a
+    #   lunging chop with a skip in it, against a Gub's real jump of 1.69 m over
+    #   0.70 s. Played while a body is actually in the air it would land, plant
+    #   and recover a metre and a half above the floor. It also travels 2.334 m
+    #   over 2.167 s, so taking it would mean a second advance, a second release
+    #   and a second reach for one weapon. The ground swing is full-body and
+    #   already replaces the air pose, so the airborne case costs nothing and
+    #   gets the same numbers (D-068).
+    # * `DrawAGreatSword1.fbx` is the sword coming out: 0.500 s, 0.082 m, −27°.
+    #   The sword is *not carried* — it is in the fists from the click to the end
+    #   of the swing and gone otherwise (D-068) — so there is nothing for a draw
+    #   clip to precede, and the pack has no sheathe to match it with anyway.
+    #   Declaring it would be `StandingEquipBow`'s mistake one weapon along: an
+    #   equip animation for one prop and none for the other two is two rules
+    #   about the same hand.
+    Pack("7_GreatSword_Suite",
+         "the great sword's one swing: a spinning advance that keeps its metres",
+         (
+             Clip("GreatSwordHighSpinAttack.fbx", "Swing", False, 0.0,
+                  advance_as="SPIN_ADVANCE"),
          )),
 )
 
@@ -1484,6 +1562,39 @@ def check_ground(arm, action, clip):
 def lock_root_motion(action, clip):
     """Lock the Hips' horizontal travel in place, and apply the vertical rule.
 
+    **The travel exception, argued** (D-068). One clip in this game — `Swing` —
+    is supposed to *move the Gub*: the great sword's attack is a spinning
+    advance and the user chose it over an in-place swing precisely so that it
+    would cover ground. It is the one clip whose horizontal metres are kept, and
+    this is the paragraph that says what "kept" can and cannot mean, because the
+    obvious reading of it is the wrong half of a pair.
+
+    There are two places the 1.712 m could live and they are not interchangeable:
+
+    * **In the fcurve** — skip the clamp below for this clip. The Hips then
+      translate inside the skeleton while the `CharacterBody3D` stands still, so
+      the *mesh* walks 1.7 m away from the capsule it is standing on. The camera,
+      the collision, the nameplate and every hit resolved against the body stay
+      behind; the visible Gub snaps back when the one-shot ends. Nothing about
+      that is "the advance is kept" — it is the model coming off its own body.
+    * **In the physics body** — clamp as usual, and drive the capsule through the
+      same 1.712 m over the same 1.867 s (`Gub._handle_spin`). Everything moves
+      together, and the feet stay planted for the same reason `Run`'s do: the
+      clip's legs were drawn cycling against a pelvis advancing at 0.917 m/s, so
+      a body that advances at 0.917 m/s cancels exactly that.
+
+    Doing **both** is the third option and is simply wrong twice: the Gub would
+    cover 3.4 m and the feet would skate through all of it.
+
+    So the clamp stays, on every clip, with no branch in the loop below — and the
+    exception is expressed where it can be checked instead: a clip that names an
+    `advance_as` is declaring that its travel is not being thrown away, and the
+    build prints the number the game has to agree with (see the `=== for gub.gd`
+    block at the end of `main`). That is the same shape `authored_as` already
+    has for a cycle's speed, and it has the property a quiet edit to this
+    function would not: move the clip, or the window, and the printed metres move
+    with it and stop matching the constant.
+
     Index 1 of the Hips `location` curve is up: the Hips bone is vertical in the
     rest pose, so its local Y is world Z, and pose translation is applied in the
     bone's *rest* basis — which is why this holds no matter how the rotation
@@ -1998,6 +2109,23 @@ def check_declarations():
                         "%s keeps %.0f%% of its rise and sets no floor_limit, so "
                         "its vertical rule would ship unchecked"
                         % (clip.name, clip.rise_kept * 100.0))
+            # A cycle's speed and a one-shot's distance are two different
+            # claims about what happens to a clip's travel, and a clip that made
+            # both would have a playback rate matching feet to a ground speed
+            # *and* a body reproducing its metres once. See `advance_as`.
+            if clip.authored_as is not None and clip.advance_as is not None:
+                raise SystemExit(
+                    "%s names both authored_as=%s and advance_as=%s. A clip's "
+                    "travel is either a cycle's speed or a one-shot's advance, "
+                    "never both." % (clip.name, clip.authored_as, clip.advance_as))
+            # An advance that nothing reproduces is a clip that says it moves the
+            # Gub and does not, which is the failure this field exists to make
+            # visible rather than invisible.
+            if clip.advance_as is not None and clip.loop:
+                raise SystemExit(
+                    "%s is a looping clip with advance_as=%s. An advance is a "
+                    "one-shot's distance, produced once by the body; a cycle's "
+                    "travel is authored_as." % (clip.name, clip.advance_as))
             if clip.align is not LOOP_MEAN and not isinstance(clip.align, (int, float)):
                 raise SystemExit("%s: align must be LOOP_MEAN or a time in "
                                  "seconds, not %r" % (clip.name, clip.align))
@@ -2063,8 +2191,15 @@ def main():
                     % (clip.rise_kept * 100.0, row["hips_max"] - row["hips_first"]))
             if pulled:
                 note += " (%d up keys pulled toward %.3f m)" % (pulled, row["hips_first"])
-        log("  %-11s locked %.3f m of travel (%.3f m/s over %.3f s)%s"
-            % (clip.name, row["travel"], row["speed"], row["duration"], note))
+        # "locked" for every clip, and "locked, and KEPT" for the one that
+        # names an `advance_as`: the Hips are clamped either way — see the
+        # exception argued over `lock_root_motion` — and what the second half
+        # says is that these metres are handed to the physics body rather than
+        # thrown away.
+        log("  %-11s locked %.3f m of travel (%.3f m/s over %.3f s)%s%s"
+            % (clip.name, row["travel"], row["speed"], row["duration"],
+               ", and KEPT as %s" % clip.advance_as if clip.advance_as else "",
+               note))
         # A floor_limit on its own floor-checks a clip whose vertical was left
         # alone; a rise_kept cannot exist without one (check_declarations), so
         # every vertical rule in the build is checked by this line.
@@ -2122,6 +2257,21 @@ def main():
             % (clip.authored_as, row["speed"], clip.name, row["travel"],
                row["duration"], row["bearing"]))
 
+    # And the travel that is *not* thrown away (D-068). Printed under the
+    # authored speeds because it is the same measurement read the other way — a
+    # clip's own metres, which for a cycle become a playback rate and for the
+    # one one-shot that names an `advance_as` become a distance the physics body
+    # reproduces. Length as well as distance, because the two are the halves of
+    # one number: `Gub` drives `SPIN_ADVANCE` over `GubAnimator`'s own window,
+    # and either moving without the other is a Gub whose feet skate.
+    for clip in clips:
+        if clip.advance_as is None:
+            continue
+        row = rows[clip.name]
+        log("    %-26s := %.3f   # %s: KEPT, %.3f m over %.3f s = %.3f m/s"
+            % (clip.advance_as, row["travel"], clip.name, row["travel"],
+               row["duration"], row["speed"]))
+
     # A moment that never happens in a clip prints as "n/a" rather than
     # crashing the summary after the asset has already been written. So does a
     # clip that is not in this build at all: everything below is named by hand
@@ -2161,12 +2311,15 @@ def main():
         log("    %-11s length %.3f  low %s..%s (hips %.3f m)  standing again %s"
             % ("Slide", row["duration"], at(row, "low_from"), at(row, "low_to"),
                row["hips_min"], at(row, "stood_up")))
-    # Both windups, because `gub_animator.gd` cuts a release out of both and the
-    # two of them disagree about which of these columns *is* the release: the
-    # throw's is its furthest forward and the cast's is neither that nor the
-    # peak (D-063, D-064). Printing both for both is what lets either constant
-    # be checked against the asset rather than believed.
-    for name in ("Throw", "Cast"):
+    # The three windups, because `gub_animator.gd` cuts a release out of all
+    # three and they disagree about which of these columns *is* the release: the
+    # throw's is its furthest forward, the cast's is neither that nor the peak
+    # (D-063, D-064), and the swing's is the peak — a sword connects where the
+    # blade is fastest, which is D-025's original rule coming round again on the
+    # one clip it is unarguable for (D-068). Printing every column for every one
+    # of them is what lets each constant be checked against the asset rather
+    # than believed.
+    for name in ("Throw", "Cast", "Swing"):
         row = rows.get(name)
         if row is None:
             log("    %-11s not in this build" % name)

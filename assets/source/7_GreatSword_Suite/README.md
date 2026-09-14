@@ -14,21 +14,46 @@ separate pipelines and neither knows about the other.
 
 ## What is in here
 
-Two clips, both With Skin, both 0.0 from `GUB_2/Idle.fbx`'s bind pose. Measured
+**One of the three files is declared** — `GreatSwordHighSpinAttack.fbx`, as
+`Swing` — and the other two are deliberately not. See D-068; the short versions
+are below the table.
+
+Three clips, all With Skin, all 0.0 from `GUB_2/Idle.fbx`'s bind pose. Measured
 by `tools/audit_source_packs.py`, plus the body's yaw — measured the way
 `build_gub.py` measures facing, as the yaw of the left-hip→right-hip line, not
 off the Hips bone's own quaternion, which carries the rig's rest orientation and
 whose "yaw" is not the body's. That column is the one this pack lives or dies on:
 
-| file | frames | length | travel | peak | body yaw |
-|---|---:|---:|---:|---:|---:|
-| `DrawAGreatSword1.fbx` | 31 | 0.500 s | 0.082 m | 0.082 m | −27° |
-| `GreatSwordHighSpinAttack.fbx` | 113 | 1.867 s | **1.712 m** | 1.713 m | **+365° net, 415° peak** |
+| file | frames | length | travel | peak | body yaw | declared |
+|---|---:|---:|---:|---:|---:|:--:|
+| `DrawAGreatSword1.fbx` | 31 | 0.500 s | 0.082 m | 0.082 m | −27° | no |
+| `GreatSwordHighSpinAttack.fbx` | 113 | 1.867 s | **1.712 m** | 1.713 m | **+365° net, 415° peak** | **`Swing`** |
+| `GreatSwordJumpAttack.fbx` | 131 | 2.167 s | 2.334 m | 2.334 m | +15° bearing | no |
 
 `DrawAGreatSword1` is the sword coming out: half a second, effectively in place,
 8 cm of hip drift and 27° of turn as the body opens to bring the blade across.
 There is a second take (`draw a great sword 2`) in `_rejected/` if this one reads
-badly.
+badly. **It is not declared**, because the sword is not *carried*: it is in the
+fists from the click to the end of the swing and gone otherwise (D-068), so there
+is nothing for a draw clip to precede — and this pack has no sheathe to match it
+with anyway. Declaring it would be `3_Bow_Suite/StandingEquipBow.fbx`'s mistake
+one weapon along: an equip animation for one prop and none for the other three is
+two rules about the same hand.
+
+`GreatSwordJumpAttack` was downloaded for the airborne case and **is not
+declared**, and the measurement is why. `build_gub.py`'s own airborne table gives
+it a peak foot clearance of **0.130 m**, feet leaving at 0.712 s and back down at
+0.860 — 0.148 s in the air, 13 cm up, with the hips rising 0.163 m. A Gub's real
+jump is 1.69 m over about 0.70 s. It is a lunging chop with a skip in it, not an
+aerial attack, and played while a body is actually airborne it would land, plant
+and recover a metre and a half above the floor. It also travels 2.334 m over
+2.167 s, so taking it would mean a second advance, a second release moment and a
+second reach for one weapon.
+
+What happens instead costs nothing: the swing is a **full-body** one-shot,
+because a 365° body spin is not maskable, so it already replaces the air pose and
+the airborne case gets the same release, the same reach and the same advance as
+the grounded one.
 
 `GreatSwordHighSpinAttack` is **not an in-place swing**, and step 9 has to be
 built around that rather than surprised by it. Read the two numbers together:
@@ -43,15 +68,20 @@ two horizontal axes to their first key. It does **nothing** to yaw, and
 moment points where the rest pose points. The spin survives into the game
 intact.
 
-The two things that follow from that:
+The two things that follow from that, and what D-068 did about each:
 
-- the hit resolves at a **release moment measured off the clip**, and the body's
-  facing at that moment is nowhere near its facing at the click, so the sweep has
-  to be taken from the animated skeleton rather than from the Gub's own basis;
-- the 1.7 m the clip was authored to cover is motion the physics body now has to
-  produce or refuse, and either answer has to be deliberate. A Gub rooted in
-  place through a swing drawn with an advance will have its feet skate for the
-  whole 1.867 s.
+- the hit resolves at a **release moment measured off the clip** — 1.067 s, the
+  peak hand speed — and the body's facing at that moment is nowhere near its
+  facing at the click. Measured in a running match through the bone attachment,
+  the blade at the release is **55–66° off the Gub's own facing**, so the sweep is
+  taken from `HeldGear.sword_blade()` (which reads the `BoneAttachment3D`, the
+  only thing that sees the modifier stack — D-066) and never from `-basis.z`;
+- the 1.7 m is **kept, by the physics body**. `lock_root_motion` still clamps the
+  Hips — it has to, or the mesh walks away from the capsule it is standing on —
+  and the clip declares an `advance_as`, which means the metres are not
+  discarded: the build prints them as `Gub.SPIN_ADVANCE` and
+  `Gub._handle_movement` drives the capsule through exactly that distance over
+  exactly this clip's length, which is what keeps the feet planted.
 
 The in-place alternative measures **1.183 s, 0.092 m peak, 0.0° net turn and
 only 37° of swing** — that is `great sword attack` in `_rejected/`, and it is the

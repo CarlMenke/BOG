@@ -288,11 +288,47 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##              *lured* at the same speed keeping it; `death` is D-032, two
 ##              potions going into the ground; and `config` is the three lobby
 ##              dials through `to_dict`/`apply_dict` and the clamps.
+##   sword    — the great sword, end to end and in numbers (D-068). Four
+##              verdicts out of one run and the first of them is a *rehearsal*:
+##              one swing at nobody, with the blade's own bearing read off the
+##              bone attachment at the release and printed. That number is the
+##              whole reason this weapon needed a mode of its own — `Swing` turns
+##              the body through a revolution inside the skeleton, so the blade
+##              at the release is nowhere near `-basis.z`, and everything after
+##              this step is placed along the bearing the rehearsal measured
+##              rather than along the way the Gub is facing.
+##
+##              Then `reach`: a dummy just inside the dial dies and one just
+##              outside it lives, with the distance each one actually was at the
+##              instant of the hit printed beside the dial. `release` is the
+##              timing read two ways off the same swing — the kill lands
+##              `GubAnimator.SWING_RELEASE_TIME` after the click to within a
+##              frame and a half, on the tick the sword's own point is moving
+##              fastest — and it carries the measurement the dial is fitted to:
+##              how far the point is from the Gub's axis at that instant, against
+##              `MatchConfig.sword_reach`. `elder` is D-040 restated for a fourth
+##              weapon: a direct hit takes nothing and still flashes the ward.
+##              And `hand` is the promise the hands make — the sword is in the
+##              fists on every tick from the click to the last frame of the spin
+##              and on none before or after, with the spear and the bow out of
+##              them for exactly that long.
+##   chain    — the swing as a movement tech, measured the way D-052 measured the
+##              bunny hop and against the same ceiling (D-068). Two subjects: a
+##              Gub that chains swings from a standing start, and a Gub that
+##              builds speed with ten timed hops *first* and then chains swings
+##              out of the top of it. What is asserted is the thing the design
+##              turns on — the swing feeds `HOP_SPEED_CAP`'s budget rather than a
+##              parallel one, so neither subject may pass the cap, the standing
+##              chain has to climb well past the clip's own 0.917 m/s, and the
+##              hop chain has to *keep* what it arrived with instead of being
+##              reset to a walk by the first swing. Prints the top sustainable
+##              speed for each. Headless with `--fixed-fps 60`.
 ##   free     — no script; play it yourself
 const MODES := ["flight", "hit", "arc", "miss", "aim", "mushroom", "cover",
 	"lure", "lure_self", "letter", "cards", "lightning", "blast", "ward", "recharge",
 	"release", "cast", "bow", "draw", "strafe", "spine", "strafing", "aiming",
-	"respawn", "health", "potion", "embed", "hurt", "walk", "bhop", "leave", "free"]
+	"respawn", "health", "potion", "embed", "hurt", "walk", "bhop", "leave",
+	"sword", "chain", "free"]
 
 ## How long after the cast the verdict is taken, in physics ticks. The click
 ## only starts the windup — the bolt leaves at `MatchConfig.lightning_delay`,
@@ -1150,6 +1186,52 @@ var _embed_failures: int = 0
 var _embed_spear_was: Vector3 = Vector3.ZERO
 var _embed_body_was: Vector3 = Vector3.ZERO
 
+## `sword`'s and `chain`'s state. See `_drive_sword` and `_drive_chain`.
+##
+## There is no `_sword_at` beside `_sword_step`, unlike every other state machine
+## in this file: every step of this one is timed from a **click** and not from
+## the step it is in, so `_sword_clicked` is the only clock there is.
+var _sword_step: int = 0
+var _sword_clicked: int = 0
+## The blade at the rehearsal's release: which way it pointed in the world, how
+## far its point was from the Gub's own axis, and how far round from the way the
+## body was facing. Everything after the rehearsal is placed off the first of
+## these and the last two are printed as the measurement the dial is fitted to.
+var _sword_blade: Vector3 = Vector3.ZERO
+var _sword_blade_at: Vector3 = Vector3.ZERO
+var _sword_tip_reach: float = -1.0
+var _sword_bearing: float = 0.0
+## The furthest the point of the blade has been seen to get from the Gub's own
+## axis in the swing that is running now, and the tick it happened on — which is
+## the tick a sword connects on, read off the prop itself rather than off any
+## constant. See `_watch_sword` for why it is the reach and not the speed.
+var _sword_tip_far: float = -1.0
+var _sword_tip_far_at: int = 0
+## What the kill signal said, latched inside it — see `_on_player_killed`.
+var _sword_kill_at: int = 0
+var _sword_kill_of: int = 0
+var _sword_kill_distance: float = -1.0
+## Whether the fists have ever disagreed with the swing, and on how many ticks.
+## The longest run of ticks the fists have disagreed with the clock for, and how
+## many consecutive ones are running right now. A run and not a total — see
+## `_watch_sword`.
+var _sword_hand_wrong: int = 0
+var _sword_hand_run: int = 0
+var _sword_hand_seen: int = 0
+var _sword_failures: int = 0
+var _sword_problems: Array[String] = []
+var _wards_at_swing: int = 0
+
+var _chain_subject: int = 0
+var _chain_step: int = 0
+var _chain_at: int = 0
+var _chain_hops: int = 0
+var _chain_swings: int = 0
+var _chain_was_grounded: bool = true
+var _chain_was_spinning: bool = false
+var _chain_row: Dictionary = {}
+var _chain_failures: int = 0
+
 ## `respawn`'s state. `_respawn_loot` is every drop lying on either corpse, held
 ## by reference so the verdict can ask each one whether it was taken.
 var _respawn_step: int = 0
@@ -1271,6 +1353,16 @@ func _start_session() -> void:
 	# run is over in three.
 	if _mode == "draw":
 		config.bow_draw_time = DRAW_MODE_DRAW_TIME
+	# The sword's own run. Nothing may roll off the one death in it — a robe or a
+	# potion dropped at a dummy's feet is a claim nobody asked for — and the
+	# respawn is pushed past the end of the run so that a dummy killed in the
+	# `reach` step stays where it was killed instead of being put back on a pad
+	# thirty metres away in the middle of the next verdict (D-068).
+	if _mode == "sword":
+		config.respawn_delay = 60.0
+		config.elder_drop_chance = 0.0
+		config.letter_drop_chance = 0.0
+		config.potion_drop_chance = 0.0
 	# Three bolts inside one run, and no loot rolled off the one death in it:
 	# a robe or a letter dropped at a dummy's feet is a claim nobody asked for.
 	if _mode == "blast":
@@ -1292,8 +1384,16 @@ func _dummy_count() -> int:
 		# Nobody to shoot at, and in `strafe`'s case nobody to walk into either:
 		# a second Gub standing in the range is a capsule eight of the sixteen
 		# legs would run their subject straight through.
-		"recharge", "bhop", "release", "cast", "strafe", "spine":
+		# `chain` is a movement measurement down an empty range, for `bhop`'s
+		# reason: a second capsule on the line is something for a chained swing
+		# to run into half way through the run.
+		"recharge", "bhop", "release", "cast", "strafe", "spine", "chain":
 			return 0
+		# One to swing at and one to make an Elder. They are parked far down the
+		# range between steps and stood exactly where the rehearsal says the
+		# blade will be for each one.
+		"sword":
+			return 2
 		# One per pose in the row. See `_dummy_spot`, which is what puts them
 		# somewhere other than the three the shooting modes share.
 		"strafing":
@@ -1368,6 +1468,18 @@ func _on_player_killed(victim_id: int, killer_id: int, cause: int) -> void:
 	# here so `health` can assert that a death by damage is announced exactly as a
 	# death by anything else is.
 	_health_kill = [victim_id, killer_id, cause]
+	# The tick and the distance, latched inside the signal rather than read a
+	# frame later (D-068). `sword` is measuring a hit whose attacker is *still
+	# moving* — the spin carries the body on for another 0.800 s — so a reading
+	# taken on the next `_physics_process` is already 15 mm out of date, and the
+	# whole verdict is a comparison between that distance and a dial.
+	if _mode == "sword":
+		var attacker := MatchState.gubs.get(killer_id) as Gub
+		var victim := MatchState.gubs.get(victim_id) as Gub
+		_sword_kill_at = _frames
+		_sword_kill_of = victim_id
+		if attacker != null and victim != null:
+			_sword_kill_distance = victim.distance_to_body(attacker.body_centre())
 	print("combat_range: %s killed %s (cause %d) at frame %d" % [
 		Net.player_name(killer_id), Net.player_name(victim_id), cause, _frames])
 
@@ -1401,6 +1513,16 @@ func _physics_process(_delta: float) -> void:
 		return
 	if _mode == "spine":
 		_drive_spine()
+		return
+	# Both of these drive the body themselves and must not reach the
+	# `look_at_point` below: `sword` holds the Gub facing one way while the clip
+	# turns the *skeleton* underneath it, and a re-aim every frame would be the
+	# mode moving the one thing it is measuring. `chain` is a run down the range.
+	if _mode == "sword":
+		_drive_sword()
+		return
+	if _mode == "chain":
+		_drive_chain()
 		return
 	if _mode == "strafing":
 		_drive_lineup(_strafing_rows())
@@ -4326,6 +4448,536 @@ func _trace_frame() -> void:
 ## testbed away: the point is to hold the game in the state it is in during the
 ## fade, with Gubs still in the tree and `multiplayer.multiplayer_peer` already
 ## null, and keep ticking them there.
+# ------------------------------------------------------------- great sword ---
+
+## Where the dummies wait between steps. Far enough down the range that no sweep
+## can reach them and no respawn logic has anything to say about them.
+const SWORD_PARK := Vector3(0.0, 0.1, -40.0)
+
+## How far inside and outside the reach the two dummies stand, in metres of
+## *surface* distance. Big enough that a tick of the attacker's own advance
+## cannot move a body across the line — the swing carries the Gub 0.917 m/s, so
+## a tick is 15 mm — and small enough that "just inside" and "just outside" are
+## still the same question asked twice.
+const SWORD_MARGIN := 0.35
+
+## How far the dial may sit from the measurement it is fitted to, in metres.
+##
+## `MatchConfig.sword_reach` is where the point of the blade is at the release,
+## and this is how far those two may drift apart before the mode calls it a
+## failure. A tenth of a metre is under a third of `SWORD_MARGIN`, so a dial that
+## had gone stale by more than this would already be moving the line the two
+## dummies are placed either side of.
+const SWORD_REACH_TOLERANCE := 0.10
+
+## How many ticks of a swing are not read for the point's extension.
+##
+## `GubAnimator.SWING_FADE_IN` is 0.06 s, which is three and a half ticks during
+## which the sword is being carried by a **cross-fade** out of whatever the body
+## was doing rather than by the clip — so where the blade is during them is a
+## blend of two poses and not a frame of this one. Five ticks is the fade plus
+## one.
+const SWORD_SETTLE := 5
+
+## How many ticks the kill may land from the tick the point is furthest out.
+##
+## The release was cut at the peak speed of the *hand* (`SWING_RELEASE_IN_CLIP`),
+## measured in Blender on the raw fcurves; this checks it against the **full
+## extension of the sword**, measured in the game through the bone attachment
+## with the whole composed pose in it. Two different quantities on two different
+## rigs, which `preview_sword -- measure` puts 1.114 s against 1.067 — under three
+## ticks apart. Five is that with a tick of slack either side, and the clip's own
+## whip is four times that long.
+const SWORD_PEAK_TOLERANCE := 5
+
+## How far the kill may land from `GubAnimator.SWING_RELEASE_TIME` after the
+## click, in ticks. A frame and a half, which is `release`'s and `cast`'s own
+## tolerance and for their reason: the click lands inside a tick and the hit
+## resolves on one.
+const SWORD_RELEASE_TOLERANCE := 1.5
+
+## How long the mode waits for a swing to have finished before giving up.
+const SWORD_PATIENCE := 400
+
+
+## The great sword, end to end (D-068). See the `sword` entry in MODES' notes.
+##
+## Four verdicts and the order is the usual one of each being the control for the
+## last — but the first *step* is not a verdict at all, it is the rehearsal, and
+## that is the shape this weapon forced. Everything here has to be placed
+## somewhere, and where "in front of the Gub" is cannot be worked out from the
+## Gub: `Swing` turns the body through a revolution inside its own skeleton, so
+## the blade at the release is more than a hundred degrees off `-basis.z`. So the
+## mode swings once at nobody, reads the blade off the bone attachment at the
+## release, prints the bearing, and puts every dummy after that on the line it
+## measured. A mode that had assumed the facing would have placed its targets in
+## empty grass and reported that a great sword cannot hit anything.
+func _drive_sword() -> void:
+	var player := MatchState.gubs.get(1) as Gub
+	var combat := player.get_node_or_null("Combat") as GubCombat if player != null else null
+	var near := MatchState.gubs.get(DUMMY_BASE) as Gub
+	var far := MatchState.gubs.get(DUMMY_BASE + 1) as Gub
+	if player == null or combat == null or near == null or far == null:
+		return
+	var rig := player.get_node_or_null("CameraRig")
+	if rig != null:
+		rig.process_mode = Node.PROCESS_MODE_DISABLED
+	player.reads_local_input = false
+	_watch_sword(player, combat)
+
+	match _sword_step:
+		0:  # settle, and get both dummies out of the way
+			if _frames < 20:
+				return
+			near.revive_at(_facing(SWORD_PARK, PLAYER_SPOT))
+			far.revive_at(_facing(SWORD_PARK + Vector3(3.0, 0.0, 0.0), PLAYER_SPOT))
+			_stand_still(near)
+			_stand_still(far)
+			_sword_next(1)
+		1:  # the rehearsal: one swing at nobody
+			if not combat.has_sword():
+				return
+			_begin_swing_at(player, combat)
+			_sword_next(2)
+		2:  # read the blade at the release, then let the spin finish
+			if _frames - _sword_clicked == _release_ticks():
+				_sword_blade = _blade_now(player)
+				_sword_blade_at = player.global_position
+				_sword_tip_reach = _tip_reach(player)
+				_sword_bearing = rad_to_deg(
+					player.facing().signed_angle_to(_sword_blade, Vector3.UP))
+				print("combat_range: the blade at the release is %+.1f deg off the "
+					% _sword_bearing
+					+ "body's own facing, its point %.3f m from the axis"
+					% _sword_tip_reach)
+			if player.is_spinning() or _frames - _sword_clicked < _release_ticks():
+				if _frames - _sword_clicked < SWORD_PATIENCE:
+					return
+			_sword_expect(_sword_blade != Vector3.ZERO, "the blade was never read")
+			_sword_expect(_sword_hand_seen > 0, "no tick of the swing was watched")
+			_sword_expect(_sword_hand_wrong <= HAND_SYNC_GRACE,
+				"the fists were out of step with the swing for %d ticks running"
+					% _sword_hand_wrong)
+			_sword_verdict("hand", "the sword was in the fists through the swing "
+				+ "and out of them either side of it, over %d ticks, worst "
+				% _sword_hand_seen + "repaint lag %d" % _sword_hand_wrong)
+			_sword_next(3)
+		3:  # a dummy just inside the reach
+			if not combat.has_sword():
+				return
+			near.revive_at(_facing(_sword_spot(
+				Net.config.sword_reach - SWORD_MARGIN), _sword_blade_at))
+			_stand_still(near)
+			_sword_kill_of = 0
+			_begin_swing_at(player, combat)
+			_sword_next(4)
+		4:
+			if player.is_spinning() and _frames - _sword_clicked < SWORD_PATIENCE:
+				return
+			_sword_expect(not near.alive, "%s survived a swing %.2f m inside the reach"
+				% [near.display_name, SWORD_MARGIN])
+			_sword_expect(_sword_kill_of == DUMMY_BASE,
+				"the kill that was reported was %d" % _sword_kill_of)
+			_sword_expect(_sword_kill_distance >= 0.0
+				and _sword_kill_distance <= Net.config.sword_reach,
+				"it died at %.3f m against a %.3f m reach"
+					% [_sword_kill_distance, Net.config.sword_reach])
+			# The release, read two ways off this one swing, and the second of
+			# them is the only thing here that reads the *animation* rather than
+			# a number derived from it: the tick the blade connected has to be
+			# the tick the point of the sword is moving fastest.
+			var delay := float(_sword_kill_at - _sword_clicked)
+			var owed := _release_ticks()
+			_sword_expect(absf(delay - owed) <= SWORD_RELEASE_TOLERANCE,
+				"the kill landed %.0f ticks after the click and owed %d" % [delay, owed])
+			_sword_expect(absi(_sword_kill_at - _sword_tip_far_at)
+				<= SWORD_PEAK_TOLERANCE,
+				"the blade was fully out on tick %+d, not the tick it killed on"
+					% (_sword_tip_far_at - _sword_kill_at))
+			_sword_expect(absf(_sword_tip_reach - Net.config.sword_reach)
+				<= SWORD_REACH_TOLERANCE,
+				"the point reaches %.3f m and the dial says %.3f"
+					% [_sword_tip_reach, Net.config.sword_reach])
+			_sword_verdict("release", "the blade connected %.0f ticks after the "
+				% delay + "click (owed %d), %+d ticks from its full %.3f m "
+				% [owed, _sword_tip_far_at - _sword_kill_at, _sword_tip_far]
+				+ "extension, %.3f m out at the release against a %.3f m dial"
+				% [_sword_tip_reach, Net.config.sword_reach])
+			_sword_next(5)
+		5:  # and one just outside it
+			if not combat.has_sword():
+				return
+			near.revive_at(_facing(SWORD_PARK, PLAYER_SPOT))
+			far.revive_at(_facing(_sword_spot(
+				Net.config.sword_reach + SWORD_MARGIN), _sword_blade_at))
+			_stand_still(near)
+			_stand_still(far)
+			_sword_kill_of = 0
+			_begin_swing_at(player, combat)
+			_sword_next(6)
+		6:
+			if player.is_spinning() and _frames - _sword_clicked < SWORD_PATIENCE:
+				return
+			_sword_expect(far.alive, "%s died %.2f m outside the reach"
+				% [far.display_name, SWORD_MARGIN])
+			_sword_expect(is_equal_approx(far.health, Gub.MAX_HEALTH),
+				"%s is down to %.1f" % [far.display_name, far.health])
+			_sword_expect(_sword_kill_of == 0,
+				"something died anyway: %d" % _sword_kill_of)
+			_sword_verdict("reach", "%.2f m inside the %.2f m reach is a kill and "
+				% [SWORD_MARGIN, Net.config.sword_reach]
+				+ "%.2f m outside it is a survivor" % SWORD_MARGIN)
+			_sword_next(7)
+		7:  # the Elder, taking a direct hit
+			if not combat.has_sword():
+				return
+			far.revive_at(_facing(_sword_spot(
+				Net.config.sword_reach - SWORD_MARGIN), _sword_blade_at))
+			_stand_still(far)
+			MatchState._make_elder(far.peer_id)
+			_wards_at_swing = _wards
+			_sword_kill_of = 0
+			_begin_swing_at(player, combat)
+			_sword_next(8)
+		8:
+			if player.is_spinning() and _frames - _sword_clicked < SWORD_PATIENCE:
+				return
+			_sword_expect(far.alive, "the Elder died to a swing")
+			_sword_expect(is_equal_approx(far.health, Gub.MAX_HEALTH),
+				"the Elder is down to %.1f" % far.health)
+			_sword_expect(_wards > _wards_at_swing, "no ward flashed")
+			_sword_verdict("elder", "an Elder took a swing %.2f m inside the reach, "
+				% SWORD_MARGIN + "kept %.0f health and flashed %d ward(s)"
+				% [far.health, _wards - _wards_at_swing])
+			print("combat_range: %s" % ("sword PASS" if _sword_failures == 0
+				else "sword FAIL (%d)" % _sword_failures))
+			get_tree().quit()
+
+
+## Click, and remember which tick it was on. The rehearsal's click and the three
+## real ones go through the same function so that "how long after the click" is
+## the same question every time.
+##
+## `try_swing_sword` and not an `Input.action_press`: the `walk` mode already
+## proves the keyboard is wired, and this one is about what happens on one exact
+## tick, which a press read a frame early or late would blur (`bhop`'s argument,
+## one weapon along).
+func _begin_swing_at(player: Gub, combat: GubCombat) -> void:
+	player.revive_at(_facing(PLAYER_SPOT, Vector3(0.0, 0.1, 0.0)))
+	player.input_direction = Vector2.ZERO
+	player.wants_sprint = false
+	_sword_clicked = _frames
+	_sword_tip_far = -1.0
+	_sword_tip_far_at = 0
+	combat.try_swing_sword()
+
+
+## Every tick of every swing: where the point of the sword is, how fast it is
+## going, and whether the fists agree with the clock.
+##
+## The hand half is the promise this weapon makes, checked on every tick rather
+## than at either end of it: from the click to the last frame of the spin the
+## sword has to be there and the spear and the bow have to be gone, and outside
+## that window all three have to be the other way round. A sword that appeared a
+## frame late, or hung about a frame after the spin, would be invisible to a
+## check that only looked twice.
+func _watch_sword(player: Gub, combat: GubCombat) -> void:
+	var gear := player.held_gear
+	if gear == null:
+		return
+	if _sword_clicked <= 0:
+		return
+	_sword_hand_seen += 1
+	var wrong := false
+	if player.is_spinning():
+		wrong = not gear.has_sword() or gear.is_carried() or gear.has_bow()
+		# **How far out the point is, and not how fast it is going.** The first
+		# version of this measured the point's speed, on the grounds that D-025's
+		# rule is a peak speed and `SWING_RELEASE_IN_CLIP` was cut at one — and
+		# it was the wrong witness twice over. The pose it reads is written by
+		# the `AnimationPlayer` in the *idle* frame and read here in the physics
+		# one, and headless those two run at different rates, so a tick-to-tick
+		# difference carries however many idle frames happened to fall between
+		# two ticks (measured: 10 to 44 m/s on a blade that never exceeds about
+		# 9). Worse, smoothing that away does not help, because this clip has
+		# **two** fast passes — an overhead whip at 0.43 s and the cut at 1.07 —
+		# and they are within a few per cent of each other, so the verdict came
+		# down to which one the jitter favoured on the day.
+		#
+		# Full extension is a single maximum and is the quantity the reach dial
+		# actually is. `preview_sword -- measure` puts it 1.544 m out at 1.114 s
+		# against a release at 1.067 — under three ticks apart — and the sentence
+		# is the one D-063 used on the throw: a sword connects at the end of its
+		# reach. So the animation's witness here is *where the blade is*, and the
+		# release the clip was cut at is the hand's own peak speed measured in
+		# Blender. Two quantities, two rigs, agreeing.
+		var out := _tip_reach(player)
+		if out > _sword_tip_far and _frames - _sword_clicked > SWORD_SETTLE:
+			_sword_tip_far = out
+			_sword_tip_far_at = _frames
+	else:
+		# Not swinging: the sword must be gone and the spear must be back, which
+		# is the other half of the same promise and the half a mode that only
+		# watched the swing would never notice was broken.
+		wrong = gear.has_sword() or gear.is_carried() != combat.has_spear()
+	# Counted as a *run* and not as a total, which is `recharge`'s own shape and
+	# is there for `HAND_SYNC_GRACE`'s reason: `_refresh_hand` runs in `_process`
+	# and the clock it reads (`Gub.is_spinning()`) runs out in wall-clock time,
+	# so the tick a swing ends on is always a tick where the clock has moved and
+	# the poll has not been round yet. One idle frame is what a poll costs; a
+	# *run* of them is the hand having stopped listening.
+	if wrong:
+		_sword_hand_run += 1
+		_sword_hand_wrong = maxi(_sword_hand_wrong, _sword_hand_run)
+	else:
+		_sword_hand_run = 0
+
+
+## How far the point of the sword is from the Gub's own axis, flat — the quantity
+## `MatchConfig.sword_reach` is, measured in the game through the attachment
+## rather than in Blender through a composed transform.
+func _tip_reach(player: Gub) -> float:
+	if player.held_gear == null:
+		return -1.0
+	var tip := player.held_gear.sword_blade()[0] as Vector3
+	return Vector3(tip.x - player.global_position.x, 0.0,
+		tip.z - player.global_position.z).length()
+
+
+## Which way the blade is pointing right now, flat, off the bone attachment —
+## the same reading `GubCombat._blade_direction` makes and made here separately
+## on purpose: the mode has to be able to say the game is wrong.
+func _blade_now(player: Gub) -> Vector3:
+	if player.held_gear == null:
+		return player.facing()
+	var tip := player.held_gear.sword_blade()[0] as Vector3
+	var out := Vector3(tip.x - player.global_position.x, 0.0,
+		tip.z - player.global_position.z)
+	return out.normalized() if out.length_squared() > 0.0001 else player.facing()
+
+
+## Where a dummy has to stand for its *surface* to be `surface` metres from the
+## swinging Gub, along the bearing the rehearsal measured.
+##
+## Off `_sword_blade_at` — where the body will be when the blade connects — and
+## not off where it is standing when the button goes down. The two are 0.978 m
+## apart, because the advance is what this whole weapon is about: a mode that
+## placed its targets from the click would put every one of them a metre too far
+## away and report that the reach is broken.
+func _sword_spot(surface: float) -> Vector3:
+	var spot := _sword_blade_at + _sword_blade * (surface + Gub.CAPSULE_RADIUS)
+	spot.y = 0.1
+	return spot
+
+
+## How many ticks after the click the blade connects, as the game's own constant
+## rather than as a number typed here.
+func _release_ticks() -> int:
+	return int(round(GubAnimator.SWING_RELEASE_TIME * 60.0))
+
+
+func _sword_next(step: int) -> void:
+	_sword_step = step
+
+
+func _sword_expect(ok: bool, wrong: String) -> void:
+	if not ok:
+		_sword_problems.append(wrong)
+
+
+func _sword_verdict(label: String, detail: String) -> void:
+	if _sword_problems.is_empty():
+		print("combat_range: %s — %s PASS" % [detail, label])
+	else:
+		_sword_failures += 1
+		print("combat_range: %s — %s FAIL (%s)"
+			% [detail, label, "; ".join(_sword_problems)])
+	_sword_problems.clear()
+
+
+# ------------------------------------------------------------ the chain ---
+
+## Where a `chain` run starts and which way it goes: the same line `bhop` uses,
+## for the same reason — clear of both blocks and the back wall.
+const CHAIN_START := Vector3(-38.0, 0.1, 22.0)
+const CHAIN_WRAP := 40.0
+const CHAIN_SUBJECTS := ["standing", "hop chain"]
+## How many swings each subject chains, in the order of CHAIN_SUBJECTS.
+##
+## Seven for the standing start, because six is what it takes to climb from rest
+## to the cap at `Gub.SPIN_GAIN` — 0.00, 2.00, 3.08, 4.16, 5.24, 6.32, 7.02 — and
+## the seventh is what shows it *stays* there rather than climbing through. Three
+## for the hop chain, because that subject arrives at the cap and the question
+## asked of it is only whether a swing keeps what a hop earned; a longer chain
+## would be twelve more seconds of gate proving the same thing again.
+const CHAIN_SWINGS: Array[int] = [7, 3]
+## And how many hops the second subject builds with first: `bhop`'s own ten,
+## because what is being asserted is that a swing keeps what a hop chain earned.
+const CHAIN_HOPS := 10
+## How far over a speed a verdict tolerates, in m/s. Floats, not a feel margin.
+const CHAIN_EPSILON := 0.02
+## What a standing chain has to beat, as a multiple of run speed. The clip's own
+## advance is 0.917 m/s — a sixth of a run — so a swing that contributed no
+## impulse at all would sit there; this is well clear of that and well under the
+## 1.3x cap, so it can only be met by the budget actually accumulating.
+const CHAIN_STANDING_MIN := 1.15
+## How long the mode waits for a subject to finish its chain.
+const CHAIN_PATIENCE := 1800
+
+
+## The swing as a movement tech, measured (D-068). See the `chain` entry in
+## MODES' notes.
+##
+## This is `bhop` with a sword in it, deliberately written beside it and
+## deliberately not merged with it, for the reason `cast` is not merged with
+## `release`: the two modes disagree about the only interesting line in either.
+## A hop is an instant that has to be *timed*; a swing is 1.867 s that has to be
+## *waited out*, and the thing being pressed on the tick it becomes available is
+## a different thing. One function with a flag in it would carry both rules and
+## the flag is what would rot.
+##
+## What it proves is that there is one ceiling and not two. `Gub.begin_spin`
+## reads the speed the body already has, adds `SPIN_GAIN` of target and clamps to
+## `hop_speed_cap()` — so a standing chain climbs to the same 1.3x a hop chain
+## climbs to, and a hop chain that swings *keeps* its speed instead of being put
+## back to the clip's own 0.917 m/s. Either of those failing would mean the
+## sword had grown a speed system of its own.
+func _drive_chain() -> void:
+	var player := MatchState.gubs.get(1) as Gub
+	if player == null:
+		return
+	var combat := player.get_node_or_null("Combat") as GubCombat
+	if combat == null:
+		return
+	var rig := player.get_node_or_null("CameraRig")
+	if rig != null:
+		rig.process_mode = Node.PROCESS_MODE_DISABLED
+	player.reads_local_input = false
+	player.set_view_basis(Basis(Vector3.UP, -PI / 2.0), false)
+	if player.global_position.x > CHAIN_WRAP:
+		player.global_position.x -= CHAIN_WRAP * 2.0
+
+	var grounded := player.is_on_floor()
+	var spinning := player.is_spinning()
+	var speed := Vector2(player.velocity.x, player.velocity.z).length()
+	var target := player.target_speed()
+	var elapsed := _frames - _chain_at
+
+	match _chain_step:
+		0:  # put the subject on the start line
+			player.revive_at(Transform3D(Basis(Vector3.UP, -PI / 2.0), CHAIN_START))
+			# Nothing held for the standing subject, because "a standing start"
+			# has to mean a body at rest: with the stick forward for even ten
+			# ticks, GROUND_ACCELERATION's 0.8 m/s a tick has it running before
+			# the first swing and the mode measures a run with swings in it.
+			# The stick goes down on the first click instead — which is also
+			# what a player does, and is what `_keeps_momentum` needs between
+			# swings for the budget to be kept at all.
+			player.input_direction = Vector2.ZERO if _chain_subject == 0 \
+				else Vector2(0.0, -1.0)
+			player.wants_sprint = true
+			_chain_hops = 0
+			_chain_swings = 0
+			_chain_row = {"subject": CHAIN_SUBJECTS[_chain_subject],
+				"before": 0.0, "first": 0.0, "last": 0.0, "top": 0.0}
+			_chain_next(1 if _chain_subject == 0 else 2)
+		1:  # a standing start: at rest, straight into the first swing
+			if elapsed >= 10:
+				_chain_row["before"] = speed
+				player.input_direction = Vector2(0.0, -1.0)
+				_chain_next(4)
+		2:  # the hop chain's run-up: sprint, then ten timed hops
+			if elapsed >= 40:
+				player.request_jump()
+				_chain_next(3)
+		3:
+			if grounded and (not _chain_was_grounded or _chain_hops == 0):
+				if _chain_hops >= CHAIN_HOPS:
+					_chain_row["before"] = speed
+					_chain_next(4)
+				else:
+					player.request_jump()
+					_chain_hops += 1
+		4:  # the chain itself: swing the instant the gate allows it
+			_chain_row["top"] = maxf(_chain_row["top"], speed)
+			# Read on the tick *after* the first swing's clock starts, which is
+			# the speed the sword decided this body should travel at — the whole
+			# question for a hop chain is whether that number is the one it
+			# arrived with or the clip's own 0.917 m/s.
+			if _chain_swings == 1 and _chain_row["first"] <= 0.0:
+				_chain_row["first"] = speed
+			if not spinning and _chain_was_spinning:
+				# The frame a spin ends: the landing grace is open and the next
+				# swing has to be asked for now or the ground takes the speed
+				# back. Pressing it here is what a player pressing it here does.
+				pass
+			if combat.has_sword() and not combat.is_busy():
+				if _chain_swings >= CHAIN_SWINGS[_chain_subject]:
+					_chain_verdict(player)
+					_chain_subject += 1
+					if _chain_subject >= CHAIN_SUBJECTS.size():
+						print("combat_range: %s" % ("chain PASS"
+							if _chain_failures == 0
+							else "chain FAIL (%d)" % _chain_failures))
+						get_tree().quit()
+						return
+					_chain_next(0)
+					return
+				# The speed the *last* swing of the chain started from, which
+				# is the sustainable number rather than the best one: a peak
+				# reached once on the way up says nothing about what a player
+				# can hold.
+				if _chain_swings == CHAIN_SWINGS[_chain_subject] - 1:
+					_chain_row["last"] = speed
+				combat.try_swing_sword()
+				_chain_swings += 1
+			elif elapsed > CHAIN_PATIENCE:
+				print("combat_range: chain %s never finished its chain — chain FAIL"
+					% _chain_row["subject"])
+				get_tree().quit()
+				return
+	_chain_was_grounded = grounded
+	_chain_was_spinning = spinning
+
+
+func _chain_next(step: int) -> void:
+	_chain_step = step
+	_chain_at = _frames
+
+
+## One subject's numbers and whether they hold. The cap is `Gub.hop_speed_cap()`
+## and not a number of this mode's own, which is the point being made: the swing
+## and the hop are bounded by the same line (D-052, D-068).
+func _chain_verdict(player: Gub) -> void:
+	var row := _chain_row
+	var target := player.target_speed()
+	var cap := player.hop_speed_cap()
+	var authored := Gub.SPIN_ADVANCE / GubAnimator.SWING_SECONDS
+	var problems: Array[String] = []
+	if row["top"] > cap + CHAIN_EPSILON:
+		problems.append("the chain went past the hop cap")
+	if _chain_subject == 0:
+		if row["before"] > 0.5:
+			problems.append("the standing subject was already moving")
+		if row["last"] < target * CHAIN_STANDING_MIN:
+			problems.append("a standing chain never *held* %.2fx run"
+				% CHAIN_STANDING_MIN)
+	else:
+		# The one that would hurt most to lose: a swing out of a full hop chain
+		# has to *keep* what the hops built. If `begin_spin` ever went back to
+		# simply setting the clip's own speed, this is the line that notices,
+		# and every other line here would still pass.
+		if row["first"] < row["before"] - CHAIN_EPSILON:
+			problems.append("the first swing threw away the hop chain's speed")
+		if row["top"] < cap - 0.5:
+			problems.append("a hop chain that swings fell off the cap")
+	_chain_failures += problems.size()
+	print("combat_range: chain %-9s before %.2f  first swing %.2f  last swing %.2f  top %.2f (%.2fx, cap %.2f, run %.2f, the clip alone is %.2f) — %s" % [
+		row["subject"], row["before"], row["first"], row["last"], row["top"],
+		row["top"] / target, cap, target, authored,
+		"ok" if problems.is_empty() else "FAIL: " + ", ".join(problems)])
+
+
 func _drive_leave() -> void:
 	if _frames == 30:
 		Net.leave_lobby(Net.Leave.LOCAL_REQUEST, "", false)

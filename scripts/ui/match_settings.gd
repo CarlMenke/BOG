@@ -165,6 +165,31 @@ func _build() -> void:
 		func(v: float) -> String:
 			return "%.1f m/s²  ·  flat to %.0f m  (and the bolt with it)" % [v,
 				GubCombat.flat_band(Net.config.bow_speed_full, v)])
+	# The great sword's two, under the bow's eight and above the Elder's, because
+	# that is the order a player meets the four weapons in — and because the row
+	# that matters is again the one against `spear_recharge`: what a sword trades
+	# is a guaranteed kill for having to be *there*, and how often it can be
+	# asked for against how often a spear can is the whole of that trade (D-068).
+	#
+	# There are only two of them because there is nothing else to tune. The
+	# damage is a whole Gub by construction and the sweep's shape is a fact about
+	# the weapon rather than a setting (`GubCombat.SWORD_ARC`).
+	_slider("sword_reach", "Great sword reaches", 0.5, 6.0, 0.01,
+		func(v: float) -> String:
+			# Said with the advance in it, because the dial on its own is not
+			# the number a player experiences: the body covers
+			# `Gub.SPIN_ADVANCE` during the swing, so what a host is really
+			# dragging is where a swing can be *started* from.
+			return "%.2f m  ·  %.2f m with the advance" % [v, v + Gub.SPIN_ADVANCE])
+	_slider("sword_recharge", "Great sword recharge", 0.0, 10.0, 0.05,
+		func(v: float) -> String:
+			# And this one says what it buys, which is the chain: at the default
+			# the next swing becomes available on the tick the last one's spin
+			# ends, which is the one moment the momentum it built is still
+			# there to be added to (D-052, D-068).
+			var cycle := GubAnimator.SWING_RELEASE_TIME + v
+			return "%.2f s  ·  a swing every %.2f s%s" % [v, cycle,
+				"  (chains)" if cycle <= GubAnimator.SWING_SECONDS + 0.001 else ""])
 	# Directly under the spear's recharge, because the two are one question: how
 	# often anybody can commit to an attack — and since D-040 the Elder's is the
 	# *shorter* of the two, which is exactly the sort of thing a host should

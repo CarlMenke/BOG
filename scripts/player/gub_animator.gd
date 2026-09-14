@@ -29,7 +29,8 @@ extends AnimationTree
 ##     loose      OneShot        Loose, upper body only
 ##     cast       OneShot        Cast at the Elder's own rate, upper body only
 ##     throw      OneShot        Throw at THROW_RATE, filtered to the upper body
-##     output   <- throw
+##     swing      OneShot        Swing at SWING_RATE, **full body**
+##     output   <- swing
 ##
 ## The two windups are two one-shots and not one one-shot with a choice of clip,
 ## for the reason the four above it are four: a one-shot owns a clip, a window
@@ -47,6 +48,17 @@ extends AnimationTree
 ## it, which is what makes it replicate for the price of one float: every peer
 ## reaches the same pose from the same charge, and a Gub that is half drawn is
 ## half drawn on all eight screens.
+##
+## **The swing is the only attack in this graph that is not a layer, and it is
+## not one because it cannot be** (D-068). The great sword's clip turns the body
+## through a whole revolution and carries it 1.712 m; a mask that kept the legs
+## on the locomotion plane would leave a Gub spinning from the waist up over a
+## run cycle pointing somewhere else, and there is no line to draw the mask at
+## because the rotation is in the pelvis. So it is a full-body OneShot at the top
+## of the tree, and everything under it — the plane, the crouch, the air scrub,
+## the landing — is replaced for as long as it runs. That is also the whole of
+## "the sword works in the air": the air pose is one of the things it replaces,
+## which costs nothing and is why there is no second clip for the airborne case.
 ##
 ## **`stand` is a plane and not a line, which is the whole of D-066.** A Gub
 ## aiming holds its facing at the crosshair (`Gub._face_view`) and moves
@@ -78,7 +90,7 @@ const REQUIRED_CLIPS: Array[String] = [
 	"Idle", "Walk", "Run", "CrouchIdle", "CrouchWalk",
 	"JumpOne", "JumpTwo", "Slide", "Throw", "Cast", "Draw", "Loose",
 	"StrafeLeft", "StrafeRight", "StrafeWalkLeft", "StrafeWalkRight",
-	"RunBack", "WalkBack", "Drink",
+	"RunBack", "WalkBack", "Drink", "Swing",
 ]
 
 # -------------------------------------------------------- the airborne arc ---
@@ -492,6 +504,105 @@ static func cast_rate_for_release(seconds: float) -> float:
 static func cast_release_for_rate(rate: float) -> float:
 	return CAST_WINDOW / maxf(rate, 0.01)
 
+# ----------------------------------------------------------- the great sword --
+
+## The swing. `Swing` is `7_GreatSword_Suite/GreatSwordHighSpinAttack.fbx`,
+## 1.867 s of spinning advance: the body turns away from the target, comes round
+## through a whole revolution — 350° of spread by the hip line, overshooting past
+## 415° mid-swing — and arrives 1.712 m from where it started (D-068).
+##
+## **The window is the whole clip, and this is the only one-shot here that can
+## say that.** The throw opens 1.067 s in because the second before it is an
+## approach `lock_root_motion` would have the Gub run on the spot; the cast
+## closes 0.6 s early because its recovery is a body unwinding that a standing
+## `CharacterBody3D` has nowhere to go with; the drink is a gesture with a
+## minute of stillness round it. This clip has none of those, because its
+## recovery **is** the advance — the body is still travelling through the whole
+## of the last third — and the metres are the reach. Cut the window short and
+## `Gub.SPIN_ADVANCE` is a distance the animation no longer covers, which is the
+## feet skating for whatever was cut.
+##
+## So both ends are the clip's own, and the fade-out lives inside the second
+## half of the follow-through: Godot fades a one-shot out *inside* its window
+## (see LAND_CLIP_END), so SWING_FADE_OUT's 0.25 s runs from 1.617 — half a
+## second after the blade has gone through, and over the frames where the body
+## is coming back square. That is what hands the legs back to the locomotion
+## plane while the Gub is still moving, which is the right way round: a swing
+## that ended by planting both feet would stop a Gub that is supposed to be
+## carrying its speed into the next one.
+const SWING_CLIP_START := 0.0
+const SWING_CLIP_END := 1.8667
+
+## Where in `Swing` the blade goes through, in the clip's own seconds.
+##
+## Measured on the built asset, and by **D-025's original rule** — peak hand
+## speed — which is the fifth clip in this file to be cut and the second time
+## that rule has been the right one. It is not a judgement call here the way it
+## was on the throw and the cast, and the reason is the weapon rather than the
+## measurement: a spear leaves a hand at full extension because that is where the
+## fingers open, a caster's hand stops and holds, and a **sword cuts where the
+## blade is fastest**. There is nowhere else on a swing for the contact to be.
+##
+## `tools/build_gub.py` prints the same 1.067 at the end of every build —
+##
+##     Swing       length 1.867  peak hand speed 1.067 (6.86 m/s), furthest forward 1.650
+##
+## — which is what makes this a number that can be checked rather than believed.
+## The "furthest forward" column is 1.650 and is the same artefact the cast's
+## own record describes: the hand is carried out and round by a pelvis that is
+## still turning, so hip-relative reach goes on creeping for half a second after
+## the cut. D-063's rule, asked of this clip, picks the follow-through.
+##
+## `tools/combat_range.tscn -- sword` checks it from the other side and off a
+## different quantity again — the **sword's own tip**, read through the bone
+## attachment, in the game, with the composed pose and the modifier stack in it.
+## The tick the hit resolves on has to be the tick that tip is moving fastest.
+const SWING_RELEASE_IN_CLIP := 1.067
+
+## The part of the clip that has to have happened by the time the blade connects.
+## 1.067 s of wind-up and swing, which is a little over twice the spear's 0.500
+## and is the whole of "slow windup, big damage, no defence".
+const SWING_WINDOW := SWING_RELEASE_IN_CLIP - SWING_CLIP_START
+
+## The rate the swing is played at.
+##
+## **One, and stated rather than derived, which is the third answer this file
+## has given to the same question.** The throw's rate is derived from a release
+## the playtest asked for; the cast's is derived from a lobby dial; the loose has
+## no rate at all because "a string is as fast as a string". This is that last
+## sentence about a different weapon: the weight of a great sword *is* the 1.867
+## seconds, and speeding the clip up is the one change that would stop a heavy
+## melee reading as heavy. Nothing asks it to be anything else, so there is no
+## ask for a rate to be derived from.
+##
+## It is still a named constant with the two numbers below divided by it, for
+## D-025's reason: pin a different rate here and the release time and the
+## commitment both follow, instead of one of them quietly lying.
+const SWING_RATE := 1.0
+
+## How long after `play_swing()` the blade actually connects, in real seconds.
+## `GubCombat` reads this, and it is derived through the rate rather than typed
+## so that moving the window or the rate cannot leave the hit and the blade
+## disagreeing (D-025). = (1.067 - 0.0) / 1.0.
+const SWING_RELEASE_TIME := SWING_WINDOW / SWING_RATE
+
+## How long the whole swing takes, in real seconds — the click to the last frame.
+##
+## The other half of `Gub.SPIN_ADVANCE`: the body covers those 1.712 m over
+## exactly this, so the two together are the 0.917 m/s the clip's feet were drawn
+## cycling against. It is also the length of the commitment — no steering, no
+## second attack, no defence — which is what the weapon trades its one-shot kill
+## for, and it is what `GubCombat.sword_cycle()` is measured against.
+const SWING_SECONDS := (SWING_CLIP_END - SWING_CLIP_START) / SWING_RATE
+
+## The swing comes in faster than the throw and leaves slower than anything else
+## here. In, because what it is blending out of is a full-body pose being
+## replaced by a full-body pose and there is nothing to protect — the first
+## frames of the clip are the body already turning. Out, for the arithmetic
+## under SWING_CLIP_END.
+const SWING_FADE_IN := 0.06
+const SWING_FADE_OUT := 0.25
+
 # --------------------------------------------------------------- the drink ---
 
 ## The window of `Drink` the channel is played over, in the clip's own seconds.
@@ -663,6 +774,9 @@ const P_CAST_RATE := "parameters/cast_rate/scale"
 const P_DRINK := "parameters/drink/request"
 const P_DRINK_ACTIVE := "parameters/drink/active"
 const P_DRINK_RATE := "parameters/drink_rate/scale"
+const P_SWING := "parameters/swing/request"
+const P_SWING_ACTIVE := "parameters/swing/active"
+const P_SWING_RATE := "parameters/swing_rate/scale"
 
 var _body: Gub
 var _skeleton_path: String = ""
@@ -757,6 +871,9 @@ func _ready() -> void:
 	# reason, and a number put here would be one the dial had never been asked
 	# about, sitting where it could be played.
 	set(P_THROW_RATE, THROW_RATE)
+	# The swing's own authored speed, for the throw's reason: it has one, and
+	# unlike the cast and the drink no dial anywhere moves it (D-068).
+	set(P_SWING_RATE, SWING_RATE)
 
 	_grounded = _body.is_grounded()
 	_dive_serial = _body.sync_dive_serial
@@ -855,6 +972,17 @@ func _build_graph(player: AnimationPlayer) -> AnimationNodeBlendTree:
 	tree.add_node("throw_rate", AnimationNodeTimeScale.new(), Vector2(1340, 700))
 	tree.add_node("throw", _upper_body_shot(THROW_FADE_IN, THROW_FADE_OUT),
 		Vector2(1560, 440))
+	tree.add_node("swing_clip", _window("Swing", SWING_CLIP_START, SWING_CLIP_END),
+		Vector2(1560, 700))
+	tree.add_node("swing_rate", AnimationNodeTimeScale.new(), Vector2(1740, 700))
+	# `_shot` and not `_upper_body_shot`, and it is the only attack in this graph
+	# that is not filtered (D-068). A 365° body spin is not maskable: the
+	# rotation is in the pelvis, which is outside UPPER_BODY_BONES by design
+	# (D-029), so a filtered version of this clip would turn a Gub's chest
+	# through a revolution while its hips went on facing the crosshair. Full body
+	# is also what makes the airborne case free — the air pose is one of the
+	# things being replaced.
+	tree.add_node("swing", _shot(SWING_FADE_IN, SWING_FADE_OUT), Vector2(1760, 380))
 
 	tree.connect_node("stance", 0, "stand")
 	tree.connect_node("stance", 1, "crouch")
@@ -902,7 +1030,19 @@ func _build_graph(player: AnimationPlayer) -> AnimationNodeBlendTree:
 	# (D-038), so the shot that must win a tie is the spear's.
 	tree.connect_node("throw", 0, "cast")
 	tree.connect_node("throw", 1, "throw_rate")
-	tree.connect_node("output", 0, "throw")
+	tree.connect_node("swing_rate", 0, "swing_clip")
+	# The swing sits **over** everything, which is the one place in this graph
+	# where the order is forced rather than argued (D-068). The four nodes under
+	# it are layers filtered to the upper body; this is a whole pose. A full-body
+	# shot underneath a masked one would have the mask's clip win on every bone
+	# the mask names, so a swing fired a frame after a throw would spin the legs
+	# and keep the arms throwing. Nothing can start a swing during any of them
+	# and nothing can start any of them during a swing — `GubCombat` gates both
+	# ways — so the only overlap there can be is a fade, and in a fade the thing
+	# the player has just committed 1.867 s to has to win.
+	tree.connect_node("swing", 0, "throw")
+	tree.connect_node("swing", 1, "swing_rate")
+	tree.connect_node("output", 0, "swing")
 	return tree
 
 
@@ -1485,6 +1625,23 @@ func stop_drink() -> void:
 	set(P_DRINK, AnimationNodeOneShot.ONE_SHOT_REQUEST_FADE_OUT)
 
 
+## Fire the great sword's swing. Called on every peer by
+## `GubCombat._begin_swing`, the same way `_play_windup` is, so a remote Gub
+## visibly spins — and re-firing mid-swing restarts it from the top of the
+## window, which is what a chained swing out of a short recharge should do
+## (D-068).
+##
+## `rate` is SWING_RATE and there is no caller that passes anything else; it is a
+## parameter at all so that the graph is playing whatever the release time was
+## derived from rather than whatever was left on the node, which is the mistake
+## `play_throw`'s own comment describes.
+func play_swing(rate: float = SWING_RATE) -> void:
+	if tree_root == null:
+		return
+	set(P_SWING_RATE, maxf(rate, 0.01))
+	set(P_SWING, AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
+
+
 ## True from the moment a windup is fired until its fade-out has finished, or
 ## while a bow is being drawn — the throw's, the Elder's cast, or the draw,
 ## because what asks is the camera and what the camera wants to know is whether
@@ -1496,6 +1653,16 @@ func stop_drink() -> void:
 ## `Blend2` has no "is it running", only a weight, and a weight that is on its
 ## way down is a Gub whose shot has already gone. So it asks the body, which is
 ## the same thing `_process` scrubs the pose from.
+##
+## **The swing is deliberately not one of the answers either** (D-068), and for
+## a harder reason than the drink's. It *is* an attack, and the camera would
+## dearly like to keep the body on the crosshair through it — but the swing
+## commits its direction at the click and `Gub._handle_movement` then drives the
+## body along it for 1.867 s. A yaw that went on tracking the view would slide a
+## Gub one way while it was drawn going another, and would hand a player a way to
+## re-point an advance they had already paid for. `Gub._face` refuses the turn
+## from its end as well, so this answering yes would only be the camera asking
+## for something it could not have.
 ##
 ## **The drink is deliberately not one of the answers** (D-067). It is the one
 ## layered thing here that is not an attack, so there is nothing for the camera

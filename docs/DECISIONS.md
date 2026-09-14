@@ -7001,3 +7001,414 @@ answer: 40 health for two seconds of standing still, at 30% of drops, in a game
 where the spear and the great sword are one-shots that no amount of healing
 survives. If potions turn out to matter only against the bow, the lever is
 `heal_amount` and the dial is in the lobby.
+
+## D-068 — The great sword: a one-shot that advances, a sweep read off the skeleton, and a chain that shares the hop's ceiling
+
+The last step of `docs/PLAN_COMBAT.md`. A **heavy melee one-shot** — the spear's
+role at melee range, traded from throw to reach — and three things about it that
+no other weapon in this game has had to deal with: it moves the Gub, its own
+facing is not the Gub's, and it is meant to be chained.
+
+Damage is `Gub.MAX_HEALTH` on connect, written as that constant, which makes
+"the sword always kills" a **number and not a branch** exactly as D-062 made the
+spear's one-shot a number. There is no `sword_damage` dial and there will not be
+one: a melee attack that sometimes leaves somebody alive at arm's length is a
+worse read than one that misses, and the balance of this weapon is meant to live
+in the 1.867 s it commits you to and the reach it buys.
+
+Explicitly **not**: blocking, combos, or impact reactions. Mixamo's *Great Sword
+Pack* carries all three and all three stay in `assets/source/_rejected/`, because
+"we decided against it" and "we threw it away" are different states and only one
+of them is reversible.
+
+### The clip, and the two files beside it that are not declared
+
+`7_GreatSword_Suite/GreatSwordHighSpinAttack.fbx`, 1.867 s. The build measures
+it at **1.712 m of travel and 350° of hip-line spread, net +364.9°, overshooting
+past 415° mid-swing**. It is a spinning advance: the body turns away, comes
+round, and arrives 1.7 m from where it started facing roughly where it began.
+The user chose it over the in-place `great sword attack` (1.183 s, 0.092 m, 0°
+net turn) for one reason, in their own words: *"the melee can spin forward, not
+in place, to give it some more range."*
+
+The window is the **whole clip**, which no other one-shot in this graph can say.
+The throw opens 1.067 s in because the second before it is an approach the game
+can never show; the cast closes 0.6 s early because its recovery is a body
+unwinding that a standing `CharacterBody3D` has nowhere to go with; the drink is
+a gesture with a minute of stillness round it. This clip has neither problem,
+because **its recovery is the advance** — the body is still travelling through
+the whole of the last third — and the metres are the reach. A window cut short
+is a `SPIN_ADVANCE` the animation no longer covers, which is the feet skating for
+whatever was cut.
+
+`GreatSwordJumpAttack.fbx` was downloaded for the airborne case and is **not
+declared**, and the measurement is why. Its feet peak **0.130 m** off the ground
+and are down again 0.148 s later, and its hips rise 0.163 m — against a Gub's
+real jump of 1.69 m over 0.70 s. It is a lunging chop with a skip in it, not an
+aerial attack, and played while a body is actually in the air it would land,
+plant and recover a metre and a half above the floor. It also travels 2.334 m
+over 2.167 s, so taking it would mean a second advance, a second release and a
+second reach for one weapon. See *Airborne* below for what happens instead.
+
+`DrawAGreatSword1.fbx` is not declared either. The sword is **not carried** (see
+below), so there is nothing for a draw clip to precede — and the pack has no
+sheathe to match it with anyway. Declaring it would be `StandingEquipBow`'s
+mistake one weapon along: an equip animation for one prop and none for the other
+three is two rules about the same hand. **If the sword is ever holstered that is
+a fresh Mixamo search, not a re-download**: there is no sheathe clip anywhere in
+this pack.
+
+### The travel exception, and why keeping it in the fcurve is the wrong half
+
+`lock_root_motion` clamps every clip's two horizontal axes to their first key.
+This is the one clip in the project whose metres are **kept** — and "kept" had
+to be pinned down, because the obvious reading of it is wrong.
+
+There are two places 1.712 m could live and they are not interchangeable:
+
+* **In the fcurve**, by skipping the clamp for this clip. The Hips then translate
+  inside the skeleton while the `CharacterBody3D` stands still, so the *mesh*
+  walks 1.7 m away from the capsule it is standing on. The camera, the collision,
+  the nameplate and every hit resolved against the body stay behind, and the
+  visible Gub snaps back when the one-shot ends. That is not "the advance is
+  kept", it is the model coming off its own body.
+* **In the physics body**, by clamping as usual and driving the capsule through
+  the same 1.712 m over the same 1.867 s. Everything moves together, and the feet
+  stay planted for the reason `Run`'s do: the clip's legs were drawn cycling
+  against a pelvis advancing at 0.917 m/s, so a body advancing at 0.917 m/s
+  cancels exactly that.
+
+Doing **both** is wrong twice: the Gub covers 3.4 m and the feet skate through
+all of it.
+
+So the clamp stays, with no branch in the loop, and the exception is expressed
+where it can be checked instead. `Clip` gains one field — **`advance_as`** — and
+a clip that names one is declaring that its travel is *not discarded*: the build
+prints it beside the authored speeds,
+
+    SPIN_ADVANCE               := 1.712   # Swing: KEPT, 1.712 m over 1.867 s = 0.917 m/s
+
+and `Gub.SPIN_ADVANCE` is that line. `check_declarations` refuses a clip that
+names both `authored_as` and `advance_as` — a cycle's speed matched by a playback
+rate that runs for ever, and a one-shot's distance produced once by a body, are
+two different claims — and refuses `advance_as` on a looping clip. The root-motion
+log line now reads `locked 1.712 m of travel (0.917 m/s over 1.867 s), and KEPT
+as SPIN_ADVANCE`. Move the clip or the window and the printed metres move and
+stop matching the constant, which a quiet edit to `lock_root_motion` could never
+have done.
+
+### The sweep cannot use the Gub's basis, and this is the number that says so
+
+`lock_root_motion` does nothing to yaw and `align_facing` applies one constant
+rotation, so **the full revolution survives into the game, inside the skeleton**.
+The Gub's own `body_yaw` at the release is roughly where the player was pointing
+when they clicked; the sword is somewhere else entirely.
+
+Measured, in a running match, through the bone attachment: at the release the
+blade is **55° to 66° off the Gub's own facing**, and the spread across runs is
+where `SWING_FADE_IN` happens to land against a body turning at 222°/s. A sweep
+along `-basis.z` would point into empty grass, every time, and would look correct
+in every code review.
+
+So `GubCombat._blade_direction` reads `HeldGear.sword_blade()`, which reads the
+**`BoneAttachment3D`** the sword hangs from. D-066 wrote down why that is the
+only honest reading and this is the second feature to need it:
+`Skeleton3D.get_bone_global_pose()` does not see a `SkeletonModifier3D` — the
+skeleton writes the modified pose into the skin and restores the animation's own
+behind it, so a bone pose read from `_physics_process` is the pose before
+`GubAim` turned the torso. `BoneAttachment3D` updates off `skeleton_updated`,
+which fires *after* the modifier stack, so the attachment is the one reading that
+agrees with what a player can see.
+
+The hit itself is `_sword_victims`: every living Gub whose capsule **surface** is
+within `MatchConfig.sword_reach` of the swinger's body centre, whose bearing is
+inside `SWORD_ARC` of the blade, with a clear line through the world and through
+deployables. The first is `Gub.distance_to_body`, the same line the Elder's blast
+uses, so a crouched Gub is a smaller target for a sword exactly as it is for a
+spear. The third is why a shield mushroom is still cover.
+
+**`SWORD_ARC` is 75° either side and is not a dial.** A 150° sweep is generous
+and is meant to be — the blade genuinely passes through every bearing during the
+spin, so the honest reading of this clip would be a full circle. A full circle is
+what it is not, for the only reason that matters: **a swing has to be able to
+miss**. A 360° sweep kills the Gub standing behind you as reliably as the one you
+aimed at, which would make the one weapon in the game with a 1.867 s commitment
+the one weapon you never have to aim.
+
+The blade direction **travels with the request and the host checks it rather than
+computing it**, which is the opposite of what it looks like it should be. Every
+peer plays the same clip, but the host's copy of a remote Gub started when the
+relay landed, and under any lag it is a tick or two behind — on a clip that
+sweeps 415° in 112 ticks, "a tick or two behind" is tens of degrees of blade.
+Reading it host-side would be more wrong more often than trusting it. What a
+modified client can do with the freedom is choose which way its own swing points
+after committing to the advance, inside a 150° arc it was going to have anyway,
+at 1.4 m, having spent a second of undodgeable animation to get there. What it
+cannot do is choose who dies: the reach, the line of sight and the damage are all
+the host's own geometry. That is the same trade `DRAW_CLAIM_GRACE` records for
+the bow — slack in the *measuring*, not in the mechanic.
+
+### The reach and the animation are two halves of one number
+
+The sword's **size is a measurement of the swing**, the way the bow's is a
+measurement of the draw (D-065). A great sword is two-handed, so the hilt has to
+reach from the fist that holds it to the fist that joins it, through a clip that
+is throwing both of them about. `tools/preview_sword.tscn -- measure` solves that
+as one equation: the fists are **0.096 m apart where the rear hand chokes up and
+0.231 m at full extension** (mean 0.164), the model's hilt spans 0.130 from fore
+hand to pommel, so the sword is **1.259× its authored size — 1.26 m point to
+pommel, 1.05 m of it blade**. The worst sample puts the pommel 0.150 m from the
+rear fist, which is inside the 0.17 m mitten this rig has for a hand; no rigid
+hilt can do better than the 0.135 m the fists themselves spread.
+
+From that, at the release, **the point of the blade is 1.443 m from the Gub's own
+axis**. `MatchConfig.sword_reach` is **1.43**, and it is that measurement rather
+than a number anybody picked. What a player actually feels is that plus the
+advance: the body covers 1.712 m during the swing, so **a swing started 3.1 m
+away connects**.
+
+Both ends are checked against each other rather than trusted.
+`preview_sword -- measure` prints the reach off a composed transform in a bare
+scene; `combat_range -- sword` reads it again in a running match through the
+attachment and fails if the dial and the blade have drifted more than 0.10 m
+apart. Shorten the window and the advance shrinks while the dial stays where it
+was — which is exactly the disagreement that check exists to catch.
+
+The blade dips to **-0.437 m at 1.226 s**, a sixth of a second after the cut, as
+the follow-through carries it past the knee. That is a limit built the way
+`PACKS`'s own `floor_limit` is — *just under what the source authors* — and not a
+grip to be tuned out: a sword is swung, and a grip that kept the point out of the
+grass would be a grip that had lifted the sword out of its own swing.
+
+### The sword is only in the hands while it is being swung
+
+There is no sheathe clip and there is no weapon-select in this game, so a carried
+great sword would be a Gub that had permanently given up its spear. It appears on
+the click and is gone when the spin ends.
+
+That makes the hand rule easy rather than hard. D-065 generalised it to "never
+more than one **per hand**"; a two-handed weapon threatens that, and the answer is
+that the rule is about *objects* and not about hands. The sword hangs off the
+same right-hand `BoneAttachment3D` the shaft, the card, the crackle and the
+nocked arrow hang off — the left hand goes to it in the animation, which costs
+nothing, because the left hand is a bone the clip already moves. What the rule
+buys is the **exclusion**, and it is written where every other exclusion is:
+`_wants_shaft` and `_wants_bow` both answer no for the whole of
+`Gub.is_spinning()`, in `GubCombat._refresh_hand`, which is still the only place
+in the build that decides what is in a fist.
+
+**A letter hold disarms it**, like the spear and the bow (D-035 and the plan's
+own decisions table). **Channelling disarms it too** (D-067): `has_sword()`
+carries all three of `has_spear()`'s clauses, and the drink is the most obviously
+true of them for a two-handed weapon. The interaction runs both ways and both are
+already handled — `is_busy()` refuses a drink during a swing, and a letter picked
+up mid-swing empties the fists and cancels the hit while the body goes on
+spinning, because the advance is already paid for and a Gub that stopped dead
+mid-swing would be the animation and the physics disagreeing in the most visible
+way there is.
+
+**An Elder survives a direct hit and flashes its ward**, and takes zero, because
+D-062 made that a damage rule rather than a special case. The swing goes through
+`MatchState.report_damage` like everything else and is refused there.
+
+### One windup, one release tick, four outcomes
+
+D-025 and D-038 keep the click-to-release path single; D-064 added the cast and
+D-065 added the bow without forking it. The sword is the fourth outcome and it is
+one line in `_tick_windup`, next to the bow's.
+
+It is asked **before** the aim is read, which is the statement: three weapons
+leave this hand and go where the camera is pointing, and the fourth is already
+out there. Being first also means a swing cannot be lost to the degenerate-aim
+guard, which returns without firing when the crosshair and the throwing hand are
+on top of each other — right for a spear, a silently dropped attack here.
+
+`SWING_RELEASE_IN_CLIP` is **1.067 s**, measured on the built asset by **D-025's
+original rule — peak hand speed** — which is the fifth clip in `gub_animator.gd`
+to be cut and the second time that rule has been the right one. It is not a
+judgement call the way the throw's and the cast's were, and the reason is the
+weapon: a spear leaves a hand at full extension because that is where the fingers
+open, a caster's hand stops and holds, and **a sword cuts where the blade is
+fastest**. There is nowhere else on a swing for the contact to be. The build
+prints `Swing length 1.867 peak hand speed 1.067 (6.86 m/s), furthest forward
+1.650` every run; the "furthest forward" column is the same artefact D-064
+documents on the cast — the hand is carried out and round by a pelvis that is
+still turning, so hip-relative reach creeps for half a second after the cut, and
+D-063's rule asked of this clip picks the follow-through.
+
+`SWING_RATE` is **1.0, and stated rather than derived**, which is the third
+answer this file has given to the same question. The throw's rate is derived from
+a release the playtest asked for; the cast's from a lobby dial; the loose has no
+rate because "a string is as fast as a string". This is that last sentence about
+a different weapon: the weight of a great sword *is* the 1.867 seconds, and
+speeding the clip up is the one change that would stop a heavy melee reading as
+heavy. `SWING_RELEASE_TIME` is still derived *through* the rate, so pinning a
+different rate moves the release rather than leaving it lying.
+
+The clip is a **full-body OneShot at the top of the graph** and is the only
+attack in it that is not a layer. A 365° body spin is not maskable: the rotation
+is in the pelvis, which `UPPER_BODY_BONES` excludes by design (D-029), so a
+filtered version would turn a Gub's chest through a revolution while its hips
+went on facing the crosshair. It sits over the four masked one-shots because a
+full-body shot underneath a masked one loses every bone the mask names — a swing
+fired a frame after a throw would spin the legs and keep the arms throwing.
+
+`GubAnimator.is_throwing()` deliberately does **not** answer yes for it, and
+`Gub._face` refuses to turn a spinning body at all. The swing commits its
+direction at the click; a yaw that went on tracking the view would slide a Gub
+one way while it was drawn going another, and would hand a player a way to
+re-point an advance they had already paid for.
+
+### Airborne: the ground swing, because it already replaces the air pose
+
+The plan's decisions table says every attack works in the air, and that the sword
+is the exception that **cannot** be a layer. It is a full-body state, and the air
+pose is one of the things it replaces — so the airborne case costs nothing and
+gets the same release, the same reach and the same advance. `Gub._handle_movement`
+returns early for a spin whether the feet are down or not, so an airborne swing
+advances too; gravity is untouched, so in practice a Gub jumping at 9 m/s is back
+on the floor about 0.4 s into a 1.867 s swing and finishes it on the ground.
+
+`GreatSwordJumpAttack` would have bought a second clip, a second window, a second
+release, a second advance and a second reach — for a clip whose feet never get
+0.130 m off the ground. That is the whole argument, and the measurement is above.
+
+### The chain, and the one ceiling it shares with the bunny hop
+
+The user: *"i kinda want the chainability, it will make the sword more fun."*
+
+Two facts make that safe and both are worth writing down rather than
+rediscovering. First, **the raw motion is slow**: 1.712 m over 1.867 s is 0.917
+m/s against `RUN_SPEED` 5.4, so chaining spins to cross ground is six times worse
+than running and there is no exploit in the animation itself. Second, **this
+problem is already solved next door**: D-052's bunny hop is chainable *and*
+capped, and `HOP_SPEED_CAP = 1.3` does not refuse the chain, it puts a ceiling on
+what chaining earns.
+
+So the swing feeds **that** budget. `Gub.begin_spin` is `_hop_gain` with a sword
+in it: it reads the speed the body already has, adds `SPIN_GAIN` (0.20) of
+`target_speed()`, and clamps to `hop_speed_cap()`. Two things differ and both are
+the swing rather than the hop — there is a **floor** as well as a ceiling,
+because a Gub standing still has to produce the clip's own 0.917 m/s or its feet
+skate through the whole swing; and there is no alignment test, because a spin has
+no stick to be aligned with. `SPIN_GAIN` is five times `HOP_GAIN` and the ratio is
+the price of each: a hop costs nothing but timing, a swing costs 1.867 s of
+committed, unsteerable, undodgeable animation.
+
+The chain is made *possible* by one line in `Gub._tick_timers`: **the frame a
+spin ends opens `LANDING_GRACE`**. Without it `GROUND_FRICTION`'s 42 m/s² takes
+the whole advance back in a couple of ticks and no swing could ever be chained
+however well it was timed. With it the sword gets exactly the window a hop gets,
+off exactly the same field — press again inside 0.1 s and the speed you built is
+still there to be added to, miss it and it is gone. `MatchConfig.sword_recharge`
+defaults to **0.800 s**, which is not a feel number: it is `SWING_SECONDS` minus
+`SWING_RELEASE_TIME`, so the earliest a second swing can be asked for is the tick
+the first one's spin ends.
+
+**Measured** by `tools/combat_range.tscn -- chain` (headless, and deliberately
+*not* `--fixed-fps`: the spin and the recharge are wall-clock deadlines like
+every other cooldown in `GubCombat`, so a forced tick rate runs the simulation
+thirty times ahead of the clock the spin is waiting on). Top horizontal speed,
+in m/s:
+
+| subject | before | after the first swing | from the last swing | top | cap |
+|---|---:|---:|---:|---:|---:|
+| standing start, 7 swings | 0.00 | 2.00 | **7.02** | 7.02 | 7.02 |
+| hop chain (10 timed hops), 3 swings | 7.02 | 7.02 | **7.02** | 7.02 | 7.02 |
+
+**The top sustainable speed is 7.02 m/s from both, which is 1.30× `RUN_SPEED` and
+is exactly `HOP_SPEED_CAP`** — the number D-052 measured for the hop, reached by a
+second move that was given no ceiling of its own. The climb from rest is the
+budget accumulating and nothing else: 0.00, 2.00 (the clip's 0.917 plus 0.20 of
+run speed), 3.08, 4.16, 5.24, 6.32, 7.02. And the hop chain **keeps** what it
+arrived with rather than being put back to the clip's own 0.917 — if
+`begin_spin` ever went back to simply setting the clip's speed, that is the row
+that notices and every other row still passes.
+
+So hop and spin compose: build speed hopping, redirect and extend it with a
+swing, and one number bounds both.
+
+⚠️ *Balance note for the playtest, not for this step:* a chainable mobility tool
+that is also a one-shot kill may make the sword the default pick over the bow.
+That is a real possibility and the answer is a playtest, not a pre-emptive nerf —
+the same call the user made on the Elder (D-040).
+
+### Checked
+
+Eight new checks; the gate is **100**.
+
+* **`combat_range -- sword`**, four verdicts out of one run, and the first *step*
+  is not a verdict at all but a **rehearsal** — one swing at nobody, with the
+  blade read off the attachment at the release and the 55° printed — because
+  nothing in the mode can be placed until that number exists. A mode that had
+  assumed the facing would have put its targets in empty grass and reported that
+  a great sword cannot hit anything.
+  * `hand` — the sword is in the fists on every one of the 112 ticks of a swing
+    and the spear and the bow are not, and outside that window all three are the
+    other way round. Counted as a *run* against `HAND_SYNC_GRACE`, for the reason
+    `recharge` counts runs: `_refresh_hand` is a poll and the clock it reads runs
+    out in wall-clock time. Worst run measured: 0.
+  * `release` — the kill lands `SWING_RELEASE_TIME` after the click to within a
+    frame and a half (measured: 64 ticks, owed 64) and **within three ticks of
+    the blade's own full extension**, and the point's 1.43 m reach at that
+    instant agrees with the 1.43 m dial. The second of those is the only line in
+    this gate that checks a melee constant against the animation it was cut from,
+    and it is what would notice a window moved without the release moving with
+    it.
+
+    It measures the blade's *extension* and not its speed, which was the first
+    version and was the wrong witness twice over: the pose is written in the idle
+    frame and read in the physics one, so a tick-to-tick speed carries whatever
+    idle frames happened to fall between two ticks — and, worse, this clip has
+    **two** fast passes, an overhead whip at 0.43 s and the cut at 1.07, within a
+    few per cent of each other, so the verdict came down to which one the jitter
+    favoured on the day. Full extension is a single maximum, is the quantity the
+    dial actually is, and lands +3 ticks from the release on every run.
+  * `reach` — 0.35 m inside the dial is a kill and 0.35 m outside it is a
+    survivor, with the distance each dummy actually was at the instant of the hit
+    latched inside the kill signal (a reading taken a tick later is already 15 mm
+    stale, because the attacker is still advancing).
+  * `elder` — a direct hit takes nothing, leaves 100 health and flashes the ward.
+* **`combat_range -- chain`** — the table above.
+* **`preview_sword -- measure`** — `fit`, the hilt equation holding at every
+  sample of the window, and `blade`, the point staying above the limit the
+  follow-through authors. The same run prints the three constants, so a grip
+  going stale is caught by the run that would have been used to fix it.
+
+Two contact sheets, both in `out/`:
+`sword_swing_clip.png` is the raw clip windowed on its release with a floor
+compass under every cell (`preview_clips.sh`, which independently reports *peak
+hip-relative hand speed 6.81 m/s at 1.067 s* and *turns through 364.9° net*), and
+`sword_swing.png` is the in-game sheet — seven Gubs across the swing, each set
+back by the advance it has covered by then, on chalk marked every half metre,
+with a compass ring and a hip-line spoke under each. The first version of that
+sheet put the Gubs at their true positions on both axes and was unreadable: 1.712
+m over seven bodies is a quarter of a metre a step. That the advance is small
+compared to a Gub is the fact which made the picture worthless and is also why
+the advance is worth having.
+
+**No crosshair treatment** (D-036, D-054). The feedback is a swoosh, a body
+sound on a connect, a great sword appearing in a Gub's fists and 1.867 s of spin,
+and the kill feed gets a mark of its own (`⚔`) because the great sword is the one
+kill in this game that happened at arm's length.
+
+### What this leaves open
+
+**No HUD tile**, which is deliberate and is the bow's own omission repeated
+rather than a new one: the ability bar has four slots — spear, mushroom, lure,
+potion — and D-065 shipped the bow without a fifth. The sword's readiness is in
+the hands, which is where this game has put every weapon's since D-035: a Gub
+with a great sword out is a Gub that is mid-swing, and a Gub between swings looks
+exactly like a Gub with a spear because that is what it is. If a tile ever
+arrives it should arrive for both.
+
+A sword sound. `SPEAR_THROW` and `SPEAR_HIT_BODY` are borrowed here the way
+`SPEAR_THROW` is borrowed for the bow's loose, and both are worth replacing the
+day somebody records one.
+
+A sheathe, if the sword is ever meant to be *carried*. That is a fresh Mixamo
+search rather than a re-download, and it would be a different weapon: carrying it
+means choosing between it and the spear, which means a weapon select, which is a
+mechanic this game does not have.
+
+And the balance note above.

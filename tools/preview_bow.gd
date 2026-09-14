@@ -217,7 +217,16 @@ func _report_carry(gub: Gub, player: AnimationPlayer, skeleton: Skeleton3D) -> v
 func _carried_clips(player: AnimationPlayer) -> Array[String]:
 	var out: Array[String] = []
 	for clip: String in GubAnimator.REQUIRED_CLIPS:
-		if clip in ["JumpOne", "JumpTwo", "Slide", "Throw", "Cast", "Draw", "Loose"]:
+		# `Swing` joined the list of clips this has to skip when the great sword
+		# arrived (D-068), and for a sharper version of the same reason the
+		# throw and the cast are on it: a Gub swinging a two-handed sword has no
+		# bow *at all* — `GubCombat._wants_bow` answers no for the whole of
+		# `Gub.is_spinning()` — so measuring a carried bow through those frames
+		# is measuring a prop that is not in the world. It was measured anyway
+		# for one run, and reported a limb tip 0.111 m up where every clip a bow
+		# is really carried in clears 0.284.
+		if clip in ["JumpOne", "JumpTwo", "Slide", "Throw", "Cast", "Draw",
+				"Loose", "Swing"]:
 			continue
 		if player.has_animation(clip):
 			out.append(clip)

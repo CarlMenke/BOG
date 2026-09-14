@@ -409,6 +409,53 @@ also "a potion heals over two seconds" "interrupt PASS"
 also "a potion heals over two seconds" "moved PASS"
 also "a potion heals over two seconds" "death PASS"
 also "a potion heals over two seconds" "config PASS"
+# The great sword, end to end (D-068). Four verdicts out of one run, and the
+# first *step* of the run is not a verdict at all — it is a rehearsal, because
+# nothing in this mode can be placed until somebody has measured where the blade
+# actually is. `Swing` turns the body through a whole revolution inside the
+# skeleton, and the mode prints what that costs: at the release the blade is
+# **55 to 66 degrees off the Gub's own facing** (the spread across runs is where
+# the fade-in lands against a body doing 222 degrees a second), so a sweep taken
+# along `-basis.z` would point at empty grass every time and would look correct
+# in every code review. Every dummy after that is stood on the bearing the
+# rehearsal measured, which is the only reason the rest of the mode can place
+# anything at all.
+#
+# `hand` is the promise the fists make, asked on every one of the 112 ticks of a
+# swing rather than at either end of it: the sword is there from the click to
+# the last frame of the spin and the spear and the bow are not, and outside that
+# window all three are the other way round. `release` is the timing read two
+# ways off one swing — the kill lands `GubAnimator.SWING_RELEASE_TIME` after the
+# click to within a frame and a half, within three ticks of the blade's own
+# full extension — and it carries the measurement the reach dial is fitted to,
+# 1.43 m of blade against a 1.43 m dial. That second reading is the only line in
+# this gate that checks a *melee* constant against the animation it was cut
+# from, and it is what would notice a window moved without the release moving
+# with it. `reach` is the mechanic: 0.35 m inside the dial is a kill and 0.35 m
+# outside it is a survivor, with the distance each dummy actually was at the
+# instant of the hit printed beside it. `elder` is D-040 restated for a fourth
+# weapon — a direct hit takes nothing and still flashes the ward.
+#
+# Headless, and it quits itself in about four seconds.
+check "a great sword swing kills" "sword PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- sword
+also "a great sword swing kills" "hand PASS"
+also "a great sword swing kills" "release PASS"
+also "a great sword swing kills" "reach PASS"
+also "a great sword swing kills" "elder PASS"
+# The sword in both fists, and the blade out of the floor (D-068). The great
+# sword is two-handed, so its size is not a number anybody picked: it is
+# `|the left fist - the right fist|` across the swing divided by the hilt the
+# model has to span, which is the same shape `preview_bow -- measure` solves for
+# a string that has to meet the drawing fingers. `fit` is that equation holding —
+# the pommel stays inside the rear mitten at every sample — and `blade` is the
+# point staying above the limit the follow-through authors. The same run prints
+# the constants, so a grip going stale is caught by the run that would have been
+# used to fix it. Headless; nothing is rendered and the PNG is thrown away.
+check "the great sword fits both fists" "fit PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" --script tools/snapshot.gd -- \
+    res://tools/preview_sword.tscn "$GODOT_LOG_DIR/sword_measure.png" 4 measure
+also "the great sword fits both fists" "blade PASS"
 # A shaft standing in a Gub who is still alive, and then in the corpse that Gub
 # becomes (D-062). This is the half of the damage model that is not a number:
 # until now a projectile that hit somebody who lived had nowhere to go, because
@@ -443,6 +490,29 @@ also "a shaft rides a living Gub" "adopt PASS"
 # time, and every tick is the same length as the game's.
 check "bunny hops carry, up to a cap" "bhop PASS" \
     "$GODOT" --headless --fixed-fps 60 --path "$GODOT_ROOT" tools/combat_range.tscn -- bhop
+# And the other half of that budget (D-068). The great sword's swing feeds its
+# impulse into the **same** momentum the bunny hop uses, under the same
+# `HOP_SPEED_CAP`, rather than having a speed system of its own — so this is
+# D-052's measurement repeated with a sword in hand, and what it asserts is that
+# there is one ceiling and not two.
+#
+# Two subjects. A Gub at a dead stop chains eight swings: the first leaves it at
+# 2.00 m/s (the clip's own 0.917 plus `SPIN_GAIN` of run speed) and the last
+# starts from **7.02**, which is 1.30x run and is exactly the cap. A Gub that
+# builds 7.02 with ten timed hops first and then swings has to *keep* it — if
+# `begin_spin` ever went back to simply setting the clip's own speed, that is
+# the line that notices and every other line here still passes. Neither may go
+# past the cap.
+#
+# Headless, and **not** `--fixed-fps`, which is the one place this differs from
+# `bhop` above. A hop is timed in ticks and a swing is timed on the wall clock —
+# `Gub.is_spinning()` and `MatchConfig.sword_recharge` are both
+# `Time.get_ticks_msec` deadlines, like every other cooldown in `GubCombat` — so
+# at a forced tick rate the simulation runs far ahead of the clock the spin is
+# waiting on and a Gub advances thirty times as far through a swing that never
+# ends. Twenty-odd seconds of real time is what the honest version costs.
+check "swings chain into the hop budget" "chain PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- chain
 # Gubs in their team's colour (D-046), read off the material the renderer will
 # draw with rather than off what the script meant to set. One Gub per team has
 # to be in exactly its nameplate colour, a free-for-all Gub has to be back on the

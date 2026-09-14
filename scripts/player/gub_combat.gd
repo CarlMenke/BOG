@@ -89,6 +89,26 @@ extends Node
 ## and the host is the only machine that spends the potion or puts back a single
 ## point of health.
 ##
+## **The great sword is the fourth outcome on that one tick, and the first that
+## does not leave the hand** (D-068). A click, a wind-up, a release moment
+## measured off the clip — and then, instead of a projectile or a ray, a shape
+## resolved in front of the body. What is new is where "in front" comes from:
+## `Swing` turns the Gub through a whole revolution inside its own skeleton, so
+## at the release the body's facing is nowhere near the blade's and the sweep has
+## to be taken off the **bone attachment the sword hangs from**. What is not new
+## is anything else: one `is_winding_up`, one cancel on death, one cancel on a
+## letter, one release tick, and the damage is `Gub.MAX_HEALTH` — a number, not a
+## branch, exactly as the spear's is (D-062).
+##
+## **The sword is only in the hands while it is being swung** (D-068), which is
+## the one thing about it that is not a copy of a line above. There is no sheathe
+## clip anywhere in the pack and there is no weapon-select in this game, so a
+## carried great sword would be a Gub that had permanently given up its spear.
+## It appears on the click and is gone when the spin ends — `Gub.is_spinning()`,
+## one clock, on every peer — and for exactly that window `_wants_shaft` and
+## `_wants_bow` answer no, which is how a two-handed weapon stays inside "never
+## more than one per hand" (D-065).
+##
 ## **The clip stopped being shared, and the windup did not** (D-064). Until step
 ## 5 of `docs/PLAN_COMBAT.md` the Elder played the spear's own `Throw` at
 ## whatever rate met the delay, which worked while the throw was a baseball
@@ -230,6 +250,43 @@ func lightning_range() -> float:
 const SPEAR_DAMAGE := Gub.MAX_HEALTH
 const LIGHTNING_DAMAGE := Gub.MAX_HEALTH
 
+## What a great sword does to a Gub (D-068). The same constant again, for the
+## same reason, and this weapon is the clearest case of it: a melee attack that
+## sometimes leaves somebody alive at arm's length is a worse read than one that
+## misses, and the whole balance of this weapon is meant to live in the 1.867 s
+## it commits you to and the reach it buys — not in an arithmetic race the victim
+## cannot see. Written as `Gub.MAX_HEALTH` so that no dial the host can reach
+## makes a connected swing anything other than a kill.
+const SWORD_DAMAGE := Gub.MAX_HEALTH
+
+## How hard a swing throws the body, as the velocity handed to `report_damage`.
+##
+## Between the spear's and the bolt's, and read off the same constant: the
+## ragdoll turns a blow into motion at `GubRagdoll.IMPACT_TRANSFER` = 0.15, so a
+## flat spear arriving at its full 42 m/s gives a corpse about 6.3 m/s and the
+## bolt's 90 is a body *thrown*. 60 is about 9 m/s of corpse — more than a
+## thrown spear, because this one arrived on the end of a two-handed swing from a
+## body that was already moving, and less than lightning, because the point of
+## the bolt's number is that it is seen from across the map and the point of this
+## one is that it is seen from two metres.
+const SWORD_IMPULSE := 60.0
+
+## How wide the sweep is, in degrees either side of the blade (D-068).
+##
+## **Not a lobby dial, and that is deliberate**: `sword_reach` is the balance
+## number and this is the *shape* of the attack, which should mean the same thing
+## in every lobby. 75 degrees either side is a 150 degree sweep, which is
+## generous and is meant to be — the blade genuinely passes through every bearing
+## during the spin, so the honest reading of this clip would be a full circle.
+##
+## A full circle is what it is not, and the reason is the only reason: a swing
+## has to be able to **miss**. A 360 degree sweep is a nova that kills the Gub
+## standing behind you as reliably as the one you aimed at, which would make the
+## one weapon in the game with a 1.867 s commitment the one weapon you never have
+## to aim. 150 leaves a third of the compass safe, which is enough for a defender
+## to be *behind* a swing and enough for an attacker to have chosen wrong.
+const SWORD_ARC := 75.0
+
 ## How hard a bolt throws the body, as the velocity handed to `report_damage`.
 ##
 ## The ragdoll turns a blow into motion at `GubRagdoll.IMPACT_TRANSFER` = 0.15,
@@ -281,6 +338,7 @@ var _config: MatchConfig
 ## Local, predictive. Drives the HUD.
 var _spear_ready_at: float = 0.0
 var _bow_ready_at: float = 0.0
+var _sword_ready_at: float = 0.0
 var _lightning_ready_at: float = 0.0
 var _mushroom_ready_at: float = 0.0
 var _lure_ready_at: float = 0.0
@@ -288,6 +346,7 @@ var _lure_ready_at: float = 0.0
 ## Host-side, authoritative. Never trusted from the wire.
 var _server_spear_ready_at: float = 0.0
 var _server_bow_ready_at: float = 0.0
+var _server_sword_ready_at: float = 0.0
 var _server_lightning_ready_at: float = 0.0
 var _server_mushroom_ready_at: float = 0.0
 var _server_lure_ready_at: float = 0.0
@@ -329,6 +388,19 @@ var _windup_release_at: float = 0.0
 ## to the drawing client, like `_windup_release_at`; what every *other* peer
 ## reads is `Gub.sync_draw`, which this is the source of.
 var _draw_started_at: float = 0.0
+
+## Is the thing on its way out of this windup a **sword swing** (D-068)?
+##
+## The sword's `_loose_charge`, and the same field for the same reason: the
+## release tick has four outcomes on it now and something has to say which one
+## this is. It is a boolean rather than a number because a swing has no charge —
+## what it carries instead is read off the skeleton at the release, which is
+## where the blade is and not where any field is.
+##
+## Local to the swinging client, like `_windup_release_at`. What every *other*
+## peer reads is `Gub.is_spinning()`, which outlasts this by the length of the
+## follow-through and is what the sword in the fists is drawn from.
+var _swinging: bool = false
 
 ## How far the string was back when it was let go, or **-1 for "no arrow on its
 ## way"**.
@@ -442,6 +514,8 @@ func _process(_delta: float) -> void:
 		try_throw_lure()
 	if Input.is_action_just_pressed("drink_potion"):
 		try_drink_potion()
+	if Input.is_action_just_pressed("swing_sword"):
+		try_swing_sword()
 
 
 func spear_cooldown() -> float:
@@ -454,6 +528,10 @@ func lightning_cooldown() -> float:
 
 func bow_cooldown() -> float:
 	return maxf(0.0, _bow_ready_at - _now())
+
+
+func sword_cooldown() -> float:
+	return maxf(0.0, _sword_ready_at - _now())
 
 
 ## Seconds until another mushroom may be placed. Not a cooldown on the *ability*
@@ -560,6 +638,40 @@ func has_bow() -> bool:
 	return not is_elder() and bow_cooldown() <= 0.0 		and not is_holding_letter() and not is_channelling()
 
 
+## Whether there is a great sword to swing, and the third mirror of `has_spear()`
+## (D-068): the swing asks it, the host asks it before it will honour a request,
+## and the fists are drawn from it.
+##
+## It shares all three of the spear's clauses and for all three of the spear's
+## reasons — the Elder has lightning *instead of* its weapons (D-038), a letter
+## hold disarms it exactly as it disarms the spear and the bow (D-035, and the
+## decisions table's own call), and a Gub with a bottle at its mouth has both
+## fists busy, which for a two-handed weapon is the most obviously true of the
+## three (D-067).
+##
+## It does **not** need a clause about the swing that is already running. That is
+## `is_busy()`'s job and it is where the three `try_` functions ask it, so this
+## can stay what its two siblings are: a statement about whether this Gub has the
+## weapon at all.
+func has_sword() -> bool:
+	return not is_elder() and sword_cooldown() <= 0.0 \
+		and not is_holding_letter() and not is_channelling()
+
+
+## Is this Gub in the middle of a swing? True on every peer for every Gub, which
+## is the point of the clock living on the body (D-068).
+##
+## **One clock, and it is `Gub`'s.** The swing is the one attack here whose
+## visible life outlasts its own release: the blade connects at 1.067 s and the
+## body goes on spinning to 1.867, and for the whole of that the sword has to be
+## in the fists on eight screens and the spear has to be out of them. A second
+## deadline in this file would be a second opinion about that, on machines that
+## have no other way to tell — so the clock `Gub._handle_movement` steers by is
+## the same one the hand is drawn from, and `_begin_swing` starts it everywhere.
+func is_swinging() -> bool:
+	return _gub != null and _gub.is_spinning()
+
+
 ## Is this Gub the Elder? Asked of `MatchState` every time rather than mirrored
 ## into a field here, for exactly the reason `is_holding_letter` is: the robe is
 ## match state, the host owns it, and a copy in this file would be a second
@@ -619,6 +731,28 @@ func lightning_cycle() -> float:
 	return _config.lightning_delay + _config.lightning_cooldown
 
 
+## The whole sword cycle: the windup you have already committed to, plus the
+## recharge that follows it (D-068).
+##
+## Shaped like `spear_cycle()`, and the number it comes out at is the interesting
+## part. `GubAnimator.SWING_RELEASE_TIME` is 1.067 s and `sword_recharge` is
+## 0.800 by default, which is **exactly `GubAnimator.SWING_SECONDS`** — the
+## length of the clip. That is not a coincidence and it is not a constraint
+## either: it is where the dial's default was put, so that the earliest a second
+## swing can be asked for is the tick the first one's spin ends.
+##
+## Which is the whole of the chain. `Gub._tick_timers` opens `LANDING_GRACE` on
+## the frame a spin finishes, so a player who clicks on that tick keeps the speed
+## the last swing built and adds to it, and a player who is late loses it to the
+## ground in a couple of ticks — the same window, off the same field, that D-052
+## gives a bunny hop. Drag the dial up and the chain gets harder until it is
+## impossible; drag it down and a swing can be cut short by the next one, which
+## costs the part of the advance that had not happened yet. Both are the right
+## way round and neither needs a second rule.
+func sword_cycle() -> float:
+	return GubAnimator.SWING_RELEASE_TIME + _config.sword_recharge
+
+
 ## How fast this Gub's windup clip is played.
 ##
 ## The spear's own 1.0 for an ordinary Gub — `Throw`'s authored speed, since
@@ -675,8 +809,14 @@ func is_winding_up() -> bool:
 ## function has a second caller with a different question — `_tick_windup` asks
 ## it as "is there a release on its way", and a channel has no release for it to
 ## find (D-067).
+## It has a third term since D-068, and it is the one that is not a windup: a
+## swing's *commitment* runs 0.800 s past its own release, and everything this
+## function is asked by — the throw, the draw, the drink and the next swing — has
+## to be refused for the whole of it. Otherwise a player buys a 1.867 s
+## animation, gets the kill at 1.067, and spends the rest of it throwing spears
+## out of a body that is visibly mid-spin.
 func is_busy() -> bool:
-	return is_winding_up() or is_channelling()
+	return is_winding_up() or is_channelling() or is_swinging()
 
 
 ## True while a *throw* is between its click and its release — the spear's or
@@ -688,7 +828,7 @@ func is_busy() -> bool:
 ## in that fist and not a shaft, so answering yes for it would put two things in
 ## one hand — which is the rule this whole node exists to keep.
 func _is_throw_windup() -> bool:
-	return _windup_release_at > 0.0 and _loose_charge < 0.0
+	return _windup_release_at > 0.0 and _loose_charge < 0.0 and not _swinging
 
 
 ## True from the moment the string starts back to the moment the arrow leaves.
@@ -877,8 +1017,17 @@ func _tick_windup() -> void:
 		if _gub.alive and is_holding_letter():
 			_spear_ready_at = 0.0
 			_bow_ready_at = 0.0
+			_sword_ready_at = 0.0
 			cooldowns_changed.emit()
 		_windup_release_at = 0.0
+		# A swing abandoned rather than landed, and the blade simply does not
+		# connect: the same sentence again, one weapon further (D-068). The
+		# *spin* is deliberately not cancelled with it — `Gub` owns that clock
+		# and the body is already travelling; a Gub that stopped dead in the
+		# middle of a swing because it walked onto a letter card would be the
+		# animation and the physics disagreeing in the most visible way there
+		# is. What it loses is the kill, which is what a cancel is.
+		_swinging = false
 		# A draw abandoned rather than loosed, and the arrow is simply not
 		# there: the same sentence the spear's cancel has said since D-025, one
 		# field further. `_tick_draw` takes the charge off the body on the same
@@ -896,6 +1045,26 @@ func _tick_windup() -> void:
 	if _now() < _windup_release_at:
 		return
 	_windup_release_at = 0.0
+
+	# **The fourth outcome, and the only one that does not ask where the
+	# crosshair is** (D-068). It is asked before the aim is read rather than
+	# after, and that is the statement: three weapons leave this hand and go
+	# where the camera is pointing, and the fourth is already out there. The
+	# blade's own direction is what a swing is aimed by, it is on the skeleton,
+	# and `_blade_direction` is the one place it is read.
+	#
+	# Being first also means a swing cannot be lost to the degenerate-aim guard
+	# below, which returns without firing anything when the crosshair and the
+	# throwing hand are on top of each other. That guard is right for a spear and
+	# would be a silently dropped attack here.
+	if _swinging:
+		_swinging = false
+		var blade := _blade_direction()
+		if Net.is_host:
+			_host_swing_sword(blade)
+		else:
+			_request_swing_sword.rpc_id(1, blade)
+		return
 
 	var origin := _throw_origin()
 	var direction := (_aim_point() - origin).normalized()
@@ -1090,14 +1259,20 @@ func _tick_hand() -> void:
 	if _gub.held_gear == null:
 		return
 	var want := _wants_shaft()
-	# Three questions and not one, because the hands came apart (D-065): a bow
-	# that should be there and is not is the same bug as a shaft that should be
-	# there and is not, and the poll that catches one has to catch all three or
-	# it is a poll with a hole in it. Still one comparison each, still doing
-	# nothing at all on the frames nothing has changed.
+	# Four questions and not one, because the hands came apart (D-065) and then
+	# a fourth thing started appearing in one of them (D-068): a bow that should
+	# be there and is not is the same bug as a shaft that should be there and is
+	# not, and the poll that catches one has to catch all four or it is a poll
+	# with a hole in it. Still one comparison each, still doing nothing at all on
+	# the frames nothing has changed.
+	#
+	# The sword is the one of the four whose answer changes on a clock nobody
+	# sent a message about — `Gub.is_spinning()` simply runs out — so it is the
+	# one this poll is load-bearing for rather than merely tidy about.
 	if _gub.held_gear.is_carried() == want \
 			and _gub.held_gear.has_bow() == _wants_bow() \
-			and _gub.held_gear.has_arrow() == _wants_arrow():
+			and _gub.held_gear.has_arrow() == _wants_arrow() \
+			and _gub.held_gear.has_sword() == _wants_sword():
 		return
 	_refresh_hand()
 	cooldowns_changed.emit()
@@ -1131,7 +1306,7 @@ func _tick_hand() -> void:
 ## window — an Elder winding a bolt up must not be handed a shaft by it.
 func _wants_shaft() -> bool:
 	return not is_elder() and not is_holding_letter() and not _gub.is_drawing() \
-		and (has_spear() or _is_throw_windup())
+		and not is_swinging() and (has_spear() or _is_throw_windup())
 
 
 # --------------------------------------------------------------------- bow ---
@@ -1339,7 +1514,7 @@ func _on_arrow_struck_gub(victim: Gub, point: Vector3, bone: String,
 ## `_bow_in_use()` so that it is true on every peer's copy and not only on the
 ## archer's.
 func _wants_bow() -> bool:
-	return not is_elder() and not is_holding_letter() \
+	return not is_elder() and not is_holding_letter() and not is_swinging() \
 		and (has_bow() or _gub.is_drawing())
 
 
@@ -1350,6 +1525,281 @@ func _wants_bow() -> bool:
 ## you this second. Off the replicated draw, like the bow above.
 func _wants_arrow() -> bool:
 	return not is_elder() and not is_holding_letter() and _gub.is_drawing()
+
+
+## Should the fists be holding a great sword right now (D-068)?
+##
+## `_wants_shaft`'s fourth sibling, and the shortest of the four because there is
+## no cooldown in it: the sword is **not carried**. It exists for the length of
+## one swing and no longer, so the whole question is "is a swing running", which
+## `Gub.is_spinning()` answers on every peer — the click to the last frame of the
+## follow-through, including the 0.800 s after the blade has already been through
+## somebody.
+##
+## The other two clauses are the hand rule rather than the gate: an Elder has
+## lightning instead of its weapons and a fist holding a letter card is not
+## holding a hilt. They can both become true *during* a swing, and when they do
+## the sword goes out of the fists on the same frame the blade stops connecting
+## (`_tick_windup`) while the body goes on spinning, which is exactly the right
+## three things to happen.
+func _wants_sword() -> bool:
+	return not is_elder() and not is_holding_letter() and is_swinging()
+
+
+# -------------------------------------------------------- the great sword ---
+
+## A click starts the swing; it does not land it (D-068). The body commits to a
+## direction and an advance now, the blade connects
+## `GubAnimator.SWING_RELEASE_TIME` later, and what it connects *with* is read
+## off the skeleton at that moment rather than off the body's facing at this one
+## — which on this clip are more than a hundred degrees apart.
+##
+## Shaped like `try_throw_spear` down to the order of the lines, because it is
+## the same machinery: the click spends the cooldown whether or not the swing
+## lands, the attacker plays its own feedback immediately, and the host relays it
+## to everyone else because a client cannot address the other peers (D-024).
+##
+## The one line that is not the throw's is `_begin_swing`, and it is not a second
+## windup — it is the *commitment*: the sword into the fists, the clip into the
+## graph and the advance into the body, all three on every machine, all three off
+## the same call.
+func try_swing_sword() -> void:
+	if not has_sword() or is_busy():
+		return
+
+	_windup_release_at = _now() + GubAnimator.SWING_RELEASE_TIME
+	_swinging = true
+	# The input has been spent whether or not the blade finds anybody, so the
+	# click spends it — `try_throw_spear`'s reason, and a stronger one here,
+	# because the swing is 1.867 s of animation nobody can interrupt.
+	_sword_ready_at = _now() + sword_cycle()
+	cooldowns_changed.emit()
+
+	_begin_swing()
+	if Net.is_host:
+		_host_swing_windup()
+	else:
+		_request_swing_windup.rpc_id(1)
+
+
+## Start the clip, the clock and the advance on this machine (D-068).
+##
+## `_begin_channel`'s twin, and it is the same shape for the same reason: this is
+## the one attack in this file whose visible life is longer than its own release,
+## so every peer has to run it rather than being told about each frame of it. The
+## clock is `Gub`'s (`begin_spin`), which is what `is_swinging()` reads and what
+## the sword in the fists is drawn from; the clip is fired at its authored rate,
+## which no dial moves; and the advance is latched by `Gub` on the owning client
+## only, because movement is client-authoritative (D-004).
+##
+## `_refresh_hand` on this frame rather than on the next, which is what
+## `_tick_hand`'s poll would otherwise do: a single frame, but the single frame
+## in which everybody watching would see a Gub start a two-handed swing holding a
+## spear.
+func _begin_swing() -> void:
+	if _gub == null:
+		return
+	_gub.begin_spin(GubAnimator.SWING_SECONDS)
+	var animator := _gub.get_node_or_null("AnimationTree") as GubAnimator
+	if animator != null:
+		animator.play_swing()
+	_refresh_hand()
+	cooldowns_changed.emit()
+
+
+## Which way the blade is pointing, flattened, at the instant it connects
+## (D-068).
+##
+## **The one place the sweep's direction is read, and it is read off the bone
+## attachment.** `Swing` turns the body through a whole revolution *inside the
+## skeleton* — `lock_root_motion` does nothing to yaw and `align_facing` applies
+## one constant rotation — so `_gub.facing()` at this moment is roughly where the
+## player was pointing when they clicked and the sword is somewhere else
+## entirely. A sweep along the body's own basis would be a sweep at nothing,
+## every time, and it would look correct in every code review.
+##
+## From the Gub's axis to the **point**, and not along the blade from guard to
+## point, because what the arc is centred on is the body: `_sword_victims` asks
+## "is this Gub within the reach, in the direction the blade is out in", and the
+## direction the blade is *out in* is where its far end is relative to the body
+## that is holding it.
+##
+## `HeldGear.sword_blade()` is what reads the attachment, and D-066's trap is why
+## it has to: `Skeleton3D.get_bone_global_pose()` does not see a
+## `SkeletonModifier3D`, so a bone pose read from here is the pose before `GubAim`
+## touched the torso. `BoneAttachment3D` updates off `skeleton_updated`, which
+## fires after the modifier stack, so the attachment is the only reading that
+## agrees with what the player can see.
+func _blade_direction() -> Vector3:
+	if _gub == null:
+		return Vector3.FORWARD
+	if _gub.held_gear == null:
+		return _gub.facing()
+	var blade: Array = _gub.held_gear.sword_blade()
+	var point: Vector3 = blade[0]
+	var out := point - _gub.global_position
+	out.y = 0.0
+	# Straight up or straight down through the body's own axis: there is no
+	# horizontal component to take, so fall back rather than normalising a zero.
+	# The same guard `_look_direction` makes, about the same impossibility.
+	if out.length_squared() < 0.0001:
+		return _gub.facing()
+	return out.normalized()
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_swing_windup() -> void:
+	if not Net.is_host or multiplayer.get_remote_sender_id() != _gub.peer_id:
+		return
+	_host_swing_windup()
+
+
+## Deliberately not gated on the host's cooldown, exactly as `_host_throw_windup`
+## is not. This is the tell — a great sword appearing in a Gub's fists and a body
+## winding into a spin — and refusing it would only hide it from everyone while
+## the hit that follows is checked properly anyway.
+func _host_swing_windup() -> void:
+	if not _gub.alive:
+		return
+	_do_swing_windup.rpc()
+	_do_swing_windup()
+
+
+@rpc("authority", "call_remote", "reliable")
+func _do_swing_windup() -> void:
+	# The swinger already did this on its own click. Doing it again when the
+	# host's relay lands would restart the clip and the clock half a round trip
+	# in, which on a 1.867 s commitment is a Gub visibly rewinding.
+	if _gub == null or _gub.is_local():
+		return
+	_begin_swing()
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_swing_sword(blade: Vector3) -> void:
+	if not Net.is_host or multiplayer.get_remote_sender_id() != _gub.peer_id:
+		return
+	_host_swing_sword(blade)
+
+
+## The hit, decided on the host and nowhere else (D-068).
+##
+## Three things are checked and not believed and they are the throw's three: the
+## recharge, the gates, and — in place of the origin — the **blade**. The
+## direction travels because the client is the only machine whose copy of this
+## Gub is at the release frame *now*: every peer plays the same clip, but the
+## host's copy started when the relay landed and under any lag is a tick or two
+## behind, and this clip sweeps 415 degrees, so "a tick or two behind" is tens of
+## degrees of blade. Reading it here would be more wrong more often than trusting
+## it, which is the same trade `DRAW_CLAIM_GRACE` records for the bow: slack in
+## the *measuring*, not in the mechanic.
+##
+## What a modified client can do with it is choose which way its own swing points
+## after committing to the advance — inside a 150 degree arc it was going to have
+## anyway, at 1.4 m, having spent a second of undodgeable animation to get there.
+## What it cannot do is choose *who dies*: everything past this line is the
+## host's own geometry.
+func _host_swing_sword(blade: Vector3) -> void:
+	if not _gub.alive or _now() < _server_sword_ready_at:
+		return
+	# The authoritative half of the two gates the client already refused itself
+	# on (D-035, D-038), off the host's own rows, which are the only copies that
+	# can be trusted or finished.
+	if is_holding_letter() or is_elder():
+		return
+	var aim := Vector3(blade.x, 0.0, blade.z)
+	if not aim.is_finite() or aim.length_squared() < 0.0001:
+		aim = _gub.facing()
+	aim = aim.normalized()
+	_server_sword_ready_at = _now() + _config.sword_recharge
+
+	var centre := _gub.body_centre()
+	var victims := _sword_victims(aim)
+	# Broadcast before the damage is reported, so that on every peer the swing
+	# lands with the body rather than after it — the same ordering
+	# `_host_cast_lightning` keeps for the same reason, and both are reliable so
+	# the order they are sent in is the order they arrive in.
+	_do_swing_sword.rpc(centre, aim, not victims.is_empty())
+	_do_swing_sword(centre, aim, not victims.is_empty())
+
+	for other: Gub in victims:
+		# The same door everything else goes through, and the same number the
+		# spear uses. Whether this hit does anything — spawn protection,
+		# friendly fire, a Gub already dead, an Elder's ward — belongs to
+		# `report_damage` and is not second-guessed here (D-062).
+		var chest := other.body_axis_nearest(centre)
+		MatchState.report_damage(other.peer_id, _gub.peer_id, SWORD_DAMAGE,
+			Gub.Cause.SWORD, chest, aim * SWORD_IMPULSE,
+			SpearProjectile.nearest_bone(other, chest))
+
+
+## Every living Gub the swing catches (D-068).
+##
+## Two tests, both required, and one of them is the same line `_blast_victims`
+## uses. The *surface* of the Gub's capsule is within `sword_reach` of the
+## swinger's own body centre — `Gub.distance_to_body`, so a crouched Gub is a
+## smaller target for a sword exactly as it is for a spear and for the blast —
+## and the bearing to it is inside `SWORD_ARC` of the blade.
+##
+## Line of sight is the third, and it is here for the reason it is there: a
+## shield mushroom is cover, and a blade swung at somebody standing behind a cap
+## has to hit the cap. Tested from the swinger's chest to the nearest point on
+## the victim's own axis, through the world and through deployables and not
+## through other Gubs — a body that one body shields another from is a rule
+## nobody could read off the screen.
+##
+## The swinger is excluded and so is every dead Gub: corpses keep their collision
+## until they respawn (D-043), and a swing that killed a corpse would be three
+## seconds of a weapon hitting things that are already down.
+func _sword_victims(blade: Vector3) -> Array[Gub]:
+	var out: Array[Gub] = []
+	var reach := maxf(_config.sword_reach, 0.01)
+	var limit := cos(deg_to_rad(SWORD_ARC))
+	var centre := _gub.body_centre()
+	var space := _gub.get_world_3d().direct_space_state
+	for other: Gub in MatchState.gubs.values():
+		if not is_instance_valid(other) or other == _gub or not other.alive:
+			continue
+		if other.distance_to_body(centre) > reach:
+			continue
+		var target := other.body_axis_nearest(centre)
+		var toward := Vector3(target.x - centre.x, 0.0, target.z - centre.z)
+		# A Gub standing on top of this one has no bearing to be inside an arc,
+		# and is close enough to be hit by anything: the arc test is skipped
+		# rather than answered with the normalisation of a zero.
+		if toward.length_squared() > 0.0001 \
+				and toward.normalized().dot(blade) < limit:
+			continue
+		var query := PhysicsRayQueryParameters3D.create(centre, target)
+		query.collision_mask = LAYER_WORLD | LAYER_DEPLOYABLE
+		query.collide_with_areas = false
+		query.collide_with_bodies = true
+		if space.intersect_ray(query).is_empty():
+			out.append(other)
+	return out
+
+
+## The swing landing, on every machine. There is no `play_swing()` here: the clip
+## started `SWING_RELEASE_TIME` ago on every peer and firing the one-shot again
+## would snap the body back to the start of the spin on the exact frame the blade
+## goes through somebody.
+##
+## `connected` travels rather than being worked out per peer, because it is the
+## host's answer and nobody else has one — the whole point of the geometry being
+## the host's. It decides one thing: whether this was a swing through air or
+## through a body, which are two different sounds and are the only feedback this
+## weapon has (D-036 and D-054 keep it off the crosshair).
+@rpc("authority", "call_remote", "reliable")
+func _do_swing_sword(point: Vector3, _blade: Vector3, connected: bool) -> void:
+	_sword_ready_at = _now() + _config.sword_recharge
+	cooldowns_changed.emit()
+	# Borrowed rather than invented, like the bow's loose and the Elder's
+	# readiness chime: there is no sword in `audio/sfx/` and a shaft leaving a
+	# hand is the closest thing in it to a blade going past. Worth replacing the
+	# day somebody records one.
+	AudioDirector.play_3d_varied(AudioDirector.SPEAR_THROW, point)
+	if connected:
+		AudioDirector.play_3d_varied(AudioDirector.SPEAR_HIT_BODY, point)
 
 
 # --------------------------------------------------------------- lightning ---
@@ -1654,6 +2104,11 @@ func _refresh_hand() -> void:
 	# rule spread over two files (D-065). `HeldGear` decides nothing.
 	_gub.held_gear.set_bow(_wants_bow())
 	_gub.held_gear.set_arrow(_wants_arrow())
+	# The fourth, set here with the other three and every time, which is what
+	# keeps "a great sword is two-handed" a property of this one function rather
+	# than a rule spread over two files (D-065, D-068): the same call that puts
+	# the sword in the right fist is the call that takes the bow out of the left.
+	_gub.held_gear.set_sword(_wants_sword())
 	# Runs on every peer's copy of every Gub, which is the point: a Gub ten
 	# seconds from a letter has to be readable from across the clearing by the
 	# people who might stop it, not only by the player holding the card. The
@@ -2298,6 +2753,14 @@ func reset() -> void:
 	_bow_ready_at = 0.0
 	_draw_started_at = 0.0
 	_loose_charge = -1.0
+	# The sword, with the swing that may have been half way round when the round
+	# ended. `Gub.revive_at` ends the spin itself, on every peer and for the same
+	# reason it puts `draw` back out of band there — so this is only the flag and
+	# the two deadlines, and the fists are emptied by the `_refresh_hand` at the
+	# bottom of this function like everything else.
+	_swinging = false
+	_sword_ready_at = 0.0
+	_server_sword_ready_at = 0.0
 	_server_bow_ready_at = 0.0
 	_server_draw_peak = 0.0
 	_server_drawing = false

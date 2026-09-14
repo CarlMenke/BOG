@@ -30,7 +30,13 @@ signal threw_spear(origin: Vector3, direction: Vector3)
 ## Appended to, never reordered: the ordinal is what travels in
 ## `MatchState._do_kill` and in the kill feed, so inserting one in the middle
 ## would turn every older peer's lightning into a fall.
-enum Cause { SPEAR, FALL, VOID, UNKNOWN, LIGHTNING, ARROW }
+## What killed a Gub, for the feed and for the refusals.
+##
+## **Appended, never inserted.** These travel on the wire and are written into
+## `stats` rows, so a value added in the middle would silently turn every death
+## already in flight into a different kind of death — the same warning
+## `Pickup.Kind` carries and for the same reason. SWORD is D-068's.
+enum Cause { SPEAR, FALL, VOID, UNKNOWN, LIGHTNING, ARROW, SWORD }
 
 ## Full health, and the unit every damage number in the game is written in
 ## (D-062). A Gub starts each life on exactly this and is dead at zero.
@@ -136,6 +142,46 @@ const HOP_MIN_AIRTIME := 0.2
 ## pressing within ~45 degrees of the way you are going.
 const HOP_MIN_SPEED := 0.9
 const HOP_ALIGNMENT := 0.7
+
+## The great sword's spinning advance, in metres (D-068).
+##
+## **Measured, and printed by the build that measures it.** `Swing` is
+## `7_GreatSword_Suite/GreatSwordHighSpinAttack.fbx` and it is the one clip in
+## this game whose horizontal travel is *kept*: `tools/build_gub.py` clamps the
+## Hips as it does on every clip — it has to, or the mesh leaves the capsule —
+## and then prints
+##
+##     SPIN_ADVANCE               := 1.712   # Swing: KEPT, 1.712 m over 1.867 s
+##
+## because the clip declares an `advance_as`. This is that line. The body
+## produces the metres the clip was drawn covering, which is what keeps the feet
+## planted through it for exactly the reason `AUTHORED_RUN` keeps them planted
+## through a run: the legs were animated cycling against a pelvis advancing at
+## 0.917 m/s, so a body advancing at 0.917 m/s cancels them.
+##
+## Rebuild with a different clip, or a different window, and the build prints a
+## different number and this one stops matching it. `tools/combat_range.tscn --
+## sword` reads the distance a standing swing actually covers and checks it
+## against this, so the disagreement is a failed check rather than a skate.
+const SPIN_ADVANCE := 1.712
+
+## What a swing adds to the momentum budget, as a fraction of target speed
+## (D-068).
+##
+## **The same budget the bunny hop uses, under the same ceiling.** `_begin_spin`
+## is `_hop_gain` with a sword in it: it reads the speed the body already has,
+## adds this much of `target_speed()`, and clamps to `hop_speed_cap()` — the one
+## `HOP_SPEED_CAP` number that already has a decision record and a smoke check
+## behind it (D-052). So hop and spin compose rather than competing, and there is
+## no second speed system to have a second ceiling.
+##
+## Five times `HOP_GAIN`, and the ratio is the price of each: a hop costs
+## nothing but timing and can be fired every 0.35 s, while a swing costs 1.867 s
+## of committed, unsteerable, undodgeable animation. Eight hops take a Gub from
+## 5.4 m/s to the 7.02 cap in about five and a half seconds; six swings take it
+## there from a standing start in about eleven, and either way the ceiling is the
+## same one.
+const SPIN_GAIN := 0.20
 
 ## The dive: jump again while already in the air and the Gub commits to a leap
 ## along whichever way it is trying to go. Once per airtime — that is what makes
@@ -419,6 +465,28 @@ var _lure_centre: Vector3 = Vector3.ZERO
 var _lure_strength: float = 0.0
 var _lure_until: float = 0.0
 
+## When the great sword's spin ends, or 0 for "not spinning" (D-068).
+##
+## **Kept on every peer**, unlike `_roll_lock` and `_landing_grace` next to it,
+## and that is deliberate: this is the one movement clock in this file that
+## something outside the body has to be able to ask about a Gub it does not own.
+## `GubCombat` draws the sword into the fists for exactly as long as this is
+## running, on all eight screens, and `has_spear()` refuses a throw for exactly
+## as long too — so a second clock in the combat node would be a second opinion
+## about whether there is a sword in that hand. One clock, on the body, started
+## on every machine by the same relay that starts the animation.
+##
+## The other two fields are the *local* half and are written only on the copy
+## whose owner is swinging, for the reason everything about movement is
+## (D-004): the host cannot push a body it does not own, and a remote Gub's
+## advance arrives the way all its motion does, through `sync_velocity`.
+var _spin_until: float = 0.0
+var _spin_direction: Vector3 = Vector3.ZERO
+var _spin_speed: float = 0.0
+## Whether the spin was still running last tick, so the frame it *ends* can open
+## the landing grace. See `_tick_timers`.
+var _was_spinning: bool = false
+
 ## The floating name, and since D-062 the health bar under it. Held rather than
 ## looked up each time because `set_health` pushes to it on every hit.
 @onready var nameplate: Nameplate = $Nameplate
@@ -669,6 +737,19 @@ func _tick_timers(delta: float) -> void:
 	# would have no air control and ROLL_FRICTION instead of AIR_FRICTION.
 	_roll_lock = maxf(0.0, _roll_lock - delta) if is_on_floor() else 0.0
 	_landing_grace = maxf(0.0, _landing_grace - delta) if is_on_floor() else 0.0
+	# The frame a spin ends is a landing, as far as the momentum budget is
+	# concerned (D-068). Without this the ground takes the whole advance back in
+	# a couple of ticks — GROUND_FRICTION is 42 m/s², which is 0.7 m/s a tick —
+	# and a swing could never be chained into another one however well it was
+	# timed. With it, the sword gets exactly the window a bunny hop gets, off
+	# exactly the same field: press again inside `LANDING_GRACE` and the speed
+	# you built is still there to be added to, miss it and it is gone. That is
+	# D-052's rule, asked by a second move, which is the whole reason the swing
+	# feeds this budget instead of having one of its own.
+	var spinning := is_spinning()
+	if _was_spinning and not spinning:
+		_landing_grace = LANDING_GRACE
+	_was_spinning = spinning
 
 
 func _apply_gravity(delta: float) -> void:
@@ -808,6 +889,19 @@ func _handle_movement(delta: float) -> void:
 		velocity.z = rolling.z
 		return
 
+	# The spin is committed, exactly as the roll is, and for a sharper version of
+	# the roll's reason (D-068). `Swing` turns the body through a whole
+	# revolution over 1.867 s while carrying it 1.712 m; the direction was
+	# chosen at the click and the *animation* is drawn around travelling that
+	# way. Steering out of it would be a Gub sliding sideways under a spin drawn
+	# going forwards, and it would make a chainable movement tech into free
+	# flight with a sword attached. So the input is dropped and the body holds
+	# the speed and the heading it was given until the clip is over.
+	if is_spinning():
+		velocity.x = _spin_direction.x * _spin_speed
+		velocity.z = _spin_direction.z * _spin_speed
+		return
+
 	var wish := _wish_direction()
 	var speed := target_speed()
 	var accelerating := is_on_floor()
@@ -875,6 +969,67 @@ func _hop_gain() -> void:
 	horizontal *= boosted / moving
 	velocity.x = horizontal.x
 	velocity.z = horizontal.z
+
+
+## Start the great sword's spinning advance (D-068).
+##
+## Called on **every** peer, from `GubCombat._begin_swing`, which is the same
+## call that fires the animation — so the clock and the clip start together on
+## every machine and `is_spinning()` means the same thing everywhere. Only the
+## owning client goes on to latch a direction and a speed, because movement is
+## client-authoritative (D-004) and a remote Gub's advance arrives through
+## `sync_velocity` like every other metre it travels.
+##
+## `seconds` is handed in rather than read from a constant here, because it is
+## `GubAnimator.SWING_SECONDS` — the length of the window the clip is played
+## over — and the advance and that window are two halves of one number: the
+## distance is fixed by the animation and the time is fixed by the animation, so
+## the speed below is the one the feet were drawn for. Reading it from the
+## animator here would also point this file at the node hanging off it.
+##
+## **The impulse is `_hop_gain` with a sword in it.** Same reading of the speed
+## already carried, same fraction of `target_speed()` added, same
+## `hop_speed_cap()` ceiling — see SPIN_GAIN. Two things differ and both are the
+## swing rather than the hop: there is a **floor** as well as a ceiling, because
+## a Gub standing still has to produce the clip's own 0.917 m/s or its feet skate
+## through the whole swing; and there is no alignment test, because a spin has
+## no stick to be aligned with — it commits to the way the body was facing when
+## the player asked for it.
+func begin_spin(seconds: float) -> void:
+	_spin_until = Time.get_ticks_msec() * 0.001 + maxf(seconds, 0.01)
+	if not is_local():
+		return
+	_spin_direction = facing()
+	# The speed the clip itself travels at. A standing swing gets exactly this
+	# and so covers exactly SPIN_ADVANCE; anything already moving keeps what it
+	# has and is given more.
+	var authored := SPIN_ADVANCE / maxf(seconds, 0.01)
+	var carried := maxf(Vector3(velocity.x, 0.0, velocity.z).length(), authored)
+	# `maxf` on the ceiling for the floor's sake: a crouching Gub's cap is
+	# 2.08 m/s and a walking one's is 2.99, both well over the authored speed,
+	# but a dial dragged low enough to go under it must slow the game down
+	# rather than make this one clip's feet skate.
+	_spin_speed = minf(carried + target_speed() * SPIN_GAIN,
+		maxf(hop_speed_cap(), authored))
+	velocity.x = _spin_direction.x * _spin_speed
+	velocity.z = _spin_direction.z * _spin_speed
+
+
+## Is this Gub in the middle of a swing's advance? True on every peer for every
+## Gub, which is the point of the clock living on all of them.
+##
+## Asked by four things and for four reasons: the movement above, to hold the
+## heading; `_face`, to refuse to turn the body under it; `GubCombat`, to keep
+## the sword in the fists and the spear out of them for exactly this long; and
+## the swing gate, to refuse a second swing on top of the one that is running.
+func is_spinning() -> bool:
+	return _spin_until > 0.0 and Time.get_ticks_msec() * 0.001 < _spin_until
+
+
+## Stop the spin now. A death, a respawn or a round reset; not a cancel a player
+## can ask for, because the commitment is the price of the weapon.
+func end_spin() -> void:
+	_spin_until = 0.0
 
 
 ## Called on the caught Gub's own client, because movement is client-authoritative
@@ -1104,6 +1259,16 @@ func _detect_landing(grounded_before: bool) -> void:
 
 
 func _face(delta: float) -> void:
+	# A spin steers nothing, including itself (D-068). The advance was committed
+	# at the click and the clip turns the *skeleton* through a whole revolution
+	# on top of whatever this yaw is; letting the camera drag the body round
+	# underneath it would slide the Gub one way while it was drawn going
+	# another, and would hand a player a way to re-point a swing they had
+	# already paid for. The clip's own rotation is not affected — it is inside
+	# the skeleton, which is why `GubCombat` has to read the blade off the bone
+	# attachment rather than off this yaw.
+	if is_spinning():
+		return
 	var desired := body_yaw
 	if _face_view:
 		desired = yaw_towards(-_view_basis.z)
@@ -1283,6 +1448,10 @@ func kill(killer_id: int, cause: Cause = Cause.UNKNOWN) -> void:
 	# bar and the body saying the same thing.
 	set_health(0.0)
 	velocity = Vector3.ZERO
+	# On every peer, like the health above and for the same reason: a Gub killed
+	# half way through a swing has to stop holding a sword everywhere at once,
+	# and `is_spinning()` is what `GubCombat` draws that sword from (D-068).
+	end_spin()
 	died.emit(killer_id, cause)
 
 
@@ -1368,6 +1537,12 @@ func revive_at(spawn: Transform3D, life_number: int = -1) -> void:
 	_airtime = 0.0
 	_roll_lock = 0.0
 	_landing_grace = 0.0
+	# On every peer, because `revive_at` runs on every peer: a Gub that came back
+	# still spinning would have a sword in its fists on a spawn pad (D-068), and
+	# on its own machine it would spend the rest of the swing sliding off the pad
+	# at a speed it earned in its last life.
+	end_spin()
+	_was_spinning = false
 	_apply_capsule(STAND_HEIGHT)
 	# The replicated fields are seeded here, field by field, and deliberately
 	# *not* by calling `_publish()`. `_publish` ends with
