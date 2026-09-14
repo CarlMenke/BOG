@@ -1,0 +1,92 @@
+[gd_resource type="Sky" load_steps=3 format=3 uid="uid://d3gubwharfsky"]
+
+; The sky for Lantern Wharf. Same shader as the island's
+; (`enchanted_sky.gdshader` — it is a general sky with gradient, band, star,
+; disc, halo, aurora and cloud knobs), every value its own.
+;
+; The island's is a night. This is the twenty minutes *before* one: the sun is
+; a flattened orange disc sitting on the west-south-west wall, the zenith has
+; already gone indigo, the first three stars are out and everything in between
+; is the blue hour. Three of the shader's features are used for things they
+; were not named for, which is the point of a shader with knobs:
+;
+;   moon          is the sun. `moon_follow_light` pins the disc to this map's
+;                 `Sun`, so lowering the DirectionalLight3D moves the disc with
+;                 it and the shadows in the yard always point away from the
+;                 thing you can see in the sky. Phase 1.0 and no mare: a sun is
+;                 a full disc, and the shader's limb term is what keeps it from
+;                 reading as a sticker.
+;   halo          is the sun's glare through sea air — falloff 13 rather than
+;                 the island's 70, which is the difference between a crisp
+;                 moon-ring and a sunset that bleeds a third of the way up the
+;                 sky.
+;   forest_glow   is the afterglow band, plus the sodium wash off the rest of
+;                 the port. It is patchy in azimuth by construction, which here
+;                 reads as other people's floodlights over the horizon rather
+;                 than as an even vignette.
+;
+; The aurora is off — energy 0 skips nothing in the shader but contributes
+; nothing either, and a curtain over a container yard would be somebody else's
+; map. Clouds run at 0.020, nearly twice the island's speed: this map is 36 m
+; across and a player looks up for two seconds at a time, so weather that takes
+; ninety seconds to cross the dome would never be seen to move.
+;
+; INCREMENTAL, like the island's, and for the same reason: nothing in this sky
+; moves fast enough for one radiance mip a frame to be visible.
+
+[ext_resource type="Shader" path="res://resources/shaders/enchanted_sky.gdshader" id="1_sky_shader"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_wharf_sky"]
+shader = ExtResource("1_sky_shader")
+shader_parameter/zenith_color = Color(0.055, 0.075, 0.2, 1)
+shader_parameter/horizon_color = Color(0.3, 0.24, 0.33, 1)
+shader_parameter/void_color = Color(0.035, 0.045, 0.062, 1)
+shader_parameter/horizon_falloff = 0.5
+shader_parameter/void_falloff = 0.3
+shader_parameter/sky_energy = 1.0
+shader_parameter/forest_glow_color = Color(0.95, 0.4, 0.14, 1)
+shader_parameter/forest_glow_energy = 0.3
+shader_parameter/forest_glow_band = 0.17
+shader_parameter/star_color = Color(0.86, 0.9, 1.0, 1)
+shader_parameter/star_energy = 1.1
+shader_parameter/star_density = 84.0
+shader_parameter/star_coverage = 0.05
+shader_parameter/star_twinkle = 0.35
+shader_parameter/star_twinkle_speed = 1.1
+shader_parameter/star_band_axis = Vector3(0.36, 0.62, -0.7)
+shader_parameter/star_band_width = 0.34
+shader_parameter/star_haze_color = Color(0.2, 0.22, 0.38, 1)
+shader_parameter/star_haze_energy = 0.06
+shader_parameter/moon_direction = Vector3(-0.93, 0.14, 0.34)
+shader_parameter/moon_follow_light = true
+shader_parameter/moon_color = Color(1.0, 0.55, 0.2, 1)
+shader_parameter/moon_energy = 7.0
+shader_parameter/moon_angular_size = 0.05
+shader_parameter/moon_phase = 1.0
+shader_parameter/moon_mare = 0.0
+shader_parameter/moon_halo_color = Color(1.0, 0.44, 0.15, 1)
+shader_parameter/moon_halo_energy = 0.6
+shader_parameter/moon_halo_falloff = 13.0
+shader_parameter/aurora_low_color = Color(0.16, 0.62, 0.45, 1)
+shader_parameter/aurora_high_color = Color(0.34, 0.26, 0.62, 1)
+shader_parameter/aurora_energy = 0.0
+shader_parameter/aurora_height = 0.22
+shader_parameter/aurora_width = 0.085
+shader_parameter/aurora_speed = 0.035
+shader_parameter/aurora_azimuth = -1.15
+shader_parameter/aurora_spread = 3.2
+shader_parameter/aurora_curtain = 0.55
+shader_parameter/cloud_color = Color(0.12, 0.12, 0.18, 1)
+shader_parameter/cloud_lit_color = Color(1.0, 0.6, 0.3, 1)
+shader_parameter/cloud_opacity = 0.62
+shader_parameter/cloud_coverage = 0.44
+shader_parameter/cloud_scale = 2.2
+shader_parameter/cloud_speed = 0.02
+shader_parameter/cloud_horizon_fade = 0.05
+shader_parameter/cloud_parallax = 0.0
+
+[resource]
+resource_name = "LanternWharfSky"
+sky_material = SubResource("ShaderMaterial_wharf_sky")
+process_mode = 2
+radiance_size = 3

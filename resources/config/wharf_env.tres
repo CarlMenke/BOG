@@ -1,64 +1,103 @@
-[gd_resource type="Environment" load_steps=3 format=3 uid="uid://cq2gubwharfenv"]
+[gd_resource type="Environment" load_steps=2 format=3 uid="uid://cq2gubwharfenv"]
 
-; Environment for Lantern Wharf. Dusk on a wet dock: the sun is a low orange
-; line over the west wall and the floodlights on the wall corners are doing most
-; of the work — the far end of the day from Kopje Crossing's noon and Rust's
-; afternoon, and warmer and bluer than the island's torch-lit night (D-009, D-056).
+; Environment for Lantern Wharf. The blue hour on a wet dock: the sun is a
+; flattened orange disc on the west-south-west wall with ten minutes left in it,
+; the four sodium floods on the wall corners have taken over as the key light,
+; and the mist that came up the mole with the tide is lying in the bottom metre
+; of the yard (D-009, D-056).
 ;
-; Derived from `safari_env.tres`, which was derived from `rust_env.tres`, and
-; the same rule held: the tonemapping, the glow and the SSAO are theirs, and the
-; sky, the fog and the exposure are the whole of the difference.
+; It was a dusk map in name only before this. The sun sat 17 degrees up at 0.9
+; energy, which is a mid-afternoon key by any measure; the floods at 5.0 under
+; it were four lamp heads that happened to glow; and the air between them was a
+; vacuum. Everything below is in service of the opposite: the sun grazes, the
+; floods do the work, and the air is a medium.
 ;
-;   * A dusk sky: violet-blue overhead, a hot orange band at the horizon. It is
-;     the ambient and the reflections (`ambient_light_source` is the sky), so
-;     the shaded side of every box goes cool and the lit side, under the sun and
-;     the sodium floods, goes warm — which is what separates the two faces of a
-;     box at a glance, and a box you cannot read the corner of is a box you run
-;     into.
+;   * The sky is `wharf_sky.tres` — the island's shader, this map's numbers.
+;   * **Ambient is half sky and half a stated colour**, which no other map here
+;     does. With `ambient_light_sky_contribution` at 1.0 the whole yard went the
+;     colour of the sunset: the sun's halo and the afterglow band dominate the
+;     radiance cubemap at this hour, so every shaded face came out orange and
+;     the map's own argument — warm lit face, cool shaded face, which is how you
+;     read the corner of a box at a glance — stopped being true. At 0.5, mixed
+;     against a dusk blue, the shaded faces go indigo and the lit ones stay
+;     sodium.
 ;   * **`background_energy_multiplier` is the exposure control** (see
-;     `rust_env.tres`, which measured it). Set from renders, not taste; see
-;     D-056 for the numbers.
-;   * Fog: a little denser than the savanna's and tinted to the horizon, because
-;     nothing on this map is more than 25 m away and a touch of haze at that
-;     range is what puts the far wall behind the near one.
-;   * Glow stays on at Rust's threshold. The lamp heads are emissive at 6x, so
-;     they bloom and nothing lit by them does.
+;     `rust_env.tres`, which measured it). Set from rendered frames, not taste.
+;     The three spawn-pad renders come out at 0.00%, 0.00% and 0.04% of pixels
+;     crushed below 0.02 luminance and 0.38%, 0.85% and 0.03% clipped; the map
+;     before this pass clipped 3.0% of pad 0 on bare container paint, which is
+;     what a mid-afternoon sun on signal red does.
+;   * **Volumetric fog is on**, and this is the only map in the game where it
+;     is. Four spots at 13.5 m aimed into a 36 m box is the best case for it
+;     here: short beams, crossing in the middle, landing on wet concrete. But
+;     it is on at **0.011, a third of the island's 0.032**, and that number was
+;     not chosen either — it is what the readability measurement allowed. On the
+;     map's longest ground sightline (23.4 m, and 25.0 m from a box top, both
+;     from `tools/parkour_report`) a Gub-sized target at 25 m reads against its
+;     background at a Michelson contrast of **0.24 with the fog on and 0.52
+;     with it off**. Half the contrast is a real price and it buys the halo
+;     round every lamp, the beam a flood throws down into the mist, and a middle
+;     distance that is no longer empty; four times that price, which is where
+;     the island's density lands, buys a yard you cannot fight in.
+;     `volumetric_fog_length` is 48 m rather than 96: the far corner is 51 m
+;     away, so half the length is twice the froxel resolution for the same cost.
+;     `ambient_inject` is nearly off (0.04) on purpose — fog lit by ambient is
+;     an even wash, and the whole point of a beam is that the medium around it
+;     is dark.
+;   * **Screen-space reflections are on**, which no other map here uses either.
+;     They are the wet dock. The floor is a flat upward plane covering half of
+;     every frame, the brightest things in the scene are lamp heads above it,
+;     and SSR is what turns those into the long vertical smears that say "this
+;     concrete is standing in water".
+;
+;     Both fade distances are set against an artefact rather than to taste, and
+;     it is the same artefact twice: a screen-space technique fails where the
+;     screen runs out, and a floor is where it runs out. `ssr_fade_out` at the
+;     3 m it was first given stopped the reflections dead in a straight
+;     horizontal line across the middle of every frame. At 28 m that went, and a
+;     fainter version of it came back along the bottom edge, where a near floor
+;     pixel's reflected ray leaves the screen behind the camera and there is
+;     nothing to march into — measured at a 0.040 jump in mean row luminance at
+;     row 1378 of 1440. `ssr_fade_in` at 3.5 m softens the ray's first metres
+;     enough that the jump falls to 0.0007, which is the same number the scene
+;     gives with SSR switched off entirely, and it costs 2% of the bright
+;     reflected pixels in the lower half of the frame. Worth it twice over.
+;   * Distance fog is thinner than it was (0.0035) because the volumetric fog
+;     now does that job, and `fog_sun_scatter` is down from 0.35 to 0.12 for the
+;     same reason the ambient was split: it was painting the whole west half of
+;     the map orange.
+;   * Glow threshold stays at Rust's 2.0. The lamp heads are unshaded emissive
+;     at 9x, the quay lamps at 5x and the sun disc at 7x, so those bloom and
+;     nothing lit by them does.
 
-[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_wharfsky"]
-sky_top_color = Color(0.16, 0.2, 0.42, 1)
-sky_horizon_color = Color(0.94, 0.52, 0.32, 1)
-sky_curve = 0.18
-sky_energy_multiplier = 1.0
-ground_bottom_color = Color(0.1, 0.1, 0.14, 1)
-ground_horizon_color = Color(0.46, 0.34, 0.32, 1)
-ground_curve = 0.05
-ground_energy_multiplier = 1.0
-sun_angle_max = 8.0
-sun_curve = 0.1
-use_debanding = true
-
-[sub_resource type="Sky" id="Sky_wharf"]
-sky_material = SubResource("ProceduralSkyMaterial_wharfsky")
-radiance_size = 3
+[ext_resource type="Sky" path="res://resources/config/wharf_sky.tres" id="1_wharf_sky"]
 
 [resource]
 resource_name = "WharfEnvironment"
 background_mode = 2
-sky = SubResource("Sky_wharf")
-background_energy_multiplier = 1.5
+sky = ExtResource("1_wharf_sky")
+background_energy_multiplier = 1.9
 ambient_light_source = 3
+ambient_light_color = Color(0.3, 0.38, 0.58, 1)
+ambient_light_sky_contribution = 0.5
+ambient_light_energy = 1.25
 reflected_light_source = 2
 tonemap_mode = 3
 tonemap_exposure = 1.0
 tonemap_white = 6.0
+ssr_enabled = true
+ssr_max_steps = 28
+ssr_fade_in = 3.5
+ssr_fade_out = 28.0
+ssr_depth_tolerance = 0.25
 ssao_enabled = true
 ssao_radius = 1.1
-ssao_intensity = 1.2
+ssao_intensity = 1.6
 ssao_power = 1.4
 ssao_detail = 0.6
 ssao_horizon = 0.08
 ssao_sharpness = 0.98
-ssao_light_affect = 0.0
+ssao_light_affect = 0.1
 ssao_ao_channel_affect = 0.35
 glow_enabled = true
 glow_levels/1 = 0.0
@@ -69,7 +108,7 @@ glow_levels/5 = 0.7
 glow_levels/6 = 0.25
 glow_levels/7 = 0.0
 glow_normalized = true
-glow_intensity = 0.55
+glow_intensity = 0.7
 glow_strength = 1.0
 glow_mix = 0.05
 glow_bloom = 0.0
@@ -78,16 +117,28 @@ glow_hdr_threshold = 2.0
 glow_hdr_scale = 2.0
 glow_hdr_luminance_cap = 10.0
 fog_enabled = true
-fog_light_color = Color(0.62, 0.46, 0.44, 1)
+fog_light_color = Color(0.36, 0.38, 0.46, 1)
 fog_light_energy = 1.0
-fog_sun_scatter = 0.25
-fog_density = 0.004
-fog_aerial_perspective = 0.2
+fog_sun_scatter = 0.12
+fog_density = 0.0035
+fog_aerial_perspective = 0.3
 fog_sky_affect = 0.0
-fog_height = -2.0
-fog_height_density = 0.0
-volumetric_fog_enabled = false
+fog_height = 1.5
+fog_height_density = 0.05
+volumetric_fog_enabled = true
+volumetric_fog_density = 0.011
+volumetric_fog_albedo = Color(0.72, 0.76, 0.82, 1)
+volumetric_fog_emission = Color(0.05, 0.06, 0.1, 1)
+volumetric_fog_emission_energy = 0.12
+volumetric_fog_gi_inject = 0.0
+volumetric_fog_anisotropy = 0.35
+volumetric_fog_length = 48.0
+volumetric_fog_detail_spread = 2.0
+volumetric_fog_ambient_inject = 0.04
+volumetric_fog_sky_affect = 0.05
+volumetric_fog_temporal_reprojection_enabled = true
+volumetric_fog_temporal_reprojection_amount = 0.9
 adjustment_enabled = true
 adjustment_brightness = 1.0
-adjustment_contrast = 1.05
-adjustment_saturation = 1.08
+adjustment_contrast = 1.06
+adjustment_saturation = 0.98

@@ -12,10 +12,16 @@
 ; So this file is what `static_map.gd` asks for:
 ;
 ;   Environment  a dusk `WorldEnvironment` (`wharf_env.tres`).
-;   Sun          17 degrees up over the west-south-west wall, orange, and the
-;                only light that casts: long shadows down the east-west aisles
-;                are what give the boxes their shape at this hour. Serialised
-;                ROW-major, as every `.tscn` stores a `Transform3D`.
+;   Sun          8 degrees up over the west-south-west wall, deep orange, and
+;                the only light that casts. It was 17 degrees at 0.9 energy,
+;                which lit the yard like a mid-afternoon and left the four
+;                floodlights with nothing to do; at 8 degrees it grazes the
+;                tops of the west stacks, throws aisle-long shadows, and the
+;                floods are the key light the map's name claims they are. The
+;                sky's disc follows this node (`moon_follow_light` in
+;                `wharf_sky.tres`), so the sun you can see and the shadows on
+;                the ground can never disagree. Serialised ROW-major, as every
+;                `.tscn` stores a `Transform3D`.
 ;   Spawns       eight pads, four at each end — two in the corner pockets and
 ;                two in the bays either side of the base — alternating north and south
 ;                so a two-player match opens with the two players at opposite
@@ -43,11 +49,13 @@ base_radius = 4.0
 environment = ExtResource("2_wharf_env")
 
 [node name="Sun" type="DirectionalLight3D" parent="."]
-transform = Transform3D(0.34202, 0.27474, -0.89863, 0, 0.9563, 0.29237, 0.93969, -0.1, 0.32708, 0, 30, 0)
-light_color = Color(1, 0.62, 0.4, 1)
-light_energy = 0.9
-light_specular = 0.6
+transform = Transform3D(0.34202, 0.13077, -0.93054, 0, 0.99025, 0.13917, 0.93968, -0.0476, 0.33869, 0, 30, 0)
+light_color = Color(1, 0.46, 0.22, 1)
+light_energy = 0.55
+light_specular = 0.9
+light_volumetric_fog_energy = 0.1
 shadow_enabled = true
+shadow_normal_bias = 1.6
 directional_shadow_mode = 1
 directional_shadow_max_distance = 70.0
 directional_shadow_blend_splits = true
