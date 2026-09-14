@@ -82,6 +82,11 @@ var _public_problem: String = ""
 ## a loopback test that resolves their tunnel's hostname over real DNS and
 ## encodes a real public address into a code meant to dial 127.0.0.1.
 var ignore_public_address: bool = false
+## Which local address `host_lobby` listens on. `"*"` — every interface — is the
+## only right answer for a player. `tools/net_loopback.gd` sets `127.0.0.1`,
+## because a socket bound to loopback alone is one no firewall asks about, and
+## that harness runs inside the automated gate where a dialog would be a hang.
+var bind_ip: String = "*"
 
 
 func _ready() -> void:
@@ -98,6 +103,7 @@ func host_lobby(port: int = DEFAULT_PORT) -> bool:
 	leave_lobby(Leave.LOCAL_REQUEST, "", false)
 
 	var peer := ENetMultiplayerPeer.new()
+	peer.set_bind_ip(bind_ip)
 	var err := peer.create_server(port, MatchConfig.MAX_PLAYERS)
 	if err != OK:
 		join_failed.emit("Could not open port %d (error %d).\nAnother copy of the game may already be hosting." % [port, err])

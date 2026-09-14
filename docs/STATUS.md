@@ -4,7 +4,7 @@ Resume point for GUB. Read this first, then `docs/ARCHITECTURE.md` (how it fits
 together), `docs/PLAN.md` (the full task list, with checkboxes) and
 `docs/DECISIONS.md` (why things are the way they are).
 
-Last updated: 2026-09-13.
+Last updated: 2026-09-14.
 
 ---
 
@@ -22,15 +22,15 @@ island and out to a results screen, and two automated checks now walk that path:
 one in a single process, one across two processes over a real socket.
 
 ```
-bash tools/smoke_test.sh        # 27 checks, ~2 minutes, finds Godot by itself
-bash tools/net_test.sh          # two processes, one socket. Not in the gate
+bash tools/smoke_test.sh        # 28 checks, ~2.5 minutes, finds Godot by itself
+bash tools/net_test.sh          # two processes, one socket; also check 28 of the gate
 ```
 
-`smoke_test.sh` is the gate and it passes, 27 of 27. `net_test.sh` passes all
-ten of its stages (102 + 32 assertions) and still reports FAIL, deliberately:
-one transient engine warning survives at match start, and it holds itself to
-"the engine stayed quiet" rather than "the assertions passed". D-022 explains
-what it is and what the real fix costs.
+`smoke_test.sh` is the gate and it passes, 28 of 28. `net_test.sh` is one of
+them now: all eleven stages (177 + 32 assertions), ten of which end in a rematch,
+with the engine quiet in both processes — the error it had reported at "match
+start" since D-022 was its own teardown. Rematch was stalling for 25 s whenever a
+client had pressed BACK TO LOBBY; D-044 is the fix and the measurement.
 
 **Both binaries build**, which had never been done before: `build/windows/GUB.exe`
 and a universal `build/macos/GUB.app` that boots clean. See the README.
@@ -237,6 +237,7 @@ Worth knowing before that session:
   playit allocated, and that is the one the code carries. Getting that pair
   backwards is the one setup mistake the game cannot detect for you.
 - macOS may raise a firewall prompt the first time a Godot binary binds 27015.
+  The loopback harness binds 127.0.0.1 only, so the gate never meets one.
 - Godot's user data is keyed on **project name, not path**, so every checkout of
   this project on one machine shares `user://settings.cfg`. A name typed into
   one worktree's menu changes what another one's testbed prints, and a public
@@ -252,7 +253,7 @@ Three tiers, because three different kinds of claim need three different proofs
 
 | tool | proves |
 |---|---|
-| `tools/smoke_test.sh` | **the gate** — import, and twenty-seven checks |
+| `tools/smoke_test.sh` | **the gate** — import, and twenty-eight checks |
 | `tools/cursor_flow.tscn` | entering a match takes the mouse, and leaving gives it back |
 | `tools/playthrough.tscn` | the whole path, menu to results; 50 assertions on the island, 58 on Rust. Takes a map id after a `--` |
 | `tools/match_rules.tscn` | 195 assertions across 14 scoring scenarios |
@@ -263,7 +264,7 @@ Three tiers, because three different kinds of claim need three different proofs
 | `tools/combat_range.tscn respawn` | a Gub that dies holding a mushroom and an Elder that dies in its robe both come back empty-handed, including a remote Gub whose client is 200 ms behind the host (D-043) |
 | `tools/ragdoll_stability.tscn` | a corpse is still a corpse 150 ticks later |
 | `tools/combat_range.tscn` | the real match path: a spear, a mushroom, a lure, a letter, the Elder's bolt |
-| `tools/net_loopback.tscn` | two processes, one socket, including a *client* using all three abilities, dying and respawning. **Not in the gate** — it binds a port |
+| `tools/net_loopback.tscn` | two processes, one socket, including a *client* using all three abilities, dying and respawning, and ten rematches with the client in the lobby for half of them (D-044). **In the gate** through `net_test.sh`, bound to 127.0.0.1 on a random port |
 | `tools/preview_map.tscn` | Rust and Kopje Crossing: renders one, and checks every spawn pad with the physics. **In the gate** for both |
 | `tools/parkour_report.tscn` | every Kopje Crossing platform has its rock, fits a Gub, and is reachable from the ground (D-042). **In the gate** |
 | `tools/preview_*.tscn` | it *looks* right. Needs a person, always will |

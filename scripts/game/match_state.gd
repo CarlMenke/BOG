@@ -235,7 +235,13 @@ func _report_arena_ready() -> void:
 ## Begin once everyone is ready — or once we have waited long enough that a peer
 ## which has not reported is better treated as gone than as slow.
 func _try_begin_warmup() -> void:
-	if phase != Phase.IDLE or _players_root == null:
+	# An arena that is actually standing, not merely the last one registered.
+	# `reset` forgets the old players root, but a root can also be on its way out
+	# of the tree without anybody having said so, and a warmup begun into it
+	# spawns every Gub into a scene about to be freed and leaves the phase at
+	# WARMUP — so the arena that registers next returns early here and the
+	# match never has a body in it.
+	if phase != Phase.IDLE or not _arena_is_standing():
 		return
 	# Only peers we genuinely have a connection to. `Net.players` is the roster,
 	# and the roster is not the same thing: `tools/combat_range.gd`,
@@ -253,6 +259,10 @@ func _try_begin_warmup() -> void:
 		push_warning("MatchState: starting without %d peer(s) whose arena never reported"
 			% waiting.size())
 	_begin_warmup()
+
+
+func _arena_is_standing() -> bool:
+	return is_instance_valid(_players_root) and _players_root.is_inside_tree()
 
 
 func _on_left_lobby(_reason: int, _message: String) -> void:
@@ -316,6 +326,11 @@ func reset() -> void:
 	_clear_elders()
 	_arena_ready.clear()
 	_arena_ready_deadline = 0.0
+	# The arena these point into is the one being left, and it is freed on the
+	# next scene change. Nothing may spawn into it between here and the next
+	# `register_arena`.
+	_players_root = null
+	_spawn_points = []
 	_finished = false
 	time_left = 0.0
 	void_height = VOID_HEIGHT
@@ -496,7 +511,7 @@ func _life_of(peer_id: int) -> int:
 
 @rpc("authority", "call_remote", "reliable")
 func _create_gub(peer_id: int, spawn: Transform3D, life: int) -> void:
-	if _players_root == null or gubs.has(peer_id):
+	if not _arena_is_standing() or gubs.has(peer_id):
 		return
 	var gub := GUB_SCENE.instantiate() as Gub
 	gub.name = "Gub_%d" % peer_id
@@ -1464,7 +1479,32 @@ func _sync_finish(summary: Dictionary) -> void:
 	# peer rather than left to expire, so the results screen is not shown over a
 	# Gub still counting down to a letter it can never have.
 	_clear_letter_holds()
+	_stop_publishing()
 	match_finished.emit(summary)
+
+
+## Every Gub on this machine stops sending its position, on every peer, the
+## moment the match is over.
+##
+## What ends a match is one reliable message; what follows it is every peer
+## freeing its Gubs, and not at the same moment — the host on its own REMATCH,
+## a client when that broadcast reaches it, a client that walks itself to the
+## lobby whenever it likes. A `MultiplayerSynchronizer` still publishing at a
+## peer that has already freed its copy costs that peer two engine errors per
+## packet: *Node not found* and *Failed to get cached node* (D-044). A client
+## sitting in the lobby while the host read the results logged them sixty times
+## a second, and every rematch logged a burst on the host.
+##
+## So the senders stop first, here, while every copy still exists. Nothing is
+## lost: the results screen covers the arena, and a rematch builds new Gubs whose
+## synchronizers start public again.
+func _stop_publishing() -> void:
+	for gub: Gub in gubs.values():
+		if not is_instance_valid(gub):
+			continue
+		var sync := gub.get_node_or_null("Sync") as MultiplayerSynchronizer
+		if sync != null:
+			sync.public_visibility = false
 
 
 ## Every Gub still standing, best-scoring first, optionally excluding one peer.

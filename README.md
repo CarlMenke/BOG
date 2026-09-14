@@ -232,7 +232,7 @@ and `tools/` is full of scenes for it:
 | `parkour_report` | **Kopje Crossing** — rebuilds the Gub's jump arc and proves every platform can be reached from the ground. In the gate |
 | `playthrough.tscn` | the whole flow, menu to results, headless. Add `-- rust` or `-- safari` to play it on a static map |
 | `match_rules.tscn` | 195 assertions across 14 scoring scenarios, headless |
-| `net_loopback.tscn` | two real processes over a real socket. Not in the gate — it binds a port |
+| `net_loopback.tscn` | two real processes over a real socket, ten rematches included. In the gate, through `net_test.sh`; binds loopback only |
 | `inspect_scene.gd` | dump a scene's tree, clips, bones and triangle counts |
 | `preview_anim`, `preview_grip`, `preview_ragdoll` | contact sheets of a clip, the spear in the fist, a corpse falling |
 

@@ -51,9 +51,11 @@ extends Node
 ##      host's playit address is in that same shared file (D-028).
 ##   2. Both processes will try to import assets into `.godot/` if they are
 ##      cold. `tools/net_test.sh` runs `--import` once before starting either.
-##   3. On macOS, binding UDP 27015 can raise a firewall prompt the first time a
-##      given binary does it. With the firewall off there is none. If a run
-##      hangs with no `code=` line, look for a dialog.
+##   3. A socket on every interface can raise a firewall prompt the first time a
+##      given binary opens one, and this runs in the gate (D-044). So the host
+##      binds 127.0.0.1 alone, through `Net.bind_ip`, on a random port rather
+##      than 27015 — see `PORT_FIRST`. If a run hangs with no `code=` line
+##      anyway, look for a dialog.
 
 ## Dialled explicitly rather than through `Net.invite_code()`. That helper
 ## encodes `Net.local_ipv4()`, which prefers a tailnet address, then a private
@@ -101,6 +103,24 @@ const WARMUP_TIME := 1.0
 ## `report_kill` return without doing anything — a symptom that points nowhere
 ## near its cause. `tools/playthrough.gd` carries the same note.
 const SPAWN_PROTECTION := 0.0
+
+## Stage 10: how many times a match is run to a result and rematched in a row.
+## Ten because the report was "only works 50% of the time" — ten clean rounds
+## is what a coin flip does one time in a thousand.
+const REMATCHES := 10
+## Every round of stage 10 has to be back in PLAYING, on both peers, inside this.
+## Well under `MatchState.ARENA_READY_TIMEOUT`, so a round that only started
+## because the host gave up waiting fails on the clock as well as on its own
+## check.
+const REMATCH_TIMEOUT := 20.0
+
+## Where the host listens. Not Net.DEFAULT_PORT: a real game hosted on this
+## machine holds that one, and this runs in the gate. A random port from a
+## range with a few retries, so a port somebody else happens to hold costs a
+## retry rather than a red gate.
+const PORT_FIRST := 27100
+const PORT_LAST := 27899
+const PORT_TRIES := 8
 
 ## How far in front of itself the client aims in the abilities stage. Short on
 ## purpose: the lure has to come down well inside its own radius of the thrower,
@@ -158,6 +178,15 @@ var _spawned: Array = []
 var _lure_caught: Array[int] = []
 ## Host only: where stage 8 killed the client, which is where its loot lies.
 var _death_point: Vector3 = Vector3.ZERO
+## Host only, stage 10: the lifecycle trace. See `_process`.
+var _tracing: bool = false
+var _traced_root: int = 0
+var _traced_ready: Array = []
+## Set when a warmup began with a peer that never reported — the timeout path.
+var _timed_out_start: bool = false
+## Client only, stage 10: the arena the last result was shown in, so a rematch
+## can be told apart from still standing in it.
+var _old_arena: int = 0
 
 
 func _ready() -> void:
@@ -188,6 +217,9 @@ func _ready() -> void:
 	# because clearing it would write to the file the person running this is
 	# about to host a real game with.
 	Net.ignore_public_address = true
+	# Loopback only. A socket on every interface is the one a firewall asks
+	# about, and since D-044 this runs inside the gate, where a dialog is a hang.
+	Net.bind_ip = LOOPBACK_IP
 
 	multiplayer.peer_connected.connect(func(id: int) -> void: _peer_connected.append(id))
 	multiplayer.peer_disconnected.connect(func(id: int) -> void: _peer_disconnected.append(id))
@@ -225,7 +257,7 @@ func _on_match_start() -> void:
 func _run_host() -> void:
 	print("net_loopback: role=host pid=%d" % OS.get_process_id())
 
-	if not _require("the port opened", Net.host_lobby()):
+	if not _require("a port opened", _open_port()):
 		print("net_loopback: %s" % _join_failure)
 		await _finish()
 		return
@@ -263,6 +295,8 @@ func _run_host() -> void:
 		ok = await _stage_kill()
 	if ok:
 		ok = await _stage_respawn()
+	if ok:
+		ok = await _stage_rematch()
 	# Runs whatever happened above. The client is a live process that has to be
 	# told to stop, its tally has to reach this log, and the disconnect is the
 	# last check either way.
@@ -270,9 +304,9 @@ func _run_host() -> void:
 	await _finish()
 
 
-## 1/10. A client connects, and both sides notice.
+## 1/11. A client connects, and both sides notice.
 func _stage_connect() -> bool:
-	print("net_loopback: stage 1/10 — connection")
+	print("net_loopback: stage 1/11 — connection")
 	if not await _await_until("a peer to connect", JOIN_TIMEOUT,
 			func() -> bool: return not _peer_connected.is_empty()):
 		return false
@@ -289,14 +323,14 @@ func _stage_connect() -> bool:
 	return true
 
 
-## 2/10. Both sides hold the same roster, and the name got there through
+## 2/11. Both sides hold the same roster, and the name got there through
 ## `_request_join`.
 ##
 ## The client's copy is fetched over the control channel, which is this
 ## harness's own `@rpc` rather than the game's chat — if it were chat, a broken
 ## chat would look like a broken roster here and the real check would never run.
 func _stage_roster() -> bool:
-	print("net_loopback: stage 2/10 — roster replication")
+	print("net_loopback: stage 2/11 — roster replication")
 	_check("the roster has two players", Net.player_count(), 2)
 	var mine := _roster_digest()
 	var reply := await _request("roster", {}, STEP_TIMEOUT)
@@ -309,11 +343,11 @@ func _stage_roster() -> bool:
 	return true
 
 
-## 3/10. The client asked for a name the host already had, and `_unique_name`
+## 3/11. The client asked for a name the host already had, and `_unique_name`
 ## disambiguated it — on the host, where the decision belongs, and on the
 ## client, which only ever sees the answer.
 func _stage_names() -> bool:
-	print("net_loopback: stage 3/10 — name collision")
+	print("net_loopback: stage 3/11 — name collision")
 	_check("the host kept its name", Net.player_name(1), HOST_NAME)
 	_check("the host renamed the client", Net.player_name(_client_id),
 		CLIENT_UNIQUE_NAME)
@@ -329,11 +363,11 @@ func _stage_names() -> bool:
 	return true
 
 
-## 4/10. `MatchConfig.to_dict()` over the wire and `apply_dict` on the far side —
+## 4/11. `MatchConfig.to_dict()` over the wire and `apply_dict` on the far side —
 ## a flat Dictionary of primitives rather than a Resource, so that receiving one
 ## never means decoding an object (D-004).
 func _stage_config() -> bool:
-	print("net_loopback: stage 4/10 — config replication")
+	print("net_loopback: stage 4/11 — config replication")
 	var settings := Net.config.duplicate_config()
 	settings.map = CONFIG_MAP
 	settings.map_seed = CONFIG_SEED
@@ -362,10 +396,10 @@ func _stage_config() -> bool:
 	return true
 
 
-## 5/10. Chat in both directions, through `Net.send_chat`, asserting the text and
+## 5/11. Chat in both directions, through `Net.send_chat`, asserting the text and
 ## who it says sent it.
 func _stage_chat() -> bool:
-	print("net_loopback: stage 5/10 — chat both directions")
+	print("net_loopback: stage 5/11 — chat both directions")
 	var before := _chat.size()
 	if (await _request("say", {"text": CLIENT_CHAT}, STEP_TIMEOUT)).is_empty():
 		return false
@@ -394,11 +428,11 @@ func _stage_chat() -> bool:
 	return true
 
 
-## 6/10. Ready up, then start. `can_start_match()` refuses until every non-host
+## 6/11. Ready up, then start. `can_start_match()` refuses until every non-host
 ## peer has readied, so the client's `_request_ready` has to have arrived for
 ## this to be reachable at all.
 func _stage_match_start() -> bool:
-	print("net_loopback: stage 6/10 — match start")
+	print("net_loopback: stage 6/11 — match start")
 	_check("the host cannot start yet", Net.can_start_match(), false)
 	if (await _request("ready", {}, STEP_TIMEOUT)).is_empty():
 		return false
@@ -420,7 +454,7 @@ func _stage_match_start() -> bool:
 	return true
 
 
-## 7/10. The arena, and then the one thing no stage here had ever asked a
+## 7/11. The arena, and then the one thing no stage here had ever asked a
 ## *client* to do: use an ability.
 ##
 ## Both peers build the real island from the replicated seed, and then the
@@ -437,7 +471,7 @@ func _stage_match_start() -> bool:
 ## host sends it the instant *its own* island finishes. See the note below for
 ## how close that actually runs.
 func _stage_abilities() -> bool:
-	print("net_loopback: stage 7/10 — the arena, and the client's abilities in it")
+	print("net_loopback: stage 7/11 — the arena, and the client's abilities in it")
 	var started := Time.get_ticks_msec()
 	if not await _await_until("the host's arena", ARENA_TIMEOUT,
 			func() -> bool: return get_tree().current_scene is Arena):
@@ -539,10 +573,10 @@ func _stage_abilities() -> bool:
 	return true
 
 
-## 8/10. The host decides a death through `MatchState.report_kill` — the same
+## 8/11. The host decides a death through `MatchState.report_kill` — the same
 ## call a landed spear makes — and the client is asked what it saw.
 func _stage_kill() -> bool:
-	print("net_loopback: stage 8/10 — a kill over the wire")
+	print("net_loopback: stage 8/11 — a kill over the wire")
 	# Somewhere that is not the client's own spawn pad. Left where it spawned,
 	# the client dies on its pad and `_next_spawn` hands the same pad straight
 	# back — it is the one furthest from the host — so the respawn in stage 9
@@ -602,7 +636,7 @@ func _stage_kill() -> bool:
 	return true
 
 
-## 9/10. The client comes back with nothing in its hands, and the host's copy of
+## 9/11. The client comes back with nothing in its hands, and the host's copy of
 ## it comes back to where it actually is.
 ##
 ## A player's report: *"you spawn with either an item or the elder randomly, it
@@ -625,7 +659,7 @@ func _stage_kill() -> bool:
 ## in — so the host's copy is required to follow the client to wherever it
 ## respawned, over a real socket, with the life number crossing it.
 func _stage_respawn() -> bool:
-	print("net_loopback: stage 9/10 — a respawn over the wire")
+	print("net_loopback: stage 9/11 — a respawn over the wire")
 	var gub: Gub = MatchState.gubs.get(_client_id)
 	if not _require("the host still has the client's Gub", is_instance_valid(gub)):
 		return false
@@ -675,14 +709,193 @@ func _stage_respawn() -> bool:
 	return true
 
 
-## 10/10. The client goes away and the host clears up after it. `Net.player_left`
+## 10/11. Run the match to a result and rematch it, ten times in a row.
+##
+## A player: *"rematch only works 50% of the time / takes a while"*. Every round
+## ends the match the way a real one ends — a kill that reaches the kill limit,
+## `_finish`, the results screen on both machines — and restarts it by pressing
+## the host's real REMATCH button, so the whole broadcast in D-021 runs: `Net`,
+## both HUDs, `MatchState.reset`, `SceneFlow`, a fresh arena, the ready reports
+## and the warmup.
+##
+## On odd rounds the client presses its own BACK TO LOBBY first, the only button
+## a client's results screen offers, and the rematch then has to fetch it from
+## the lobby. That is the half the report was about (D-044).
+##
+## The host traces the lifecycle with timestamps while this runs — reset,
+## register, each ready report, the warmup — so a slow round says where the time
+## went. A warmup that begins with a peer missing from `_arena_ready` is the
+## `ARENA_READY_TIMEOUT` path, and fails the round outright.
+func _stage_rematch() -> bool:
+	print("net_loopback: stage 10/11 — a match to a result and a rematch, %d times"
+		% REMATCHES)
+	# One kill ends a match from here on, and there is no countdown before the
+	# next: ten rounds of the island build are the cost of this stage and
+	# nothing else should be. Stages 6 and 7 already walked a real WARMUP.
+	# Through `update_config`, like the lobby, so the client holds the same.
+	var settings := Net.config.duplicate_config()
+	settings.kill_limit = 1
+	settings.warmup_time = 0.0
+	Net.update_config(settings)
+	MatchState.phase_changed.connect(_trace_phase)
+	_tracing = true
+
+	var slowest := 0.0
+	for n in REMATCHES:
+		var via_lobby := n % 2 == 1
+		_trace("round %d%s" % [n + 1, " (the client goes to the lobby first)" if via_lobby else ""])
+		if not await _await_until("round %d to be PLAYING with the client alive" % (n + 1),
+				REMATCH_TIMEOUT, func() -> bool:
+					return MatchState.phase == MatchState.Phase.PLAYING \
+						and MatchState.is_alive(_client_id)):
+			return false
+
+		# The result.
+		var victim: Gub = MatchState.gubs.get(_client_id)
+		var point := victim.global_position if is_instance_valid(victim) else Vector3.ZERO
+		MatchState.report_kill(_client_id, 1, Gub.Cause.SPEAR, point, Vector3.FORWARD * 6.0, "")
+		if not _require("round %d: the kill ended the match on the host" % (n + 1),
+				MatchState.phase == MatchState.Phase.POST_MATCH):
+			return false
+		var hud := _hud()
+		if not _require("round %d: the host's results screen is up" % (n + 1),
+				hud != null and hud._results.visible):
+			return false
+		var seen := await _request("results", {"lobby": via_lobby}, REMATCH_TIMEOUT)
+		if seen.is_empty():
+			return false
+		_check("round %d: the client saw the result" % (n + 1),
+			bool(seen.get("results", false)), true)
+		if via_lobby:
+			_check("round %d: the client walked itself to the lobby" % (n + 1),
+				bool(seen.get("in_lobby", false)), true)
+
+		# The button.
+		var old_arena := _scene_id()
+		var pressed_at := Time.get_ticks_msec()
+		_timed_out_start = false
+		_trace("REMATCH pressed")
+		hud._results._rematch_button.pressed.emit()
+		if not await _await_until("round %d: the host back in PLAYING" % (n + 1),
+				REMATCH_TIMEOUT, func() -> bool:
+					var scene := get_tree().current_scene
+					return scene is Arena and scene.get_instance_id() != old_arena \
+						and MatchState.phase == MatchState.Phase.PLAYING):
+			return false
+		var took := float(Time.get_ticks_msec() - pressed_at) * 0.001
+		slowest = maxf(slowest, took)
+		_check("round %d: the host did not start without the client" % (n + 1),
+			_timed_out_start, false)
+		_check("round %d: the host has a Gub per player, in the new arena" % (n + 1),
+			_gubs_in_current_arena(), Net.player_count())
+		var theirs := await _request("rematched", {}, REMATCH_TIMEOUT)
+		if theirs.is_empty():
+			return false
+		_check("round %d: the client is in the new arena and PLAYING" % (n + 1),
+			bool(theirs.get("playing", false)), true)
+		_check("round %d: the client has a Gub per player, in its new arena" % (n + 1),
+			int(theirs.get("gubs", -1)), Net.player_count())
+		print("net_loopback:   round %d: REMATCH to PLAYING in %.2f s on the host%s" % [
+			n + 1, took, " (from the lobby)" if via_lobby else ""])
+		if _failures > 0:
+			return false
+
+	_tracing = false
+	MatchState.phase_changed.disconnect(_trace_phase)
+	print("net_loopback:   %d rematches, slowest %.2f s" % [REMATCHES, slowest])
+	return true
+
+
+## The current scene's instance id, or 0. An id rather than the node, because
+## the node is about to be freed and the point is to compare against it after.
+func _scene_id() -> int:
+	var scene := get_tree().current_scene
+	return scene.get_instance_id() if scene != null else 0
+
+
+## The HUD of whatever arena this peer is in, or null.
+func _hud() -> HUD:
+	var scene := get_tree().current_scene
+	return scene.get_node_or_null("HUD") as HUD if scene != null else null
+
+
+## Live Gubs that are actually in the arena on screen — not merely in
+## `MatchState.gubs`, which would also count a Gub spawned into the arena that
+## was just freed.
+func _gubs_in_current_arena() -> int:
+	var scene := get_tree().current_scene
+	var count := 0
+	for gub: Gub in MatchState.gubs.values():
+		if is_instance_valid(gub) and gub.is_inside_tree() and scene != null \
+				and scene.is_ancestor_of(gub):
+			count += 1
+	return count
+
+
+## Pick a port and open it. See PORT_FIRST.
+func _open_port() -> bool:
+	for attempt in PORT_TRIES:
+		var port := randi_range(PORT_FIRST, PORT_LAST)
+		if Net.host_lobby(port):
+			return true
+		print("net_loopback: port %d would not open, trying another" % port)
+	return false
+
+
+# ------------------------------------------------------------------- trace ---
+
+func _trace(what: String) -> void:
+	print("net_loopback:   [%8.3f] %s" % [Time.get_ticks_msec() * 0.001, what])
+
+
+func _trace_phase(phase: MatchState.Phase) -> void:
+	match phase:
+		MatchState.Phase.IDLE:
+			_trace("reset (phase IDLE)")
+		MatchState.Phase.WARMUP:
+			var missing: Array = []
+			for peer_id: int in multiplayer.get_peers():
+				if not MatchState._arena_ready.has(peer_id):
+					missing.append(peer_id)
+			if not missing.is_empty():
+				_timed_out_start = true
+			_trace("_begin_warmup (phase WARMUP)%s" % (
+				"" if missing.is_empty() else " WITHOUT %s — the ready timeout" % str(missing)))
+		MatchState.Phase.PLAYING:
+			_trace("PLAYING")
+		MatchState.Phase.POST_MATCH:
+			_trace("result (phase POST_MATCH)")
+
+
+## Everything the phase signal cannot see: `register_arena` (the players root
+## changing) and each ready report (a key appearing in `_arena_ready`). Sampled
+## once a frame, which is fine — both arrive between frames.
+func _process(_delta: float) -> void:
+	if not _tracing:
+		return
+	var root: Node = MatchState._players_root
+	var root_id := root.get_instance_id() if is_instance_valid(root) else 0
+	if root_id != _traced_root:
+		_traced_root = root_id
+		_trace("register_arena (a new players root)" if root_id != 0
+			else "players root forgotten")
+	var reported := MatchState._arena_ready.keys()
+	reported.sort()
+	if reported != _traced_ready:
+		for peer_id: int in reported:
+			if not _traced_ready.has(peer_id):
+				_trace("ready report from peer %d" % peer_id)
+		_traced_ready = reported
+
+
+## 11/11. The client goes away and the host clears up after it. `Net.player_left`
 ## and `MatchState._on_player_left` are the newest code in the networking layer
 ## and have never run against a socket.
 func _stage_disconnect() -> void:
 	if _client_id == 0 or not Net.has_player(_client_id):
-		print("net_loopback: stage 10/10 — skipped, no client to disconnect")
+		print("net_loopback: stage 11/11 — skipped, no client to disconnect")
 		return
-	print("net_loopback: stage 10/10 — disconnect")
+	print("net_loopback: stage 11/11 — disconnect")
 
 	# Its tally first, while it can still answer.
 	var tally := await _request("finish", {}, STEP_TIMEOUT)
@@ -877,17 +1090,54 @@ func _serve(message: Dictionary) -> void:
 			reply["elder"] = MatchState.is_elder(Net.local_id())
 			reply["robe"] = is_instance_valid(mine) and mine.elder_robe != null
 			reply["pos"] = mine.global_position if is_instance_valid(mine) else Vector3.INF
+		"results":
+			# The result arrives over the wire; the results screen is what the
+			# HUD puts up for it.
+			_old_arena = _scene_id()
+			await _await_until("the result and the results screen", STEP_TIMEOUT,
+				func() -> bool:
+					var hud := _hud()
+					return MatchState.phase == MatchState.Phase.POST_MATCH \
+						and hud != null and hud._results.visible)
+			var hud := _hud()
+			reply["results"] = hud != null and hud._results.visible
+			if bool(payload.get("lobby", false)) and hud != null:
+				# The one button a client's results screen has that does anything.
+				hud._results._lobby_button.pressed.emit()
+				await _await_until("this client to reach the lobby", STEP_TIMEOUT,
+					func() -> bool:
+						return get_tree().current_scene != null \
+							and SceneFlow.current_scene_path == SceneFlow.LOBBY \
+							and not SceneFlow._busy)
+				reply["in_lobby"] = SceneFlow.current_scene_path == SceneFlow.LOBBY
+		"rematched":
+			await _await_until("this client back in PLAYING in a new arena", REMATCH_TIMEOUT,
+				func() -> bool:
+					var scene := get_tree().current_scene
+					return scene is Arena and scene.get_instance_id() != _old_arena \
+						and MatchState.phase == MatchState.Phase.PLAYING \
+						and _gubs_in_current_arena() == Net.player_count())
+			var scene := get_tree().current_scene
+			reply["playing"] = scene is Arena and scene.get_instance_id() != _old_arena \
+				and MatchState.phase == MatchState.Phase.PLAYING
+			reply["gubs"] = _gubs_in_current_arena()
 		"finish":
 			reply["checks"] = _checks
 			reply["failures"] = _failures
 		"leave":
 			# The host is watching the socket for this, so there is nothing to
-			# reply to. Tidy up first: `Net.leave_lobby` nulls the multiplayer
-			# peer, and any Gub still in the tree then asks a session that no
-			# longer exists whether it belongs to it, once per frame each.
+			# reply to. Leave *then* tidy up, the order the pause menu's Leave
+			# takes. This used to reset first, a frame before leaving, and that
+			# frame was the "engine error at match start" this run reported for
+			# as long as it existed: the host's Gub was still publishing, the
+			# client had just freed its copy, and one packet landed in between —
+			# *Node not found: Arena/Players/Gub_1/Sync* (D-044). The worry that
+			# ordered it that way, a Gub asking a peer that has gone who owns
+			# it, was fixed in `Gub.is_local` and is guarded by the gate's
+			# "leaving a match cleanly".
+			Net.leave_lobby(Net.Leave.LOCAL_REQUEST, "", false)
 			MatchState.reset()
 			await get_tree().process_frame
-			Net.leave_lobby(Net.Leave.LOCAL_REQUEST, "", false)
 			_running = false
 			return
 		_:

@@ -3,10 +3,13 @@
 #
 #   bash tools/net_test.sh
 #
-# This is a MANUAL tool. It is deliberately **not** in `tools/smoke_test.sh` and
-# must not be added to it: it binds UDP 27015 for real, and on macOS the first
-# bind by a new binary can raise a firewall dialog. A gate that can stop for a
-# dialog is not a gate.
+# It is in `tools/smoke_test.sh` since D-044, which reversed D-022's "must not
+# be". The objection was a firewall dialog on the first bind, and the harness
+# now binds 127.0.0.1 alone, on a random port from 27100-27899 with retries —
+# a loopback-only socket is not one a firewall asks about, and a random port
+# means a real game hosted on this machine (27015) or a port Windows has
+# reserved costs a retry rather than a red gate. Run on its own it is still the
+# fastest way to see the whole two-process story, logs and all.
 #
 # What it is for: every `@rpc` in this project has, until now, only ever run its
 # "call locally" half. `Net.start_offline()` (D-011) opens a session on an
@@ -15,11 +18,11 @@
 # is the harness; this script starts its two halves, feeds the client the
 # invite code the host prints, and reduces the pair to one PASS/FAIL.
 #
-# It currently exits non-zero, and that is the correct answer rather than a
-# broken tool: all ten stages pass, and the run then reports the engine errors
-# raised by shipping code in `scripts/` that the offline peer had been hiding.
-# They are printed with an explanation apiece at the bottom of the run. When
-# they are fixed this goes green on its own; nothing here needs editing.
+# It holds itself to "the engine stayed quiet", not just "the assertions
+# passed": any ERROR line either process logs, outside exit-time leak reports,
+# fails the run. For a long time one always survived — reported as a race at
+# match start, and actually the harness's own client freeing its Gubs a frame
+# before it left (D-044). Nothing is excused now.
 #
 # Notes for anyone running it:
 #   * Both processes share Godot's user data directory (it is keyed on the
@@ -29,8 +32,10 @@
 #   * Assets are imported once, up front, so neither process has to — two Godot
 #     processes writing `.godot/` at the same time is a fight nobody wins.
 #   * Everything is cleaned up on the way out, including on failure and on
-#     timeout, so a bad run never leaves a Godot sitting on port 27015. If one
-#     somehow survives, `lsof -nP -iUDP:27015` will find it.
+#     timeout, so a bad run never leaves a Godot sitting on its port. The port
+#     is in the invite code the host prints, and in the host log.
+#   * NET_SKIP_IMPORT=1 skips the up-front import, for a caller (the gate) that
+#     has just run one.
 
 set -uo pipefail
 
@@ -41,8 +46,9 @@ CLIENT_LOG="$LOG_DIR/client.log"
 
 ## Seconds to wait for the host to print its invite code.
 CODE_TIMEOUT=60
-## Seconds for the whole run, once both processes are up. Two simultaneous
-## island builds are the bulk of it.
+## Seconds for the whole run, once both processes are up. Island builds are the
+## bulk of it: two at match start and two more for each of stage 10's ten
+## rematches, under a minute in all on the machine that wrote this.
 RUN_TIMEOUT=300
 
 host_pid=""
@@ -103,18 +109,20 @@ echo
 # One import, before either process starts. Two Godot processes importing into
 # the same `.godot/` at once corrupt each other's cache, and the symptom is a
 # scene that loads without its script rather than an error.
-echo "importing assets"
-if ! "$GODOT" --headless --path "$ROOT" --import >"$LOG_DIR/import.log" 2>&1; then
-    echo "  FAIL — import did not complete"
-    tail -20 "$LOG_DIR/import.log" | sed 's/^/      /'
-    exit 1
+if [ "${NET_SKIP_IMPORT:-0}" != "1" ]; then
+    echo "importing assets"
+    if ! "$GODOT" --headless --path "$GODOT_ROOT" --import >"$LOG_DIR/import.log" 2>&1; then
+        echo "  FAIL — import did not complete"
+        tail -20 "$LOG_DIR/import.log" | sed 's/^/      /'
+        exit 1
+    fi
+    echo "  ok"
+    echo
 fi
-echo "  ok"
-echo
 
 # --------------------------------------------------------------- the host ---
 echo "starting the host"
-"$GODOT" --headless --path "$ROOT" tools/net_loopback.tscn -- host \
+"$GODOT" --headless --path "$GODOT_ROOT" tools/net_loopback.tscn -- host \
     >"$HOST_LOG" 2>&1 &
 host_pid=$!
 
@@ -130,7 +138,7 @@ while [ -z "$code" ]; do
         fail "the host exited before it printed an invite code"
     fi
     if [ "$(date +%s)" -ge "$deadline" ]; then
-        fail "the host printed no invite code in ${CODE_TIMEOUT}s (a macOS firewall dialog will do this)"
+        fail "the host printed no invite code in ${CODE_TIMEOUT}s"
     fi
     sleep 0.2
 done
@@ -139,13 +147,13 @@ echo
 
 # ------------------------------------------------------------- the client ---
 echo "starting the client"
-"$GODOT" --headless --path "$ROOT" tools/net_loopback.tscn -- join "$code" \
+"$GODOT" --headless --path "$GODOT_ROOT" tools/net_loopback.tscn -- join "$code" \
     >"$CLIENT_LOG" 2>&1 &
 client_pid=$!
 echo "  dialling $code"
 echo
 
-echo "running (up to ${RUN_TIMEOUT}s; two island builds are most of it)"
+echo "running (up to ${RUN_TIMEOUT}s; island builds are most of it)"
 timed_out=0
 deadline=$(($(date +%s) + RUN_TIMEOUT))
 while kill -0 "$host_pid" 2>/dev/null || kill -0 "$client_pid" 2>/dev/null; do
@@ -219,6 +227,10 @@ if [ "$peers_failed" -ne 0 ]; then
     fail "one of the two peers failed"
 fi
 
+# How long a rematch took, which is the number the rematch stage exists for.
+sed -n 's/^net_loopback:   \([0-9]* rematches, .*\)$/  \1/p' "$HOST_LOG"
+echo
+
 # -------------------------------------------------------- what Godot said ---
 # Nine green stages and two clean exit codes prove less than they look like
 # they do. Godot prints an error and carries straight on running, which is why
@@ -275,11 +287,11 @@ note_if "on yourself is not allowed" \
     "  afterwards — but the log fills up. Fix: only send when not the host, or" \
     "  make the RPCs \"call_local\" and drop the manual local call."
 note_if "Failed to get cached node" \
-    "* MatchState spawns Gubs with a reliable RPC while the" \
-    "  MultiplayerSynchronizer on each Gub begins sending unreliable updates" \
-    "  immediately. Those are different ENet channels, so an update can overtake" \
-    "  the spawn and land on a node the receiver has not built yet. Transient —" \
-    "  the first fraction of a second of movement is dropped, then it settles."
+    "* A MultiplayerSynchronizer published to a peer that had already freed its" \
+    "  copy of that node. The sender has to stop before the receiver frees:" \
+    "  MatchState._stop_publishing does that when a match ends (D-044). If this" \
+    "  is back, something now frees Gubs where the sender was not told first —" \
+    "  a new way out of a match, or a teardown in the harness."
 note_if "Unable to get unique ID" \
     "* MatchState.local_gub() asks multiplayer for its unique id with no peer" \
     "  assigned. Gub.is_local() already guards against exactly this and says so" \
@@ -288,6 +300,6 @@ note_if "Unable to get unique ID" \
     "  a host who closed the lobby, logs three of these per frame until the" \
     "  scene finally changes."
 
-echo "net: FAIL   (the ten stages passed; the engine did not stay quiet)"
+echo "net: FAIL   (the stages passed; the engine did not stay quiet)"
 echo "net:        logs in $LOG_DIR"
 exit 1

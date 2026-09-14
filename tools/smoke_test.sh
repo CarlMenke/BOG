@@ -226,6 +226,19 @@ also "rust playthrough" "arena: Rust built from"
 # Rust's — that it was the savanna that got built, not the island in its place.
 check "safari playthrough" "playthrough: PASS"     "$GODOT" --headless --path "$GODOT_ROOT" tools/playthrough.tscn -- safari
 also "safari playthrough" "arena: Kopje Crossing built from"
+# Two Godot processes over a real socket: `tools/net_test.sh`, whole. Everything
+# D-022 built — roster, config, chat, the client's abilities, a kill, a respawn,
+# a disconnect — and since D-044 a match run to a result and rematched ten times
+# in a row, half of them with the client already back in the lobby, each
+# required back in PLAYING on both machines well inside the ready timeout. A
+# player reported rematch working half the time; this is that, counted.
+#
+# It passes only if the engine stays quiet in both processes as well. It binds
+# 127.0.0.1 on a random port with retries, which is what lets it be here at all:
+# no firewall asks about loopback, and a game hosted on 27015 does not collide.
+# About a minute, nearly all of it island builds.
+check "two processes, ten rematches" "net: PASS" \
+    env NET_SKIP_IMPORT=1 bash "$ROOT/tools/net_test.sh"
 echo
 
 # These need a real window: Godot's headless driver uses the dummy rasteriser

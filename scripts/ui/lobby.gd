@@ -62,6 +62,13 @@ func _ready() -> void:
 	Net.left_lobby.connect(_on_left_lobby)
 	Net.join_failed.connect(_on_join_failed)
 	Net.match_start_requested.connect(_on_match_start)
+	# A rematch is a match start for anybody who is already in here (D-044).
+	# The host's REMATCH is pressed on a results screen, but a client's results
+	# screen has a BACK TO LOBBY button and nothing else, so by the time the
+	# broadcast lands some of the lobby is usually standing in this scene. Only
+	# the HUD used to listen, so they were left here while the host waited out
+	# `ARENA_READY_TIMEOUT` and then started without them.
+	Net.rematch_requested.connect(_on_match_start)
 
 	_known_peers = Net.peer_ids()
 	_chat.add_system("Welcome to the hollow. Say hello.")

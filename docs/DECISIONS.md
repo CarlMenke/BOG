@@ -487,6 +487,8 @@ could reach a state where it could never end. `Net.player_left` is broadcast now
 and `MatchState` frees the Gub and re-runs the win check.
 
 ## D-022 — Two processes, one socket: what offline mode could never show
+*Since D-044 this is in the gate, bound to loopback on a random port, and the
+engine error it always reported was the harness's own teardown.*
 D-011 argued that `Net.start_offline()` is the right shape for a testbed, and it
 was: peer 1, `is_server()` true, no socket, and every `is_host` branch and
 authority check downstream takes the shipping path. That argument has one hole it
@@ -3195,3 +3197,91 @@ over a real socket the host's copy of a respawned client follows it to its pad i
 the same life, and that nothing was picked up. `net_test.sh` is now 102 + 32
 assertions over ten stages; the one engine error at match start is the same one
 it has always reported.
+
+## D-044 — A rematch has to find the players who already went home
+A player: *"rematch only works 50% of the time / takes a while"*. Both halves
+were one bug, and it was not a race.
+
+A client's results screen has exactly one button that does anything: BACK TO
+LOBBY (D-021 gave REMATCH to the host alone). Pressing it walks that client to
+the lobby scene and leaves it connected, which is correct. But the rematch
+broadcast, `Net.rematch_requested`, was heard by one thing only — the HUD, which
+lives in the arena that client has just left. The lobby listened for a match
+*start* and not for a rematch. So every client that had pressed the button stayed
+in the lobby; the host built its arena and waited for a ready report that could
+never come, sat out the whole of `ARENA_READY_TIMEOUT` (25 s), and started the
+match without them. Whether a rematch "worked" depended on whether anyone had
+clicked the only button they had, which from the host's chair looks like a coin
+flip with a long delay on the bad side. The lobby now treats a rematch as a match
+start.
+
+**Measured, not read.** `tools/net_loopback.gd` stage 10 runs a match to a
+result and presses the host's real REMATCH button ten times in a row, with the
+client pressing its own BACK TO LOBBY first on every other round, while the host
+logs a timestamp for the reset, each `register_arena`, each ready report and the
+warmup. Against the old lobby, round 1 (client still on the results screen) took
+3.3 s and round 2 stalled: the host registered its arena, logged its own ready
+report, and then nothing — no report from the client, no warmup, for the whole
+20 s the round allows. With the fix all ten rounds take 2.3-2.4 s, from the lobby
+or not, and with the lobby line removed again round 2 stalls again.
+
+### The other thing a rematch was doing: freeing Gubs somebody was still sending
+With the stall gone, the run still failed on the engine log, and this is the
+second fix. A `MultiplayerSynchronizer` keeps publishing to a peer that has
+already freed its copy of the node, and the receiver logs *Node not found:
+"Arena/Players/Gub_1/Sync"* and *Failed to get cached node* for every packet.
+Freeing happens at different moments on different machines — the host on its own
+REMATCH, a client when the broadcast arrives, a client in the lobby whenever it
+pressed the button — so every rematch left a burst on the host, and a client in
+the lobby logged about sixty pairs a second for as long as the host sat on the
+results screen. Harmless to play, and exactly the sort of noise that hides the
+next real error. `MatchState._sync_finish` now turns every Gub's synchronizer
+private on every peer when the match ends (`_stop_publishing`), while every copy
+still exists, so nothing is sending by the time anything is freed. The results
+screen covers the arena, and a rematch builds new Gubs that start public. Without
+it the same run logs about three hundred of these.
+
+**The "engine error at match start" that `net_test.sh` had reported since D-022
+was the same error, from the harness.** It was never at match start: the client
+half's "leave" called `MatchState.reset()` a frame *before* `Net.leave_lobby`,
+the host's Gub was still publishing, and one packet landed on the freed copy.
+The harness now leaves first and then tidies up, which is the order the pause
+menu's Leave takes. `net_test.sh` exits zero for the first time.
+
+### Defensive, not the cause
+`reset()` left `_players_root` and `_spawn_points` pointing into the arena about
+to be freed, so a `_try_begin_warmup` landing between a reset and the next
+`register_arena` would have spawned every Gub into the dying scene and set the
+phase to WARMUP, and the new arena's own call would then have returned early.
+Nothing reached that window in any of the traced rounds — every client report
+came after the host's own register, because no client can have a new arena
+before the host has sent the rematch that starts building one — but it costs two
+lines to close: `reset` forgets both, and `_try_begin_warmup` and `_create_gub`
+require a players root that is valid and inside the tree.
+
+Also looked at and not the cause: `SceneFlow.go_to` keeping only the latest
+pending request (a client pressing BACK TO LOBBY while a rematch is in flight
+ends up in the arena, which is where it should be); a rematch racing the result
+broadcast (both are reliable, on one channel, in order); ready reports sent
+before the host resets (the host resets synchronously before its broadcast
+leaves, so none can arrive first).
+
+### In the gate now
+D-022 kept the loopback test out of `smoke_test.sh` because binding UDP 27015
+could raise a firewall dialog, and a gate that can stop for a dialog is not a
+gate. That is still right, and the answer was to stop binding like a server:
+`Net.bind_ip` (default `"*"`) lets the harness listen on 127.0.0.1 alone, which
+no firewall asks about, and it picks a random port in 27100-27899 with up to
+eight tries, so a real game hosted on this machine or a port Windows has
+reserved costs a retry rather than a red gate. The whole of `net_test.sh` runs
+as one check, "two processes, ten rematches" (27 checks to 28), and adds about
+forty seconds, nearly all of it island builds. Stage 10 sets the warmup to zero
+for its rounds — stages 6 and 7 already walk a real one — and stays on the
+Hollow, which was the fastest to rematch here: slowest round 3.3 s against
+Kopje Crossing's 3.4 s and Rust's 4.0 s, all with the one-second warmup still
+in, and 2.4 s without it.
+
+What loopback still cannot say: a client that is slow to *leave* the results
+screen over a real link, or a host that presses REMATCH while a client's own
+BACK TO LOBBY transition is mid-fade. The second is handled by `SceneFlow`'s
+pending request and was reasoned about, not run.
