@@ -79,7 +79,7 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##              is of a Gub doing nothing, on purpose.
 ##   cards    — one of each letter set down on the ground in front of the
 ##              player, which is the picture of the three meshes themselves
-##              (D-040). It is the only mode here that reaches past a public API
+##              (D-041). It is the only mode here that reaches past a public API
 ##              into `MatchState._spawn_drop`, and the reason is the roll: a
 ##              card's letter is `randi() % 3` and nothing else (D-033), so
 ##              `letter` above photographs whichever letter came up — and a

@@ -2888,7 +2888,7 @@ Both were run against the code without them first (D-015): with the invincibilit
 clause removed `ward` fails and the other two still pass; with `_tick_elders`
 removed `expiry` fails. The gate goes from 18 checks to 21.
 
-## D-040 — A letter card is a letter: three meshes through the prop pipeline, self-lit, spun on the ground and held upright in the fist
+## D-041 — A letter card is a letter: three meshes through the prop pipeline, self-lit, spun on the ground and held upright in the fist
 The card the letters mode is about (D-033, D-035) was a `Label3D` glyph on a
 billboard, and the comment above the constants gave the honest reason: *there is
 no card mesh in `art/generated/`*. That was a placeholder with an expiry date on
@@ -2963,7 +2963,7 @@ off the mesh's own AABB. It is the one mode in that file reaching past a public
 API — straight at `MatchState._spawn_drop` — and the roll is why: a card's
 letter is `randi() % 3` and nothing else (D-033), so the existing `letter` mode
 photographs whichever letter came up, and a picture of one random letter is not
-a picture of the asset. The gate runs it, 14 checks to 15, and it prints a
+a picture of the asset. The gate runs it, 21 checks to 22, and it prints a
 verdict because a letter at half the height it should be is still,
 unmistakably, a letter.
 

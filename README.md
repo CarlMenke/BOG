@@ -277,7 +277,7 @@ python tools/rig_report.py          # checks the Gub's rig; prints, changes noth
 
 The three props arrive at ~500k triangles each and leave at 19k between them,
 with UVs transferred back seam-aware. The **three letter cards** — the meshes
-the letters win condition puts on the ground and in a fist (**D-040**) — go
+the letters win condition puts on the ground and in a fist (**D-041**) — go
 through the same script for the other half of what it does. They arrive from
 Tripo at 8.5k–10.6k triangles, so 6000 is barely a decimation; what they are in
 the target list for is the 4096-square base colour coming down to 512, the

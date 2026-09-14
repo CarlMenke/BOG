@@ -87,7 +87,7 @@ const ROBE_SCALE := 0.34
 ## Letter cards are what players sprint across the map for, so they have to be
 ## readable at a glance from a few metres. That used to argue for a glyph on a
 ## billboard, and the reason it gave was the honest one: there was no card mesh
-## in `art/generated/`. There is one per letter now (D-040), out of the same
+## in `art/generated/`. There is one per letter now (D-041), out of the same
 ## pipeline the spear and the lure come through, so what is lying in the grass
 ## is the letter rather than a picture of one.
 const LETTER_G_MODEL := preload("res://art/generated/letter_g.glb")
