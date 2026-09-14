@@ -1,0 +1,75 @@
+[gd_resource type="Sky" load_steps=3 format=3 uid="uid://cq2gubsafarisky"]
+
+; The sky over Kopje Crossing. All tuning lives here, not in the shader —
+; `safari_sky.gdshader` only declares the knobs and their fallbacks.
+;
+; This replaced a `ProceduralSkyMaterial` with a two-colour gradient in it, and
+; the replacement had one hard requirement beyond looking like weather: the
+; environment takes its **ambient light from the sky**, so the bottom half of
+; this dome is the only bounce light on the map. The `ground_*` colours below
+; are therefore the exact colours the procedural sky carried — (0.78, 0.68,
+; 0.50) into (0.45, 0.36, 0.25) — and `ground_falloff` is shaped to land in
+; roughly the same place as the old `ground_curve = 0.04` did, which is "almost
+; all bottom colour, almost all the way up to the horizon". Everything above the
+; horizon changed; everything below it did not, so the map's measured exposure
+; only had to move for the clouds.
+;
+; INCREMENTAL process mode: the sky animates, but a cumulus tower takes about
+; four minutes to cross the dome, so rebuilding one radiance mip per frame is
+; invisible and costs a fraction of REALTIME. The 256 px radiance is plenty for
+; a sky whose only sharp feature is a one-degree sun.
+
+[ext_resource type="Shader" path="res://resources/shaders/safari_sky.gdshader" id="1_safari_sky_shader"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_safari_sky"]
+shader = ExtResource("1_safari_sky_shader")
+shader_parameter/zenith_color = Color(0.22, 0.45, 0.84, 1)
+shader_parameter/horizon_color = Color(0.87, 0.84, 0.75, 1)
+shader_parameter/horizon_falloff = 0.45
+shader_parameter/ground_horizon_color = Color(0.78, 0.68, 0.5, 1)
+shader_parameter/ground_bottom_color = Color(0.45, 0.36, 0.25, 1)
+shader_parameter/ground_falloff = 0.16
+shader_parameter/sky_energy = 1.0
+shader_parameter/haze_color = Color(0.94, 0.93, 0.9, 1)
+shader_parameter/haze_energy = 0.3
+shader_parameter/haze_band = 0.12
+shader_parameter/haze_power = 2.6
+shader_parameter/sun_direction = Vector3(0.31, 0.899, 0.31)
+shader_parameter/sun_follow_light = true
+shader_parameter/sun_color = Color(1, 0.97, 0.88, 1)
+shader_parameter/sun_energy = 22.0
+shader_parameter/sun_angular_size = 0.016
+shader_parameter/sun_aureole_color = Color(1, 0.94, 0.82, 1)
+shader_parameter/sun_aureole_energy = 0.85
+shader_parameter/sun_aureole_falloff = 190.0
+shader_parameter/sun_wash = 0.3
+shader_parameter/cloud_sun_color = Color(1, 1, 1, 1)
+shader_parameter/cloud_body_color = Color(0.88, 0.9, 0.95, 1)
+shader_parameter/cloud_base_color = Color(0.37, 0.41, 0.52, 1)
+shader_parameter/cloud_coverage = 0.505
+shader_parameter/cloud_tower_m = 1550.0
+shader_parameter/cloud_swell = 0.2
+shader_parameter/cloud_softness = 0.042
+shader_parameter/cloud_energy = 2.0
+shader_parameter/cloud_step_density = 0.32
+shader_parameter/cloud_base_m = 1250.0
+shader_parameter/cloud_reach_m = 12000.0
+shader_parameter/cloud_size_m = 4200.0
+shader_parameter/cloud_wind = 7.0
+shader_parameter/cloud_wind_azimuth = 0.78
+shader_parameter/cloud_shadow = 0.82
+shader_parameter/cloud_horizon_fade = 0.05
+shader_parameter/cirrus_color = Color(1, 0.996, 0.975, 1)
+shader_parameter/cirrus_opacity = 0.12
+shader_parameter/cirrus_coverage = 0.66
+shader_parameter/cirrus_size_m = 7000.0
+shader_parameter/cirrus_height_m = 8000.0
+shader_parameter/cirrus_wind = 26.0
+shader_parameter/cirrus_azimuth = 1.15
+shader_parameter/cloud_parallax = 0.0016
+
+[resource]
+resource_name = "KopjeCrossingSky"
+sky_material = SubResource("ShaderMaterial_safari_sky")
+process_mode = 2
+radiance_size = 3
