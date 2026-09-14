@@ -77,10 +77,28 @@ directional_shadow_blend_splits = true
 ; 0.55 is measured, not chosen. The dark band of platform undersides across the
 ; top of the pad 0 render sat at (18, 12, 0) with one light; at 0.26 it came up
 ; to (26, 20, 3) and at 0.55 to (32, 26, 4), which is where it stops reading as
-; a hole cut in the sky and starts reading as rock in shade. The ground does not
-; move at all — it faces up, and this light travels up — so none of it costs
-; exposure: pad 0 measures 0.00 % crushed and 0.41 % clipped either way, inside
-; the budget `safari_env.tres` states.
+; a hole cut in the sky and starts reading as rock in shade. Pad 0 measures
+; 0.00 % crushed and 0.41 % clipped, inside the budget `safari_env.tres` states.
+;
+; It stops at 0.55 rather than going further, and this is the note for the next
+; person who looks at a pad render and reads those dark discs at eye level as
+; unlit foliage. They are not foliage. They are the undersides of the landing
+; slabs — `RockPath` meshes on their pillars — and the paving is visible in them
+; at full resolution. Measured off the same pad 0 frame: the acacia canopy seen
+; from below medians (145, 135, 56), a mid olive-gold, while the slab undersides
+; median (37, 29, 5). The leaf cards are fine. Their normals average +0.59 in y
+; and only one vertex in a hundred points down, so a canopy lights from the sun
+; and reads from underneath; a backlight or a transmission term on them would
+; wash out a canopy that is already working.
+;
+; The slabs stay dark on purpose. Sweeping this light to 0.85 and 1.20 moves
+; them only to (38, 31, 5) and (45, 38, 6) — they are concave undersides and
+; SSAO owns their ambient — while the sand goes 172 to 190 to 205 and undoes the
+; palette `safari_map.gd` calibrated against the map as it shipped. That is a
+; large cost for six points of grey. And on a parkour-first map the contrast is
+; load-bearing the other way round: a dark slab underside against a bright sky
+; is how a player standing on the ground sees that there is something up there
+; to jump onto.
 ;
 ; `sky_mode = 1` is LIGHT_ONLY, and it is load-bearing: `safari_sky.gdshader`
 ; puts its sun disc on `LIGHT0`, and a second directional light that reached the
