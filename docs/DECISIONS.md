@@ -4976,3 +4976,147 @@ brightening on the wall tops.
 Audio is wiring only, for `ambient_harbour.wav` and `ambient_lamp_hum.wav`. Frame
 cost was budgeted by counts rather than profiled; if it needs cutting on a weak
 GPU, the order is SSR, then the flood shadows, then the volumetric fog.
+
+## D-061 — Kopje Crossing gets weather, a horizon and something alive in it
+The last of the four atmosphere passes (D-058, D-059, D-060). Kopje Crossing had
+the opposite problem from a small map: 96 m of pale sand under the biggest sky in
+the game, with nothing in that sky, nothing in the air, and nothing past the rim
+but fog and the lower half of a gradient. Scale was the one thing it could not
+sell, because there was nothing for it to be big against.
+
+Six layers, all added after `super()`, none of them collision, and the gameplay —
+pads, jump graph, sightlines, fog density — untouched.
+
+**The sky.** `safari_sky.gdshader` is `enchanted_sky.gdshader` with the night
+removed and a cloud model the island's cannot do. Cumulus have vertical
+development, and no stack of flat dome layers can make one: a ray five degrees
+above the horizon climbs 1.5 km over 160 km of ground, so each plane samples
+unrelated noise. That was built first and it looked exactly like the horizontal
+smear it sounds like. Cloud is now a heightfield of columns standing on one flat
+base at 1250 m, marched twelve steps front to back with the coverage threshold
+climbing as it rises, so the mass domes over rather than spiking. Near the horizon
+the march grazes the sides of distant towers, which is why they stand up. Detail
+and edge softness fall off with march distance — without that the far cloud is
+static, not cloud — and the march is dithered from a *direction* hash so the grain
+is nailed to the sky instead of crawling with the camera. Drift is 7 m/s, about
+four minutes to cross. Quarter-res only; the full-res pass reads the buffer and
+evaluates no noise, and the cubemap pass recomputes at four steps and one octave.
+
+**The horizon.** A plain at -9.4 m out to 3.6 km, and three rings of range at 260,
+560 and 1100 m getting taller and bluer with distance, unshaded and
+vertex-coloured, all in `StaticMap.BACKDROP_GROUP` (D-057). Five draw calls, about
+600 triangles. The plain wears the sand shader at its own scales and its own paler
+palette, because aerial perspective belongs in the palette here: fog density is
+what a player's readability at forty metres depends on, and it was left exactly
+where D-031 measured it. Only `fog_light_color` (to 0.74, 0.70, 0.62 — 60% of the
+old colour through this tonemap was white, and the ranges disappeared into it) and
+`fog_aerial_perspective` (0.20 to 0.45) moved.
+
+**The air.** `safari_ambience.gd` is deliberately *not* `ambience.gd`: over sunlit
+sand an additive mote is invisible, so the dust is alpha-blended and pale and reads
+against shaded rock, which is where dust reads in life. 380 thermal motes over the
+plateau starting at 2.2 m — above head height, so nothing ever hangs in front of a
+target — two dust devils out on the open band (ring emission plus tangential
+acceleration against a vertical gravity, so spin and lift come from the same two
+settings), 140 *additive* midges over the waterhole, which is the one place on the
+map a glint is right, and eleven vultures on two multimeshes turning opposite ways
+at 28 and 39 m. Audio hooks for wind, insects and water, wired exactly like
+`ambience.gd::_build_audio` and skipped in silence.
+
+**The heat.** A screen-space shimmer band (`safari_heat.gdshader`) on a cylinder at
+**120 m**, and that radius is the entire safety argument: the rim is at 48 m and
+the furthest pad at 44, so every player, prop and spear on the map is in front of
+the band from every camera and the depth test rejects it there. The only things it
+can distort are the sky and the distant ranges.
+
+**The ground.** The sand was one albedo times a 10 m noise tile — a span of eight
+sRGB points, too small to be landscape and too big to be grain. It is now three
+scales (38 m drifts, 4.3 m scuffing, 0.5 m grain that mips away by 20 m) over a
+palette four times wider, **centred on the old one so the exposure did not move**.
+The waterhole's wet shore is a uniform in that shader rather than a ring mesh. The
+water itself was roughness 0.05 with metallic on it and rendered as a sheet of ice;
+it is now silt at the rim, green-brown in the middle, two scrolling noise fields for
+ripples, and sky only through Fresnel. Grass and canopies lean with a wave crossing
+the map and **desaturate before they tint**, which is the only way the kit's green
+tufts become dry-season straw — a multiply can darken a channel but never remove
+one.
+
+**A second light.** Noon over pale sand bounces, and the map had none of it: every
+platform underside was a black brick. `Lights/Bounce` is a shadowless directional
+light almost anti-parallel to the Sun, warm sand colour, 0.55 against the sun's
+1.3, with `sky_mode = LIGHT_ONLY` — load-bearing, because a second light reaching
+the sky shader could take LIGHT0 and move the sun disc.
+
+**Noon and 64 degrees were kept**, against the suggestion to move the hour. The
+map's own note is that the kopje must never shadow the spiral, and that holds at 58
+degrees too, so it would not have been the blocker. The argument that settles it is
+one the map does not make: **eight pads on a symmetric ring means a low sun puts
+four of them in the light and four in the eye**, and this is the only map open
+enough for that to decide a fight. The drama went into the sky and the horizon
+instead, which is where the map had none.
+
+Measured the way `rust_env.tres` asks. `background_energy_multiplier` **stays at
+1.35**: iso 0.00% crushed and 0.00% clipped, pad 0 0.00% and 0.41%, pads 3, 5 and 7
+under 0.13%, against a budget of 2% and 1%. The old iso frame crushed 0.60%; the
+bounce light took that to nothing, and pad 0's platform undersides went from
+(18, 12, 0) to (32, 26, 4).
+
+### The dark fans at eye level are slabs, not leaves
+Raised in review as the loudest wrong thing in the pad views — flat black discs
+that read as acacia canopies lit from the wrong side, and a guess that the kit's
+leaf cards were single-sided backfaces no fill could reach. Checked rather than
+taken: `CommonTree_1`'s leaf surface has mean `normal.y` +0.59 with only 1% of
+vertices below -0.3, and the material is authored `doubleSided`, which is the
+correct authoring for stylised foliage. A canopy seen from below medians
+(145, 135, 56) — a lit canopy, not a cutout. The black fans are the **`RockPath`
+landing slabs on their pillars**, medianing (37, 29, 5), with the paving pattern
+visible at full resolution.
+
+They stay dark, for a reason that cuts against the look note. Sweeping the bounce
+light 0.55 → 0.85 → 1.20 moves the slab undersides only (32,26,4) → (38,31,5) →
+(45,38,6) — they are concave and SSAO owns their ambient — while the sand goes 172
+→ 205, a 19% shift on the biggest surface in the game, undoing the calibrated
+palette. Six points of grey for that is a bad trade. And this is a parkour-first
+map: **a dark slab underside against a bright sky is how a player on the ground
+sees there is something up there to jump onto.** Lifting them reduces exactly the
+contrast the map's primary mechanic is read by. The finding is recorded in
+`safari.tscn` beside the Bounce light so the next reader does not go hunting in the
+leaf material.
+
+### What checks it
+No new gate lines, for the reason D-058 gives. 63 of 63, green.
+
+### Rejected
+- **An HDRI sky**, though licence and bandwidth were available. A photograph does
+  not drift, and on the one map whose failure was stillness that is the whole
+  problem; its lower hemisphere would also arrive with whatever ground the
+  photographer stood on, and this environment takes its ambient from the sky. A 2k
+  Poly Haven midday veld panorama was downloaded and *measured* instead, with a
+  hand-written RGBE reader, and it corrected the palette twice: a midday veld
+  horizon is a pale near-neutral rather than gold — the map's was gold — and a
+  midday zenith is far less saturated than it feels. Nothing was committed.
+- **Photographic PBR ground** (three CC0 sets downloaded and looked at). It would
+  be the only photoreal surface in a flat-shaded map, its grain is sub-pixel past
+  fifteen metres, and the two with usable colour tile visibly at 96 m.
+- **Volumetric fog.** A sun 64 degrees up through clear air casts no visible shafts,
+  and it is not free on an eight-player game.
+- **Screen-space shimmer over the play space.** A Gub silhouette that wobbles is a
+  Gub you cannot lead a spear onto; the band lives outside every camera-to-player
+  line instead.
+- **A low sun** — see above.
+
+### Two traps worth naming
+`cull_disabled` on the sand shader is not laziness: the plateau fan and the plain's
+`PlaneMesh` are wound opposite ways, and `cull_back` renders one and silently drops
+the other. The symptom is the whole plateau vanishing with the plain showing
+through where the ground should be, and it looks exactly like a lighting bug. And a
+`source_color` uniform's default written in a shader is taken as **linear**, while a
+`Color` set from GDScript is sRGB and converted — which is how this map's sand
+turned white the first time. Every colour is now set from the script.
+
+### Left for later
+Three audio loops are wired and named and skipped in silence. The dust devils stand
+where they are placed rather than wandering, and the vulture cards bank and bob but
+do not flap. Budget: four particle emitters and 700 particles, two bird multimeshes
+of eleven cards, one extra shadowless light, five backdrop draw calls, one
+screen-texture copy, no volumetrics.
