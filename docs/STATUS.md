@@ -131,6 +131,18 @@ of what that means:
 - **The fifth map** (Halcyon Wake) is built the same way and is the tall one: a
   66 m superyacht on open water on a bright morning, with four decks joined by
   stairs and hop steps, the sea as the void, and G two decks up (**D-057**).
+- **All four static maps have had an atmosphere pass** (**D-058** to **D-061**),
+  one per map, after the user's verdict that Whisperbloom Hollow was the only one
+  that felt like a place. Each got its own hour and its own weather rather than
+  the island's night copied over: Halcyon Wake a sea of seven analytic waves with
+  a sun-glitter track, a coast to lie off and a wind everything agrees with; Rust
+  an HDR panorama whose sun elevation was *measured* off the file and matched by
+  the scene's own light, plus dust, heat shimmer and a refinery horizon; Lantern
+  Wharf the dusk its name promises, with the floods as real sources, wet
+  reflective concrete and a working port beyond the walls; Kopje Crossing towering
+  cumulus, a 3.6 km plain with three receding ranges, dust devils and vultures.
+  None of it is collision — all of it is built after `StaticMap`'s `super()` — and
+  no pad, sightline or jump moved. The gate is still 63 of 63.
 - **The UI** is themed and complete: menu with a live glade behind it, an
   eight-Gub lobby, HUD, scoreboard, kill feed, pause, settings, chat, results.
 - **Combat** is a one-hit spear, a mushroom you cannot be shot through, and a
