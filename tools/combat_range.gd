@@ -593,11 +593,620 @@ func _physics_process(_delta: float) -> void:
 	_acted = true
 	match _mode:
 		"mushroom":
+			_stock(combat)
 			combat.try_place_mushroom()
 		"lure", "lure_self":
+			_stock(combat)
 			combat.try_throw_lure()
+		"letter":
+			_drop_a_letter()
+		"lightning":
+			_drop_a_robe()
 		_:
 			combat.try_throw_spear()
+
+
+## Put one letter card down at the player's feet and let them walk into it.
+##
+## Deliberately *not* handed over the way `_stock` hands over a mushroom. The
+## card comes out of a real death, through `MatchState._drop_loot`'s own roll
+## with `letter_drop_chance` forced to 1 so it cannot come up a lure, and it is
+## claimed by the player's own body entering the `Pickup` area. That makes this
+## the only place the whole chain runs in a world with geometry in it — which
+## matters because the failure it guards is not a script error: an `Area3D` that
+## tries to stop monitoring from inside `body_entered` logs a plain `ERROR` and
+## the smoke gate walks straight past it.
+##
+## The drop lands at the point the blow was struck rather than at the body, so
+## the card can be set down in front of the player without moving anybody.
+func _drop_a_letter() -> void:
+	var player := MatchState.gubs.get(1) as Gub
+	if player == null:
+		return
+	Net.config.win_condition = MatchConfig.WinCondition.LETTERS
+	Net.config.letter_drop_chance = 1.0
+	# Long enough that the frame is still mid-hold whenever the snapshot lands.
+	Net.config.letter_hold_time = 30.0
+	MatchState.report_kill(DUMMY_BASE, 1, Gub.Cause.SPEAR,
+		player.global_position + player.facing() * 1.2,
+		Vector3.FORWARD * 18.0, "Spine1")
+
+
+## Put one Elder robe down at the player's feet and let them walk into it.
+##
+## The far dummy is the one killed, so the near one is still standing to be shot
+## at — and, exactly as `_drop_a_letter` does, the drop is placed at the *blow*
+## rather than at the body, so the robe can be set down in front of the player
+## without moving anybody.
+##
+## Through `_drop_loot`'s own roll with `elder_drop_chance` forced to 1, never by
+## handing the state over: the roll, the `Pickup` area's overlap,
+## `claim_pickup`, `_do_set_elder` and the re-parent of the cloth onto a live
+## skeleton are all part of what this mode is for. Only `tools/preview_elder.gd`
+## has ever done that attach before, and it does it in a scene with one Gub in
+## it and no match running.
+func _drop_a_robe() -> void:
+	var player := MatchState.gubs.get(1) as Gub
+	if player == null:
+		return
+	Net.config.elder_drop_chance = 1.0
+	MatchState.report_kill(DUMMY_BASE + 1, 1, Gub.Cause.SPEAR,
+		player.global_position + player.facing() * 1.2,
+		Vector3.FORWARD * 18.0, "Spine1")
+
+
+## Cast once the robe is on, then say whether anybody died.
+##
+## The verdict is the whole point. A still frame of a bolt looks the same
+## whether the Gub at the far end of it fell over or not, and "the spectacle
+## works and the weapon does nothing" is precisely the failure a rendered check
+## is here to catch.
+func _drive_lightning(combat: GubCombat) -> void:
+	if _cast_at == 0:
+		if not MatchState.is_elder(1) or not combat.has_lightning():
+			return
+		_cast_at = _frames
+		var hand := (MatchState.gubs.get(1) as Gub).held_spear
+		print("combat_range: robe claimed on frame %d — Elder, spear %s, crackle %s"
+			% [_frames, combat.has_spear(), hand != null and hand.is_charged()])
+		# The same call a click makes. `try_throw_spear` is the Elder's cast as
+		# well as the Gub's throw — it branches on the robe (D-038) — and going
+		# through it rather than at `try_cast_lightning` is what makes this mode
+		# exercise the path a player's mouse actually takes.
+		combat.try_throw_spear()
+		return
+	if _frames != _cast_at + LIGHTNING_VERDICT_DELAY:
+		return
+	var target := MatchState.gubs.get(DUMMY_BASE) as Gub
+	if target != null and not target.alive:
+		print("combat_range: the bolt killed %s — lightning PASS" % target.display_name)
+	else:
+		print("combat_range: nothing at the far end died — lightning FAIL")
+
+
+# -------------------------------------------------------------------- ward ---
+
+## Put the robe on a *dummy* and throw a real spear at it (D-040).
+##
+## Three verdicts out of one run, in this order and for this reason:
+##
+##   1. `ward`    — a spear thrown at an Elder must not kill it.
+##   2. `expiry`  — the robe must then come off **by itself**, on
+##                  `MatchState._tick_elders` running in a real match loop.
+##   3. `control` — the *same* throw at the *same* Gub, once the robe is off,
+##                  must kill it. Without this the first verdict is worth
+##                  nothing: a spear that never left the hand, a dummy that was
+##                  already dead, a `report_kill` that never arrived — every one
+##                  of those sails through "did not die", and the gate would go
+##                  green on invincibility that had been implemented as a
+##                  `return` at the top of the throw.
+##
+## That control is the whole lesson of D-039 restated. The mushroom passed a
+## green gate for its entire life while stopping nothing, because the only thing
+## anybody had ever asserted about it was that a PNG got written.
+##
+## The Elder here is a dummy rather than the player, which is the opposite way
+## round from the `lightning` mode next door and is the only way to get a real
+## spear into the air at one: the player is the only Gub in this scene with a
+## camera to aim and a hand to throw from.
+func _drive_ward(combat: GubCombat) -> void:
+	var dummy := MatchState.gubs.get(DUMMY_BASE) as Gub
+	if dummy == null:
+		return
+
+	match _ward_step:
+		0:
+			# Late enough for both Gubs to have settled onto the ground and for
+			# the spawn-frame transforms to have been published.
+			if _frames < 12:
+				return
+			_robe_at_the_dummys_feet(dummy)
+			_ward_step = 1
+		1:
+			# On the Elder state and not on a frame count, because what stands
+			# between the drop and the robe is an `Area3D` overlap resolving —
+			# and because a mode that threw its spear before the robe was on
+			# would be checking that a spear kills a Gub, which is the one thing
+			# every other mode here already proves.
+			if not MatchState.is_elder(DUMMY_BASE):
+				return
+			# Both claims, printed together: the rules say Elder and the cloth
+			# is on the skeleton. A dummy that is the Elder in the bookkeeping
+			# and a plain Gub on screen would make the verdict below true for
+			# entirely the wrong reason.
+			print("combat_range: %s took the robe on frame %d — Elder %s, worn %s, %.1f s left"
+				% [dummy.display_name, _frames, MatchState.is_elder(DUMMY_BASE),
+					dummy.elder_robe != null and dummy.elder_robe.is_worn(),
+					MatchState.elder_remaining(DUMMY_BASE)])
+			combat.try_throw_spear()
+			_ward_at = _frames
+			_ward_step = 2
+		2:
+			if _frames < _ward_at + SPEAR_VERDICT_DELAY:
+				return
+			if dummy.alive:
+				print("combat_range: the spear did not kill the Elder — ward PASS")
+			else:
+				print("combat_range: %s died wearing the robe — ward FAIL"
+					% dummy.display_name)
+			_ward_at = _frames
+			_ward_step = 3
+		3:
+			if not MatchState.is_elder(DUMMY_BASE):
+				print("combat_range: the robe burned out on frame %d — its %.1f s were up — expiry PASS"
+					% [_frames, WARD_DURATION])
+				_ward_step = 4
+				return
+			if _frames - _ward_at > WARD_EXPIRY_LIMIT:
+				print("combat_range: the robe never burned out — expiry FAIL")
+				get_tree().quit()
+			return
+		4:
+			# On the throw gate, exactly as `cover`'s control throw is: a
+			# hardcoded wait here becomes a throw that never happened the day
+			# `spear_recharge` is retuned, and a control that never fires is a
+			# control that always passes.
+			if not combat.has_spear():
+				return
+			combat.try_throw_spear()
+			_ward_at = _frames
+			_ward_step = 5
+		5:
+			if _frames < _ward_at + SPEAR_VERDICT_DELAY:
+				return
+			if not dummy.alive:
+				print("combat_range: the same throw with the robe gone killed %s — control PASS"
+					% dummy.display_name)
+			else:
+				print("combat_range: nothing was protecting anybody and nobody died — control FAIL")
+			get_tree().quit()
+
+
+## Drop one Elder robe on top of the near dummy and let it walk into its own
+## feet.
+##
+## The far dummy is the one killed, so the near one — the target of every throw
+## in this file — is still standing to wear it. Through `_drop_loot`'s own roll
+## with `elder_drop_chance` forced to 1, and placed at the **blow** rather than
+## at the body, which is the same trick `_drop_a_letter` and `_drop_a_robe` use
+## to set an item down somewhere other than where the corpse is.
+##
+## Collection is then the shipping path and not a hand-over: the `Pickup`'s
+## `Area3D` finds the dummy's collision body already inside it on the next
+## physics step and calls `MatchState.claim_pickup` itself. A dummy is a remote
+## Gub with no client behind it and cannot be walked anywhere, so dropping the
+## robe *under* one is the only way to make that overlap happen — and it is
+## worth the trouble, because `claim_pickup` called by hand would skip the one
+## part of the chain that has ever actually been broken (D-039's note about an
+## `Area3D` that cannot stop monitoring from inside `body_entered`).
+func _robe_at_the_dummys_feet(dummy: Gub) -> void:
+	Net.config.elder_drop_chance = 1.0
+	MatchState.report_kill(DUMMY_BASE + 1, 1, Gub.Cause.SPEAR,
+		dummy.global_position, Vector3.FORWARD * 18.0, "Spine1")
+
+
+## Say what the Gub is holding, so a run means something without opening the
+## PNG. The two halves that must agree are printed together on purpose: a hold
+## with a spear still in the hand is the bug this mode exists to catch.
+func _report_letter(combat: GubCombat) -> void:
+	if _frames != 60:
+		return
+	var player := MatchState.gubs.get(1) as Gub
+	var hand := player.held_spear if is_instance_valid(player) else null
+	print("combat_range: holding %s with %.1f s left — can throw %s, shaft shown %s, card shown %s" % [
+		MatchState.letter_name(MatchState.letter_hold_letter(1)),
+		MatchState.letter_hold_remaining(1), combat.has_spear(),
+		hand != null and hand.is_carried(), hand != null and hand.has_letter()])
+
+
+# ------------------------------------------------------------------- cover ---
+
+## Stand a mushroom up in front of a dummy, prove it is cover, prove the proof
+## means something, and then walk into it.
+##
+## Three verdicts out of one run, in this order and for this reason:
+##
+##   1. `cover`   — a spear thrown at a Gub standing behind a mushroom must not
+##                  kill it.
+##   2. `control` — the *same* throw, after the mushroom has withered, must kill
+##                  it. Without this the first verdict is worth nothing: a spear
+##                  that had stopped killing anybody at all — a broken launch, a
+##                  dummy that was already dead, a `report_kill` that never
+##                  arrived — sails straight through "did not die", and the gate
+##                  goes green on a mushroom that stops nothing.
+##   3. `solid`   — a Gub walking into one is held off at the edge of the cap
+##                  instead of wading into the middle of it.
+##
+## This is the check the mushroom spent its whole life without. The `mushroom`
+## mode above asserts `snapshot: wrote`, which proves a PNG exists, and while it
+## was passing the collision cap sat 31 cm above the head of the tallest thing
+## it was supposed to be hiding, with nothing in a Gub's height band but a
+## 0.55 m post. Nothing anywhere ever asked it to stop anything. See D-039.
+func _drive_cover(player: Gub, combat: GubCombat) -> void:
+	var dummy := MatchState.gubs.get(DUMMY_BASE) as Gub
+	if dummy == null:
+		return
+
+	match _cover_step:
+		0:
+			# Late enough for both Gubs to have settled onto the ground, early
+			# enough that the mushroom is standing before anything is aimed.
+			if _frames < 10:
+				return
+			_cover_mushroom = _plant_a_mushroom(dummy.global_position, PLAYER_SPOT,
+				COVER_OFFSET)
+			_cover_step = 1
+		1:
+			# A frame later, and that is not a stylistic pause. A `StaticBody3D`
+			# added to the tree does not exist to the physics server until the
+			# next step, so a ray fired on the frame it was planted reports a
+			# mushroom 0.00 m wide at every height — which is a convincing
+			# picture of exactly the bug being measured, and wrong.
+			_report_cover_profile(_cover_mushroom, dummy, player)
+			_cover_step = 2
+		2:
+			if _frames < 20:
+				return
+			combat.try_throw_spear()
+			_cover_at = _frames
+			_cover_step = 3
+		3:
+			if _frames < _cover_at + SPEAR_VERDICT_DELAY:
+				return
+			if dummy.alive:
+				print("combat_range: the spear did not get through — cover PASS")
+			else:
+				print("combat_range: %s died behind a mushroom — cover FAIL"
+					% dummy.display_name)
+			# Withered rather than freed: that is what a mushroom does at the
+			# end of its life, and it is the path the collision layer is
+			# actually cleared on, so the control throw flies through the same
+			# hole a real one would.
+			if is_instance_valid(_cover_mushroom):
+				_cover_mushroom.wither()
+			_cover_step = 4
+		4:
+			# On the gate rather than on a frame number, exactly as `lightning`
+			# waits for the robe. A hardcoded wait here would quietly become a
+			# throw that never happened the day `spear_recharge` is retuned, and
+			# a control that never fires is a control that always passes.
+			if not combat.has_spear():
+				return
+			combat.try_throw_spear()
+			_cover_at = _frames
+			_cover_step = 5
+		5:
+			if _frames < _cover_at + SPEAR_VERDICT_DELAY:
+				return
+			if not dummy.alive:
+				print("combat_range: the same throw with the mushroom gone killed %s — control PASS"
+					% dummy.display_name)
+			else:
+				print("combat_range: nothing was blocking and nobody died — control FAIL")
+			# And now one in the player's own way, to lean on.
+			_cover_mushroom = _plant_a_mushroom(player.global_position,
+				player.global_position + player.facing() * 10.0, 0.0)
+			Input.action_press("move_forward")
+			_cover_at = _frames
+			_cover_step = 6
+		6:
+			_watch_cover_approach(player)
+			if _frames < _cover_at + COVER_WALK_FRAMES:
+				return
+			Input.action_release("move_forward")
+			_report_cover_solid()
+			get_tree().quit()
+
+
+## Stand one up the way the ability does: `MUSHROOM_DISTANCE` in front of a Gub,
+## along the line to whatever it is taking cover from, on the ground.
+##
+## Through `ShieldMushroom.plant` and the same packed scene `GubCombat` loads,
+## rather than through `try_place_mushroom`, and the difference is worth being
+## explicit about because this file's own `_stock` comment is about exactly this
+## kind of shortcut. `try_place_mushroom` reads the *player's* camera and can
+## only ever put one in front of the player; what this mode needs first is one
+## in front of the dummy. Everything past the placement — the collision build,
+## the layer, the eruption, the lifetime — is the shipping code either way, and
+## the `mushroom` mode next door is the one that walks the placement path.
+func _plant_a_mushroom(behind: Vector3, towards: Vector3,
+		offset: float) -> ShieldMushroom:
+	var forward := towards - behind
+	forward.y = 0.0
+	forward = forward.normalized()
+	var spot := behind + forward * GubCombat.MUSHROOM_DISTANCE 		+ forward.cross(Vector3.UP) * offset
+	# The stage is one flat slab at y = 0 (see `_build_ground`), which is what
+	# `_mushroom_spot`'s downward ray would find anyway.
+	spot.y = 0.0
+	var mushroom := MUSHROOM.instantiate() as ShieldMushroom
+	_items.add_child(mushroom)
+	# Long enough that nothing in this run is ever waiting on a wither it did
+	# not ask for; step 2 takes the first one away by hand.
+	mushroom.plant(spot, Gub.yaw_towards(-forward), COVER_LIFETIME, 1)
+	return mushroom
+
+
+## How wide the mushroom actually is, height by height, measured with the
+## physics rather than read off the constants in `shield_mushroom.gd`.
+##
+## Rays on the deployable layer alone, so what comes back is the mushroom and
+## nothing else — not the ground it stands on and not the Gub behind it. The
+## bands run well past the top of the cap on purpose: the failure this was
+## written for was a cap that had floated *above* everything it was covering,
+## and a profile that stopped at a Gub's head would have shown an empty column
+## with no explanation in it.
+##
+## The last line is the one that answers the question a player would ask. A
+## profile says how wide the thing is; what anybody standing behind it cares
+## about is how much of *them* it hides, so the silhouette of a standing Gub is
+## sampled point by point along the line to a thrower fourteen metres away and
+## the share of it that is behind cover is printed as a percentage.
+func _report_cover_profile(mushroom: Node3D, target: Gub, thrower: Gub) -> void:
+	var space := get_world_3d().direct_space_state
+	var axis := mushroom.global_position
+	print("combat_range: mushroom collision, measured on layer %d at %.0f cm across."
+		% [ShieldMushroom.LAYER_DEPLOYABLE, PROFILE_SAMPLE * 100.0])
+	print("              A Gub stands 0.00-%.2f m, crouches to %.2f, has its eyes at %.2f,"
+		% [Gub.STAND_HEIGHT, Gub.CROUCH_HEIGHT, thrower.eye_height()])
+	print("              and its antennae reach 1.80 m — above the hitbox, and meant to show.")
+	var y := PROFILE_STEP
+	while y <= PROFILE_TOP:
+		var width := _blocked_width(space, axis, y)
+		# One # per 10 cm, so the shape of the thing is legible in the log
+		# without anybody having to plot the numbers.
+		var bar := ""
+		for _i in int(round(width * 10.0)):
+			bar += "#"
+		var note := ""
+		if absf(y - Gub.STAND_HEIGHT) < PROFILE_STEP * 0.5:
+			note = "   <- the top of a standing Gub"
+		print("              y %.2f m  %.2f m wide  %s%s" % [y, width, bar, note])
+		y += PROFILE_STEP
+	var eye := thrower.global_position + Vector3.UP * thrower.eye_height()
+	# Two stances, because they are two different questions and only the first
+	# one is flattering. Squarely behind your own cover is what the ability is
+	# for; half a metre out of line is what a fight does to you within a second
+	# of it starting, and it is the number the cap's *width* has to answer.
+	var square := _behind(axis, eye, GubCombat.MUSHROOM_DISTANCE)
+	print("              squarely behind it, a standing Gub is %.0f%% hidden from %.1f m"
+		% [_hidden_fraction(space, square, eye) * 100.0, eye.distance_to(square)])
+	print("              standing %.2f m out of line, as the dummy is, %.0f%%"
+		% [COVER_OFFSET, _hidden_fraction(space, target.global_position, eye) * 100.0])
+
+
+## The spot `MUSHROOM_DISTANCE` behind a mushroom on the line from the thrower:
+## where a Gub that planted this thing and did not move would be standing.
+func _behind(axis: Vector3, eye: Vector3, distance: float) -> Vector3:
+	var away := axis - eye
+	away.y = 0.0
+	return axis + away.normalized() * distance
+
+
+## How much of the mushroom is in the way at one height, in metres, found by
+## firing a comb of rays straight through it.
+func _blocked_width(space: PhysicsDirectSpaceState3D, axis: Vector3, y: float) -> float:
+	var blocked := 0
+	var dx := -PROFILE_HALF_WIDTH
+	while dx <= PROFILE_HALF_WIDTH:
+		var query := PhysicsRayQueryParameters3D.create(
+			Vector3(axis.x + dx, y, axis.z + 4.0),
+			Vector3(axis.x + dx, y, axis.z - 4.0))
+		query.collision_mask = ShieldMushroom.LAYER_DEPLOYABLE
+		if not space.intersect_ray(query).is_empty():
+			blocked += 1
+		dx += PROFILE_SAMPLE
+	return blocked * PROFILE_SAMPLE
+
+
+## What share of a standing Gub a thrower cannot see, because the mushroom is in
+## the way.
+##
+## The silhouette is the collision capsule rather than the mesh, because the
+## capsule is what a spear can actually hit: a Gub is 1.80 m of model inside
+## 1.55 m of hitbox (see `Gub.STAND_HEIGHT`), and the 25 cm of head and antennae
+## above it are exactly the part that is *supposed* to be showing over the top of
+## cover. The half-widths follow the capsule's real shape, hemispheres included,
+## so the samples near the feet and the crown are not counted as though the body
+## were a box.
+func _hidden_fraction(space: PhysicsDirectSpaceState3D, at: Vector3,
+		eye: Vector3) -> float:
+	var flat := at - eye
+	flat.y = 0.0
+	# Across the line of sight, so the samples sweep the silhouette rather than
+	# some arbitrary slice through it.
+	var across := flat.normalized().cross(Vector3.UP)
+	var radius := Gub.CAPSULE_RADIUS
+	var samples := 0
+	var hidden := 0
+	for row in SILHOUETTE_ROWS:
+		var y := (row + 0.5) / float(SILHOUETTE_ROWS) * Gub.STAND_HEIGHT
+		# The capsule narrows into a hemisphere at each end; anywhere between
+		# them it is a cylinder at full width.
+		var half := radius
+		if y < radius:
+			half = sqrt(maxf(0.0, radius * radius - (radius - y) * (radius - y)))
+		elif y > Gub.STAND_HEIGHT - radius:
+			var above := y - (Gub.STAND_HEIGHT - radius)
+			half = sqrt(maxf(0.0, radius * radius - above * above))
+		for col in SILHOUETTE_COLS:
+			var t := (col + 0.5) / float(SILHOUETTE_COLS) * 2.0 - 1.0
+			var point := at + Vector3.UP * y + across * (t * half)
+			var query := PhysicsRayQueryParameters3D.create(eye, point)
+			query.collision_mask = ShieldMushroom.LAYER_DEPLOYABLE
+			samples += 1
+			if not space.intersect_ray(query).is_empty():
+				hidden += 1
+	return float(hidden) / float(samples) if samples > 0 else 0.0
+
+
+## How close the walking Gub has come to the middle of the mushroom in its way.
+##
+## A running minimum rather than a final position, because a `CharacterBody3D`
+## pressed into a cylinder slides around it: where the Gub ends up says nothing
+## about whether it was stopped, and how far in it ever got says everything.
+func _watch_cover_approach(player: Gub) -> void:
+	if not is_instance_valid(_cover_mushroom):
+		return
+	var axis := _cover_mushroom.global_position
+	_cover_closest = minf(_cover_closest, Vector2(
+		player.global_position.x - axis.x,
+		player.global_position.z - axis.z).length())
+
+
+## Was the Gub held off by the cap, or did it walk in under it?
+##
+## The threshold is derived from the two radii rather than typed in, so it
+## follows the constants instead of having to be remembered alongside them.
+## What it is really asking is *where* the solid part of the mushroom is: a Gub
+## that gets within its own width of the axis has found nothing at its own
+## height but the stem, which is the bug this whole mode exists for.
+func _report_cover_solid() -> void:
+	var hold_off := ShieldMushroom.CAP_RADIUS + Gub.CAPSULE_RADIUS - COVER_HOLD_OFF_SLACK
+	if _cover_closest >= hold_off:
+		print("combat_range: walked into it and was held %.2f m off the middle (wanted %.2f) — solid PASS"
+			% [_cover_closest, hold_off])
+	else:
+		print("combat_range: walked to %.2f m of the middle of a cap %.2f m across — solid FAIL"
+			% [_cover_closest, ShieldMushroom.CAP_RADIUS * 2.0])
+
+
+# ---------------------------------------------------------------- recharge ---
+
+## Throw until the spear has grown back a dozen times, then take it out of the
+## hand and see whether anything ever asks for it again.
+##
+## Two halves, because the bug has two shapes. The first is the bug as a player
+## meets it: throw, wait, and require the shaft to be in the fist at the end of
+## every cycle. The second is the *property* that stops it coming back — see
+## `_drive_desync`.
+##
+## The invariant is checked on every frame rather than once a cycle, and stated
+## as a count of consecutive frames the hand and the throw gate disagreed for.
+## That is what tells one or two frames of ordinary repaint lag apart from a
+## shaft that is never coming back, which is the only distinction that matters
+## here: "not reliably" is a duration, not a boolean.
+func _drive_recharge(player: Gub, combat: GubCombat) -> void:
+	var hand := player.held_spear
+	if hand == null or _frames < 20:
+		return
+	if _recharge_cycles >= RECHARGE_CYCLES:
+		_drive_desync(combat, hand)
+		return
+
+	if combat.has_spear() and not hand.is_carried():
+		_hand_out_of_step += 1
+		_worst_out_of_step = maxi(_worst_out_of_step, _hand_out_of_step)
+	else:
+		_hand_out_of_step = 0
+
+	if not combat.has_spear():
+		return
+	if not hand.is_carried():
+		if _hand_out_of_step <= HAND_SYNC_GRACE:
+			return
+		# Armed for a tenth of a second with an empty fist. Whatever was meant
+		# to put the shaft back is not going to — so the cycle is counted as
+		# failed, and the shaft is put back *by the testbed* so the run carries
+		# on and measures the next eleven instead of stopping at the first.
+		_recharge_failures += 1
+		print("combat_range: cycle %d — the gate opened %d frames ago and the fist is still empty"
+			% [_recharge_cycles + 1, _hand_out_of_step])
+		hand.set_carried(true)
+		_hand_out_of_step = 0
+
+	# Armed with a spear in hand: one good cycle. The first time round that is
+	# only the state a Gub spawns in, so it is not counted as a regrow.
+	if _recharge_thrown > 0:
+		_recharge_cycles += 1
+	_recharge_thrown += 1
+	if _recharge_cycles < RECHARGE_CYCLES:
+		combat.try_throw_spear()
+
+
+## The other half, and the deterministic one.
+##
+## A dozen real cycles will catch the race if this machine happens to lose it,
+## and prove nothing whatsoever if it happens to win twelve in a row — which is
+## the trouble with checking a race by running it. So the last thing this mode
+## does is create, on purpose, the exact state the race leaves behind: the throw
+## gate says armed and the fist is empty.
+##
+## A hand repainted by a one-shot timer has already had its chance and stays
+## empty for ever. A hand that is *polled* notices on the next frame. Nothing in
+## the game reaches in and does this to itself; this is the fault stated
+## directly rather than waited for, and it is the half of this check that cannot
+## pass by luck.
+func _drive_desync(combat: GubCombat, hand: HeldSpear) -> void:
+	if _desync_at == 0:
+		if not combat.has_spear() or not hand.is_carried():
+			return
+		_desync_at = _frames
+		hand.set_carried(false)
+		return
+	if hand.is_carried():
+		_desync_recovered = _frames - _desync_at
+		_report_recharge()
+		get_tree().quit()
+		return
+	if _frames - _desync_at < DESYNC_PATIENCE:
+		return
+	_report_recharge()
+	get_tree().quit()
+
+
+func _report_recharge() -> void:
+	var came_back := _desync_recovered >= 0 and _desync_recovered <= HAND_SYNC_GRACE
+	if _recharge_failures == 0 and came_back:
+		print("combat_range: %d regrows, a spear in the fist at the end of every one (worst lag %d frames), and an emptied fist refilled itself in %d — recharge PASS"
+			% [_recharge_cycles, _worst_out_of_step, _desync_recovered])
+		return
+	if _recharge_failures > 0:
+		print("combat_range: %d of %d regrows left the fist empty with the gate open — recharge FAIL"
+			% [_recharge_failures, _recharge_cycles])
+	if not came_back:
+		print("combat_range: the fist was emptied with the gate open and %s — recharge FAIL"
+			% ("nothing ever put the spear back" if _desync_recovered < 0
+				else "it took %d frames to notice" % _desync_recovered))
+
+
+## Put one mushroom and one lure in the Gub's hands.
+##
+## This is the testbed supplying by hand something the real game supplies some
+## other way, which is the exact shape of every integration bug this project has
+## had (D-018, D-019) — so it is worth saying plainly what is *not* being
+## checked here. A Gub spawns with nothing now and everything it gets comes off
+## a corpse (D-032), so between `MatchState._drop_loot`, the `Pickup` area and
+## `MatchState.claim_pickup` there is a whole path from "somebody died" to
+## "somebody is holding a mushroom" that this call steps over. `playthrough` is
+## what walks it: it kills people in a real arena, which is what makes drops
+## spawn at all.
+##
+## It goes through `grant_mushroom`/`grant_lure` rather than poking a counter,
+## so what it hands out arrives the same way a pickup's would — host-side, and
+## broadcast.
+func _stock(combat: GubCombat) -> void:
+	combat.grant_mushroom(1)
+	combat.grant_lure(1)
 
 
 ## Say where the ring ended up. A still frame shows a yellow circle on some

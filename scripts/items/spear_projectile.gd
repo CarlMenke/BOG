@@ -178,7 +178,23 @@ func _resolve(hit: Dictionary) -> void:
 		# Spawn protection makes a Gub solid but unkillable, so the spear passes
 		# through rather than stopping short and looking like a miss.
 		if victim.alive and not victim.is_invulnerable():
-			var bone := _nearest_bone(victim, point)
+			var bone := nearest_bone(victim, point)
+			# The Elder is not invulnerable in the sense above — it is *solid*,
+			# and a spear that passed through one would be the worst of both
+			# readings (D-040). It simply cannot be killed, which is a decision
+			# `MatchState.report_kill` makes and this does not second-guess: the
+			# signal is emitted either way, the host asks its own question, and
+			# the ward flash comes back from there.
+			#
+			# What is different is what becomes of the shaft. `_stick_in` hides
+			# a spear and parks it on the victim for the ragdoll to adopt, and
+			# there is no ragdoll coming — so against an Elder it would hang on
+			# an invisible list until `ADOPTION_GRACE` quietly freed it, once per
+			# hit, for as long as anyone kept shooting.
+			if MatchState.is_elder(victim.peer_id):
+				_glance_off(point)
+				struck_gub.emit(victim, point, bone)
+				return
 			_stick_in(victim, point, bone)
 			struck_gub.emit(victim, point, bone)
 			return
@@ -244,6 +260,35 @@ func _stick_in(victim: Gub, point: Vector3, bone: String) -> void:
 	# in both senses.
 	visible = false
 	victim.embed_spear(self, bone)
+
+
+## Stop dead against an Elder and cease to exist (D-040).
+##
+## Neither of the other two endings fits. `_stick_in` waits for a corpse that is
+## never coming, and `_stick` would leave a shaft hanging in mid-air at chest
+## height while the Gub it hit walks out from behind it — a spear stuck in
+## nothing, which reads as the game having lost track of the body.
+##
+## `_impact_velocity` is recorded before the velocity is cleared even though
+## nothing will use it: the host reads it out of `struck_gub`'s handler on the
+## way into `report_kill`, which is about to refuse the kill, and a zero there
+## would be a lie that happens not to matter today. The sound and the flash are
+## not here — they are `WardFlash.burst`'s, fired once by the host from the one
+## place that knows the hit was refused, so that the Elder's bolt gets the same
+## feedback without a second copy of it living on this file.
+func _glance_off(point: Vector3) -> void:
+	_stuck = true
+	_impact_velocity = _velocity
+	_velocity = Vector3.ZERO
+	global_position = point
+	_stop_glowing()
+	if _trail != null:
+		_trail.begin_fade()
+		_trail = null
+	visible = false
+	# Deferred, so the object is still perfectly alive for the `struck_gub`
+	# handler the caller is about to run.
+	queue_free()
 
 
 func _stick(normal: Vector3) -> void:

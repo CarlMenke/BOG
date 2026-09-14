@@ -127,6 +127,18 @@ func _check(what: String, got: Variant, want: Variant) -> void:
 	print("  FAIL  %s: got %s, wanted %s" % [what, str(got), str(want)])
 
 
+## The same, for a float that is the result of arithmetic rather than a value
+## that was stored. `WALK_SPEED * elder_speed_multiplier` computed on both sides
+## of a comparison happens to be bit-identical today and would stop being so the
+## moment either side grew a term, which is a failing check about nothing.
+func _near(what: String, got: float, want: float) -> void:
+	_checks += 1
+	if absf(got - want) < 0.0001:
+		return
+	_failures += 1
+	print("  FAIL  %s: got %f, wanted %f" % [what, got, want])
+
+
 func _scenario(scenario_name: String) -> void:
 	print("-- %s" % scenario_name)
 
@@ -933,6 +945,46 @@ func _run_config_validation() -> void:
 	for id: String in MapCatalog.ids():
 		config.apply_dict({"map": id})
 		_check("the catalog's own id '%s' survives" % id, config.map, id)
+
+	# The Elder dials travel like everything else, and a field missing from
+	# `_FIELDS` is a setting the host changes in the lobby and nobody else ever
+	# sees — which is invisible until somebody wonders why the Elder is rarer on
+	# their machine than on the host's, or why it lasted twice as long on theirs.
+	config.apply_dict({"elder_drop_chance": 4.0, "lightning_cooldown": 0.0,
+		"elder_duration": 900.0, "elder_speed_multiplier": 40.0,
+		"elder_jump_multiplier": -2.0})
+	_check("an impossible robe chance is clamped", config.elder_drop_chance, 1.0)
+	_check("a zero lightning cooldown is clamped", config.lightning_cooldown, 0.2)
+	_check("a match-long robe is clamped", config.elder_duration, 120.0)
+	# A boost below 1.0 would make the Elder *slower* than everybody else, which
+	# is not a setting anybody is asking for and is exactly what a hostile peer
+	# would send to pin one in place.
+	_check("an absurd speed boost is clamped", config.elder_speed_multiplier, 3.0)
+	_check("a negative jump boost is clamped", config.elder_jump_multiplier, 1.0)
+	# Zero is legal here, the way it is for the letter hold: it means the bolt
+	# leaves on the frame of the click (D-040). A clamp that quietly raised it
+	# would be a declared setting nobody could actually select.
+	config.apply_dict({"lightning_delay": 0.0})
+	_check("a zero lightning delay survives", config.lightning_delay, 0.0)
+	config.apply_dict({"lightning_delay": 90.0})
+	_check("and an absurd one is clamped", config.lightning_delay, 2.0)
+
+	# The clip is sped up to put its own release on whatever the delay says
+	# (D-040), and both directions of that arithmetic are asserted here rather
+	# than left to be noticed as an arm that finishes before the bolt goes.
+	_near("0.2 s of delay is a 5.67x throw",
+		GubAnimator.throw_rate_for_release(0.2), GubAnimator.THROW_WINDOW / 0.2)
+	_near("and that rate releases at 0.2 s again",
+		GubAnimator.throw_release_for_rate(
+			GubAnimator.throw_rate_for_release(0.2)), 0.2)
+	_near("the spear's own rate still releases at 0.71",
+		GubAnimator.throw_release_for_rate(GubAnimator.THROW_RATE),
+		GubAnimator.THROW_RELEASE_TIME)
+	# The setting that would otherwise be a division by zero.
+	_near("a zero delay saturates rather than dividing by zero",
+		GubAnimator.throw_rate_for_release(0.0), GubAnimator.THROW_RATE_MAX)
+	_check("and the clip still plays at a finite rate",
+		is_finite(GubAnimator.throw_rate_for_release(0.0)), true)
 
 	# Regression guard: lure_fuse defaulted to 0.35 while its own range started
 	# at 0.5, so every fresh config was silently raised and the declared default

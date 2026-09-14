@@ -154,11 +154,61 @@ const THROW_RATE := 1.6
 ## decelerating and letting go there would read as a push.
 const THROW_RELEASE_IN_CLIP := 1.633
 
+## The part of the clip that actually has to have happened by the time the thing
+## in the hand leaves it, in the clip's own seconds. 1.133 s of arm.
+##
+## Named rather than left inline because there are now two questions asked about
+## it and they are inverses of each other: "how long does this take at a given
+## rate" and "what rate makes it take a given time". Both are below, and both
+## have to be reading the same window or the release lands somewhere the arm is
+## not (D-040).
+const THROW_WINDOW := THROW_RELEASE_IN_CLIP - THROW_CLIP_START
+
+## The fastest the clip will ever be played, whatever it is asked for.
+##
+## It exists for one setting: `lightning_delay` of 0, which is legal and means
+## "the bolt leaves on the frame of the click". A rate derived from a delay of
+## zero is a division by zero, and a rate of several hundred is a frame of
+## nothing followed by an arm already back at its side. 8x puts the whole 1.133 s
+## of arm into 0.14 s, which is about as short as a throw can be and still read
+## as one — below that the ceiling does the clamping and the bolt simply leads
+## the hand, which at that setting is what was asked for.
+const THROW_RATE_MAX := 8.0
+
 ## How long after `play_throw()` the spear actually leaves the hand, in real
 ## seconds. `GubCombat` reads this, and it is derived rather than typed so that
 ## moving the window or the rate cannot leave the spear and the hand disagreeing
 ## (D-025 is what that costs). = (1.633 - 0.50) / 1.6.
-const THROW_RELEASE_TIME := (THROW_RELEASE_IN_CLIP - THROW_CLIP_START) / THROW_RATE
+const THROW_RELEASE_TIME := THROW_WINDOW / THROW_RATE
+
+
+## The playback rate that puts the release exactly `seconds` after the click.
+##
+## The Elder's bolt leaves `MatchConfig.lightning_delay` after the click rather
+## than at the spear's 0.71 s (D-040), and firing at 0.2 s while an arm authored
+## to take 1.133 s of clip is still on its way back would look broken — so the
+## clip is sped up to meet the number instead of the number being fitted to the
+## clip. At the default 0.2 that is 1.133 / 0.2 = **5.67x**, which is 3.54 times
+## the spear's own 1.6.
+##
+## Derived here rather than typed next to the delay for the reason
+## `THROW_RELEASE_TIME` is derived: a hard-coded 5.67 beside a dial that can be
+## dragged to 0.5 is a hand that finishes a third of a second before the bolt it
+## is supposed to be throwing, and nothing anywhere would say so.
+static func throw_rate_for_release(seconds: float) -> float:
+	# Below the ceiling's own release time there is nothing left to scale, so
+	# this returns the ceiling rather than dividing by something at or near zero.
+	if seconds <= THROW_WINDOW / THROW_RATE_MAX:
+		return THROW_RATE_MAX
+	return THROW_WINDOW / seconds
+
+
+## The inverse: when the release actually lands for a clip played at `rate`.
+## Only differs from what was asked for once `throw_rate_for_release` has hit its
+## ceiling, which is the one place the two can disagree and the one place the
+## disagreement is intended.
+static func throw_release_for_rate(rate: float) -> float:
+	return THROW_WINDOW / maxf(rate, 0.01)
 
 ## Fade times, in and out, for the four one-shots. The slide comes in fast and
 ## leaves slowly because its exit *is* the stand-up; the landings come in almost
@@ -590,7 +640,15 @@ func _scrub_air() -> void:
 	# `vertical_speed()` and not `velocity.y`: on a remote Gub the replicated
 	# value is a physics tick fresher than the copy in `velocity`. See `Gub`.
 	var vy := _body.vertical_speed()
-	set(P_AIR_ONE_SEEK, arc_time(vy, Gub.JUMP_VELOCITY,
+	# `jump_velocity()` rather than the constant, because the Elder's boost
+	# multiplies it (D-040). Against a fixed 9.0 a Gub that left the ground at
+	# 11.25 spends the first fifth of its climb clamped to the take-off pose and
+	# reaches the apex pose a fifth of a metre early — the arc is a *ratio*, so
+	# it has to be measured against the speed this leap actually started at. It
+	# is live rather than recorded on take-off for the same reason
+	# `elder_scale` is: the robe is on every peer's copy of the Gub, so a remote
+	# one is scrubbed by the same number as the local one.
+	set(P_AIR_ONE_SEEK, arc_time(vy, _body.jump_velocity(),
 		JUMP_ONE_START, JUMP_ONE_APEX, JUMP_ONE_END))
 	set(P_AIR_TWO_SEEK, arc_time(vy, _dive_launch,
 		JUMP_TWO_START, JUMP_TWO_APEX, JUMP_TWO_END))
@@ -684,9 +742,21 @@ func _track_slide() -> void:
 
 ## Fire the throw animation. Called on every peer, so remote Gubs visibly throw,
 ## and re-firing mid-throw restarts it from the top of the window.
-func play_throw() -> void:
+##
+## `rate` is the one thing about this clip that is not fixed, because the Elder's
+## release is not fixed: a bolt that leaves 0.2 s after the click needs the arm
+## to have got there by 0.2 s (D-040). It is set on the TimeScale node *before*
+## the one-shot is fired, so the very first frame of the throw is already playing
+## at the rate the release was derived from — set afterwards, the fade-in would
+## run at whatever the last thrower left behind.
+##
+## The default is the spear's, so every existing caller is unchanged and a Gub
+## that stops being the Elder mid-match throws at the authored speed again
+## without anything having to remember to put it back.
+func play_throw(rate: float = THROW_RATE) -> void:
 	if tree_root == null:
 		return
+	set(P_THROW_RATE, maxf(rate, 0.01))
 	set(P_THROW, AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
 
 

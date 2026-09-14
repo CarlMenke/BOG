@@ -22,11 +22,11 @@ island and out to a results screen, and two automated checks now walk that path:
 one in a single process, one across two processes over a real socket.
 
 ```
-bash tools/smoke_test.sh        # 13 checks, ~1 minute, finds Godot by itself
+bash tools/smoke_test.sh        # 21 checks, ~2 minutes, finds Godot by itself
 bash tools/net_test.sh          # two processes, one socket. Not in the gate
 ```
 
-`smoke_test.sh` is the gate and it passes, 13 of 13. `net_test.sh` passes all
+`smoke_test.sh` is the gate and it passes, 21 of 21. `net_test.sh` passes all
 nine of its stages (88 + 32 assertions) and still reports FAIL, deliberately:
 one transient engine warning survives at match start, and it holds itself to
 "the engine stayed quiet" rather than "the assertions passed". D-022 explains
@@ -243,13 +243,16 @@ Three tiers, because three different kinds of claim need three different proofs
 
 | tool | proves |
 |---|---|
-| `tools/smoke_test.sh` | **the gate** — import, and thirteen checks |
+| `tools/smoke_test.sh` | **the gate** — import, and twenty-one checks |
 | `tools/cursor_flow.tscn` | entering a match takes the mouse, and leaving gives it back |
 | `tools/playthrough.tscn` | the whole path, menu to results; 50 assertions on the island, 58 on Rust. Takes a map id after a `--` |
-| `tools/match_rules.tscn` | 66 assertions across 9 scoring scenarios |
+| `tools/match_rules.tscn` | 195 assertions across 14 scoring scenarios |
 | `tools/invite_codes.tscn` | 2675 assertions over 1296 endpoints, plus the host's typed public address |
+| `tools/combat_range.tscn cover` | a mushroom stops a spear, the same throw without one does not, and a Gub cannot walk into the cap (D-039) |
+| `tools/combat_range.tscn recharge` | the spear is back in the fist after twelve throws, and an emptied fist refills itself (D-039) |
+| `tools/combat_range.tscn ward` | a real spear cannot kill an Elder, the robe burns out on its own, and the same throw kills once it has (D-040) |
 | `tools/ragdoll_stability.tscn` | a corpse is still a corpse 150 ticks later |
-| `tools/combat_range.tscn` | the real match path: a spear, a mushroom, a lure |
+| `tools/combat_range.tscn` | the real match path: a spear, a mushroom, a lure, a letter, the Elder's bolt |
 | `tools/net_loopback.tscn` | two processes, one socket, including a *client* using all three abilities. **Not in the gate** — it binds a port |
 | `tools/preview_map.tscn` | Rust: renders it, and checks every spawn pad with the physics. **In the gate** |
 | `tools/preview_*.tscn` | it *looks* right. Needs a person, always will |

@@ -2629,3 +2629,261 @@ frame later.
 
 `out/mushroom_cover.png` is a spear stopped dead in the cap with the Gub standing
 untouched behind it.
+
+## D-040 — The Elder is twenty seconds of being unkillable, not a weapon you keep until somebody takes it off you
+The user played one and came back with six sentences:
+
+> There should be basically no delay for the lightning, right when you press then
+> it should shoot maybe .2 seconds after. also it should recharge faster, way
+> faster, also they should be invincible, and it should last for 20 seconds
+> rather then until they die. They should also get boosted speed and jump.
+
+**Four of those reverse decisions made earlier in the same session**, and D-038
+is superseded in the places named below rather than left standing beside this
+one. A document that records both answers as current is worse than one that
+records neither.
+
+### What it was, and why "until you die" stopped working the moment it could not
+D-038's Elder was a *persistent upgrade*: a robe off a corpse, a stronger weapon
+on a five-second recharge, held for as long as you could stay alive, and
+consumed by the death that ended it. The whole shape of that rested on one
+sentence — **the counter-play to an Elder is killing it** — and the cooldown,
+the drop chance and the consume-on-death rule were all priced off it.
+
+Invincibility deletes that sentence. An Elder that cannot be killed and stays
+the Elder until it is killed is the Elder for the rest of the match, so the exit
+has to be something else, and the only honest candidate is a clock. That is why
+the twenty seconds and the invincibility are one change and not two: neither is
+coherent without the other. What replaces the old counter-play is not weaker,
+only different — **you no longer beat an Elder, you outlast one** — and twenty
+seconds is a length of time a player can decide to spend behind a rock.
+
+Everything else in the list follows from that. A window that fires four times is
+not the same weapon as a window that fires twenty, so the recharge came down to
+1.0 s. A window you spend walking is not a window, so speed and jump went up.
+And two thirds of a second of wind-up is a third of a bolt's worth of warning
+when the whole state lasts twenty, so the cast delay came down to 0.2 s.
+
+### The cast: 0.71 s becomes 0.2, and the clip is sped up to meet it
+The bolt used to leave at `GubAnimator.THROW_RELEASE_TIME` — 0.71 s, the moment
+the `Throw` clip's right hand reaches peak forward speed — because the user had
+said "you can use the same throw animation" and reusing the release was the
+honest way to do that. **That half of D-038 is superseded.** The clip stays;
+what changes is how fast it runs.
+
+`lightning_delay` (0.2 s, a lobby dial) is the number now, and the clip is played
+at whatever rate puts its own release there. Firing at 0.2 s while an arm
+authored to take 1.133 s of clip is still winding up would look broken in a way
+no amount of particle work covers, so:
+
+    GubAnimator.THROW_WINDOW    = 1.633 - 0.50 = 1.133 s of clip
+    throw_rate_for_release(0.2) = 1.133 / 0.2  = 5.67x
+                                = 3.54x the spear's own 1.6
+
+**Derived, never typed.** A hard-coded 5.67 sitting beside a dial that can be
+dragged to 0.5 is a hand that finishes a third of a second before the bolt it is
+supposed to be throwing, and nothing anywhere would say so — which is precisely
+the failure D-025 exists because of, one level up. `play_throw(rate)` sets the
+`TimeScale` node before firing the one-shot, and `GubCombat._play_windup` works
+the rate out from replicated state on *every* peer rather than sending it, so it
+cannot arrive wrong at the far end.
+
+**Zero is a legal setting and means "on the frame of the click".** It is also a
+division by zero, so `throw_rate_for_release` saturates at `THROW_RATE_MAX` —
+8x, the whole arm in 0.14 s — rather than returning infinity. Below about 0.14 s
+of delay the bolt therefore leads the hand by up to a seventh of a second, which
+at that setting is exactly what was asked for; everywhere above it the two are
+the same number.
+
+The animator's arc scrub had the same shape of dependency and was fixed with it.
+`_scrub_air` measured the jump clip's phase against a constant `JUMP_VELOCITY`,
+and phase is a *ratio*, so against a Gub that left the ground 25% faster it held
+the take-off pose for the first fifth of the climb. It asks
+`Gub.jump_velocity()` now.
+
+### Invincible, and the void is the exception for the reason spawn protection's is
+`MatchState.report_kill` is the one place a death is decided, and it now refuses
+one whose victim is the Elder — beside the `is_invulnerable()` spawn-protection
+check it is modelled on, and **carving out `Gub.Cause.VOID` for the same reason
+that one does**: a Gub that cannot die to the void falls past the bottom of the
+island for ever, alive, unreachable and unrespawnable. Without that clause the
+invincibility is a soft-lock waiting for somebody to walk off a ledge.
+
+Three details were decided rather than fallen into.
+
+**It sits after the friendly-fire check, not beside the invulnerability one.** A
+shot stopped because the thrower is on your team was never going to kill you and
+the robe had nothing to do with it; flashing a ward at it would credit the robe
+with a save it did not make. What reaches the Elder clause is a shot that would
+otherwise have landed.
+
+**Invincibility is about death, not motion.** An Elder is still solid, still
+lured, still shoved by a bolt, still knocked off a ledge. Making it immovable
+would have been one line and would have deleted the lure as counter-play at the
+exact moment the lure is the most interesting thing in the fight. The refused hit
+also calls `note_attack`, which is the clearest case that function has ever had:
+an Elder lured over the edge is a void death somebody earned.
+
+**A survived hit has to read as one.** `SpearProjectile._stick_in` hides a spear
+and parks it on the victim for a ragdoll to adopt, and against an Elder there is
+no ragdoll coming — so the strongest weapon in the game would hit the strongest
+target in it and simply cease to exist, with nothing at either end saying whether
+the throw had even happened. A spear now `_glance_off`s an Elder: it stops at the
+point of impact and is freed. The *feedback* is `WardFlash`, broadcast from
+`report_kill` and only from there, because that is the one place that knows a
+death was refused — which is also what gets the other Elder's bolt the same
+treatment without a second copy of the rule living on the projectile. It is the
+robe's violet rather than the bolt's white, a shell and a light gone in 0.26 s,
+and it is deliberately not a shield: a ward that lingers reads as cover that is
+*up*, and the Elder has none.
+
+### The clock is host-owned, and it is the letter hold's clock
+`_elders` was `peer_id -> true` and is now `peer_id -> {ends_at}`, written by the
+same shape of RPC as `_letter_holds`, ticked by `_tick_elders` beside
+`_tick_letter_holds`, and read by `elder_remaining()` under the same contract as
+`letter_hold_remaining()`. `is_elder()` stays **the presence of the row** and
+never `remaining <= 0`, for the reason D-035 gives about the hold: a client's
+countdown can reach zero a round trip before the host's, and a Gub that took its
+own robe off on that frame would be a Gub the host still refuses to let throw a
+spear.
+
+Three things end a robe and all three run the same teardown — the clock, a void
+death, and a disconnect. **Expiry is not a death**: the Gub keeps its letters,
+keeps its carried mushrooms and lures, gets its spear back, and goes on standing
+where it was. The obvious way to write that teardown is to reuse the death path,
+which would take the stock with it, so `tools/match_rules.gd` asserts against it
+by name.
+
+### Speed and jump: one multiplier each, at one place each
+`elder_speed_multiplier` 1.35 is applied in `Gub.target_speed()` — the single
+point walking, sprinting and crouching all come out of. Applying it to
+`RUN_SPEED` instead would have produced a sprinting Elder that walks at exactly
+everybody else's pace, and the difference between that bug and no bug at all is
+invisible from the dial.
+
+`elder_jump_multiplier` 1.25 is applied in `Gub.jump_velocity()`, read by
+`_handle_jump` and by the animator's arc scrub. **The dive is deliberately not
+boosted**: `DIVE_UP_VELOCITY` is added on top of whatever the body is already
+doing, so a boosted jump already carries a boosted dive, and scaling it as well
+would multiply the same factor in twice.
+
+**The number on the slider is not the number that matters, and here it is.**
+Height goes as the square of launch velocity, so 1.25 is not +25%:
+
+    jump apex          1.69 m -> 2.64 m   (+56%)
+    jump + dive apex   2.30 m -> 3.25 m
+
+Measured against Rust, whose walkable surfaces were probed on a 2 m grid with the
+scan ceiling temporarily lifted from 3 m to 40 m
+(`tools/preview_map.tscn probe`):
+
+    standing on the 1.70 m plane, a Gub's feet reach world   3.39 m
+    with a dive                                              4.00 m
+    an Elder's                                               4.34 m
+    an Elder with a dive                                     4.94 m
+
+**That opens exactly one tier**: surfaces topping out between world 4.0 and
+4.9 m — about a dozen cells on the map, all of them two stacked containers —
+which an ordinary Gub cannot reach at all and an Elder can reach with a dive.
+Nothing above 5 m moves within reach, so the catwalks (7-8 m), the tower
+(12-17 m) and the perimeter structures are exactly as unreachable as they were,
+and no route out of the yard opens up. **The number is reported rather than
+quietly lowered**, which is both the instruction and the right call: two-high
+container stacks are a thing a container-yard map obviously has, they are inside
+the arena, and standing on one for twenty seconds is the Elder being the Elder.
+The dial is in the lobby if a real match says otherwise.
+
+The one thing the boost cannot drag along with it is the animation. The
+locomotion blend space's fastest point *is* `RUN_SPEED`, with the `Run` clip's
+playback rate baked in when the graph is built, so a boosted Elder runs at
+7.3 m/s with its feet planted for 5.4 of it — up to a third of a skate, for
+twenty seconds, on the one Gub in the match wearing a robe that already says it
+is not ordinary. Rebuilding the blend space to follow a config dial would be a
+graph that changes shape mid-match, which is a far worse trade than a visible
+skate on a deliberately conspicuous state.
+
+### The drop chance came down to 2% to meet what the robe became
+`elder_drop_chance` was 0.05, set for an Elder that was a modest upgrade held
+until somebody killed you. What the dial hands out now is twenty seconds during
+which a Gub cannot be killed at all, moves a third faster, and fires a one-shot
+weapon about once a second. Arriving several times a match, that is not an event;
+it is the match. **2% makes it an event**, which is the word D-038 used for what
+it was trying to build and did not price for. The user has been told this is
+happening and the slider is in the lobby.
+
+### Every number is a lobby dial
+`lightning_delay` 0.2 (0-2), `lightning_cooldown` 1.0 (0.2-10, was 5.0 in
+0.5-30), `elder_duration` 20 (1-120), `elder_speed_multiplier` 1.35 (1-3),
+`elder_jump_multiplier` 1.25 (1-3), and `elder_drop_chance` 0.02. All six are in
+`_FIELDS`, all six are clamped in `_clamp_all`, and all six are rows in the
+lobby's Match panel — because this is the feature most likely to need tuning the
+moment real people meet it, and a rebuild is the wrong unit of tuning.
+
+Two of the readouts are deliberately not the stored number. The speed row reads
+"+35%", because that is a sentence about the game where 1.35 is a number about
+the code; and the jump row reads **"2.64 m high"**, because the multiplier is on
+velocity and a host reading "+25%" would be tuning the wrong quantity.
+
+### The HUD: a countdown, and not on the crosshair
+Twenty seconds of god mode with no idea how long is left is the same problem the
+letter hold had, and it gets the same answer. `ElderTrack` is `LetterTrack`'s
+shape — a `Control` in the same column, one `set_state` push, an early-out when
+nothing moved, polled from `HUD._process` because the deadline lives on the host
+with no per-frame signal behind it. A bar and the whole seconds, in the robe's
+violet, amber for the last three.
+
+**Not on the crosshair** (D-036, which stands). The recharge ring was deleted
+rather than fixed a third time, and a countdown put back in its place would be
+that decision reversed by the next feature that happened to want a timer.
+
+It **drains**, which is the opposite of what the hold's lamp does. D-036's
+"nothing on this HUD drains any more" was about cooldowns — a ring emptying while
+you wait to be allowed to act, which is a worse way of saying "not yet". This is
+a thing you have and are losing, and a bar that filled as it ran out would be
+describing the wrong event.
+
+Nobody else gets a HUD element. The robe is the tell and it is in-world on
+purpose; the *clock* is not handed out, because "he has four seconds left" should
+be judged from how long that robe has been on screen rather than read off a
+display. The ability tile keeps its binary lit/dark. At a 1 s recharge it blinks,
+which is fine and honest and is exactly what D-036 kept it binary for.
+
+### What checks it, and the one check that matters
+`tools/match_rules.gd` goes from 159 assertions to 195. The Elder scenario is
+rewritten around the new rule — a spear does not kill an Elder and costs nobody
+a kill or a death, the attacker is still remembered for the void, the robe burns
+out on its own, expiry keeps the letters and the stock and hands the spear back,
+the void *does* kill, two robes run two independent clocks — and it sets all four
+Elder dials to values unlike their defaults, because a check against a multiplier
+that happens to be 1.0 passes whether or not anything applies it. The rate
+arithmetic is asserted in both directions, including the zero that would
+otherwise be a division by it.
+
+**And none of that would have caught the bug worth catching.** `match_rules` has
+no world, no geometry and nothing standing fourteen metres away, so all it can
+prove is that `report_kill` refuses a kill it was handed. D-039's lesson is that
+a rule checked only in a harness that stands its subject up by hand is a rule
+nobody has tested — the mushroom passed a green gate for its whole life while
+stopping nothing, because its only check asserted that a PNG got written.
+
+So `tools/combat_range.tscn ward` throws a **real spear at a real Elder**. It
+drops a robe on top of a dummy and lets the dummy's own body trip the `Pickup`
+area, waits on the Elder state rather than on a frame number, throws, and prints
+three verdicts:
+
+1. **`ward`** — the Elder survives it.
+2. **`expiry`** — the robe then burns out *by itself*, on `_tick_elders` running
+   in a real match loop, rather than by the run winding the row's deadline back.
+   That is the half `match_rules` structurally cannot claim: it can prove the
+   teardown is right once something calls it, and only this can prove something
+   does.
+3. **`control`** — the *same* throw at the *same* Gub, robe gone, kills it.
+
+The third is the point, and it is `cover`'s argument restated. "Did not die" is
+satisfied by a spear that never left the hand, a dummy that was already dead, or
+a `report_kill` that never arrived — so without a control on the same geometry
+the first verdict proves nothing at all.
+
+Both were run against the code without them first (D-015): with the invincibility
+clause removed `ward` fails and the other two still pass; with `_tick_elders`
+removed `expiry` fails. The gate goes from 18 checks to 21.

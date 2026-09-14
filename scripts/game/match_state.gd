@@ -594,6 +594,41 @@ func report_kill(victim_id: int, killer_id: int, cause: Gub.Cause,
 			and not config().friendly_fire:
 		return
 
+	# **The Elder cannot be killed** (D-040). The user, after playing one:
+	# *"they should be invincible, and it should last for 20 seconds rather then
+	# until they die."* The two halves are one rule — with nothing able to kill
+	# an Elder, "until they die" is "for the rest of the match", so the clock in
+	# `_tick_elders` is what the robe now ends on.
+	#
+	# **The void still kills**, and that carve-out is not a nicety: it is the
+	# same one spawn protection makes two lines above, for the same reason. A
+	# Gub that cannot die to the void falls past the bottom of the island for
+	# ever, alive, unreachable and unrespawnable. So the one thing that can end
+	# an Elder early is the map itself.
+	#
+	# **After the friendly-fire check rather than beside the invulnerability
+	# one**, and the ward below is why. A shot stopped because the thrower is on
+	# your team was never going to kill you and the robe had nothing to do with
+	# it; flashing a ward at it would credit the robe with a save it did not
+	# make, on the one peer best placed to be confused about it. What reaches
+	# here is a shot that would otherwise have landed.
+	if is_elder(victim_id) and cause != Gub.Cause.VOID:
+		# Exactly what `note_attack` is for, and this is its clearest case: an
+		# attacker who hurt somebody without killing them is credited if the
+		# victim goes off the edge shortly afterwards. An Elder shoved by a
+		# lightning bolt or lured over a ledge is precisely that, and the void
+		# is the only death it has.
+		if killer_id != victim_id:
+			note_attack(victim_id, killer_id)
+		# The one piece of feedback there is. A spear that hits an Elder is
+		# turned aside rather than buried (`SpearProjectile._glance_off`), so
+		# without this the strongest weapon in the game would simply vanish
+		# against the strongest target in it and nobody at either end would know
+		# whether the throw had even happened.
+		_do_ward.rpc(victim_id, point)
+		_do_ward(victim_id, point)
+		return
+
 	entry["alive"] = false
 	entry["deaths"] += 1
 	entry["respawn_at"] = _now() + config().respawn_delay

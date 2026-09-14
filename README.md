@@ -178,11 +178,14 @@ bash tools/smoke_test.sh
 
 Everything that can be checked without a person watching: the headless import,
 the invite codes, the match rules, **a full playthrough from the main menu to
-the results screen**, a ragdoll that has to survive hitting the ground, three
-combat modes that report what they did, and three checks that walk the path a
-player walks — that holding W moves a Gub, that starting a match takes the
-mouse, and that leaving one does not leave Gubs asking a peer that is gone. Ten
-in all. Run it before committing anything that touches gameplay.
+the results screen**, a ragdoll that has to survive hitting the ground, several
+combat modes that report what they did — including the Elder's lightning, end to
+end from the robe dropping off a corpse to the Gub at the far end falling over,
+and a real spear thrown at a real Elder that has to bounce off — and three checks
+that walk the path a player walks: that holding W moves a Gub, that starting a
+match takes the mouse, and that leaving one does not leave Gubs asking a peer
+that is gone. Twenty-one in all. Run it before committing anything that touches
+gameplay.
 
 Most of those exist because of one bug shape, met repeatedly: **a thing wired
 into a testbed and into nothing else.** `tools/` scenes stand their subject up
@@ -221,17 +224,40 @@ and `tools/` is full of scenes for it:
 | `preview_island` | **the island** — nine framings, `match` for real Gubs, `hud` to keep the HUD |
 | `preview_map` | **Rust** — top-down, side, or eye height on any spawn pad; `probe` prints the floor as ASCII. Checks every pad with the physics, and is in the gate |
 | `playthrough.tscn` | the whole flow, menu to results, headless. Add `-- rust` to play it on the static map |
-| `match_rules.tscn` | 60 assertions across 9 scoring scenarios, headless |
+| `match_rules.tscn` | 195 assertions across 14 scoring scenarios, headless |
 | `net_loopback.tscn` | two real processes over a real socket. Not in the gate — it binds a port |
 | `inspect_scene.gd` | dump a scene's tree, clips, bones and triangle counts |
 | `preview_anim`, `preview_grip`, `preview_ragdoll` | contact sheets of a clip, the spear in the fist, a corpse falling |
 
 `combat_range` runs the **real match path** — an offline session on `Net`, a
 roster, `MatchState.register_arena`, kills through `MatchState.report_kill` — so
-a throw that works there works in a match. Pass a mode as the fourth argument
-(`flight`, `hit`, `arc`, `miss`, `mushroom`, `lure`, `lure_self`, `free`) and
-`trace` as a fifth to print the whole flight, which is the only way to tell a
-miss from a hit whose kill was dropped.
+a throw that works there works in a match. Pass a mode as the trailing argument
+(`flight`, `hit`, `arc`, `miss`, `aim`, `mushroom`, `cover`, `lure`,
+`lure_self`, `letter`, `lightning`, `ward`, `recharge`, `walk`, `leave`, `free`)
+and
+`trace` after it to print the whole flight, which is the only way to tell a miss
+from a hit whose kill was dropped.
+
+Several modes print their own verdict and need no picture, so they are run
+headless straight from the scene rather than through `snapshot.gd`:
+
+```bash
+Godot --headless --path . tools/combat_range.tscn -- cover
+Godot --headless --path . tools/combat_range.tscn -- recharge
+Godot --headless --path . tools/combat_range.tscn -- ward
+```
+
+`cover` is the one to reach for after touching `shield_mushroom.gd`: it stands a
+real mushroom up, prints the blocked width at every height a Gub occupies, and
+then asserts that a spear is stopped by one, that the same throw without one is
+not, and that a Gub cannot walk into the cap (D-039).
+
+`ward` is the one to reach for after touching anything about the Elder: it puts
+a robe on a dummy, throws a real spear at it, and asserts that the Elder
+survives, that the robe then burns out on its own clock, and that the *same*
+throw kills once it has (D-040). That third verdict is not a nicety — without a
+control on the same geometry, "did not die" is satisfied by a spear that never
+left the hand.
 
 ### Regenerating the art and audio
 

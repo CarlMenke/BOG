@@ -568,10 +568,65 @@ func _wish_direction() -> Vector3:
 
 ## The speed this Gub is asking to travel at, which is also the animator's
 ## locomotion blend position when it gets there.
+##
+## **The Elder's boost is applied here and nowhere else** (D-040). This is the
+## one point every stance already comes out of, so walking, sprinting and
+## crouching all scale by the same factor and none of them can be forgotten —
+## multiplying `RUN_SPEED` at three call sites is how a sprinting Elder ends up
+## faster and a crouching one ends up exactly as slow as everybody else.
+##
+## One thing the animator cannot follow it to: the locomotion blend space's
+## fastest point *is* `RUN_SPEED`, with the `Run` clip's playback rate baked into
+## it when the graph is built. So a boosted Elder runs at 7.3 m/s with its feet
+## planted for 5.4 of it — up to a third of a skate, for twenty seconds, on the
+## one Gub in the match wearing a robe that already says it is not ordinary.
+## Rebuilding the blend space to follow a dial would be a graph that changes
+## shape mid-match, which is a much worse trade.
 func target_speed() -> float:
-	if is_crouching():
-		return CROUCH_SPEED
-	return RUN_SPEED if wants_sprint else WALK_SPEED
+	var speed := CROUCH_SPEED if is_crouching() \
+		else (RUN_SPEED if wants_sprint else WALK_SPEED)
+	return speed * elder_scale(Net.config.elder_speed_multiplier)
+
+
+## How fast this Gub leaves the ground, in metres per second.
+##
+## Its own function purely so the Elder's boost has one place to be applied,
+## the same way `target_speed` gives the three ground speeds one place. The dive
+## is deliberately **not** boosted: `DIVE_UP_VELOCITY` is added on top of
+## whatever the body is already doing, so a boosted jump already carries a
+## boosted dive, and scaling it as well would multiply the same factor in twice
+## — which is exactly how a modest-looking dial clears a wall nobody meant it to.
+func jump_velocity() -> float:
+	return JUMP_VELOCITY * elder_scale(Net.config.elder_jump_multiplier)
+
+
+## How high a leap that left the ground at `launch` m/s gets, in metres.
+##
+## Static, and public, because the *lobby* needs it: `elder_jump_multiplier` is a
+## multiplier on velocity and height goes as its square, so a slider that read
+## "+25%" would be telling a host the wrong thing about the number they are
+## dragging. The Match panel shows the apex instead, and it asks this rather than
+## carrying an arithmetic copy of it — a 1.69 typed into a UI file is a number
+## that goes quietly wrong the day gravity or `JUMP_VELOCITY` moves.
+##
+## The plain project gravity, not the 1.35x `_apply_gravity` uses on the way
+## down: the extra pull only applies while `velocity.y` is negative, which is
+## after the apex this is about.
+static func apex_for(launch: float) -> float:
+	var gravity := float(ProjectSettings.get_setting("physics/3d/default_gravity", 24.0))
+	return launch * launch / (2.0 * maxf(gravity, 0.01))
+
+
+## `multiplier` while this Gub is the Elder, and 1.0 otherwise.
+##
+## `elder_robe != null` **is** the flag — see `set_elder`. There is no second
+## boolean to disagree with it and no call into `MatchState` either: the robe is
+## put on by `_do_set_elder`, which runs on every peer, so the wardrobe and the
+## rules are already the same statement. That matters here more than anywhere,
+## because movement is client-authoritative (D-004) and this is read on the
+## machine that owns the Gub rather than on the host.
+func elder_scale(multiplier: float) -> float:
+	return multiplier if elder_robe != null else 1.0
 
 
 ## One key, two moves. On the ground (or inside coyote time) this is an ordinary
@@ -626,7 +681,7 @@ func _handle_jump() -> void:
 	_coyote = 0.0
 	if is_sliding():
 		_end_slide()
-	velocity.y = JUMP_VELOCITY
+	velocity.y = jump_velocity()
 	# Before the emit, so anything listening already sees the new value. The
 	# animator does not use the signal — it is local-only — but it does watch
 	# this counter, on every peer.
