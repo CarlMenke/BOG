@@ -11,7 +11,16 @@ until it grows back, so an empty hand is the most useful thing on screen: it
 tells everyone in sight that the Gub holding it is harmless for the next few
 seconds. Two abilities exist to bend that around: a **mushroom** planted as cover
 you cannot be hit through, and a **lure** lobbed past it that drags everyone
-nearby out into the open for about a second.
+nearby out into the open for about a second. Neither is on a timer: you spawn
+with neither, every death drops one item where the body fell, and you pick them
+up by walking over them. Whatever you were carrying is lost when you die.
+
+About one death in fifty drops something else: the **Elder's robe**. Walk over it
+and for twenty seconds you cannot be killed — spears bounce off — you move a
+third faster, jump half again as high, and throw lightning out of your hand
+instead of a spear. The robe is visible to everybody from across the map, the
+clock is visible only to you, and the counter-play is not to kill an Elder but to
+outlast one. Falling off the map still counts, which is what the lure is for.
 
 ---
 
@@ -77,6 +86,7 @@ plain one detaches from the terminal and prints nowhere.
 | jump, slide | `Space`, crouch while sprinting |
 | dive | `Space` again in mid-air — once per jump, and you commit to it |
 | throw spear | left mouse — winds up, leaves the hand 0.71 s later |
+| the Elder's bolt | the same left mouse, while wearing the robe — 0.2 s |
 | aim (zooms in) | right mouse |
 | mushroom, lure | `Q`, `E` |
 | scoreboard, pause, chat | `Tab`, `Esc`, `T` |

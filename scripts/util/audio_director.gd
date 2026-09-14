@@ -23,6 +23,13 @@ const LURE_FIRE := preload("res://audio/sfx/lure_fire.wav")
 const DEATH := preload("res://audio/sfx/death.wav")
 const RESPAWN := preload("res://audio/sfx/respawn.wav")
 const HITMARKER := preload("res://audio/sfx/hitmarker.wav")
+## The Elder's bolt, in two voices rather than one (D-038). The crack is the
+## strike and the roll is what follows it half a second later, and they are
+## separate clips because the balance between them is what decides whether a
+## bolt reads as landing *near you* or as weather somewhere — a number in
+## `LightningBolt`, not a re-run of `tools/make_sfx.py`.
+const THUNDER_CRACK := preload("res://audio/sfx/thunder_crack.wav")
+const THUNDER_ROLL := preload("res://audio/sfx/thunder_roll.wav")
 
 ## Ambience beds. These loop seamlessly by construction rather than by
 ## crossfading — see `looping_noise` in tools/make_sfx.py — so they can be left

@@ -1,7 +1,8 @@
 class_name GubCombat
 extends Node
-## The three things a Gub can do to another Gub: throw a spear, plant a mushroom
-## to hide behind, and lob a lure that drags people out from behind theirs.
+## The things a Gub can do to another Gub: throw a spear, plant a mushroom to
+## hide behind, and lob a lure that drags people out from behind theirs — or, if
+## it is the Elder, throw lightning instead of the spear.
 ##
 ## Authority split (docs/DECISIONS.md D-004): the owning client decides *when* it
 ## wants to act and plays its own feedback immediately, but the host decides
@@ -104,6 +105,32 @@ const MAX_AIM_DISTANCE := 220.0
 ## How far in front the mushroom is planted.
 const MUSHROOM_DISTANCE := 2.1
 
+## How far the Elder's bolt reaches.
+##
+## Hitscan with no travel time and no drop would be a map-wide delete at any
+## range you can see, so there has to be a number, and this one is *derived from
+## the spear* rather than picked: it is the distance at which a flat spear throw
+## stops being a flat spear throw. A spear leaves at 42 m/s and falls at 8 m/s²
+## (`SpearProjectile.SPEED`/`DROP`), so over 28 m it is in the air 0.67 s and
+## drops 1.78 m — one Gub's height, near enough exactly. Inside 28 m you point
+## at a Gub and hit it; past it the throw becomes a judgement about arc, which
+## is where D-014 says the skill in this fight lives.
+##
+## So the Elder owns exactly the band where the spear is a point-and-click
+## weapon, and beyond it the spear is still the better tool — which is the
+## shape a power-up should have. On Rust (42 x 64 m) that is most of a fight and
+## not the length of the yard; on the island it is a clearing.
+const LIGHTNING_RANGE := 28.0
+
+## How hard a bolt throws the body, as the velocity handed to `report_kill`.
+##
+## The ragdoll turns a blow into motion at `GubRagdoll.IMPACT_TRANSFER` = 0.15,
+## so a flat spear arriving at its full 42 m/s gives a corpse about 6.3 m/s.
+## This is a little over twice that, which is the difference between a body
+## knocked over and a body *thrown* — and the brief for this weapon is that it
+## should be seen from the other side of the map.
+const LIGHTNING_IMPULSE := 90.0
+
 ## Launch speed of the lure. With LURE_GRAVITY this sets the furthest it can be
 ## thrown at all — `s^2 / g`, about 22 m on the flat, which is a deliberate
 ## limit: the lure is a tool for pulling someone out of nearby cover, not for
@@ -123,13 +150,31 @@ var _config: MatchConfig
 
 ## Local, predictive. Drives the HUD.
 var _spear_ready_at: float = 0.0
+var _lightning_ready_at: float = 0.0
 var _mushroom_ready_at: float = 0.0
 var _lure_ready_at: float = 0.0
 
 ## Host-side, authoritative. Never trusted from the wire.
 var _server_spear_ready_at: float = 0.0
+var _server_lightning_ready_at: float = 0.0
 var _server_mushroom_ready_at: float = 0.0
 var _server_lure_ready_at: float = 0.0
+
+## What this Gub is carrying. Unbounded on purpose: there is no cap, no slot
+## limit and no inventory screen, because the only decision worth having here is
+## "spend it or keep it" and a cap would add "throw one away" to that for no
+## gain. Starts at zero on spawn and on every respawn — see `reset`.
+##
+## Predictive, like the cooldowns above: spending decrements immediately so the
+## HUD moves on the click, and the host's `_do_*` broadcast carries the real
+## remainder and corrects it. Every peer keeps this for every Gub, which costs
+## two ints and means a spectator's HUD is right about the Gub it is watching.
+var _mushrooms: int = 0
+var _lures: int = 0
+
+## Host-side, authoritative. The only counts that can actually spend anything.
+var _server_mushrooms: int = 0
+var _server_lures: int = 0
 
 var _active_mushrooms: Array[Node] = []
 
@@ -174,6 +219,8 @@ func _process(_delta: float) -> void:
 	# middle of a windup has a throw to *cancel*, and the guards are exactly the
 	# conditions under which it has to be cancelled.
 	_tick_windup()
+	_tick_hand()
+	_tick_charge()
 	if not _gub.is_local() or not _gub.alive:
 		_stow_aim_marker()
 		return
@@ -193,16 +240,77 @@ func spear_cooldown() -> float:
 	return maxf(0.0, _spear_ready_at - _now())
 
 
-func mushroom_cooldown() -> float:
+func lightning_cooldown() -> float:
+	return maxf(0.0, _lightning_ready_at - _now())
+
+
+## Seconds until another mushroom may be placed. Not a cooldown on the *ability*
+## — there is nothing to recharge — only on how fast the stack can be emptied.
+func mushroom_use_cooldown() -> float:
 	return maxf(0.0, _mushroom_ready_at - _now())
 
 
-func lure_cooldown() -> float:
+func lure_use_cooldown() -> float:
 	return maxf(0.0, _lure_ready_at - _now())
 
 
+## How many this Gub is carrying. Zero is the normal state at the start of a
+## life, so the HUD has to render an empty slot as ordinary rather than broken.
+func mushroom_count() -> int:
+	return _mushrooms
+
+
+func lure_count() -> int:
+	return _lures
+
+
+## Whether there is a spear to throw. **The one gate**: the throw asks it, the
+## host asks it before it will honour a request, the aim marker asks it, and the
+## hand is drawn from it. Anything that wants to take a Gub's spear away adds a
+## clause here and gets all four for free.
+##
+## A letter hold is the second such clause (D-035). A Gub holding a card up
+## cannot throw, and the reason is not a rule bolted on next to this one — it is
+## that the hand the spear would come out of has a letter in it.
 func has_spear() -> bool:
-	return spear_cooldown() <= 0.0
+	return not is_elder() and spear_cooldown() <= 0.0 and not is_holding_letter()
+
+
+## Is this Gub the Elder? Asked of `MatchState` every time rather than mirrored
+## into a field here, for exactly the reason `is_holding_letter` is: the robe is
+## match state, the host owns it, and a copy in this file would be a second
+## opinion about who is dangerous.
+func is_elder() -> bool:
+	return _gub != null and MatchState.is_elder(_gub.peer_id)
+
+
+## The Elder's gate, and the mirror image of `has_spear()` in every way that
+## matters: the cast asks it, the host asks it before it will honour a request,
+## and the hand is drawn from it.
+##
+## It shares the *hold* half of the spear's gate deliberately (D-038). An Elder
+## mid-letter-hold cannot fire, because otherwise the hold stops being a
+## vulnerability for exactly the player who most needs to have one — and the
+## hand it would come out of is holding a card.
+##
+## It does **not** share the recharge half. They are different clocks on purpose:
+## a spear can be dodged, a bolt cannot, so the bolt waits longer
+## (`MatchConfig.lightning_cooldown`).
+func has_lightning() -> bool:
+	return is_elder() and lightning_cooldown() <= 0.0 and not is_holding_letter()
+
+
+## Is this Gub in the middle of a letter hold?
+##
+## Asked of `MatchState` every time rather than mirrored into a field here, and
+## that is the whole design. The hold is owned by the host, replicated to every
+## peer, and ticked in exactly one place; a copy in this file would be a second
+## clock, and a second clock is how a Gub ends up with a card in its hand and a
+## spear it is allowed to throw. There is no local prediction of a hold for the
+## same reason — the letter is the prize and the host is the only thing that
+## hands it out.
+func is_holding_letter() -> bool:
+	return _gub != null and MatchState.is_holding_letter(_gub.peer_id)
 
 
 ## The whole spear cycle: the windup you have already committed to, plus the
@@ -211,6 +319,39 @@ func has_spear() -> bool:
 ## windup and then jumping down when the spear finally goes.
 func spear_cycle() -> float:
 	return GubAnimator.THROW_RELEASE_TIME + _config.spear_recharge
+
+
+func lightning_cycle() -> float:
+	return _config.lightning_delay + _config.lightning_cooldown
+
+
+## How fast the `Throw` clip is played for this Gub's windup.
+##
+## The spear's authored 1.6 for an ordinary Gub; for an Elder, whatever puts the
+## clip's own release on `lightning_delay` (D-040) — 5.67x at the default 0.2 s,
+## which is 3.54 times the spear's. Derived from the dial every time it is asked
+## rather than cached, so a host who drags the delay mid-match does not leave one
+## Gub throwing at the old rate for the rest of its life.
+##
+## Asked by `_play_windup` on every peer, not only the caster's, which is the
+## reason it is a function of replicated state alone: the rate never travels, so
+## it can never travel *wrong*.
+func windup_rate() -> float:
+	if not is_elder():
+		return GubAnimator.THROW_RATE
+	return GubAnimator.throw_rate_for_release(_config.lightning_delay)
+
+
+## How long after the click this Gub's throw actually leaves the hand.
+##
+## For the spear this is `GubAnimator.THROW_RELEASE_TIME` and always has been.
+## For an Elder it is the dial — except at the very bottom of the dial's range,
+## where `windup_rate()` has hit `THROW_RATE_MAX` and the arm cannot be sped up
+## any further. There the bolt leads the hand rather than the hand being made to
+## catch an impossible number, which at a delay of zero is the setting's whole
+## point. Everywhere above about 0.14 s the two are the same number.
+func release_delay() -> float:
+	return _config.lightning_delay if is_elder() else GubAnimator.THROW_RELEASE_TIME
 
 
 ## True between the click and the release. The held spear is still in the hand
@@ -246,6 +387,27 @@ func _aim_point() -> Vector3:
 	return point
 
 
+## The way the camera is pointing, flattened to horizontal and normalised.
+##
+## Only meaningful on the Gub's own client — `GubCamera` turns itself off on
+## every other copy — so this is called where the input is read and the answer
+## travels, never on the host's copy of somebody else's Gub. The fallback to the
+## body's facing is the same one `_aim_point` makes and covers the same case: a
+## Gub with no rig at all, which is every Gub in `tools/match_rules.gd` and every
+## remote Gub everywhere.
+func _look_direction() -> Vector3:
+	var rig := _gub.get_node_or_null("CameraRig") as GubCamera
+	if rig == null:
+		return _gub.facing()
+	var direction: Vector3 = rig.aim_ray()["direction"]
+	var flat := Vector3(direction.x, 0.0, direction.z)
+	# Straight down or straight up: there is no horizontal component to take, so
+	# fall back rather than normalising a zero.
+	if flat.length_squared() < 0.0001:
+		return _gub.facing()
+	return flat.normalized()
+
+
 func _throw_origin() -> Vector3:
 	var basis := Basis(Vector3.UP, _gub.body_yaw)
 	return _gub.global_position + Vector3.UP * _gub.eye_height() \
@@ -268,7 +430,11 @@ func _throw_origin() -> Vector3:
 ## answer, and it costs you the wider field of view while you ask.
 func _tick_aim_marker() -> void:
 	var rig := _gub.get_node_or_null("CameraRig") as GubCamera
-	if rig == null or not rig.is_aiming() or not (has_spear() or is_winding_up()):
+	# An Elder gets no ring, and that is not an oversight. The marker answers
+	# "where will this land given the drop", and a hitscan bolt has no drop to
+	# answer about: it lands exactly on the crosshair. Drawing one anyway would
+	# be the HUD promising a ballistic arc for a weapon that has none.
+	if rig == null or not rig.is_aiming() or is_elder() 			or not (has_spear() or is_winding_up()):
 		_stow_aim_marker()
 		return
 	if _aim_marker == null:
@@ -302,7 +468,15 @@ func _stow_aim_marker() -> void:
 ## goes is decided here, which is the whole change: a target that walks during
 ## your windup has to be led.
 func try_throw_spear() -> void:
-	if spear_cooldown() > 0.0 or is_winding_up():
+	# The Elder's click runs the same clip through the same windup and comes out
+	# the other end as a bolt (D-038). It is branched here rather than at the
+	# input so that everything downstream of a click — the animation, the relay
+	# to the other peers, the cancel-on-death, the cancel-on-hold — is one piece
+	# of code with one set of edge cases.
+	if is_elder():
+		try_cast_lightning()
+		return
+	if not has_spear() or is_winding_up():
 		return
 
 	_windup_release_at = _now() + GubAnimator.THROW_RELEASE_TIME
@@ -350,16 +524,41 @@ func _tick_windup() -> void:
 	var direction := (_aim_point() - origin).normalized()
 	if direction.length_squared() < 0.001:
 		return
+	# Asked *here* and not at the click, on purpose. Everything else about this
+	# throw is decided at the release — the aim is, and that is the whole of
+	# D-025 — so a Gub that walked over a robe mid-windup fires the weapon it has
+	# now rather than the one it had when it pressed the button. The host asks
+	# the same question again on arrival and is the copy that counts.
+	#
+	# Its *timing* stays the spear's, which is right: the robe arrived after the
+	# arm did, the clip is already playing at 1.6, and the release is where that
+	# arm actually lets go. A bolt out of a spear's windup is a fifth of a second
+	# late by the dial and exactly on time by the animation, and the animation is
+	# what anybody is looking at.
+	if is_elder():
+		if Net.is_host:
+			_host_cast_lightning(origin, direction)
+		else:
+			_request_cast_lightning.rpc_id(1, origin, direction)
+		return
 	if Net.is_host:
 		_host_throw_spear(origin, direction)
 	else:
 		_request_throw_spear.rpc_id(1, origin, direction)
 
 
+## Start the arm going back, at whichever rate this Gub's weapon needs (D-040).
+##
+## The rate is worked out here rather than handed in, and that is what keeps the
+## Elder's fast windup honest on the seven machines that are only watching: this
+## same function is what `_do_throw_windup` calls on every other peer, and it
+## reaches the same answer from the same replicated robe and the same replicated
+## config. Sending the rate with the relay would have been one more number on
+## the wire that could be a different number at the far end.
 func _play_windup() -> void:
 	var animator := _gub.get_node_or_null("AnimationTree") as GubAnimator
 	if animator != null:
-		animator.play_throw()
+		animator.play_throw(windup_rate())
 
 
 @rpc("any_peer", "call_remote", "reliable")

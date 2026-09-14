@@ -267,6 +267,61 @@ def hitmarker():
     return sweep(n, 2400.0, 1500.0, 1.0) * envelope(n, 0.002, 0.9, 3.5)
 
 
+def thunder_crack():
+    """The Elder's bolt landing. The loudest thing in the game, on purpose.
+
+    Thunder heard from a distance is all roll and no edge; thunder heard from
+    thirty metres is a rifle crack with the roll arriving underneath it. This is
+    the close one, because the bolt comes out of a hand in front of you rather
+    than out of the sky (D-038), and it is built as four layers stacked in the
+    order the ear receives them:
+
+      snap  broadband noise with almost no attack, gone in a tenth of a second.
+            Nothing is filtered off the top — the fizz *is* the crack, and it is
+            what makes the sound read as near rather than as weather.
+      body  the same noise taken down to a thud, which is the air column
+            collapsing. Multiplied back up because a one-pole filter at 190 Hz
+            throws away most of white noise's amplitude with its bandwidth.
+      boom  a sub-bass drop, the one layer with a pitch, so the sound has a
+            bottom on speakers that can reproduce one and a thump on ones that
+            cannot.
+      roll  a longer band-limited tail, amplitude-modulated by two slow sines
+            at frequencies that do not divide into each other, so the tail
+            wanders instead of pulsing.
+    """
+    n = seconds(0.95)
+    t = np.linspace(0.0, n / RATE, n)
+    snap = noise(n, 71) * envelope(n, 0.0004, 0.99, 7.0)
+    body = lowpass(noise(n, 72), 190.0) * envelope(n, 0.004, 0.97, 2.4) * 3.6
+    boom = sweep(n, 128.0, 36.0, 1.7) * envelope(n, 0.006, 0.96, 2.6) * 0.8
+    roll = lowpass(noise(n, 73), 560.0) * envelope(n, 0.05, 0.92, 1.2) * 2.4
+    roll *= 0.55 + 0.3 * np.sin(2.0 * np.pi * 3.1 * t)         + 0.15 * np.sin(2.0 * np.pi * 7.3 * t)
+    return snap * 0.95 + body + boom + roll
+
+
+def thunder_roll():
+    """The half-second later half, played as a second voice at the same point.
+
+    Two clips rather than one long one because they are mixed at different
+    volumes and the balance between the crack and the roll is the whole
+    difference between "a bolt hit near me" and "a storm is somewhere". Keeping
+    them apart means that balance is a number in `LightningBolt` rather than a
+    re-run of this script.
+
+    All tail: no transient at all, so it can start under a crack that is already
+    ringing without adding a second attack to it.
+    """
+    n = seconds(1.7)
+    t = np.linspace(0.0, n / RATE, n)
+    rumble = lowpass(noise(n, 74), 240.0) * 4.5
+    # Three slow, mutually irrational swells. A single one reads as a tremolo
+    # pedal; three read as distance.
+    rumble *= 0.5 + 0.24 * np.sin(2.0 * np.pi * 1.7 * t)         + 0.16 * np.sin(2.0 * np.pi * 4.3 * t)         + 0.10 * np.sin(2.0 * np.pi * 9.1 * t + 1.1)
+    # A long attack is what keeps it out of the crack's way, and a long decay is
+    # what makes it a roll rather than a hit.
+    return rumble * envelope(n, 0.18, 0.78, 1.5)
+
+
 EFFECTS = {
     "spear_throw": spear_throw,
     "spear_hit_body": spear_hit_body,
@@ -279,6 +334,8 @@ EFFECTS = {
     "death": death,
     "respawn": respawn,
     "hitmarker": hitmarker,
+    "thunder_crack": thunder_crack,
+    "thunder_roll": thunder_roll,
 }
 
 

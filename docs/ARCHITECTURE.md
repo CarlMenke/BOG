@@ -272,9 +272,14 @@ tools/           dev tools and testbeds — none of this ships
 | `scripts/world/island_generator.gd` | terrain, and the height oracle |
 | `scripts/player/gub.gd` | a player character |
 | `scripts/player/gub_animator.gd` | the blend tree, built in code (**D-029**) |
-| `scripts/player/gub_combat.gd` | spear, mushroom, lure |
+| `scripts/player/gub_combat.gd` | spear, mushroom, lure — and the Elder's bolt in the spear's place (**D-038**, **D-040**) |
 | `scripts/player/ragdoll_builder.gd` | 13 physical bones, generated at runtime |
 | `scripts/items/spear_projectile.gd` | hand-integrated ballistics, swept for hits |
+| `scripts/items/pickup.gd` | what a death leaves on the ground (**D-032**) |
+| `scripts/player/elder_robe.gd` | the robe on a live Gub's own skeleton (**D-037**, **D-038**) |
+| `scripts/items/lightning_bolt.gd` | the bolt: one `ImmediateMesh`, two lights, forty sparks |
+| `scripts/items/ward_flash.gd` | what a spear looks like when it fails to kill an Elder (**D-040**) |
+| `scripts/ui/elder_track.gd` | how much of the Elder is left, for its wearer only (**D-040**) |
 | `tools/build_gub.py` | the Gub's whole art pipeline: eight FBX in, one `.glb` out |
 
 `export_presets.cfg` is deliberately committed — it is the only record of what a

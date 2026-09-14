@@ -29,11 +29,30 @@ var _checks: int = 0
 
 func _ready() -> void:
 	print("match_rules: starting")
+	# A harness that cannot reach the thing it is testing must not print PASS.
+	#
+	# When `match_state.gd` fails to parse, Godot logs the error, declines to
+	# instantiate the autoload, and carries on running. Every `MatchState.x`
+	# below then resolves against `Nil`: each scenario errors out somewhere
+	# before its first `_check`, nothing is ever asked, and the tally at the
+	# bottom prints "0 failures" over a completely dead run. The smoke gate does
+	# catch the SCRIPT ERRORs — but this file should not be claiming PASS in the
+	# same breath, and it did, once, for a `Dictionary.filter()` that Godot 4.7
+	# does not have.
+	if MatchState == null or Net == null:
+		print("match_rules: FAIL — an autoload is missing; see the errors above")
+		get_tree().quit(1)
+		return
 	_run_kill_limit()
 	_run_friendly_fire_off()
 	_run_friendly_fire_on()
 	_run_team_kill_limit()
 	_run_lives_elimination()
+	_run_letters()
+	_run_team_letters()
+	_run_letter_hold()
+	_run_letter_hold_disconnect()
+	_run_elder()
 	_run_time_limit()
 	_run_void_credit()
 	_run_spawn_protection()
@@ -47,10 +66,13 @@ func _ready() -> void:
 	# queue_free lands at the end of a frame and the corpses and spears take
 	# another to unwind, hence the wait.
 	#
-	# A dozen or so still get reported and always will — they are the `preload`
-	# constants on the item and audio scripts, which are alive for as long as
-	# the scripts are. Nothing here can release those, so the count never quite
-	# reaches zero.
+	# Two dozen or so still get reported and always will — they are the
+	# `preload` constants on the item and audio scripts plus the voices the
+	# audio pool is still holding, all of which are alive for as long as the
+	# scripts are. Nothing here can release those, so the count never quite
+	# reaches zero, and it went up when the Elder scenario started firing
+	# thunder at things — and again at D-040, when every spear that fails to
+	# kill an Elder started sounding a ward off its robe.
 	MatchState.reset()
 	for i in 4:
 		await get_tree().process_frame

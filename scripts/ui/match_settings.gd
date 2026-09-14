@@ -86,8 +86,50 @@ func _build() -> void:
 	# the recharge is what decides how punishing a miss is.
 	_slider("spear_recharge", "Spear recharge", 0.5, 15.0, 0.1, func(v: float) -> String:
 		return "%.1f s" % v)
+	# Directly under the spear's recharge, because the two are one question: how
+	# often anybody can commit to an attack — and since D-040 the Elder's is the
+	# *shorter* of the two, which is exactly the sort of thing a host should
+	# discover by reading one row under the other rather than in a match.
+	_slider("lightning_cooldown", "Lightning recharge", 0.2, 10.0, 0.1,
+		func(v: float) -> String: return "%.1f s" % v)
+	# The four Elder dials that are not the drop chance, kept together and in
+	# the order they are met: how long the bolt takes to come out, how long the
+	# robe lasts, and the two boosts. They are in "Feel" rather than beside the
+	# robe chance up in "Limits" because none of them changes how *often* an
+	# Elder happens — only what one is like — and because this is the feature
+	# most likely to want tuning the moment real people meet it (D-040).
+	#
+	# Zero reads as "Instant", the same word `letter_hold_time` and
+	# `respawn_delay` use for the same thing: a real setting rather than a
+	# slider dragged off the end.
+	_slider("lightning_delay", "Lightning delay", 0.0, 2.0, 0.05,
+		func(v: float) -> String:
+			return "Instant" if v <= 0.0 else "%.2f s" % v)
+	_slider("elder_duration", "Elder lasts", 1.0, 120.0, 1.0,
+		func(v: float) -> String: return "%d s" % roundi(v))
+	# Shown as a percentage over the base speed rather than as the bare
+	# multiplier, because "+35%" is a sentence about the game and "1.35" is a
+	# number about the code.
+	_slider("elder_speed_multiplier", "Elder speed", 1.0, 3.0, 0.05,
+		func(v: float) -> String: return "+%d%%" % roundi((v - 1.0) * 100.0))
+	# And the jump is shown as the height it actually reaches, because the
+	# multiplier is on launch velocity and height goes as its square: +25% on
+	# this slider is +56% of apex, and a host reading "+25%" would be tuning the
+	# wrong number. 1.69 m at 1.0, and asked of `Gub` rather than worked out
+	# here, so a UI file cannot end up quoting an apex the physics stopped
+	# producing.
+	_slider("elder_jump_multiplier", "Elder jump", 1.0, 3.0, 0.05,
+		func(v: float) -> String:
+			return "%.2f m high" % Gub.apex_for(Gub.JUMP_VELOCITY * v))
 	_slider("respawn_delay", "Respawn delay", 0.0, 10.0, 0.5, func(v: float) -> String:
 		return "Instant" if v <= 0.0 else "%.1f s" % v)
+	# Not cooldowns. Mushrooms and lures are carried stock now (D-032) and these
+	# only decide how fast a stack can be emptied — which is why they are
+	# seconds and not tens of seconds.
+	_slider("mushroom_use_delay", "Mushroom delay", 0.1, 10.0, 0.1,
+		func(v: float) -> String: return "%.1f s" % v)
+	_slider("lure_use_delay", "Lure delay", 0.1, 10.0, 0.1,
+		func(v: float) -> String: return "%.1f s" % v)
 	_slider("max_players", "Lobby size", MatchConfig.MIN_PLAYERS, MatchConfig.MAX_PLAYERS,
 		1, func(v: float) -> String: return "%d Gubs" % int(v))
 

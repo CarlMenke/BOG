@@ -2191,3 +2191,229 @@ clip turns the head further, it will show there first.
 scripts share one search, for the reason `tools/find_godot.sh` gives at the top
 of itself: a search for where somebody installed a large application has to stay
 in step with reality, and two copies of it will not.
+
+## D-038 — The Elder: a robe off a corpse, a bolt out of the hand, and a death that consumes it
+*Four parts of this are superseded by **D-040**, which turned the Elder into a
+timed invincible burst after the user played this version of it. Each is marked
+where it stands. In short: the Elder **cannot be killed** and lasts **20 seconds**
+rather than until it dies; the bolt leaves **0.2 s** after the click rather than
+at the clip's 0.71 s release; the cooldown is **1.0 s** rather than 5.0; and the
+drop chance is **2%** rather than 5%. Everything else below — the robe as a
+fourth drop, the roll order, the bolt out of the hand, the 28 m range, the
+crackling fist, the hold gate, two Elders at once — still stands.*
+
+D-037 built the robe and stopped there, deliberately: an asset with no drop, no
+state and no weapon behind it. This is the rest of it.
+
+**The robe is a fourth thing that falls out of a corpse**, rolled by
+`MatchState._drop_loot` alongside the mushroom, the lure and the letter card.
+`elder_drop_chance` is 0.05 against the other two's ~47% each *(**superseded by
+D-040**: 0.02, because what the dial hands out is no longer a modest upgrade)*,
+and — unlike the letter — **it is not gated on a win condition**. That is the one asymmetry worth
+arguing for: a letter is a scoring mechanic and only exists in the mode that
+scores it, but the Elder is a *weapon*, and a weapon that only appears in one of
+four modes is a weapon nobody ever learns to play against. So the dial sits in
+the lobby's Match panel above the friendly-fire toggle rather than in the pair of
+rows that hide themselves.
+
+The roll order is **letter, then robe, then the remainder split evenly between
+mushroom and lure**, and it is written into the comment at the roll because it is
+exactly the sort of thing that gets reordered for tidiness and silently changes
+the balance: put the robe first and a letters match quietly drops fewer cards
+than the number on the slider in front of the host.
+
+### Dying consumes the robe. It does not drop.
+***Superseded by D-040 in its central claim.** The Elder cannot be killed any
+more, so a death is no longer what ends one: a twenty-second clock is, and the
+only death that can still reach the robe is a fall into the void. What survives
+is the second sentence of this section — a robe that ends is **consumed**, never
+put back on the ground — which now applies to the clock, the void and a
+disconnect alike. "Nothing else ends it" below is the paragraph that is simply
+no longer true.*
+
+This is the opposite of the letter rule (D-035) and it was chosen on purpose.
+A card that evaporated with its carrier would take a letter out of a mode that
+may be a hundred deaths from replacing it, so the card lands at the corpse and
+the kill is a *transfer*. The robe is the other shape: killing an Elder has to be
+worth doing for its own sake, and a robe lying on the body would hand the whole
+reward of that fight to whoever won the scramble afterwards rather than to
+whoever won the fight. So an Elder's death takes the Elder out of the match, and
+the next one arrives when the drop table says so.
+
+Nothing else ends it. Not a respawn timer, not picking up a mushroom, not
+finishing a letter hold — an Elder that survives is still the Elder, which is
+what makes killing one the play. A disconnect is treated exactly as a death, as
+it is for a hold, and the world gains nothing from it.
+
+**Two Elders can exist at once and that needs no rule.** Two robes can be on the
+ground; both can be picked up. An artificial "only one" would mean a robe that
+refuses to be collected, which is the most conspicuous object a map can have.
+
+### The lightning comes out of the hand, not out of the sky
+The user: *"it should come from the elders hand, you can use the same throw
+animation"*. A sky strike was the obvious alternative and it is rejected here
+permanently, because of what it would quietly break.
+
+A shield mushroom's entire definition is cover you cannot be hit through
+(D-032, D-034). A bolt that falls from above has no line to block, so every
+mushroom in the game would go on *looking* like cover while being none against
+the strongest weapon in it — and the player behind one would have no way to find
+that out except by dying. The bolt therefore leaves the Elder's fist and travels
+to the target as a **hitscan ray on the world, player and deployable layers**, so
+it is stopped by exactly the things that stop a spear. Cover works because the
+bolt is a line, and it is a line because the user said it should come from the
+hand.
+
+**It replaces the spear rather than joining it.** `has_spear()` is false for an
+Elder for as long as it is one, the fist carries no shaft, and the same mouse
+button fires the bolt. One weapon, one button, one thing to learn.
+
+### It reuses the Throw clip, and the release time is the point
+***Superseded by D-040 in its timing.** The clip is still reused and the branch
+is still taken at the release, which is the part that mattered; but the release
+is now `MatchConfig.lightning_delay` — 0.2 s — and the clip is played at 5.67x so
+the arm gets there. The paragraph below about "half a second of a Gub visibly
+winding up" is the thing the user asked to be removed.*
+
+A click plays the existing `Throw` one-shot and the bolt leaves at
+`GubAnimator.THROW_RELEASE_TIME` — 0.71 s, derived in `gub_combat.gd` from the
+clip window and the playback rate — with the aim read at that moment and not at
+the click, exactly as D-025 specifies for the spear. The branch between "throw a
+spear" and "cast a bolt" is taken **at the release**, beside where the aim is
+read, so one windup, one cancel-on-death, one cancel-on-letter-hold and one relay
+to the other peers serve both. A parallel windup for the Elder would have been a
+second copy of the one piece of timing D-025 exists to keep honest.
+
+It also means the Elder gives its target the same warning a thrower does: half a
+second of a Gub visibly winding up. There is no charge-up, no beam, no warning
+ring on the ground, because the animation already is the warning.
+
+**Range: 28 m, and it is derived from the spear rather than picked.** Hitscan
+with no travel and no drop would be a map-wide delete at any range you can see.
+A spear leaves at 42 m/s and falls at 8 m/s², so at 28 m it has been in the air
+0.67 s and dropped 1.78 m — one Gub's height, near enough exactly. Inside 28 m
+the spear is a point-and-click weapon; past it the throw becomes a judgement
+about arc, which is where D-014 says the skill in this fight lives. So the Elder
+owns precisely the band where the spear needs no skill, and outside it the spear
+is still the better tool. On Rust (42 x 64 m) that is most of a fight and not the
+length of the yard.
+
+**Cooldown: 5.0 s against the spear's 3.0**, and a separate dial. *(**Superseded
+by D-040**: 1.0 s. The argument below is still sound and simply stopped applying
+— it prices a weapon somebody carries until they die, and the Elder is now a
+twenty-second window in which four shots and twenty shots are different
+weapons.)* A spear can be
+dodged — it takes a third of a second to cross fourteen metres and it drops — and
+a bolt cannot: once it is released the shot has already landed. The only price
+that can be charged for that is the wait before the next one.
+
+**A letter hold stops it.** `has_lightning()` shares the hold half of the spear's
+gate and not the recharge half. Without that, becoming the Elder would make the
+ten-second hold free for exactly the player who most needs to be vulnerable
+during it.
+
+### The hand crackles when it is loaded and is bare while it recharges
+The spear's great virtue is that an empty hand says "harmless" from across a
+clearing, and D-036 deleted the HUD's recharge ring precisely because the hand
+said it better. An Elder has no spear — so without something in its place, the
+most dangerous Gub in the match would be the one player nobody could read.
+
+So the Elder's fist carries `HandCrackle`: three short arcs of the bolt's own
+geometry, restruck every thirtieth of a second, around a small violet light. Same
+language, same distance, no HUD required. It hangs off the same
+`BoneAttachment3D` as the shaft and the letter card, so the hand can never hold
+two things, and which one is showing is still decided in one place —
+`GubCombat._refresh_hand`, off the same gates the shot is refused by.
+
+The light is what actually carries at range, and that is D-035's lesson rather
+than a guess: a glyph in a gold fist at twenty metres is a gold smudge on a gold
+body, and what reads is that the Gub is *lit*.
+
+**It is put back by a poll, not by a timer**, and that was the one place this
+deliberately departed from the spear. The spear's `_regrow_spear` arranged the
+same thing with a `SceneTreeTimer` started at the moment `_spear_ready_at` is
+set — two clocks measuring one interval, a `Time.get_ticks_msec()` deadline and
+a sum of frame deltas. They agree to about a millisecond, and a millisecond the
+wrong way means `has_spear()` is still false on the frame the timer fires and
+nothing ever asks again. `GubCombat._tick_charge` instead compares the hand
+against the gate every frame, on Elders only, and cannot drift from it.
+
+*Since D-039 the spear does the same and `_regrow_spear` is gone.* Writing this
+paragraph was not enough to fix the thing it was about, which is the whole
+lesson of that entry: the spear went on losing that race for the rest of the
+session, in front of a player, while the correct argument for why it would sat
+here in the document.
+
+### "Way over the top" is the requirement, and here is what it cost
+`LightningBolt` is built fresh — there was almost no particle work in this
+project to copy — and it is drawn to the rule `SpearTrail` was written to: this
+is light, not a surface, so everything in it is unshaded and additively blended
+and is therefore brighter than the night forest *and* than Rust's noon.
+
+It is an `ImmediateMesh` rather than a particle system, for the trail's reason and
+one more: a stroke of lightning is a continuous jagged line, and the whole read of
+the effect is that its shape changes every other frame — re-emitting a particle
+system at 30 Hz costs far more than rebuilding four hundred vertices. One mesh
+carries a white core inside a violet glow plus four forks, re-jittered every
+0.03 s over the 0.22 s it lives, pinned at both ends by a `sin(pi t)` taper so it
+genuinely leaves the hand and genuinely arrives at the body.
+
+Per bolt: one mesh (ten surfaces, ~450 vertices, rebuilt seven times), two
+shadowless `OmniLight3D`s dead by 0.16 s, a one-shot burst of 40 CPU sparks gone
+by 0.7 s, and a scorch quad where it hit a surface. Two Elders firing at once is
+four extra dynamic lights for a sixth of a second — a quarter of what the
+island's fifteen torches cost, for a sixtieth of the time. The victim is thrown
+along the bolt at a little over twice a flat spear's shove, and the caster and
+anybody within 16 m of the impact get a camera kick through
+`GubCamera.shake`, which already respects the `camera_shake` user setting.
+
+Two numbers came out of looking at it rather than out of reasoning, and both are
+recorded in the file because they were wrong in the same instructive way.
+**The flash started at 26 energy over 15 m and blew the entire frame to white**,
+taking with it the body it was supposed to be lighting; a flash that hides the
+kill is not a flash, it is a wipe. And **48 additive spark quads emitted from one
+point on one frame is not a shower, it is a white ball** — they only become
+sparks once they have separated, and the first three frames are the ones anybody
+sees. They now start scattered through a 0.45 m sphere and leave at 16 m/s.
+Sized on the quad rather than through `CPUParticles3D.scale_amount_*`, which did
+not take: the sparks came out half a metre across regardless of it.
+
+The thunder is two synthesised voices rather than one — `thunder_crack` and
+`thunder_roll`, both new in `tools/make_sfx.py` — played together at the impact
+through the existing 3D-varied playback. Two clips because the balance between
+the crack and the roll is the whole difference between "that landed near me" and
+"there is weather somewhere", and that balance should be a number in
+`LightningBolt` rather than a re-run of the script.
+
+`out/lightning.png` is the evidence. `out/elder_hand.png` is the crackle.
+
+### The HUD tile changes weapon and stays binary
+The ability bar's first slot swaps its glyph and its label and goes on being lit
+or dark off one boolean — `has_lightning()` instead of `has_spear()`, covering
+the longer recharge and the letter hold in exactly the same way. No sweep, no
+seconds, no second kind of readout. That is D-036 applied to a second weapon
+rather than an exception to it. The kill feed gets one mark of its own (⚡),
+because it is the one kill in this game worth reading the feed to find out about.
+
+### What checks it
+`tools/match_rules.gd` grew a scenario (122 → 159 checks): the robe is claimable,
+claiming it sets the Elder state *and* puts the cloth on the skeleton, an Elder
+has no spear and a crackling hand, the cooldown gates a second cast, a letter
+hold blocks one on the client and again on the host, death ends it and drops
+nothing, a respawn does not give it back, two Elders can coexist, and a leaver
+takes their robe with them. *(D-040 rewrote the death half of that scenario —
+nothing kills an Elder but the void — and took the file to 195.)*
+
+`tools/combat_range.tscn lightning` is the other half and is the one that
+matters: it kills a dummy with `elder_drop_chance` forced to 1, lets the player's
+own body walk over what falls out, and fires one bolt at a Gub fourteen metres
+away — then **prints its own verdict**, because a still frame of a bolt looks
+identical whether or not the thing at the far end of it fell over. The smoke gate
+runs it, which takes it from 13 checks to 14.
+
+The runtime attach is `tools/preview_elder.gd`'s, line for line, in
+`ElderRobe.don`: find the `Skeleton3D`, re-parent the `MeshInstance3D`, keep its
+`Skin`, clear its transform, null its owner. That tool resolves all 49 bind names
+against a live Gub and prints the verdict, so it is the thing that says the robe
+binds at all — and a second, subtly different attach path in the game would have
+meant the thing that is checked and the thing that ships were not the same thing.

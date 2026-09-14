@@ -92,13 +92,133 @@ const DUMMY_BASE := 900
 ##              before the arena is freed, so every Gub in the tree spends those
 ##              frames still being processed with no peer to ask.
 ##   free     — no script; play it yourself
-const MODES := ["flight", "hit", "arc", "miss", "aim", "mushroom", "lure",
-	"lure_self", "walk", "leave", "free"]
+const MODES := ["flight", "hit", "arc", "miss", "aim", "mushroom", "cover",
+	"lure", "lure_self", "letter", "lightning", "ward", "recharge", "walk",
+	"leave", "free"]
+
+## How long after the cast the verdict is taken, in physics ticks. The click
+## only starts the windup — the bolt leaves at `MatchConfig.lightning_delay`,
+## 0.2 s since D-040, which is 12 ticks — and the hitscan resolves on that same
+## tick, since there is no projectile to fly.
+##
+## Left at fifty rather than retuned down with the delay. It was 0.71 s of
+## windup plus a margin and is now most of it margin, and a verdict taken *late*
+## costs a headless run half a second; one taken early cannot tell "the bolt did
+## nothing" from "the bolt has not gone yet", which is the only way this mode can
+## lie. If the dial is ever raised past 0.8 s this number has to move with it.
+const LIGHTNING_VERDICT_DELAY := 50
+
+## How long after the click a spear's verdict is taken, in physics ticks. Same
+## arithmetic as the bolt's above and one more term: the click starts the
+## windup, the shaft leaves `GubAnimator.THROW_RELEASE_TIME` (0.71 s, 42.5
+## ticks) later, and then it has fourteen metres to cross at 42 m/s — twenty
+## ticks. Ninety-five is that plus a margin, and the margin matters more here
+## than it looks: the whole point of `cover` is a throw that is *supposed* to
+## produce nothing, and a verdict taken too early cannot tell "blocked" from
+## "not there yet".
+const SPEAR_VERDICT_DELAY := 95
 
 ## How far the `walk` mode requires the Gub to travel. A Gub that is not walking
 ## still drifts a little as it settles onto the ground on the first few frames,
 ## and this is comfortably clear of that.
 const WALK_MIN_DISTANCE := 1.0
+
+## The `cover` mode's ray profile: how high it climbs, how far either side it
+## looks, and how finely it samples across. 3 cm across a 3.2 m span is 161 rays
+## per height band and 18 bands, which is nothing to fire in one frame and is
+## fine enough to see a 5 cm hole between a stem and a cap — which is the shape
+## of gap that put this mode here.
+const PROFILE_TOP := 2.70
+const PROFILE_STEP := 0.15
+const PROFILE_HALF_WIDTH := 1.60
+const PROFILE_SAMPLE := 0.02
+
+## How much the cap is allowed to let a walking Gub in past the distance the
+## geometry says it should be held off at — `CAP_RADIUS + CAPSULE_RADIUS`.
+##
+## Not a fudge factor. A `CharacterBody3D` pressed into a static cylinder is
+## resolved by depenetration rather than by a hard stop, and a capsule's top
+## hemisphere is narrower than its waist, so the honest contact distance is a
+## centimetre or two inside the sum of the two radii. A quarter of a metre is
+## comfortably outside that and still nowhere near the 0.66 m a Gub reached when
+## the only thing at its own height was the stem.
+const COVER_HOLD_OFF_SLACK := 0.25
+
+## How far to one side of the line of fire the mushroom in the `cover` mode is
+## planted.
+##
+## **Not zero, and this is the most important number in the check.** Lined up
+## perfectly, the stem alone blocks the shot — it is 0.55 m of post standing on
+## the exact line between the two Gubs — so a dead-centre throw is stopped by a
+## mushroom whose cap is a metre above the fight and the check passes while
+## proving nothing. It was written that way first and it did pass, which is how
+## the real mushroom got here.
+##
+## Half a metre out is a thirteen-degree difference at `MUSHROOM_DISTANCE`, which
+## is what happens when either Gub takes one step, and it is nowhere near the
+## edge of a cap 2 m across. Anything that stops the spear there is stopping it
+## with the cap, which is the thing being checked.
+const COVER_OFFSET := 0.5
+
+## How many throw-and-regrow cycles `recharge` drives before it is satisfied.
+##
+## Twelve rather than one because the failure it guards is a race between two
+## clocks, and a race lost by a millisecond passes a single trial by luck. At
+## the 0.15 s recharge this mode sets, a cycle is the 0.71 s windup plus that —
+## 52 ticks — so twelve of them is about 630 ticks, which is what the smoke
+## gate's warmup count is sized for.
+const RECHARGE_CYCLES := 12
+
+## How long the deliberate desync waits for the hand to notice, in physics
+## ticks. Half a second is forty times `HAND_SYNC_GRACE` and several times any
+## plausible repaint lag: anything still empty-handed at the end of it is not
+## slow, it is never coming back.
+const DESYNC_PATIENCE := 30
+
+## How long the mushroom under test lives. Far longer than the run, so that
+## nothing here is ever accidentally measuring a wither.
+const COVER_LIFETIME := 120.0
+
+## How long the `ward` mode's robe lasts, in seconds.
+##
+## Short, because the mode has to watch it burn out — and **it burns out on its
+## own**, through `MatchState._tick_elders` running in a real match loop, rather
+## than by the run reaching in and winding the row's deadline back. That is the
+## whole difference between this and `match_rules`' `_expire_elder`: the harness
+## next door can prove the teardown is correct once something calls it, and only
+## this can prove that something does.
+##
+## Three seconds is long enough for the first spear's full 0.71 s windup and
+## 0.33 s of flight to land inside the window with room either side, and short
+## enough that the run is over in about six.
+const WARD_DURATION := 3.0
+
+## How long the `ward` mode will wait for that to happen before calling it a
+## failure, in physics ticks. Generous — three seconds is 180 — and it exists so
+## that a robe which never expires ends the run with a verdict rather than
+## hanging a headless check for ever.
+const WARD_EXPIRY_LIMIT := 420
+
+## How long the player leans on the mushroom in the `solid` half, in physics
+## ticks. At `Gub.WALK_SPEED` a Gub covers the `MUSHROOM_DISTANCE` to it in
+## under a second, so this is most of a second of actually pushing.
+const COVER_WALK_FRAMES := 100
+
+## The silhouette grid in `_hidden_fraction`: 21 slices up a 1.55 m body is one
+## every 7 cm, and 11 across a 0.76 m one is one every 7 cm too, so the samples
+## are square and neither axis is flattering the answer.
+const SILHOUETTE_ROWS := 21
+const SILHOUETTE_COLS := 11
+
+## How many frames the hand is allowed to be out of step with the throw gate
+## before it counts as a failure.
+##
+## Not zero, and deliberately: `_refresh_hand` runs in `_process` and the gate
+## it reads moves in wall-clock time, so there is always a frame or two in which
+## the gate has opened and the hand has not been repainted yet. Four frames at
+## 60 Hz is 66 ms — under a tenth of a second, far below anything a player could
+## call unreliable, and forever short of the "never" the bug actually produced.
+const HAND_SYNC_GRACE := 4
 
 ## Every scripted mode is watched from the touchline. The thrower's own camera
 ## looks *along* the throw, where the spear is a dot behind the Gub's head and a
@@ -147,17 +267,66 @@ var _acted: bool = false
 var _items: Node3D
 var _players: Node3D
 var _aim_at: Vector3 = Vector3.ZERO
+## The frame the Elder's bolt was fired on, or 0 for "not yet". The verdict is
+## taken relative to this rather than at a fixed frame, because the cast waits
+## on the robe being picked up and that is an `Area3D` overlap rather than a
+## countdown.
+var _cast_at: int = 0
 var _fixed_camera: Camera3D
+
+## `cover`'s state machine. It runs on gates rather than on frame numbers
+## wherever it can — the second throw waits for the spear to have grown back,
+## exactly as `lightning` waits for the robe — so the mode does not quietly
+## start failing the day somebody retunes `spear_recharge`.
+var _cover_step: int = 0
+var _cover_at: int = 0
+var _cover_mushroom: Node3D = null
+## The closest the walking Gub has come to the axis of the mushroom in its way.
+## A minimum rather than a final position, because a Gub pressed into a cylinder
+## slides around it: where it *ends up* says nothing, and how far in it ever got
+## says everything.
+var _cover_closest: float = INF
+
+## `recharge`'s bookkeeping. `_hand_out_of_step` counts consecutive frames on
+## which the throw gate said armed and the fist was empty, which is the bug
+## stated as a number.
+var _recharge_cycles: int = 0
+var _recharge_failures: int = 0
+var _hand_out_of_step: int = 0
+var _worst_out_of_step: int = 0
+## Set once the twelve honest cycles are done and the hand has been emptied by
+## hand, to see whether anything ever asks again.
+var _desync_at: int = 0
+var _desync_recovered: int = -1
+var _recharge_thrown: int = 0
+
+## `ward`'s state machine, the same shape as `cover`'s and on gates for the same
+## reason: the robe is claimed by an `Area3D` overlap and burns out on a
+## wall clock, and neither of those is a frame number.
+var _ward_step: int = 0
+var _ward_at: int = 0
 
 
 func _ready() -> void:
+	# The mode is found by *name* rather than at a fixed index, because this
+	# scene is now launched two different ways and they do not agree about where
+	# the trailing arguments start. Through `tools/snapshot.gd` the user args are
+	# `scene png ticks mode`, so the mode is the fourth; run headless as a plain
+	# scene — which is what a check with no picture in it wants — they are just
+	# `mode`, and the fourth does not exist. One `find` covers both and cannot be
+	# thrown off by a mode being added, which an index can.
 	var args := OS.get_cmdline_user_args()
-	if args.size() >= 4 and MODES.has(args[3]):
-		_mode = args[3]
+	var at := -1
+	for i in args.size():
+		if MODES.has(args[i]):
+			at = i
+			break
+	if at >= 0:
+		_mode = args[at]
 	# A still frame cannot tell "the spear missed" from "the spear hit and the
 	# kill was dropped". Add `trace` after the mode to print the flight, or
 	# `pov` to watch from the thrower's own camera instead of the touchline.
-	var extra: String = args[4] if args.size() >= 5 else ""
+	var extra: String = args[at + 1] if at >= 0 and args.size() > at + 1 else ""
 	_trace = extra == "trace"
 	_pov = extra == "pov"
 

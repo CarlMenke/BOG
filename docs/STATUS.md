@@ -130,6 +130,32 @@ of what that means:
   are one-shots. The collision capsule now follows the pose (stand 1.55, crouch
   1.35, slide 0.75), the spear sits in the fist instead of through the head, and
   a corpse reads as a body.
+- **The Elder is playable** (D-037 built the asset, **D-038** made it real,
+  **D-040** turned it into the thing the user asked for after playing it).
+  `tools/build_elder.sh` fits a purple robe and a wizard hat to the Gub's
+  measured silhouette and writes `art/generated/elder.glb`: 4,352 triangles, no
+  animation data, bound onto a live Gub's own `Skeleton3D` at runtime. In a
+  match it is a fourth kind of drop off a corpse at **2%** in **every** mode.
+  The Gub that walks over it becomes, on every peer's screen, **twenty seconds
+  of a thing that cannot be killed**: nothing but the void takes an Elder down,
+  the robe burns out on a host-owned clock rather than on a death, and a spear
+  thrown at one is turned aside in a violet flash. It moves 35% faster, jumps
+  to 2.64 m instead of 1.69, and carries **no spear at all**. The same mouse
+  button plays the same `Throw` clip — at 5.67x, derived from the delay so the
+  arm keeps up — and fires a hitscan **bolt out of the hand 0.2 s after the
+  click**: 28 m, 1 s recharge, one hit kills, stopped by a shield mushroom
+  exactly as a spear is, and refused during a letter hold. The fist crackles
+  while it is loaded and is bare while it recharges, which is the spear's
+  empty-hand tell kept intact, and the wearer gets a draining countdown above
+  the ability bar — never on the crosshair (D-036). Expiry is not a death: the
+  letters and the carried stock survive it. The bolt is a branching
+  `ImmediateMesh` stroke with a flash at both ends, a spark burst, a scorch,
+  layered thunder and a camera kick: `out/lightning.png` and
+  `out/elder_hand.png`.
+  The known asset risk is unchanged — the hem does not survive `Run`, `Slide`
+  and `JumpTwo` cleanly, and D-037 says how badly, with the renders. One new
+  one: a boosted Elder outruns its own `Run` clip by up to a third, because the
+  locomotion blend space tops out at `RUN_SPEED` with the clip's rate baked in.
 
 ---
 

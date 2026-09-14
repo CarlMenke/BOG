@@ -23,7 +23,11 @@ signal jumped()
 signal dived()
 signal threw_spear(origin: Vector3, direction: Vector3)
 
-enum Cause { SPEAR, FALL, VOID, UNKNOWN }
+## Appended to, never reordered — the ordinal is what `MatchState._apply_death`
+## puts on the wire and what the kill feed switches on. LIGHTNING therefore sits
+## *after* UNKNOWN rather than beside SPEAR where it belongs by meaning, because
+## a tidier order would have renumbered every cause already in flight.
+enum Cause { SPEAR, FALL, VOID, UNKNOWN, LIGHTNING }
 
 ## The ground speed each locomotion clip was authored at, in metres per second,
 ## measured on the finished 1.80 m rig by `tools/build_gub.py` (hips travel over
@@ -191,6 +195,11 @@ const LAYER_DEPLOYABLE := 8
 var display_name: String = "Gub"
 ## The spear in the Gub's hand. Hidden while one is in flight.
 var held_spear: HeldSpear
+## The robe, while this Gub is the Elder (D-038), and null the rest of the time
+## — which is almost always. Built on demand rather than in `_ready` like the
+## spear, because seven of every eight Gubs in a match will never wear one and a
+## hidden second skinned mesh on every rig is 4,352 triangles of nothing.
+var elder_robe: ElderRobe
 var team: int = MatchConfig.TEAM_NONE
 var alive: bool = true
 ## Set while the round is starting or just after a respawn; blocks damage.
@@ -263,6 +272,26 @@ func _equip_spear() -> void:
 	held_spear.name = "HeldSpear"
 	add_child(held_spear)
 	held_spear.attach_to(skeleton)
+
+
+## Put the Elder's robe on this Gub, or take it off again.
+##
+## Called on **every** peer's copy from `MatchState._do_set_elder`, never from
+## here: who the Elder is is match state and the host decides it (D-038). This
+## is only the wardrobe.
+##
+## Idempotent, because the truth it reflects is replicated and a message that
+## arrives twice must not leave two robes on one skeleton. `elder_robe != null`
+## *is* the flag — there is no second boolean to disagree with it, which is the
+## same rule the hand and the throw gate follow.
+func set_elder(wearing: bool) -> void:
+	if wearing == (elder_robe != null):
+		return
+	if wearing:
+		elder_robe = ElderRobe.don(self)
+		return
+	elder_robe.doff()
+	elder_robe = null
 
 
 func is_local() -> bool:

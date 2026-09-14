@@ -607,6 +607,26 @@ func report_kill(victim_id: int, killer_id: int, cause: Gub.Cause,
 
 	_apply_death.rpc(victim_id, killer_id, cause, point, blow, bone)
 	_apply_death(victim_id, killer_id, cause, point, blow, bone)
+	# The robe is **consumed**, not dropped, and it is taken off here rather than
+	# next to the loot roll on purpose. A letter card lands at the corpse for
+	# whoever is standing over it; a robe simply ceases to exist, and the next
+	# one arrives only when the drop table rolls another (D-038). That is the
+	# opposite of the letter rule and it is deliberate: a robe that changed hands
+	# at the corpse would hand the whole reward to whoever won the scramble
+	# rather than to whoever won the fight.
+	#
+	# Since D-040 the only death that can reach this line with a robe on is a
+	# void death — everything else was refused above. Which is exactly why the
+	# call stays here rather than moving into `_tick_elders` beside the expiry:
+	# this is what stops a robe being left attached to a body at the bottom of
+	# the map, wearing out a twenty-second clock nobody can see.
+	_end_elder(victim_id)
+	# Before the loot roll, so that when a carrier is killed the card is the
+	# first thing to appear at the corpse rather than the second. Both drop:
+	# killing somebody nine seconds into a hold is the best thing that can
+	# happen to you in this mode and it should look like it.
+	_interrupt_letter_hold(victim_id, point)
+	_drop_loot(cause, point)
 	_push_scores()
 	_check_win()
 

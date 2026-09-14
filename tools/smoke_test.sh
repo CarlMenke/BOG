@@ -171,6 +171,28 @@ check "spear kills" "killed Dummy 1" \
 check "lure catches" "combat_range: lure caught 1" \
     "$GODOT" --path "$GODOT_ROOT" --resolution 640x360 --script tools/snapshot.gd -- \
     res://tools/combat_range.tscn "$GODOT_LOG_DIR/lure.png" 132 lure
+# The Elder, end to end and in a world with something standing in it: a robe
+# rolled out of a real death, walked over, and one bolt at a dummy fourteen
+# metres away. `match_rules` proves the state machine — the robe makes an Elder,
+# the clock ends it, the cooldown gates a second cast — but it has no geometry
+# and nothing to hit, so the one thing it cannot prove is that the bolt kills
+# anybody. That is exactly the failure a screenshot also cannot see: a bolt
+# drawn beautifully past a Gub who is still standing looks identical to one that
+# worked, which is why the mode prints its own verdict.
+#
+# 90 ticks, and the margin in it is now much larger than it was. The robe drops
+# on tick 20 and is claimed on 21, the cast follows immediately, and the bolt
+# leaves `lightning_delay` later — 0.2 s = 12 ticks since D-040, where it used
+# to be THROW_RELEASE_TIME's 42.5 — so the kill lands around tick 34 and the
+# verdict is printed 50 ticks after the cast. The hero shot of an actual bolt is
+# a separate, earlier frame, and it moved with the delay:
+#     ... --script tools/snapshot.gd -- res://tools/combat_range.tscn \
+#         out/lightning.png 38 lightning
+check "lightning kills" "lightning PASS"     "$GODOT" --path "$GODOT_ROOT" --resolution 640x360 --script tools/snapshot.gd --     res://tools/combat_range.tscn "$GODOT_LOG_DIR/lightning.png" 90 lightning
+# Kept, and now honest about what it is: this is the *placement* path —
+# `try_place_mushroom`, the two validation rays, the broadcast, the eruption —
+# and `snapshot: wrote` is all it has ever asserted. Fine as half a check and
+# disastrous as the whole one. "mushroom stops a spear" above is the other half.
 check "mushroom deploys" "snapshot: wrote" \
     "$GODOT" --path "$GODOT_ROOT" --resolution 640x360 --script tools/snapshot.gd -- \
     res://tools/combat_range.tscn "$GODOT_LOG_DIR/mushroom.png" 40 mushroom

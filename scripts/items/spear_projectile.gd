@@ -190,9 +190,14 @@ func _resolve(hit: Dictionary) -> void:
 	struck_world.emit(point, normal)
 
 
-## Which bone the spear went through, so the ragdoll spins around the right
-## place. Approximate on purpose — it drives a visual, not a damage number.
-func _nearest_bone(victim: Gub, point: Vector3) -> String:
+## Which bone a hit landed on, so the ragdoll spins around the right place.
+## Approximate on purpose — it drives a visual, not a damage number.
+##
+## Static and public because the Elder's bolt asks the same question of the same
+## rig for the same reason (D-038), and the answer has to be the same answer: a
+## corpse that spins differently depending on which weapon killed it would be
+## two ragdoll behaviours where the physics only has one.
+static func nearest_bone(victim: Gub, point: Vector3) -> String:
 	var skeleton := victim.find_child("Skeleton3D", true, false) as Skeleton3D
 	if skeleton == null:
 		return "Spine1"
