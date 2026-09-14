@@ -22,11 +22,11 @@ island and out to a results screen, and two automated checks now walk that path:
 one in a single process, one across two processes over a real socket.
 
 ```
-bash tools/smoke_test.sh        # 22 checks, ~2 minutes, finds Godot by itself
+bash tools/smoke_test.sh        # 26 checks, ~2 minutes, finds Godot by itself
 bash tools/net_test.sh          # two processes, one socket. Not in the gate
 ```
 
-`smoke_test.sh` is the gate and it passes, 22 of 22. `net_test.sh` passes all
+`smoke_test.sh` is the gate and it passes, 26 of 26. `net_test.sh` passes all
 nine of its stages (88 + 32 assertions) and still reports FAIL, deliberately:
 one transient engine warning survives at match start, and it holds itself to
 "the engine stayed quiet" rather than "the assertions passed". D-022 explains

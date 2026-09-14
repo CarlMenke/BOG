@@ -201,6 +201,14 @@ check "full playthrough" "playthrough: PASS" \
 check "rust playthrough" "playthrough: PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/playthrough.tscn -- rust
 also "rust playthrough" "arena: Rust built from"
+# And on Kopje Crossing, the map with no `.glb` behind it (D-042). It is the
+# same `arena.gd` branch as Rust, which is exactly why it gets its own run: the
+# branch is shared but the build is not, and a hundred and twenty-three
+# platforms laid out of a table in `_ready` is a very different thing to fall
+# over from a scene that was imported once. The `also` is the same guard as
+# Rust's — that it was the savanna that got built, not the island in its place.
+check "safari playthrough" "playthrough: PASS"     "$GODOT" --headless --path "$GODOT_ROOT" tools/playthrough.tscn -- safari
+also "safari playthrough" "arena: Kopje Crossing built from"
 echo
 
 # These need a real window: Godot's headless driver uses the dummy rasteriser
@@ -296,6 +304,17 @@ check "leaving a match cleanly" "leave PASS" \
 check "rust spawns and collision" "preview_map: PASS" \
     "$GODOT" --path "$GODOT_ROOT" --resolution 900x1100 --script tools/snapshot.gd -- \
     res://tools/preview_map.tscn "$GODOT_LOG_DIR/rust_top.png" 30 top
+# The same eight-pad physics check on Kopje Crossing, through the same tool
+# with the map named. The triangle floor it asserts is Rust's number and the
+# savanna clears it three times over, so it still means "the geometry was
+# built" rather than "some geometry exists".
+check "safari spawns and collision" "preview_map: PASS"     "$GODOT" --path "$GODOT_ROOT" --resolution 900x1100 --script tools/snapshot.gd --     res://tools/preview_map.tscn "$GODOT_LOG_DIR/safari_top.png" 30 top     map=res://scenes/world/maps/safari.tscn
+# And the thing that makes the savanna a map rather than a pile of rocks: every
+# landing has the rock the table promises under it, a Gub fits on it, and it can
+# be reached from the ground on the Gub's real jump arc, which the report reads
+# off `Gub` rather than typing. A change to the jump that strands a platform
+# fails here instead of in a match. About six seconds, so it earns its place.
+check "safari parkour reachability" "parkour_report: PASS"     "$GODOT" --path "$GODOT_ROOT" --resolution 1000x1000 --script tools/snapshot.gd --     res://tools/parkour_report.tscn "$GODOT_LOG_DIR/safari_parkour.png" 30 top
 # Walks the menu into a real match and asks Input.mouse_mode what happened. It
 # grabs the physical mouse for about a second on the way through, which is the
 # only way to prove the thing it proves: every other check here stands the arena
