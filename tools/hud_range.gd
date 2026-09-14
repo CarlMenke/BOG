@@ -20,7 +20,18 @@ extends Node
 ## Modes: hud, hud_teams, hud_cooldown, hud_letters, hud_hold, hud_elder,
 ##        killfeed, scoreboard, scoreboard_letters, pause, results,
 ##        results_letters, dead, spectate,
-##        hud_letters_teams, scoreboard_letters_teams, results_letters_teams.
+##        hud_letters_teams, scoreboard_letters_teams, results_letters_teams,
+##        reload_timer.
+##
+## `reload_timer` is the one mode here that prints a verdict and sits in the
+## gate (D-054). It throws a real spear and reads the spear tile every frame of
+## the throw: nothing through the windup, a sweep and a number matching the real
+## recharge after the release, both gone the frame the spear is back, and a
+## crosshair with no ring anywhere in it throughout. Its PASS needs about 260
+## ticks; a picture of the tile mid-recharge is the same mode at 130:
+##
+##     ... --resolution 1600x900 --script tools/snapshot.gd -- \
+##         res://tools/hud_range.tscn out/reload_timer.png 130 reload_timer
 ##
 ## The three `*_letters_teams` modes are the letters pictures under Teams, where
 ## the lamps, a team row on the scoreboard and a team row on the results table
@@ -60,7 +71,17 @@ const LETTER_MODES := ["hud_letters", "hud_hold", "scoreboard_letters",
 const TEAM_LETTER_MODES := ["hud_letters_teams", "scoreboard_letters_teams",
 	"results_letters_teams"]
 
+## `reload_timer`'s recharge, and how far the printed seconds may sit from the
+## real remaining time. A tenth is the task's own tolerance and is also what the
+## tile's rounding (tenths, always up) can cost.
+const RELOAD_RECHARGE := 3.0
+const RELOAD_TOLERANCE := 0.105
+## Anything on the crosshair with one of these in its name would be the ring
+## coming back under another label (D-036).
+const RING_WORDS := ["ring", "recharge", "cooldown", "progress", "fraction", "cycle"]
+
 var _mode: String = "hud"
+var _reload_failures: PackedStringArray = []
 var _hud: CanvasLayer
 
 
@@ -91,15 +112,18 @@ func _stage() -> void:
 		Net.config.team_count = 2
 	if _mode == "hud_cooldown":
 		# Long enough that the recharge is still running when the snapshot is
-		# taken; the range's own 1.5 s is over before then. Since D-036 all this
-		# proves is that the spear tile goes dark and stays dark — there is no
-		# ring left to time, which is the whole point of keeping the shot.
+		# taken; the range's own 1.5 s is over before then. Since D-054 the dark
+		# tile also carries its recharge fill and seconds; `reload_timer` is the
+		# mode that measures them.
 		Net.config.spear_recharge = 6.0
 	if LETTER_MODES.has(_mode):
 		Net.config.win_condition = MatchConfig.WinCondition.LETTERS
 	if _mode == "spectate":
 		Net.config.win_condition = MatchConfig.WinCondition.LIVES
 		Net.config.lives = 3
+	if _mode == "reload_timer":
+		# The shipping three, set rather than inherited from the range's 1.5.
+		Net.config.spear_recharge = RELOAD_RECHARGE
 	if _mode == "hud_elder":
 		# The shipping twenty, so the picture is of the bar a player actually
 		# sees rather than of one this file invented a length for.
@@ -125,6 +149,9 @@ func _stage() -> void:
 		"hud_elder":
 			_stage_kills()
 			_stage_elder()
+		"reload_timer":
+			_stage_kills()
+			_run_reload_timer()
 		"dead":
 			_stage_kills()
 			var dying: Dictionary = MatchState.stats.get(1, {})
@@ -320,6 +347,134 @@ func _stage_elder() -> void:
 	Net.config.elder_drop_chance = 1.0
 	MatchState.report_kill(victim, Net.local_id(), Gub.Cause.SPEAR,
 		player.global_position + player.facing() * 1.2, Vector3.FORWARD * 18.0, "Spine1")
+
+
+## The spear tile's recharge readout, measured over one real throw (D-054).
+##
+## Read off the tile itself -- `recharge_progress()` and `recharge_text()` are
+## what `_draw` draws -- rather than recomputed from `GubCombat`, because the
+## thing under test is the HUD's choice of *when* to hand the tile a timer, and
+## recomputing it here would be testing a copy of that choice.
+func _run_reload_timer() -> void:
+	var slot := _hud.get_node("%SpearSlot") as AbilitySlot
+	var crosshair := _hud.get_node("%Crosshair") as Crosshair
+	var combat := _local_combat()
+	if slot == null or crosshair == null or combat == null:
+		print("hud_range: no spear tile, crosshair or local Gub - reload_timer FAIL")
+		return
+	_check_formatting()
+	_check_crosshair(crosshair, "before the throw")
+
+	var wait := 0
+	while not combat.has_spear() and wait < 120:
+		await RenderingServer.frame_pre_draw
+		wait += 1
+	await RenderingServer.frame_pre_draw
+	await RenderingServer.frame_pre_draw
+	_expect(combat.has_spear(), "no spear to throw after %d frames" % wait)
+	_expect_no_timer(slot, "ready")
+
+	combat.try_throw_spear()
+	_expect(combat.is_winding_up(), "the click did not start a windup")
+	var windup_frames := 0
+	while combat.is_winding_up() and windup_frames < 120:
+		await RenderingServer.frame_pre_draw
+		# Read just before the frame is drawn, so after the HUD's `_process` and
+		# the throw's own: what is checked is what is about to be on screen.
+		if combat.is_winding_up():
+			_expect_no_timer(slot, "windup frame %d" % windup_frames)
+			_check_crosshair(crosshair, "windup frame %d" % windup_frames)
+		windup_frames += 1
+	var released_at := Time.get_ticks_msec() * 0.001
+	_expect(windup_frames > 10, "the windup lasted only %d frames" % windup_frames)
+
+	var samples := 0
+	var saw_mid := false
+	while not combat.has_spear() and samples < 600:
+		await RenderingServer.frame_pre_draw
+		samples += 1
+		if combat.has_spear():
+			break
+		var remaining := combat.spear_cooldown()
+		var progress := slot.recharge_progress()
+		var text := slot.recharge_text()
+		if samples % 20 == 0:
+			_check_crosshair(crosshair, "recharge frame %d" % samples)
+		# The first frame after the release is the HUD's first look at it.
+		if samples < 2 or remaining <= 0.0:
+			continue
+		var elapsed := Time.get_ticks_msec() * 0.001 - released_at
+		if not saw_mid and elapsed >= RELOAD_RECHARGE * 0.5:
+			saw_mid = true
+			_expect(progress > 0.0 and progress < 1.0,
+				"mid-recharge sweep is %.3f, not between 0 and 1" % progress)
+			_expect(absf(progress - (1.0 - remaining / RELOAD_RECHARGE)) < 0.05,
+				"sweep %.3f against %.2f s left of %.1f" % [progress, remaining, RELOAD_RECHARGE])
+			_expect(text.is_valid_float() and absf(float(text) - remaining) <= RELOAD_TOLERANCE,
+				"mid-recharge the tile reads \"%s\" with %.2f s left" % [text, remaining])
+			_expect(absf(float(text) - (RELOAD_RECHARGE - elapsed)) <= RELOAD_TOLERANCE + 0.05,
+				"the tile reads \"%s\" %.2f s after the release of a %.1f s recharge" % [
+					text, elapsed, RELOAD_RECHARGE])
+			print("hud_range: %.2f s after the release the tile reads \"%s\" over a %.2f sweep (%.2f s left)" % [
+				elapsed, text, progress, remaining])
+		# Every frame, not only the middle one: the number must never be missing
+		# or off the real remaining time while the spear is away.
+		elif not text.is_valid_float() or absf(float(text) - remaining) > RELOAD_TOLERANCE:
+			_expect(false, "recharge frame %d: tile reads \"%s\" with %.2f s left" % [
+				samples, text, remaining])
+	_expect(saw_mid, "never sampled the middle of the recharge")
+	_expect(combat.has_spear(), "the spear never came back")
+	await RenderingServer.frame_pre_draw
+	_expect_no_timer(slot, "spear back")
+	_check_crosshair(crosshair, "spear back")
+
+	if _reload_failures.is_empty():
+		print("hud_range: %d windup frames with no timer, recharge timed, gone when back - reload_timer PASS" % windup_frames)
+	else:
+		for failure in _reload_failures:
+			print("hud_range: %s" % failure)
+		print("hud_range: %d reload check(s) failed - reload_timer FAIL" % _reload_failures.size())
+
+
+## The number's format, on a tile of its own that never enters the tree, so the
+## live one under test is not touched. Tenths below ten seconds rounded up, whole
+## seconds above, nothing at all when armed or given no total.
+func _check_formatting() -> void:
+	var tile := (load("res://scenes/ui/ability_slot.tscn") as PackedScene).instantiate() as AbilitySlot
+	var cases := [
+		[false, 1.41, 3.0, "1.5"], [false, 0.01, 3.0, "0.1"], [false, 2.0, 3.0, "2.0"],
+		[false, 12.3, 15.0, "13"], [false, 9.97, 15.0, "10"], [true, 1.0, 3.0, ""],
+		[false, 1.0, 0.0, ""], [false, 0.0, 3.0, ""],
+	]
+	for case: Array in cases:
+		tile.set_armed(case[0], case[1], case[2])
+		_expect(tile.recharge_text() == case[3], "set_armed(%s, %s, %s) reads \"%s\", want \"%s\"" % [
+			case[0], case[1], case[2], tile.recharge_text(), case[3]])
+	tile.free()
+
+
+func _expect_no_timer(slot: AbilitySlot, when: String) -> void:
+	_expect(slot.recharge_progress() < 0.0 and slot.recharge_text().is_empty(),
+		"%s: tile shows sweep %.3f and \"%s\"" % [when, slot.recharge_progress(), slot.recharge_text()])
+
+
+## The crosshair's whole surface: no property and no method whose name is a
+## ring's, and `set_state` still takes the one boolean and nothing to divide.
+func _check_crosshair(crosshair: Crosshair, when: String) -> void:
+	var script := crosshair.get_script() as Script
+	for entry: Dictionary in script.get_script_property_list() + script.get_script_method_list():
+		var name_lower := String(entry["name"]).to_lower()
+		for word: String in RING_WORDS:
+			if name_lower.contains(word):
+				_expect(false, "%s: the crosshair has \"%s\"" % [when, entry["name"]])
+		if entry["name"] == "set_state" and entry.has("args"):
+			_expect((entry["args"] as Array).size() == 1,
+				"%s: Crosshair.set_state takes %d arguments" % [when, (entry["args"] as Array).size()])
+
+
+func _expect(ok: bool, failure: String) -> void:
+	if not ok and not _reload_failures.has(failure):
+		_reload_failures.append(failure)
 
 
 ## Somebody for the local Gub to kill. Found rather than named: the combat range

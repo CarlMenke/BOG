@@ -22,11 +22,11 @@ island and out to a results screen, and two automated checks now walk that path:
 one in a single process, one across two processes over a real socket.
 
 ```
-bash tools/smoke_test.sh        # 49 checks, ~2 minutes, finds Godot by itself
+bash tools/smoke_test.sh        # 50 checks, ~2 minutes, finds Godot by itself
 bash tools/net_test.sh          # two processes, one socket; ~45 s, run by hand
 ```
 
-`smoke_test.sh` is the gate and it passes, 49 of 49. `net_test.sh` is kept out
+`smoke_test.sh` is the gate and it passes, 50 of 50. `net_test.sh` is kept out
 of it to keep the gate fast; run it by hand after touching networking, the lobby
 or the results screen. It passes all eleven stages (177 + 32 assertions), ten of
 which end in a rematch, with the engine quiet in both processes — the error it

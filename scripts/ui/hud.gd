@@ -225,28 +225,40 @@ func _refresh_abilities() -> void:
 		_abilities.modulate = Color(1, 1, 1, 0.25)
 		return
 	_abilities.modulate = Color(1, 1, 1, 1.0 if MatchState.is_alive(Net.local_id()) else 0.3)
-	# One call, one boolean. `has_spear()` already covers the recharge *and* a
-	# letter hold (D-035), so the bar never has to decide which of the two is
-	# taking the spear away — and cannot disagree with the hand about it.
+	# `has_spear()` is still the one boolean for lit or dark — it covers the
+	# recharge *and* a letter hold (D-035), so the tile cannot disagree with the
+	# hand about whether there is a spear. What D-054 adds on top is the timer,
+	# and it is handed over only when the recharge is genuinely the reason:
+	#
+	# * Not during the windup. The spear is still in the hand and the clock the
+	#   tile would read is the whole cycle, which is exactly the "already gone"
+	#   ring D-036 threw away. Timed from the release, the sweep starts empty
+	#   and the number starts at the full recharge, which is the truth.
+	# * Not during a hold or a capture carry (D-051 made a carry a hold with no
+	#   clock). A recharge that reaches zero over a Gub still holding a card
+	#   would be a countdown to nothing; the lamps are that player's timer.
 	#
 	# For an Elder the tile is a different weapon and the same sentence: the
-	# glyph swaps to a bolt and `has_lightning()` is the one boolean, covering
-	# the longer recharge and the hold in exactly the same way (D-038). No
-	# sweep, no countdown, no second kind of readout on this bar — which is the
-	# condition D-036 kept the tile on in the first place.
+	# glyph swaps to a bolt and its own clock and denominator are used (D-038,
+	# D-040).
+	var spear_timed := not combat.is_winding_up() and not combat.is_holding_letter()
 	if combat.is_elder():
 		# "Bolt" rather than "Lightning": the tile is 62 px wide and the other
 		# three labels are Spear, Shield and Lure. A caption that overhangs its
 		# own square would be the one thing on this bar that does not line up.
 		_spear_slot.set_kind(AbilitySlot.Kind.LIGHTNING, "Bolt")
-		_spear_slot.set_armed(combat.has_lightning())
+		_spear_slot.set_armed(combat.has_lightning(),
+			combat.lightning_cooldown() if spear_timed else 0.0,
+			Net.config.lightning_cooldown)
 	else:
 		_spear_slot.set_kind(AbilitySlot.Kind.SPEAR, "Spear")
-		_spear_slot.set_armed(combat.has_spear())
+		_spear_slot.set_armed(combat.has_spear(),
+			combat.spear_cooldown() if spear_timed else 0.0,
+			Net.config.spear_recharge)
 	# Stock, not cooldowns (D-032). The count is the readout; the use-delay only
 	# dims the tile, because it is a floor on spend rate and not something worth
-	# timing a fight around. Note what is *not* passed: no totals, because
-	# nothing here divides any more.
+	# timing a fight around. Note what is *not* passed: no totals — the spear
+	# tile is the only thing on this bar that divides (D-054).
 	_mushroom_slot.set_stock(combat.mushroom_count(), combat.mushroom_use_cooldown() > 0.0)
 	_lure_slot.set_stock(combat.lure_count(), combat.lure_use_cooldown() > 0.0)
 

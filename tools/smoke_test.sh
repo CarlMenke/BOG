@@ -407,6 +407,17 @@ check "mushroom deploys" "snapshot: wrote" \
 check "letter cards are meshes" "cards PASS" \
     "$GODOT" --path "$GODOT_ROOT" --resolution 640x360 --script tools/snapshot.gd -- \
     res://tools/combat_range.tscn "$GODOT_LOG_DIR/cards.png" 60 cards
+# The spear tile's recharge readout (D-054), read off the tile every frame of
+# one real throw: no sweep and no number through the windup, a sweep between 0
+# and 1 and seconds within a tenth of the real remaining time once the spear has
+# left the hand, both gone the frame it is back, and a crosshair with nothing
+# ring-shaped anywhere in its script at any point. 270 ticks: the verdict lands
+# around 240. The picture worth looking at is the same mode at 130:
+#     ... --resolution 1600x900 --script tools/snapshot.gd -- \
+#         res://tools/hud_range.tscn out/reload_timer.png 130 reload_timer
+check "spear reload timer on the tile" "reload_timer PASS" \
+    "$GODOT" --path "$GODOT_ROOT" --resolution 640x360 --script tools/snapshot.gd -- \
+    res://tools/hud_range.tscn "$GODOT_LOG_DIR/reload_timer.png" 270 reload_timer
 # Holds W and requires the Gub to have gone somewhere. Movement was wired into
 # the testbeds and nowhere else, so every testbed could be walked around while
 # the real arena could not, and the abilities — which read their own keys —

@@ -12,24 +12,28 @@ extends Control
 ## The key cap is read out of the input map rather than typed in, so a slot can
 ## never claim Q while the action is bound to something else.
 ##
-## **Nothing here sweeps or counts down any more.** A slot used to eat a wedge
-## out of itself and print the seconds left; both are gone for the reason the
-## crosshair's ring is (D-036). What replaced them is two shapes, and a slot is
-## whichever one its caller talks to it in:
+## **The first slot times its recharge; nothing else here does** (D-054, which
+## amends D-036). A slot used to eat a wedge out of itself and print the seconds
+## left, and D-036 took both away with the crosshair's ring. The ring stays gone.
+## The tile got half of it back, on the user's word, and on the condition that
+## makes it honest where the ring never was: the clock starts at the *release*,
+## not at the click. Through the windup the tile is dark and says nothing, which
+## is true — the spear is still in the hand and nothing is growing back yet.
+## A slot is whichever of these its caller talks to it in:
 ##
-## * `set_armed` — the spear. Lit or dark and nothing else, because
-##   `GubCombat.has_spear()` is one expression covering both the recharge and a
-##   letter hold (D-035), and there is nothing in it worth timing against.
+## * `set_armed` — the spear, or the Elder's bolt. Lit or dark, plus, while the
+##   weapon is genuinely growing back, a fill that climbs clockwise from twelve
+##   o'clock and the seconds left printed over the glyph. The caller decides
+##   when that is; this file only draws what it is handed.
 ## * `set_stock` — the mushroom and the lure. They are carried stock now
 ##   (D-032), so the count is the readout, and an empty slot is the ordinary
 ##   state at the start of every life rather than a fault to be alarmed by.
 ##
 ## **The first slot changes what it is.** An Elder has no spear — it throws
 ## lightning instead (D-038) — so the same tile swaps its glyph and its label
-## and goes on being binary lit/dark off `has_lightning()`. That decision is the
-## whole of D-036 applied to a second weapon: the readiness of the thing in your
-## hand is one boolean, and a bar that started drawing a second kind of timer
-## for the Elder would be re-importing exactly what that entry deleted.
+## and gets the same treatment off the bolt's own clock. One tile in one place
+## on the bar that timed one weapon and not the other would be two rules for one
+## square.
 
 enum Kind { SPEAR, MUSHROOM, LURE, LIGHTNING }
 
@@ -44,6 +48,17 @@ const COUNT_FONT_SIZE := 22
 const COUNT_LEFT := 6.0
 const COUNT_BASELINE := 57.0
 
+## The recharge readout. The number sits over the centre of the glyph, which is
+## the one place on the square the eye already goes to, and is outlined because
+## it is drawn over a glyph and a fill and has to read against both.
+const TIMER_FONT_SIZE := 22
+const TIMER_OUTLINE := 8
+const TIMER_BASELINE := 35.0
+## How much of the Gub's yellow the recovered part of the fill carries. Enough to
+## see the wedge from the corner of the eye, little enough that the dark glyph
+## under it still reads as "not yet".
+const SWEEP_ALPHA := 0.26
+
 @export var kind: Kind = Kind.SPEAR
 ## The input action this slot fires, used for the key cap.
 @export var action: String = "throw_spear"
@@ -57,6 +72,11 @@ var _count: int = -1
 ## Usable this instant. For the spear that is `has_spear()`; for stock it is
 ## "there is at least one and the use-delay has passed".
 var _lit: bool = true
+## Seconds until the weapon is back, and what that is out of. Both zero means
+## "no timer to draw" — ready, winding up, or dark for some other reason (a
+## letter hold) that this clock does not measure.
+var _remaining: float = 0.0
+var _total: float = 0.0
 
 @onready var _cap: Label = %KeyCap
 @onready var _name: Label = %Name
@@ -82,9 +102,39 @@ func set_kind(next: Kind, next_label: String) -> void:
 	queue_redraw()
 
 
-## The spear: armed or not. No denominator, because nothing is being divided.
-func set_armed(is_armed: bool) -> void:
+## The spear or the bolt: armed or not, and — only while it is growing back —
+## how long that has left out of how long it takes. Leave both at zero for "no
+## timer": the HUD does exactly that through a windup and through a hold.
+func set_armed(is_armed: bool, remaining: float = 0.0, total: float = 0.0) -> void:
+	if is_armed or remaining <= 0.0 or total <= 0.0:
+		remaining = 0.0
+		total = 0.0
+	remaining = minf(remaining, total)
+	if not is_equal_approx(remaining, _remaining) or total != _total:
+		_remaining = remaining
+		_total = total
+		queue_redraw()
 	_apply(-1, is_armed)
+
+
+## Fraction of the recharge already done, 0..1, or -1 while no timer is shown.
+## Read by `tools/hud_range.gd`, which is why it exists as a function rather than
+## as arithmetic inside `_draw`.
+func recharge_progress() -> float:
+	if _total <= 0.0:
+		return -1.0
+	return clampf(1.0 - _remaining / _total, 0.0, 1.0)
+
+
+## The seconds as drawn, or "" while no timer is shown. Tenths under ten
+## seconds, whole seconds above, and always rounded *up*: a tile reading "0.0"
+## over a spear that is not back yet would be a lie by a rounding.
+func recharge_text() -> String:
+	if _total <= 0.0:
+		return ""
+	if _remaining < 9.95:
+		return "%.1f" % (ceilf(_remaining * 10.0 - 0.0001) / 10.0)
+	return "%d" % int(ceilf(_remaining))
 
 
 ## Carried stock. `busy` is the short floor between two placements
@@ -96,8 +146,9 @@ func set_stock(count: int, busy: bool) -> void:
 
 
 ## Called by the HUD every frame, so it repaints only when something actually
-## changed. Both inputs are discrete now, which means that is genuinely rare
-## rather than "every frame the number moved a hundredth".
+## changed. Count and lit are discrete, so on its own that is genuinely rare; the
+## one tile with a recharge running repaints every frame of it in `set_armed`,
+## because there the number really does move every frame.
 func _apply(count: int, lit: bool) -> void:
 	if count == _count and lit == _lit:
 		return
@@ -114,7 +165,11 @@ func _draw() -> void:
 	# The border is the state at a glance from the corner of the eye; the count
 	# is the detail you look at when you are deciding whether to spend one.
 	draw_rect(box, UIPalette.faded(tint, 0.85 if _lit else 0.5), false, 1.5)
+	if _total > 0.0:
+		_draw_sweep(recharge_progress())
 	_draw_glyph(tint)
+	if _total > 0.0:
+		_draw_timer()
 
 	if _count >= 0:
 		_draw_count()
@@ -141,6 +196,34 @@ func _draw_count() -> void:
 		else UIPalette.faded(UIPalette.TEXT, 0.30)
 	draw_string(get_theme_default_font(), Vector2(COUNT_LEFT, COUNT_BASELINE),
 		str(_count), HORIZONTAL_ALIGNMENT_LEFT, -1, COUNT_FONT_SIZE, colour)
+
+
+## The recovered part of the recharge as a wedge of the square, clockwise from
+## twelve o'clock. Traced out to the square's edge rather than drawn as a circle,
+## so at nearly-full it fills the corners too instead of leaving four dark
+## triangles that read as "not quite".
+func _draw_sweep(progress: float) -> void:
+	if progress <= 0.0:
+		return
+	var half := SIZE * 0.5
+	var c := Vector2(half, half)
+	var points := PackedVector2Array([c])
+	var steps := maxi(2, int(ceil(progress * 90.0)))
+	for i in steps + 1:
+		var angle := -PI * 0.5 + TAU * progress * float(i) / float(steps)
+		var dir := Vector2(cos(angle), sin(angle))
+		points.append(c + dir * (half / maxf(absf(dir.x), absf(dir.y))))
+	draw_colored_polygon(points, UIPalette.faded(UIPalette.GUB, SWEEP_ALPHA))
+
+
+func _draw_timer() -> void:
+	var font := get_theme_default_font()
+	var text := recharge_text()
+	var at := Vector2(0.0, TIMER_BASELINE)
+	draw_string_outline(font, at, text, HORIZONTAL_ALIGNMENT_CENTER, SIZE,
+		TIMER_FONT_SIZE, TIMER_OUTLINE, Color(0.0, 0.0, 0.0, 1.0))
+	draw_string(font, at, text, HORIZONTAL_ALIGNMENT_CENTER, SIZE,
+		TIMER_FONT_SIZE, UIPalette.TEXT)
 
 
 func _draw_glyph(tint: Color) -> void:

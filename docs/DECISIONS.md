@@ -2015,7 +2015,9 @@ cursor"* — on the condition that the hand is genuinely empty while reloading,
 which was checked and is true. So the tile is lit when `has_spear()` and dark
 when not, with no arc, no seconds and no number, and that one call covers a
 recharge and a hold without the bar ever having to decide which is taking the
-spear away.
+spear away. *(**Amended by D-054:** the tile times the recharge again, with a fill
+and the seconds left, but only from the release. It is silent through the
+windup and under a hold. The crosshair stays ring-free.)*
 
 **The mushroom and lure tiles show counts, because they are stock and not
 cooldowns** (D-032). `set_cooldown(remaining, total)` was the wrong shape for
@@ -4135,3 +4137,80 @@ The ring is photographed at `out/blast.png` (tick 43). 48 checks to 49.
   ring is the part a distance can be read off.
 - **Each peer drawing the ring from its own config.** A client with a stale
   config would draw a ring that disagrees with who died.
+
+## D-054 — The spear tile times its recharge from the release; the crosshair stays a plain reticle
+*Amends D-036. The slot half of what D-036 deleted is back, for the first tile
+only; the crosshair half stays gone.*
+
+The user: *"There should be an indicator into how long until you get a spear
+reload ONLY in the bottom bar menu, not on the main cursor"*, then, asked
+whether that meant a timer: *"go ahead and do the reload timer as well, it
+should be on top of the thing that shows whether its up or not in the bottom of
+the players screen"*.
+
+D-036's complaint was never that a recharge timer is wrong. It was that both
+rings it tried were wrong about the windup: one sat full through the 0.71 s
+windup and then dropped, the other swept from the click while the spear was
+still in the hand. The tile's timer answers that by **not running during the
+windup at all**.
+
+**What the tile shows** (`AbilitySlot.set_armed(lit, remaining, total)`, fed by
+`HUD._refresh_abilities`):
+- **Ready:** lit, nothing else. Unchanged.
+- **Winding up:** dark, no fill, no number. The spear is still in the hand and
+  nothing is growing back yet, so the tile says nothing.
+- **Recharging** (after the release): dark, a faint yellow wedge that fills
+  clockwise from twelve o'clock out to the square's corners, and the seconds
+  left printed over the glyph with a black outline. The denominator is
+  `spear_recharge` and the remaining time is `spear_cooldown()`, which the
+  release resets to exactly `spear_recharge`. So the fill starts empty and the
+  number starts at the full recharge. Tenths under ten seconds, whole seconds
+  above, always rounded up, so it never reads "0.0" over a spear that is not
+  back. Both disappear the frame `has_spear()` is true.
+- **Holding a letter, or carrying one in Capture G·U·B** (D-051 made a carry a
+  hold with no clock): dark, no timer, as before. A recharge counting down to
+  zero over a Gub who still cannot throw would be a countdown to nothing, and
+  the lamps are that player's timer.
+- **The Elder:** the same tile with the bolt glyph gets the same treatment off
+  `lightning_cooldown()` over `MatchConfig.lightning_cooldown` (D-040's 1 s),
+  also silent through its own windup. It is one tile in one place. Timing one
+  weapon in that square and not the other would be two rules for one square,
+  and the code is the same call with a different clock.
+
+Mushroom and lure tiles are unchanged: stock counts, per the user's "spear".
+
+`GubCombat.spear_cycle()` is still what the click spends. Its comment claimed
+the HUD divided by it, which has been untrue since D-036 and is now corrected.
+Nothing on screen divides by the whole cycle.
+
+**Checked** by `tools/hud_range.tscn -- reload_timer`, in the gate as "spear
+reload timer on the tile". It throws a real spear with a 3 s recharge and reads
+the tile's own `recharge_progress()` and `recharge_text()` just before each
+frame is drawn:
+- every windup frame (44 of them): no sweep and no number;
+- every recharge frame: the number is within 0.1 s of `spear_cooldown()`, and
+  halfway through the sweep is between 0 and 1, matches `1 - remaining/total`,
+  and the number matches the time since the release (it printed "1.5" at 1.51 s,
+  over a 0.51 sweep);
+- the frame the spear is back: both gone;
+- throughout: the `Crosshair` script has no property or method named for a ring,
+  a recharge, a cooldown, a progress, a fraction or a cycle, and `set_state`
+  still takes one argument;
+- the number format, on a detached tile: 1.41 reads "1.5", 0.01 reads "0.1",
+  12.3 reads "13", and armed or zero-total reads "".
+
+With the windup gate removed from the HUD, the check fails on windup frame 0
+(the tile read "3.0"). The tile is photographed mid-recharge at
+`out/reload_timer.png` (tick 130). 49 checks to 50.
+
+### Rejected
+- **Timing from the click.** That is D-036's second ring moved to the bottom
+  of the screen. The sweep would move while the spear is visibly still in the
+  hand.
+- **Showing the recharge (full, not moving) during the windup.** That is
+  D-036's first ring. A tile that holds "3.0" for 0.71 s and then starts
+  counting reads as a stall.
+- **Anything on the crosshair.** The user said "ONLY in the bottom bar".
+- **A draining fill.** D-036 settled that nothing on this HUD drains. The
+  letter hold fills, and so does this.
+- **Timing the recharge under a letter hold.** See above.

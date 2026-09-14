@@ -319,9 +319,10 @@ func is_holding_letter() -> bool:
 
 
 ## The whole spear cycle: the windup you have already committed to, plus the
-## recharge that follows it. The HUD divides by this rather than by the recharge
-## alone, so the ring sweeps from the click instead of sitting full through the
-## windup and then jumping down when the spear finally goes.
+## recharge that follows it. What the click spends, so a second click during the
+## windup is refused. Nothing on the HUD divides by it any more: the spear tile
+## times the recharge alone, from the release, and says nothing during the
+## windup (D-054) — this denominator was the ring that swept from the click.
 func spear_cycle() -> float:
 	return GubAnimator.THROW_RELEASE_TIME + _config.spear_recharge
 
@@ -488,9 +489,9 @@ func try_throw_spear() -> void:
 		return
 
 	_windup_release_at = _now() + GubAnimator.THROW_RELEASE_TIME
-	# The input has been spent whether or not the spear has left yet, so the ring
-	# starts sweeping on the click. A crosshair that sits ready through half a
-	# second of windup only invites the second click that will be refused.
+	# The input has been spent whether or not the spear has left yet, so the
+	# click spends it. A tile that sits lit through half a second of windup only
+	# invites the second click that will be refused.
 	_spear_ready_at = _now() + spear_cycle()
 	cooldowns_changed.emit()
 
