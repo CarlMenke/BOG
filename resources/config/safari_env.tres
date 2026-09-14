@@ -1,4 +1,4 @@
-[gd_resource type="Environment" load_steps=3 format=3 uid="uid://cq2gubsafarienv"]
+[gd_resource type="Environment" load_steps=2 format=3 uid="uid://cq2gubsafarienv"]
 
 ; Environment for Kopje Crossing. Noon on a high savanna, and the brightest
 ; thing in the game by some way — Rust is mid-afternoon in a container yard and
@@ -41,28 +41,30 @@
 ; walking in from a spawn pad forty metres away. The height fog at -3 with a
 ; density of 0.015 is doing the opposite job — it pools in the bottom of the
 ; cliff skirt so the edge of the world has some depth to it.
+;
+; Two of the fog numbers moved when the map got a world beyond its own cliff —
+; a plain and three ranges out to 1.1 km — and neither of them is the density,
+; which is exactly the number a player's readability depends on and is therefore
+; exactly the number left alone. At 40 m the fog still covers 3.5 % of a
+; silhouette, as it did.
+;
+;   * `fog_light_color` came down from (0.86, 0.80, 0.66) to (0.74, 0.70, 0.62).
+;     At 0.0009 a surface a kilometre out is 60 % fog, and 60 % of the old
+;     colour through this tonemap is white — so the whole horizon blew out and
+;     the distant ranges disappeared into it. It is a haze now rather than a
+;     light.
+;   * `fog_aerial_perspective` went from 0.20 to 0.45, which sends distant
+;     geometry toward the *sky behind it* rather than toward one flat colour.
+;     That is what real aerial perspective is, and on a map that now has three
+;     ranges receding into a sky with weather in it, it is the difference
+;     between depth and a wash.
 
-[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_safarisky"]
-sky_top_color = Color(0.28, 0.5, 0.86, 1)
-sky_horizon_color = Color(0.88, 0.82, 0.68, 1)
-sky_curve = 0.13
-sky_energy_multiplier = 1.0
-ground_bottom_color = Color(0.45, 0.36, 0.25, 1)
-ground_horizon_color = Color(0.78, 0.68, 0.5, 1)
-ground_curve = 0.04
-ground_energy_multiplier = 1.0
-sun_angle_max = 12.0
-sun_curve = 0.08
-use_debanding = true
-
-[sub_resource type="Sky" id="Sky_safari"]
-sky_material = SubResource("ProceduralSkyMaterial_safarisky")
-radiance_size = 3
+[ext_resource type="Sky" path="res://resources/config/safari_sky.tres" id="1_safari_sky"]
 
 [resource]
 resource_name = "SafariEnvironment"
 background_mode = 2
-sky = SubResource("Sky_safari")
+sky = ExtResource("1_safari_sky")
 background_energy_multiplier = 1.35
 ambient_light_source = 3
 reflected_light_source = 2
@@ -96,11 +98,11 @@ glow_hdr_threshold = 2.0
 glow_hdr_scale = 2.0
 glow_hdr_luminance_cap = 10.0
 fog_enabled = true
-fog_light_color = Color(0.86, 0.8, 0.66, 1)
+fog_light_color = Color(0.74, 0.7, 0.62, 1)
 fog_light_energy = 1.0
 fog_sun_scatter = 0.12
 fog_density = 0.0009
-fog_aerial_perspective = 0.2
+fog_aerial_perspective = 0.45
 fog_sky_affect = 0.0
 fog_height = -3.0
 fog_height_density = 0.015

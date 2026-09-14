@@ -320,6 +320,12 @@ const BUSHES := 40
 const PEBBLES := 250
 const FLOWERS := 10
 
+## The kit's grass atlas, named because the wind shader loads it directly
+## rather than inheriting it off a kit material. See `safari_wind.gdshader`: the
+## atlas has green tufts in it and this map has no green in it, and taking the
+## green out needs a desaturate, which a `StandardMaterial3D` cannot do.
+const GRASS_TEXTURE := "res://assets/Stylized_Nature_MegaKitStandard/glTF/Grass.png"
+
 const GRASS_CELL := 1.1
 const GRASS_JITTER := 0.42
 const GRASS_CHANCE_BAND := 0.90
@@ -349,6 +355,74 @@ const TRUNK_SMALL_BAOBAB := 0.9
 const TRUNK_DEAD := 0.45
 const TRUNK_FRACTION := 0.62
 
+# --- the world beyond the cliff ------------------------------------------
+## Kopje Crossing is a plateau standing on a cliff, and until this the cliff
+## stood on nothing: the rim ended, the fog closed over it, and behind that was
+## the lower hemisphere of the sky. On the map with the longest sightlines in
+## the game that is the one thing you cannot leave empty, because the whole
+## reading of "high" depends on there being a low to be high above. A player
+## who walks to the edge here should be able to see that the drop goes
+## somewhere.
+##
+## So: the plain the cliff lands on, three rings of range standing behind it,
+## and a band of heat shimmer between the two. None of it is collision, none of
+## it casts a shadow (the sun's shadow distance is 130 m and the nearest of
+## these starts at 260), and all of it is in `StaticMap.BACKDROP_GROUP` so
+## `preview_map` still frames the map and not the county (D-057).
+
+## Where the plain is, and how big a square of it. -9.4 is a hand's breadth
+## under `CLIFF_DEPTH`, so the cliff lands on it rather than hovering over it,
+## and 3600 m is far enough that its own edge is under the haze from anywhere on
+## the plateau. `void_height` is -14, so this is scenery a falling Gub passes
+## through and dies below, exactly as before.
+const PLAIN_Y := -9.4
+const PLAIN_SIZE := 3600.0
+
+## The ranges, near to far: radius, how many teeth round the ring, the lowest
+## and highest crest, how far the skirt drops below the crest, and the colour of
+## the crest against the colour of its foot.
+##
+## They get *taller* with distance, which sounds backwards and is not. A 15 m
+## ridge at 260 m subtends 3.3 degrees and an 82 m range at 1100 m subtends 4.3,
+## so the far one is bigger in the frame as well as bluer — and a pair like that
+## is what says the second one is a long way behind the first rather than a
+## copy of it. The colours run the other way, from the sand's own warm grey at
+## 260 m to something almost indistinguishable from the haze at 1100.
+##
+## The skirt exists so the ring has a bottom edge that is below the plain and
+## therefore never visible; the crest is all you ever see. Each ring is one
+## mesh, unshaded, vertex-coloured: three draw calls for the whole horizon.
+const RANGES: Array[Dictionary] = [
+	{"radius": 260.0, "teeth": 46, "low": 1.5, "high": 15.0, "skirt": 30.0,
+		"crest": Color(0.36, 0.29, 0.20), "foot": Color(0.55, 0.49, 0.39)},
+	{"radius": 560.0, "teeth": 32, "low": 7.0, "high": 40.0, "skirt": 66.0,
+		"crest": Color(0.36, 0.37, 0.40), "foot": Color(0.60, 0.59, 0.56)},
+	{"radius": 1100.0, "teeth": 24, "low": 18.0, "high": 82.0, "skirt": 130.0,
+		"crest": Color(0.44, 0.50, 0.59), "foot": Color(0.67, 0.70, 0.73)},
+]
+## Two sine terms and a jitter, so a crest line is a crest line and not a saw.
+const RANGE_JITTER := 0.30
+
+## The heat shimmer band. See `safari_heat.gdshader` for why the radius is the
+## whole design: the plateau rim is at 48 m and the furthest spawn pad at 44, so
+## a band at 120 m is behind every player, every prop and every spear on the map
+## from every camera, and the depth test keeps it there.
+const SHIMMER_RADIUS := 120.0
+const SHIMMER_HEIGHT := 16.0
+const SHIMMER_CENTRE_Y := 1.0
+
+# --- the air -------------------------------------------------------------
+## Where the two dust devils may stand: out in the open band, clear of the pads,
+## clear of every landing, and not in the water. Thrown rather than stated for
+## the same reason the acacias are — a stated pair would have to be re-checked
+## by hand every time a zone moved.
+const DEVIL_BAND_INNER := 24.0
+const DEVIL_BAND_OUTER := 42.0
+const DEVIL_SPAWN_KEEPOUT := 11.0
+const DEVIL_PLATFORM_KEEPOUT := 7.0
+const DEVILS := 2
+
+
 # ------------------------------------------------------------------ state ---
 
 ## Every landing on the map is `StaticMap.platforms`, filled before `super()`.
@@ -364,14 +438,27 @@ var dressing_counts: Dictionary = {}
 var _rng := RandomNumberGenerator.new()
 var _mesh_cache: Dictionary = {}
 
+## The atmosphere layers draw from their own generator rather than from `_rng`.
+##
+## Not fastidiousness: `_rng` is consumed in a fixed order and every existing
+## dressing layer's positions are a function of where in that order it sits, so
+## inserting a new consumer anywhere would move forty acacias and twenty-nine
+## boulders. A second stream seeded off the same constant keeps the old map
+## exactly where it was and is just as deterministic across peers.
+var _air_rng := RandomNumberGenerator.new()
+
 var _rock_material: StandardMaterial3D
 var _path_material: StandardMaterial3D
-var _ground_material: StandardMaterial3D
-var _grass_material: StandardMaterial3D
-var _bush_material: StandardMaterial3D
-var _acacia_leaf: StandardMaterial3D
-var _baobab_leaf: StandardMaterial3D
-var _water_material: StandardMaterial3D
+var _ground_material: ShaderMaterial
+var _plain_material: ShaderMaterial
+var _grass_material: ShaderMaterial
+var _bush_material: ShaderMaterial
+var _acacia_leaf: ShaderMaterial
+var _baobab_leaf: ShaderMaterial
+var _water_material: ShaderMaterial
+## One seamless grey noise tile, shared by the sand, the plain, the ripples and
+## the shimmer. Four shaders, one 512 px texture, one upload.
+var _noise: NoiseTexture2D
 
 ## Everything with a collider that the dressing has already put down, as
 ## (x, z, radius). Grass and pebbles test against it so nothing sprouts out of
@@ -382,6 +469,7 @@ var _occupied: Array[Vector3] = []
 func _ready() -> void:
 	var started := Time.get_ticks_msec()
 	_rng.seed = SEED
+	_air_rng.seed = SEED ^ 0x415448
 	_build_materials()
 	_read_spawns()
 
@@ -691,6 +779,10 @@ func _build_dressing(parent: Node3D) -> void:
 	_build_grass(parent)
 	_build_pebbles(parent)
 	_build_flowers(parent)
+	# Last, and drawing from `_air_rng`, so everything above keeps the exact
+	# positions it had before any of this existed.
+	_build_backdrop(_group("Backdrop"))
+	_build_air(_group("Air"))
 
 
 func _build_water(parent: Node3D) -> void:
@@ -929,6 +1021,155 @@ func _build_flowers(parent: Node3D) -> void:
 	dressing_counts["Flowers"] = transforms.size()
 
 
+# -------------------------------------------------------------- the world ---
+
+## Everything outside the cliff: the plain, three ranges, and the shimmer band.
+##
+## All of it after `super()`, all of it in `StaticMap.BACKDROP_GROUP`, none of
+## it casting. Five draw calls and about six hundred triangles for a horizon.
+func _build_backdrop(parent: Node3D) -> void:
+	var plain := MeshInstance3D.new()
+	plain.name = "Plain"
+	var quad := PlaneMesh.new()
+	quad.size = Vector2(PLAIN_SIZE, PLAIN_SIZE)
+	plain.mesh = quad
+	plain.position = Vector3(0.0, PLAIN_Y, 0.0)
+	plain.material_override = _plain_material
+	plain.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	plain.add_to_group(BACKDROP_GROUP)
+	parent.add_child(plain)
+
+	for i: int in RANGES.size():
+		_range_ring(parent, i, RANGES[i])
+
+	# The heat. An open cylinder outside everything a player can stand on; see
+	# `safari_heat.gdshader` for why that radius is the whole safety argument.
+	var band := CylinderMesh.new()
+	band.top_radius = SHIMMER_RADIUS
+	band.bottom_radius = SHIMMER_RADIUS
+	band.height = SHIMMER_HEIGHT
+	band.radial_segments = 48
+	band.rings = 1
+	band.cap_top = false
+	band.cap_bottom = false
+	var shimmer := MeshInstance3D.new()
+	shimmer.name = "HeatShimmer"
+	shimmer.mesh = band
+	shimmer.position = Vector3(0.0, SHIMMER_CENTRE_Y, 0.0)
+	var heat := ShaderMaterial.new()
+	heat.shader = load("res://resources/shaders/safari_heat.gdshader")
+	heat.set_shader_parameter("shimmer_noise", _noise)
+	heat.set_shader_parameter("band_centre", SHIMMER_CENTRE_Y)
+	heat.set_shader_parameter("band_half", SHIMMER_HEIGHT * 0.45)
+	heat.set_shader_parameter("glare_color", Color(0.95, 0.90, 0.78))
+	heat.set_shader_parameter("glare", 0.035)
+	shimmer.material_override = heat
+	shimmer.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	shimmer.add_to_group(BACKDROP_GROUP)
+	parent.add_child(shimmer)
+
+
+## One ring of range: a closed strip of teeth, crest above and skirt below.
+##
+## The crest line is two sine terms at incommensurate rates plus a jitter, which
+## is enough to look like erosion and cheap enough to be four lines. Vertex
+## colours rather than a texture: what these have to do is fade from a crest
+## colour into a foot colour that matches the haze they stand in, and that is a
+## gradient down each tooth and nothing else.
+func _range_ring(parent: Node3D, index: int, spec: Dictionary) -> void:
+	var radius := float(spec["radius"])
+	var teeth := int(spec["teeth"])
+	var low := float(spec["low"])
+	var high := float(spec["high"])
+	var skirt := float(spec["skirt"])
+	var crest: Color = spec["crest"]
+	var foot: Color = spec["foot"]
+
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+
+	var tops := PackedFloat32Array()
+	for i: int in teeth:
+		var t := TAU * float(i) / float(teeth)
+		var shape := 0.5 + 0.34 * sin(t * 3.0 + float(index) * 1.7) \
+			+ 0.16 * sin(t * 7.0 - float(index) * 2.3)
+		shape += _air_rng.randf_range(-RANGE_JITTER, RANGE_JITTER)
+		tops.append(low + (high - low) * clampf(shape, 0.0, 1.0))
+
+	for i: int in teeth:
+		var j := (i + 1) % teeth
+		var a := TAU * float(i) / float(teeth)
+		var b := TAU * float(j) / float(teeth)
+		var pa := Vector3(cos(a) * radius, 0.0, sin(a) * radius)
+		var pb := Vector3(cos(b) * radius, 0.0, sin(b) * radius)
+		var ya := tops[i]
+		var yb := tops[j]
+		var base := minf(ya, yb) - skirt
+		# Inward-facing: these are only ever seen from inside the ring.
+		var quad_points := [
+			Vector3(pb.x, base, pb.z), Vector3(pa.x, base, pa.z),
+			Vector3(pa.x, ya, pa.z), Vector3(pb.x, yb, pb.z)]
+		var quad_colors := [foot, foot, crest, crest]
+		for tri: Array in [[0, 1, 2], [0, 2, 3]]:
+			for k: int in tri:
+				st.set_color(quad_colors[k])
+				st.set_normal(Vector3.UP)
+				st.add_vertex(quad_points[k])
+
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.vertex_color_use_as_albedo = true
+	# Unshaded on purpose. These are 260 m to 1100 m away, well outside the
+	# sun's 130 m shadow distance, and a lit surface out there would shade by
+	# whichever way its flat faces happened to point — which on a silhouette is
+	# the one thing that gives away that it is geometry and not distance.
+	mat.cull_mode = BaseMaterial3D.CULL_BACK
+	# The colours in `RANGES` are sRGB, like every other colour in this file.
+	# Vertex colours are taken as linear unless a material says otherwise, and a
+	# horizon drawn a stop and a half too pale is a horizon nobody can see.
+	mat.vertex_color_is_srgb = true
+	var node := MeshInstance3D.new()
+	node.name = "Range%d" % index
+	node.mesh = st.commit()
+	node.material_override = mat
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	node.add_to_group(BACKDROP_GROUP)
+	parent.add_child(node)
+
+
+## The air: dust, devils, midges, birds and the audio hooks, all of it in
+## `safari_ambience.gd`. This end of it only decides where the two dust devils
+## are allowed to stand, because the map is the only thing that knows where its
+## landings and its pads are.
+func _build_air(parent: Node3D) -> void:
+	var spots: Array[Vector2] = []
+	for i: int in DEVILS:
+		for attempt: int in PLACEMENT_ATTEMPTS:
+			var at := _air_band_point(DEVIL_BAND_INNER, DEVIL_BAND_OUTER)
+			if not _spawn_clear(at, DEVIL_SPAWN_KEEPOUT) or _in_water(at):
+				continue
+			if _nearest_platform(at) < DEVIL_PLATFORM_KEEPOUT or not _on_plateau(at):
+				continue
+			# Not on top of each other, either: two devils four metres apart is
+			# one wide devil with a seam in it.
+			var apart := true
+			for taken: Vector2 in spots:
+				apart = apart and at.distance_to(taken) > 22.0
+			if not apart:
+				continue
+			spots.append(at)
+			break
+	SafariAmbience.build(parent, SEED, PLATEAU_RADIUS, WATER_CENTRE, WATER_RADIUS, spots)
+	dressing_counts["DustDevils"] = spots.size()
+
+
+## `_band_point`, but drawn from the atmosphere's own generator. See `_air_rng`.
+func _air_band_point(inner: float, outer: float) -> Vector2:
+	var angle := _air_rng.randf_range(0.0, TAU)
+	var r := sqrt(_air_rng.randf_range(inner * inner, outer * outer))
+	return Vector2(cos(angle), sin(angle)) * r
+
+
 # -------------------------------------------------------------- primitives ---
 
 ## One landing: a flat kit slab, a pillar under it, and a `Platform` record.
@@ -1038,7 +1279,7 @@ func _piece(parent: Node3D, model: String, at: Vector3, size: Vector3, yaw: floa
 ## on layer 1 — because cover has to be reliable, and a tree you can walk through
 ## but not shoot through is worse than no tree at all.
 func _tree(parent: Node3D, model: String, at: Vector2, size: float, yaw: float,
-		trunk_radius: float, leaf: StandardMaterial3D) -> MeshInstance3D:
+		trunk_radius: float, leaf: Material) -> MeshInstance3D:
 	var mesh := _kit(model)
 	if mesh == null:
 		return null
@@ -1120,7 +1361,7 @@ func _convex_body(parent: Node3D, from: MeshInstance3D) -> void:
 
 
 func _multimesh(parent: Node3D, model: String, transforms: Array[Transform3D],
-		shadows: bool, material: StandardMaterial3D) -> void:
+		shadows: bool, material: Material) -> void:
 	if transforms.is_empty():
 		return
 	var mesh := _kit(model)
@@ -1161,66 +1402,126 @@ func _build_materials() -> void:
 	if _path_material != null:
 		_path_material.albedo_color = Color(1.0, 0.86, 0.66)
 
-	_grass_material = _kit_material("Grass_Wispy_Short", 0)
-	if _grass_material != null:
-		_grass_material.albedo_color = Color(1.0, 0.84, 0.42)
-		# Grass cards are two-sided by nature: culling one face of a billboard
-		# is a blade that disappears when you walk around it.
-		_grass_material.cull_mode = BaseMaterial3D.CULL_DISABLED
-
+	# Everything rooted in the sand gets the wind shader. See
+	# `safari_wind.gdshader`: it leans with a wave crossing the map, and it
+	# desaturates before it tints, which is the only way the kit's green grass
+	# tufts become dry-season straw rather than dark green ones.
+	_grass_material = _wind_material(load(GRASS_TEXTURE), Color(1.0, 0.86, 0.46),
+		0.78, 0.15, 0.55)
 	# The bush is the twisted tree's leaf card on a small mesh, so it had the
-	# same red problem as the baobab and gets the same fix.
-	_bush_material = _kit_material("Bush_Common", 0)
-	if _bush_material != null:
-		_bush_material.albedo_texture = load(LEAVES_TWISTED_WHITE)
-		_bush_material.albedo_color = BUSH_TINT
-		_bush_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	# same red problem as the baobab and gets the same fix — the white card,
+	# tinted, rather than the tree's own red-painted one.
+	_bush_material = _wind_material(load(LEAVES_TWISTED_WHITE), BUSH_TINT,
+		0.25, 0.10, 0.9)
+	# The canopies. A bigger lever arm and a slower, wider lean than the grass:
+	# a thorn tree's crown moves as one thing and moves late.
+	_acacia_leaf = _wind_material(load(LEAVES_NORMAL_WHITE), ACACIA_TINT,
+		0.0, 0.26, 4.2)
+	_baobab_leaf = _wind_material(load(LEAVES_TWISTED_WHITE), BAOBAB_TINT,
+		0.0, 0.20, 5.0)
 
-	_acacia_leaf = _leaf_material("CommonTree_1")
-	if _acacia_leaf != null:
-		_acacia_leaf.albedo_texture = load(LEAVES_NORMAL_WHITE)
-		_acacia_leaf.albedo_color = ACACIA_TINT
-	_baobab_leaf = _leaf_material("TwistedTree_2")
-	if _baobab_leaf != null:
-		_baobab_leaf.albedo_texture = load(LEAVES_TWISTED_WHITE)
-		_baobab_leaf.albedo_color = BAOBAB_TINT
+	_noise = _sand_texture()
+	# The plateau and the plain beyond the cliff: the same shader at two scales,
+	# so the land below is obviously the same land.
+	# The three sands, and they are **derived from the map as it was**, not
+	# chosen. The old material was an `albedo_color` of (0.80, 0.68, 0.44)
+	# multiplying a generated noise texture ramped between (0.72, 0.58, 0.36) and
+	# (0.90, 0.80, 0.56), and the product of those is an albedo that ran from
+	# about (0.68, 0.58, 0.27) to (0.76, 0.61, 0.33) in sRGB — a span of eight
+	# points in red and five in blue, which is exactly why 96 m of it read as one
+	# flat colour. So the middle of this palette is the middle of that, and the
+	# two ends are opened out four times as far: the same sand, with somewhere to
+	# go.
+	_ground_material = _sand_material(38.0, 4.3, 0.52, true,
+		Color(0.53, 0.41, 0.26), Color(0.70, 0.59, 0.38), Color(0.84, 0.75, 0.55))
+	_plain_material = _sand_material(340.0, 46.0, 6.0, false,
+		Color(0.48, 0.42, 0.33), Color(0.58, 0.53, 0.43), Color(0.66, 0.62, 0.53))
 
-	_ground_material = StandardMaterial3D.new()
-	_ground_material.albedo_color = Color(0.80, 0.68, 0.44)
-	_ground_material.albedo_texture = _ground_texture()
-	# One noise tile every ten metres. The UVs are already xz/8, so 0.8 of that
-	# is a ten-metre period — big enough to break the flatness up, small enough
-	# that the repeat is not a pattern anyone can see from the summit.
-	_ground_material.uv1_scale = Vector3(0.8, 0.8, 1.0)
-	_ground_material.roughness = 1.0
-	_ground_material.cull_mode = BaseMaterial3D.CULL_BACK
-
-	_water_material = StandardMaterial3D.new()
-	_water_material.albedo_color = Color(0.20, 0.48, 0.70, 0.82)
-	_water_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	_water_material.roughness = 0.05
-	_water_material.metallic = 0.1
-	_water_material.cull_mode = BaseMaterial3D.CULL_BACK
+	_water_material = ShaderMaterial.new()
+	_water_material.shader = load("res://resources/shaders/safari_water.gdshader")
+	_water_material.set_shader_parameter("ripple_noise", _noise)
+	_water_material.set_shader_parameter("centre_xz", WATER_CENTRE)
+	_water_material.set_shader_parameter("radius_metres", WATER_RADIUS)
+	# sRGB, converted on the way in — see `_sand_material`.
+	_water_material.set_shader_parameter("shallow_color", Color(0.44, 0.36, 0.20, 0.78))
+	_water_material.set_shader_parameter("deep_color", Color(0.17, 0.24, 0.20, 0.94))
+	_water_material.set_shader_parameter("sheen_color", Color(0.70, 0.79, 0.92))
+	# 0.55 rather than the shader's 0.85: at 0.85 the sky came back off the
+	# surface hard enough to bury the silt under it, and the point of the silt is
+	# that this is the last water on a plateau in the dry season.
+	_water_material.set_shader_parameter("sheen", 0.55)
 
 
-## Sand, as a noise texture rather than a flat colour. A 96 m plateau of one
-## albedo reads as a floor tile from the summit; one octave of noise between two
-## sands is all it takes for it to read as ground.
-func _ground_texture() -> NoiseTexture2D:
+## The one noise tile, grey, seamless, shared by four shaders.
+##
+## It carries no colour any more. It used to be ramped between two sands and
+## used directly as an albedo; now the sand shader samples it at three scales
+## and does the colour itself, which is what let the map stop being one
+## ten-metre tile of mottling (see `safari_ground.gdshader`). Fractal rather
+## than a single octave, because two of the three scales it is sampled at want
+## detail inside the tile.
+func _sand_texture() -> NoiseTexture2D:
 	var noise := FastNoiseLite.new()
 	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
-	noise.frequency = 0.05
+	noise.frequency = 0.012
+	noise.fractal_octaves = 4
+	noise.fractal_gain = 0.52
 	noise.seed = SEED
-	var ramp := Gradient.new()
-	ramp.set_color(0, Color(0.72, 0.58, 0.36))
-	ramp.set_color(1, Color(0.90, 0.80, 0.56))
 	var texture := NoiseTexture2D.new()
 	texture.noise = noise
 	texture.seamless = true
 	texture.width = 512
 	texture.height = 512
-	texture.color_ramp = ramp
 	return texture
+
+
+## A sand material at three stated scales and a palette. `damp` is whether it
+## draws the wet ring at the waterhole — the plateau does, the plain does not.
+##
+## The plain gets its own colours as well as its own scales, and that is the
+## whole of how the edge of the map reads. It is the *same land*, so it cannot
+## be a different colour; it is 150 m to 1.5 km away through hot air, so it has
+## to be paler, cooler and much flatter in contrast than the ground under your
+## feet. Aerial perspective, done in the palette rather than left to the fog,
+## because the fog on this map is deliberately thin (see `safari_env.tres`) and
+## turning it up to bury the plain would bury a player at forty metres with it.
+func _sand_material(patch: float, mottle: float, grain: float, damp: bool,
+		deep: Color, mid: Color, pale: Color) -> ShaderMaterial:
+	var mat := ShaderMaterial.new()
+	mat.shader = load("res://resources/shaders/safari_ground.gdshader")
+	mat.set_shader_parameter("sand_noise", _noise)
+	# Stated here rather than left to the shader's own defaults, and the reason
+	# is the one thing about `source_color` that catches everybody: a default
+	# written in the shader source is taken as **linear**, and a `Color` set from
+	# here is taken as sRGB and converted. Write (0.65, 0.47, 0.22) as a default
+	# and the ground comes out at sRGB (0.83, 0.71, 0.51) — which is how this
+	# map's sand turned white the first time.
+	mat.set_shader_parameter("sand_deep", deep)
+	mat.set_shader_parameter("sand_mid", mid)
+	mat.set_shader_parameter("sand_pale", pale)
+	mat.set_shader_parameter("damp_color", Color(0.31, 0.23, 0.13))
+	mat.set_shader_parameter("patch_metres", patch)
+	mat.set_shader_parameter("mottle_metres", mottle)
+	mat.set_shader_parameter("grain_metres", grain)
+	mat.set_shader_parameter("damp_centre", WATER_CENTRE)
+	mat.set_shader_parameter("damp_radius", (WATER_RADIUS + 6.0) if damp else 0.0)
+	mat.set_shader_parameter("damp_strength", 0.8 if damp else 0.0)
+	return mat
+
+
+## One instance of the wind shader: the texture it wears, the colour it is
+## tinted, how far its sample is dragged toward grey first, how far the tip
+## leans, and how tall the thing is that is leaning.
+func _wind_material(texture: Texture2D, tint: Color, dryness: float,
+		sway: float, height: float) -> ShaderMaterial:
+	var mat := ShaderMaterial.new()
+	mat.shader = load("res://resources/shaders/safari_wind.gdshader")
+	mat.set_shader_parameter("albedo_texture", texture)
+	mat.set_shader_parameter("tint", tint)
+	mat.set_shader_parameter("dryness", dryness)
+	mat.set_shader_parameter("sway_metres", sway)
+	mat.set_shader_parameter("sway_height", height)
+	return mat
 
 
 func _kit_material(model: String, surface: int) -> StandardMaterial3D:
@@ -1234,19 +1535,6 @@ func _kit_material(model: String, surface: int) -> StandardMaterial3D:
 	# the map is rasterised twice.
 	copy.cull_mode = BaseMaterial3D.CULL_BACK
 	return copy
-
-
-func _leaf_material(model: String) -> StandardMaterial3D:
-	var mesh := _kit(model)
-	if mesh == null:
-		return null
-	for surface: int in mesh.get_surface_count():
-		var source := mesh.surface_get_material(surface) as StandardMaterial3D
-		if source != null and String(source.resource_name).contains("Leaves"):
-			var copy := source.duplicate() as StandardMaterial3D
-			copy.cull_mode = BaseMaterial3D.CULL_DISABLED
-			return copy
-	return null
 
 
 # ------------------------------------------------------------------- tests ---
