@@ -201,6 +201,23 @@ also "a spear cannot kill the Elder" "control PASS"
 # Headless, and it quits itself around tick 280.
 check "a respawn hands back nothing" "respawn PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- respawn
+# The camera, kept out of the scenery (D-045). A player: "too frequently the
+# camera is inside meshes and stuff when there are meshes behind the character".
+# Seven legs — a wall on each shoulder walked along, a corner, under a canopy and
+# at its edge, a wall at the Gub's back with the view swung and flicked through
+# it, and a low tunnel walked through — 1,700 frames, each asked three ways
+# whether the lens is inside collision: a point query, a near-plane sphere, and a
+# ray from the eye (is it behind a wall). Against the old spring arm 942 of the
+# 1,700 fail, in every leg.
+#
+# The `also` is the half that keeps D-025 true: the point a throw is aimed at is
+# required, every frame, to be the one the *unobstructed* camera would give for
+# the same view. With `aim_ray` taken from the pulled-in lens instead, 1,030
+# frames fail. `--fixed-fps 60` so a tick of view-turning is the same on every
+# machine; headless, about two seconds.
+check "camera stays out of the scenery" "clip PASS" \
+    "$GODOT" --headless --fixed-fps 60 --path "$GODOT_ROOT" tools/camera_range.tscn
+also "camera stays out of the scenery" "aim PASS"
 # Menu to results screen, through the real scenes and the real autoloads. The
 # only check here that can notice a *join* coming apart — a lobby that never
 # hands off to the arena, an arena that never registers, a results screen that

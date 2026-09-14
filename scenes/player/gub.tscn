@@ -63,12 +63,10 @@ script = ExtResource("3_anim")
 top_level = true
 script = ExtResource("4_cam")
 
-[node name="SpringArm3D" type="SpringArm3D" parent="CameraRig"]
-spring_length = 3.6
-margin = 0.28
+[node name="Boom" type="Node3D" parent="CameraRig"]
 
-[node name="Camera3D" type="Camera3D" parent="CameraRig/SpringArm3D"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.62, 0, 0)
+[node name="Camera3D" type="Camera3D" parent="CameraRig/Boom"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.62, 0, 3.6)
 fov = 75.0
 near = 0.05
 far = 400.0

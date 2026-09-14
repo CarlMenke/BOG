@@ -3285,3 +3285,94 @@ What loopback still cannot say: a client that is slow to *leave* the results
 screen over a real link, or a host that presses REMATCH while a client's own
 BACK TO LOBBY transition is mid-fade. The second is handled by `SceneFlow`'s
 pending request and was reasoned about, not run.
+
+## D-045 — The camera is swept as a sphere along the path it is actually on
+A player: *"too frequently the camera is inside meshes and stuff when there are
+meshes behind the character"*.
+
+**What the old rig did.** A `SpringArm3D` with no `shape`, so it cast a single
+ray down the middle of the boom — and then the `Camera3D` under it was moved
+0.62 m sideways (`_camera.position.x = _shoulder`), off the line that had been
+tested. A wall beside or behind the shoulder was never looked for. The arm also
+does its cast in its own physics step while the view is turned in `_process`, so
+a camera swung into a wall was placed from a direction that was already stale.
+
+**Measured before fixing.** `tools/camera_range.tscn` (new) walks the local Gub
+through seven legs — a wall on each shoulder walked along, a corner, under a
+canopy and at its edge, a wall at its back with the view swung and flicked
+through it, and a low tunnel — and asks every one of 1,700 frames, after the rig
+has placed its camera, whether the lens is inside the scenery: a point query at
+the camera, a 0.1 m sphere there (the near plane reaches about 0.09 m), and a ray
+from the Gub's eye to the camera (is it on the far side of a wall). Against the
+old rig 942 of 1,700 frames failed, and every leg failed: wall on the right
+86/200, on the left 24/200, corner 181/260, under the canopy 181/260, canopy edge
+182/260, back to a wall 98/260 (as much as 2.91 m behind a surface), tunnel
+190/260. With the new rig, 0 of 1,700.
+
+**What it does now** (`GubCamera._place_camera`). Two sphere sweeps, radius
+0.26 m, on world and camera-blocker layers only (`1 | 64`, as before — never
+players, projectiles or pickups): pivot out to the shoulder, then from wherever
+the shoulder got to back along the boom. Each is held a further 0.05 m off its
+first hit. So the shoulder offset cannot carry the lens through a wall either,
+and a ceiling or a canopy is the same sweep as a wall — looking down lifts the
+boom into it. It runs every frame after the view has turned. It pulls in to the
+hit at once and eases back out at `RETURN_RATE` 5 /s (exponential, about 0.46 s
+to 90 %), never further than that frame's sweep says is clear, so the ease cannot
+cross a surface. If the sphere does not fit even at the start (a head right under
+a low ceiling), that segment falls back to a ray rather than collapsing the
+camera into the Gub. The boom and shoulder lengths themselves did not change; the
+`SpringArm3D` node became a plain `Boom`.
+
+**The aim does not move** (D-025). `aim_ray` used to be projected from the
+`Camera3D`; it is now built from where the camera *would* be with nothing in the
+way — the rig's pivot, yaw and pitch, the full boom and shoulder, plus shake's
+offset because shake moves the crosshair too. It carries `clear_of`, the boom
+length, and `GubCombat._aim_point` starts its hit test that far along: anything
+nearer is behind the thrower. That second half is not optional. Without it, the
+wall that pushed the camera forward is the first thing on the unobstructed ray,
+and a Gub with its back to a wall would aim at the wall. It was also the old
+rig's behaviour by accident, since its lens was usually past that wall. The
+`MIN_AIM_DISTANCE` clamp, which only ever produced points behind the Gub from a
+camera 3.6 m back, no longer triggers. `look_at_point` solves from the same
+origin, so the testbeds that use it aim exactly as before.
+
+When the shoulder is squeezed in, the lens is off the aim ray, and a crosshair at
+the centre of the screen would sit up to a shoulder's width to one side of where
+the spear goes at every range. So in that case only, the lens is turned in to
+meet the aim ray where the aim ray meets the world (up to 60 m). The reticle stays
+on the thing being aimed at; the spear is unaffected either way.
+
+The range checks this too: every frame, `GubCombat._aim_point` has to be within
+1 cm of the point worked out independently from the unobstructed camera. 0 of
+1,700 frames off (worst 3 mm, float noise at 220 m). With `aim_ray` taken from the
+pulled-in lens instead, 1,030 of 1,700 frames are off, by up to 212 m — which is
+also why the check is worth having: it fails loudly on exactly the regression it
+exists for.
+
+In the gate as "camera stays out of the scenery", `clip PASS` and `aim PASS`,
+headless with `--fixed-fps 60`, about two seconds. 28 checks to 30.
+
+### Rejected
+- **Giving the `SpringArm3D` a `SphereShape3D`.** It still sweeps one line, the
+  middle of the boom, and the camera still is not on it; and it still updates on
+  its own physics step behind the view.
+- **Moving the shoulder offset onto the rig so the arm's line is the camera's.**
+  Then a wall beside the Gub is inside the arm's start and the whole boom
+  collapses, instead of just the shoulder.
+- **Easing in as well as out.** Every frame of easing in is a frame drawn from
+  inside the wall, which is the complaint.
+- **Aiming from the pulled-in lens with the old code path.** Where the pull-in is
+  straight down the boom the line is the same, but the shoulder squeeze moves the
+  line, and the range measured exactly that.
+- **A shorter boom.** Not asked for; this is collision only.
+
+### What this does not cover
+- The range is boxes. Rust and Kopje Crossing are trimeshes; a sphere sweep treats
+  those the same, but a thin single-sided face is only as good as the map's
+  collision.
+- Aiming (the 2.4 m boom and 0.48 m shoulder) is swept by the same code but is not
+  one of the legs.
+- In a tight space the lens can end up very close to the head: 0.23 m from the
+  pivot in the 2.6 m-wide, 2.2 m-high tunnel while looking down. It is outside the
+  scenery, but it is inside the Gub. The cave (PLAN 5.2) will want either more
+  headroom than that or the local Gub faded when the camera is that close.

@@ -3,9 +3,10 @@ extends Node3D
 ## Third-person camera rig. Lives under a `Gub`, and only wakes up for the Gub
 ## the local player owns.
 ##
-## Structure: this node yaws, the `SpringArm3D` under it pitches and pulls the
-## camera in when scenery gets between it and the Gub, and the `Camera3D` sits
-## off to one side so the Gub does not cover the crosshair.
+## Structure: this node yaws, the `Boom` under it pitches, and the `Camera3D`
+## sits at the end of the boom and off to one side so the Gub does not cover the
+## crosshair. When scenery gets between the Gub and where the camera wants to be,
+## the camera is pulled in along that same path — see `_place_camera` (D-045).
 ##
 ## The rig follows the body's *position* but never its rotation — the body's
 ## facing is a consequence of where you are moving, not of where you are
@@ -37,14 +38,39 @@ const ZOOM_SPEED := 8.0
 ## Radians per pixel at a sensitivity setting of 1.0.
 const SENSITIVITY_SCALE := 0.0022
 
-@onready var _arm: SpringArm3D = $SpringArm3D
-@onready var _camera: Camera3D = $SpringArm3D/Camera3D
+## Camera collision (D-045). The camera is swept to where it wants to be as a
+## sphere rather than a ray, along the path the Gub's head would see it by:
+## pivot out to the shoulder, then shoulder back along the boom. A ray down the
+## middle of the boom, which is what the `SpringArm3D` here used to cast, tested
+## a line the camera was never on — 0.62 m to one side of it.
+##
+## The world and anything marked as a camera blocker, never players: clipping to
+## a team-mate standing behind you is worse than seeing through them.
+const COLLISION_MASK := 1 | 64
+## Wide enough that the near plane (0.05 m out, about 0.09 m to its corners) is
+## nowhere near a face when the sphere is only just clear of it.
+const PROBE_RADIUS := 0.26
+## Held back from the first hit on top of the radius, so a camera resting
+## against a wall is not re-touching it on float noise every frame.
+const PROBE_MARGIN := 0.05
+## How fast a pulled-in camera goes back out, per second, as an exponential
+## ease. Coming *in* is never eased: any frame spent easing in is a frame drawn
+## from inside the wall.
+const RETURN_RATE := 5.0
+
+@onready var _boom: Node3D = $Boom
+@onready var _camera: Camera3D = $Boom/Camera3D
 
 var _body: Gub
 var _yaw: float = 0.0
 var _pitch: float = -0.12
 var _distance: float = DISTANCE_DEFAULT
 var _shoulder: float = SHOULDER_DEFAULT
+## How much of the shoulder and the boom the scenery currently allows. The
+## camera sits at these, and they only ever lag behind the scenery outwards.
+var _shoulder_clear: float = SHOULDER_DEFAULT
+var _boom_clear: float = DISTANCE_DEFAULT
+var _probe := PhysicsShapeQueryParameters3D.new()
 var _base_fov: float = 75.0
 var _shake_strength: float = 0.0
 var _shake_decay: float = 6.0
@@ -69,12 +95,10 @@ func _ready() -> void:
 
 	_base_fov = float(Settings.get_value("fov"))
 	_camera.current = true
-	_arm.spring_length = _distance
-	# The arm must be stopped by the world and by anything explicitly marked as
-	# a camera blocker, but never by players — clipping to a team-mate standing
-	# behind you is worse than seeing through them.
-	_arm.collision_mask = 1 | 64
-	_arm.margin = 0.28
+	var sphere := SphereShape3D.new()
+	sphere.radius = PROBE_RADIUS
+	_probe.shape = sphere
+	_probe.collision_mask = COLLISION_MASK
 	Settings.changed.connect(_on_setting_changed)
 
 
@@ -111,7 +135,8 @@ func _process(delta: float) -> void:
 	_apply_shake(delta)
 
 	rotation.y = _yaw
-	_arm.rotation.x = _pitch
+	_boom.rotation.x = _pitch
+	_place_camera(delta)
 
 	# Hand the body a view basis so WASD is relative to where you are looking,
 	# and tell it to face the camera while aiming so a throw goes to the
@@ -166,9 +191,80 @@ func _apply_zoom(delta: float) -> void:
 	var t := clampf(ZOOM_SPEED * delta, 0.0, 1.0)
 	_distance = lerpf(_distance, want_distance, t)
 	_shoulder = lerpf(_shoulder, want_shoulder, t)
-	_arm.spring_length = _distance
 	_camera.fov = lerpf(_camera.fov, want_fov, t)
-	_camera.position.x = _shoulder
+
+
+## Put the camera as far out along shoulder-then-boom as the scenery allows.
+##
+## Two sweeps, so the shoulder offset cannot carry the lens through a wall beside
+## the Gub either; and every frame, after the view has turned, so a camera swung
+## round into a wall is pulled in on the frame it would have gone in rather than
+## on the next physics tick. Pulled in at once to the first hit, let back out
+## with an ease, and never further out than this frame's sweep says is clear, so
+## the ease cannot carry it across a surface. Ceilings and canopies are the same
+## sweep: looking down lifts the boom into them like any wall.
+##
+## Only the lens moves. The aim is taken from the unobstructed camera
+## (`aim_ray`), so where a spear goes does not depend on any of this.
+func _place_camera(delta: float) -> void:
+	var space := get_world_3d().direct_space_state
+	var basis := _boom.global_transform.basis
+	var pivot := global_position
+
+	var shoulder_want := _shoulder * _sweep(space, pivot, basis.x * _shoulder)
+	_shoulder_clear = _ease_clear(_shoulder_clear, shoulder_want, delta)
+	var shoulder_point := pivot + basis.x * _shoulder_clear
+
+	var boom_want := _distance * _sweep(space, shoulder_point, basis.z * _distance)
+	_boom_clear = _ease_clear(_boom_clear, boom_want, delta)
+
+	_camera.transform = Transform3D(Basis.IDENTITY, Vector3(_shoulder_clear, 0.0, _boom_clear))
+	# With the shoulder squeezed in, the lens is off the aim ray, and a crosshair
+	# at the centre of the screen would sit a parallel shoulder's width from
+	# where the spear goes. Turn the lens in to meet the aim ray where the aim ray
+	# meets the world, so the reticle stays on the thing being aimed at.
+	if _shoulder - _shoulder_clear > 0.001:
+		var ray := aim_ray()
+		var origin: Vector3 = ray["origin"]
+		var direction: Vector3 = ray["direction"]
+		var far := origin + direction * 60.0
+		var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(
+			origin + direction * float(ray["clear_of"]), far, COLLISION_MASK))
+		var meet: Vector3 = far if hit.is_empty() else hit["position"]
+		if _camera.global_position.distance_squared_to(meet) > 0.01:
+			_camera.look_at(meet, basis.y)
+
+
+## Keep up with the scenery at once when it closes in; ease back when it opens.
+func _ease_clear(current: float, want: float, delta: float) -> float:
+	if want <= current:
+		return want
+	return lerpf(current, want, 1.0 - exp(-RETURN_RATE * delta))
+
+
+## The fraction of `motion` from `from` a camera can travel and stay at least
+## `PROBE_RADIUS + PROBE_MARGIN` clear of the scenery.
+##
+## If the sphere does not fit even at the start (a head right up under a low
+## ceiling) that segment falls back to a ray, which is what the old spring arm
+## did everywhere, rather than collapsing the camera into the Gub's skull.
+func _sweep(space: PhysicsDirectSpaceState3D, from: Vector3, motion: Vector3) -> float:
+	var length := motion.length()
+	if length < 0.001:
+		return 1.0
+	_probe.transform = Transform3D(Basis.IDENTITY, from)
+	_probe.motion = motion
+	var safe: float = space.cast_motion(_probe)[0]
+	if safe >= 1.0:
+		return 1.0
+	if safe <= 0.0 and not space.intersect_shape(_probe, 1).is_empty():
+		var hit := space.intersect_ray(
+			PhysicsRayQueryParameters3D.create(from, from + motion, COLLISION_MASK))
+		if hit.is_empty():
+			return 1.0
+		var reach := from.distance_to(hit["position"]) - PROBE_RADIUS - PROBE_MARGIN
+		return clampf(reach / length, 0.0, 1.0)
+	return clampf((safe * length - PROBE_MARGIN) / length, 0.0, 1.0)
 
 
 ## Called on kills, hard landings and nearby impacts.
@@ -190,29 +286,46 @@ func _apply_shake(delta: float) -> void:
 ## World-space ray the crosshair is pointing down. Everything the player throws
 ## is aimed with this, so the spear goes where the reticle is rather than where
 ## the Gub's hand happens to be.
+##
+## Taken from where the camera *would* be with nothing in the way — the full boom
+## and shoulder for this view — never from the lens `_place_camera` has pulled
+## in (D-045), because a wall behind the Gub must not move a spear (D-025).
+## `clear_of` is how far along the ray the Gub itself is. Anything nearer is
+## behind the thrower, so aiming skips it; without that, the wall that pushed
+## the camera forward would be the thing the throw aimed at.
 func aim_ray() -> Dictionary:
-	var viewport := get_viewport()
-	var centre := viewport.get_visible_rect().size * 0.5
+	var basis := _boom.global_transform.basis
+	var origin := global_position + basis * Vector3(_shoulder, 0.0, _distance)
+	# Shake moves the picture, and the crosshair with it, so it moves the ray.
+	origin += basis.x * _camera.h_offset + basis.y * _camera.v_offset
 	return {
-		"origin": _camera.project_ray_origin(centre),
-		"direction": _camera.project_ray_normal(centre),
+		"origin": origin,
+		"direction": -basis.z,
+		"clear_of": _distance,
 	}
 
 
 ## Swing the rig until the crosshair is on `point`.
 ##
-## Solved from the *camera's* position rather than the rig's, because the camera
-## sits behind and to one side: aiming the rig at a target leaves the crosshair a
-## shoulder-width off it at every distance. Moving the rig moves the camera, so
-## one call gets close and calling it again on the next frame converges — which
-## is what the scripted testbeds do.
+## Solved from the *camera's* position rather than the rig's — the unobstructed
+## camera `aim_ray` starts from — because the camera sits behind and to one side:
+## aiming the rig at a target leaves the crosshair a shoulder-width off it at
+## every distance. Moving the rig moves the camera, so one call gets close and
+## calling it again on the next frame converges — which is what the scripted
+## testbeds do.
 func look_at_point(point: Vector3) -> void:
-	var to := point - _camera.global_position
+	var to := point - (aim_ray()["origin"] as Vector3)
 	if to.length_squared() < 0.0001:
 		return
 	to = to.normalized()
 	_yaw = atan2(-to.x, -to.z)
 	_pitch = clampf(asin(clampf(to.y, -1.0, 1.0)), PITCH_MIN, PITCH_MAX)
+
+
+## Point the view by angle, as a mouse would. For scripted testbeds.
+func set_view(yaw_angle: float, pitch_angle: float) -> void:
+	_yaw = yaw_angle
+	_pitch = clampf(pitch_angle, PITCH_MIN, PITCH_MAX)
 
 
 func camera() -> Camera3D:

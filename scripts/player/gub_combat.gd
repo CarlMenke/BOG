@@ -374,8 +374,11 @@ func _aim_point() -> Vector3:
 	var direction: Vector3 = ray["direction"]
 
 	var space := _gub.get_world_3d().direct_space_state
+	# Tested from the Gub's own depth outwards: nothing behind the thrower can be
+	# thrown at, and the wall that pushed the camera in is behind it (D-045).
 	var query := PhysicsRayQueryParameters3D.create(
-		origin, origin + direction * MAX_AIM_DISTANCE)
+		origin + direction * float(ray.get("clear_of", 0.0)),
+		origin + direction * MAX_AIM_DISTANCE)
 	query.collision_mask = LAYER_WORLD | LAYER_PLAYER | LAYER_DEPLOYABLE
 	query.exclude = [_gub.get_rid()]
 	var hit := space.intersect_ray(query)
