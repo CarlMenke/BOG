@@ -4464,3 +4464,150 @@ whether the floods read in a fight are for a person.
   over the water.
 - **Shadowed floodlights.** Four more shadow maps for a small map whose long sun
   shadows already give every box its shape.
+
+## D-057 — Halcyon Wake: a yacht four decks high on a sea that is the void, where every deck has a walk up and a hop up
+The user: *"a yacht map"*.
+
+The map is **Halcyon Wake**, id `yacht`, the fifth row in `MapCatalog`: a
+superyacht at anchor on open water on a bright morning. Where Kopje Crossing is
+a rock garden you climb and Lantern Wharf a yard you run through, this one goes
+up: four decks on one hull, and the fight is over who holds which.
+
+**What it is.**
+- A hull lofted from cross-sections — keel, waterline, boot top, deck edge,
+  bulwark — 62 m from stem to transom and 13 m in beam, with a swim platform a
+  metre under the aft deck taking it to 66 m. The deck is full width from
+  amidships aft and narrows to the stem along `1 - t^2.2`; the waterline is
+  narrower and its stem 5 m further aft, which is the rake and the flare. White
+  topsides, a navy boot top, oxide below the water, a line of hull windows.
+- **Main deck, y = 0.** The foredeck (the tender on its chocks, Team 1's base),
+  two 1.85 m walkways under the upper deck's 1 m overhang, a salon cut straight
+  through the deckhouse — 9 m across, 6 m deep, 2.9 m to the ceiling, open both
+  sides — and the aft deck (Team 2's base). The salon is the only roofed space
+  and is deliberately wide and open-ended for the camera (D-045).
+- **Upper deck, y = 3.2.** A forward balcony, 2 m side walkways and an aft
+  terrace round the upper deckhouse. **Sun deck, y = 6.2**, with a hot tub, a
+  sun pad and G. **Flybridge, y = 8.8**, a 5 x 3.5 m open top under the mast.
+- Glass rails, a metre tall, are collision on every upper deck, with gaps only
+  where a stair or a step arrives. The main deck has a solid bulwark. Both are a
+  hop to clear, so going over on purpose is always possible; the swim platform
+  has no rail at all.
+- **The sea is the void.** It is a 2.4 km dressing quad at y = -3.0 with a
+  scrolling ripple shader, not collision; `void_height` is -3.5. A Gub that goes
+  over the side falls about half a second, disappears into the water and dies.
+- 2,225 triangles swept into collision in 3 ms, which is why its
+  `preview_map` line carries `min_triangles=1000` as the wharf's does.
+
+**Getting up: every deck has a walk and a hop.** The Gub has no step-up, so a
+staircase is a smooth ramp in the collision, never drawn, under a flight of
+0.2 m treads that are dressing and never collide (26-29 degrees against a 52
+degree `floor_max_angle`). A throwaway `CharacterBody3D` with the Gub's capsule,
+snap and floor angle walked up both stairs at run speed without a jump. The hop
+routes are white boxes flush against the face they lead to, each rise 1.0-1.3 m
+against a 1.69 m jump:
+
+| from -> to | walk | hop |
+|---|---|---|
+| main -> upper | twin stairs up from the aft deck | two steps (1.1, 2.2) at the deckhouse's forward face |
+| upper -> sun | a stair up the middle of the aft terrace | two steps (4.3, 5.3) along the upper deckhouse's forward face |
+| sun -> fly | — | a 7.5 m step each side at the flybridge's aft face |
+
+The stern team walks up; the bow team hops up faster, so the two ends are
+different rather than mirrored, which a hull cannot be anyway.
+
+**What the report reads.** A deck is not one landing — the report reads a
+landing as a circle, and one circle big enough for a deck promises floor over
+its side — so each open deck is declared as a 2.2 m grid of records, each kept
+0.55 m clear of anything standing on the deck and given the radius it can
+honestly promise. Stair records sit 0.08 m over the slope, which is what a 0.38 m
+capsule on a 30 degree slope needs. 75 landings: upper 31, sun 14, flybridge 4,
+swim platform 5, steps 10, stairs 8, and the tender, sun pad and hot tub. Every
+one is reachable from the main deck with hops and leaps alone: 69 hops and 6
+leaps along the tree (976 hop, 1,112 leap, 996 big edges in the graph). The
+mast top (14.2) and its yard (13.4) are `off_limits` — the one-tick dive from
+the flybridge reaches 13.03 — and nothing reaches either.
+
+**Sightlines.** A 62 m hull is a 62 m lane if nothing stands in it. The side
+walkways are the risk: each is filled for 2 m by a pillar beside the salon that
+holds the upper deck up, so the way past is a step into the salon and back out,
+and a crane pedestal stands in each at the aft deck. The tender blocks the
+middle of the foredeck. Longest eye-to-eye line between two Gubs on the main
+deck: **19.0 m** (a foredeck diagonal); from any landing: **35.8 m** (the
+tender's top to the sun pad). The gate holds them to 21 m and 38 m. The roof
+number is long on purpose and is the price of a map that is about height: the
+decks see down onto the ends of the ship, and the ends are where the cover is.
+No spawn pad sees any pad of the other base.
+
+**Over the side.** `parkour_report` grew an `overboard` row in `EXPECT`, set
+only for this map. Off both ends of every row of the ground grid it marches out
+to where the deck ends — under anything standing at the edge — steps a metre
+further, and casts from above the rail down past the void: 54 columns, none of
+which meets anything. It also asserts the void is under the lowest floor (the
+swim platform, -1.0) and within 5 m of it. That is the geometric half of void
+death; the other half, `MatchState` killing a Gub under `void_height`, is what
+every static map already relies on.
+
+**Capture G·U·B is declared** (D-051). Bases at (0, 0, -23) on the foredeck and
+(0, 0, 20.5) on the aft deck, 43.5 m apart, `base_radius` 4. U and B at
+(-2.8, 0, -0.5) and (2.8, 0, -0.5) in the salon either side of the bar; G at
+(0, 6.2, 2.1) on the sun deck above them — the first letter on any map that
+starts off the main floor. Eight pads, four per end, alternating bow and stern;
+forward sight down their noses is 4.8-16 m. `playthrough -- yacht` and
+`capture_preview -- yacht` report the layout as declared.
+
+### Lighting
+A clear morning at sea, so the brightest and bluest map: a white-gold sun 38
+degrees up over the starboard bow (energy 1.2, shadowed to 90 m), a deep blue
+sky that is the ambient, and a sea-coloured lower sky so the far edge of the sea
+does not show a seam under the fog. The white superstructure's shaded faces go
+cool blue and its lit faces stay warm, which is what separates one deck from the
+one under it. The window bands are a dark blue-grey rather than black: at black
+they read as doorways. `background_energy_multiplier` 1.0. Counted with PIL on
+`out/yacht_pad0.png`, `yacht_pad1.png`, `yacht_pad6.png`,
+`yacht_parkour_iso.png` and `yacht_top.png`: 0.00% of pixels below 8/255
+everywhere; 0.11% at 255 on the top view only, which is the sun's glint on the
+water.
+
+### What changed around it
+- `StaticMap.BACKDROP_GROUP`: meshes in it are left out when `preview_map`
+  measures a map's bounds. Without it the sea would make the top-down frame
+  2.4 km wide and move the "middle" the pads are checked facing.
+- `parkour_report`'s capsule-fit test stands the capsule 2 cm up. Exactly
+  touching, a step top whose height does not round cleanly in float32 (2.2 m,
+  7.5 m) read as blocked while a 3.2 m deck beside it passed; the test is for
+  something standing *in* the landing, not the landing itself. The ground
+  sampling the sightline check did is now `_ground_points`, shared with the
+  overboard check.
+
+### What checks it
+Six lines in the gate, 57 checks to 63: a playthrough on `yacht` with `also`s
+that Halcyon Wake was built, its capture layout passed and was declared;
+`preview_map` on its pads; and `parkour_report` on it. Renders are not
+committed: `out/yacht_top.png`, `yacht_side.png`, `yacht_pad0.png`,
+`yacht_pad1.png`, `yacht_pad5.png`, `yacht_pad6.png` from `preview_map`,
+`out/yacht_parkour.png`, `yacht_parkour_side.png`, `yacht_parkour_iso.png` from
+`parkour_report`, and `out/capture_base_yacht.png` from `capture_preview`.
+
+Nobody has played it. Whether the flybridge is a hill worth taking or a perch
+with no cover, whether the walkways are flanks or corridors, whether the camera
+copes in the salon and under the 1 m overhangs, and whether the stern team's
+stairs against the bow team's hop steps is fair, are for a person.
+
+### Rejected
+- **A mirrored yacht.** A hull has a bow and a stern; the two ends are balanced
+  by giving each a different way up, not by pretending they are the same.
+- **Enclosed interiors** — a closed salon, cabins, a wheelhouse you walk into.
+  The third-person camera and a one-hit spear both play badly in rooms; the one
+  roofed space is open at both ends.
+- **Stairs as real steps in the collision.** The Gub has no step-up; 0.2 m
+  treads are a wall to it.
+- **One landing per deck.** One circle big enough for a deck promises floor
+  over the rail; the report would pass and be wrong.
+- **An open walkway from bow to stern.** A line along it would run from the
+  shoulder of the bow to the transom, over 40 m; the pillars and pedestals are
+  what keep the main deck under 21.
+- **A reachable mast.** From 13 m the whole ship is a gallery.
+- **Hull collision below the waterline, or a sea you can stand on.** A ledge a
+  falling Gub lands on is a Gub stuck against the hull waiting for nothing.
+- **A black window band.** It read as a row of doorways into rooms that are not
+  there.

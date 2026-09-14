@@ -334,6 +334,15 @@ check "wharf playthrough" "playthrough: PASS" \
 also "wharf playthrough" "arena: Lantern Wharf built from"
 also "wharf playthrough" "playthrough: capture layout PASS"
 also "wharf playthrough" "capture layout on 'wharf' — declared bases"
+# And on Halcyon Wake, the tall built map (D-057): a yacht of four decks laid
+# out of a table, standing on a sea that is not collision. The same four lines
+# as Lantern Wharf's, because it declares its own bases and letters too — one
+# of them two decks up, the first letter any map has put off the main floor.
+check "yacht playthrough" "playthrough: PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" tools/playthrough.tscn -- yacht
+also "yacht playthrough" "arena: Halcyon Wake built from"
+also "yacht playthrough" "playthrough: capture layout PASS"
+also "yacht playthrough" "capture layout on 'yacht' — declared bases"
 # A Capture G·U·B match standing up in the real arena (D-051): `arena.gd` draws
 # a ring per team, the host settles three cards onto the map once the physics
 # has stepped, and every Gub spawns on a pad of its own team's. The rules
@@ -490,6 +499,21 @@ check "wharf parkour and sightlines" "parkour_report: PASS" \
     "$GODOT" --path "$GODOT_ROOT" --resolution 1000x1000 --script tools/snapshot.gd -- \
     res://tools/parkour_report.tscn "$GODOT_LOG_DIR/wharf_parkour.png" 30 top \
     map=res://scenes/world/maps/wharf.tscn
+# Halcyon Wake's eight pads, on its own triangle floor for the same reason as
+# the wharf's: a yacht of boxes and one lofted hull is about 2,200 triangles.
+check "yacht spawns and collision" "preview_map: PASS" \
+    "$GODOT" --path "$GODOT_ROOT" --resolution 900x1100 --script tools/snapshot.gd -- \
+    res://tools/preview_map.tscn "$GODOT_LOG_DIR/yacht_top.png" 30 top \
+    map=res://scenes/world/maps/yacht.tscn min_triangles=1000
+# And the yacht's promises: every deck, step and stair landing is reachable from
+# the main deck by hops and leaps alone, the mast is out of reach of every jump,
+# no eye-to-eye line runs past 21 m on the main deck or 38 m from a landing, no
+# pad sees the other base's pads, and over every edge of the deck there is
+# nothing between a falling Gub and the void half a metre under the sea.
+check "yacht parkour and overboard" "parkour_report: PASS" \
+    "$GODOT" --path "$GODOT_ROOT" --resolution 1000x1000 --script tools/snapshot.gd -- \
+    res://tools/parkour_report.tscn "$GODOT_LOG_DIR/yacht_parkour.png" 30 top \
+    map=res://scenes/world/maps/yacht.tscn
 # Walks the menu into a real match and asks Input.mouse_mode what happened. It
 # grabs the physical mouse for about a second on the way through, which is the
 # only way to prove the thing it proves: every other check here stands the arena

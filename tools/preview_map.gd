@@ -441,6 +441,9 @@ func _world_bounds() -> AABB:
 	var box := AABB()
 	var first := true
 	for node in _meshes(_map):
+		# The sea round a yacht is scenery, not the map's extent (D-057).
+		if node.is_in_group(StaticMap.BACKDROP_GROUP):
+			continue
 		var world := node.global_transform * node.get_aabb()
 		if first:
 			box = world

@@ -1,0 +1,111 @@
+[gd_scene load_steps=3 format=3 uid="uid://bgubmapyacht01"]
+
+; Halcyon Wake — the fifth map, a superyacht at anchor on a bright morning (D-057).
+;
+; Like Kopje Crossing and Lantern Wharf this scene has no geometry in it.
+; `scripts/world/maps/yacht_map.gd` extends `StaticMap` and builds the yacht in
+; `_ready()` from its layout tables — the hull, four decks, the deckhouses, the
+; stairs and hop steps between them, the rails and the furniture — then calls
+; `super()`, which sweeps them into world-space trimesh collision on layer 1,
+; and then adds the dressing: the windows, the stair treads, the radar and the
+; sea, which is not collision. The sea is the void.
+;
+; So this file is what `static_map.gd` asks for:
+;
+;   Environment  a clear Mediterranean morning (`yacht_env.tres`).
+;   Sun          38 degrees up over the starboard bow, white-gold, shadowed, so
+;                every deck casts a hard shadow on the one below it and the
+;                stack reads as a stack. Serialised ROW-major, as every `.tscn`
+;                stores a `Transform3D`.
+;   void_height  -3.5, half a metre under the sea's surface at -3.0. The lowest
+;                floor on the map is the swim platform at -1.0.
+;   Spawns       eight pads, four on the foredeck and four on the aft deck,
+;                alternating bow and stern so a two-player match opens at
+;                opposite ends. Each faces the middle of the yacht.
+;   Bases        Team 1 on the foredeck in front of the tender, Team 2 on the
+;                aft deck at the foot of the aft stairs, 43.5 m apart (D-051).
+;   Letters      U and B in the open salon amidships, either side of the bar;
+;                G two decks up, on the sun deck above them.
+;
+; `tools/preview_map.gd` stands a Gub on every pad, `tools/parkour_report.gd`
+; walks the jump graph up all four decks, proves the mast is out of reach,
+; measures the longest sightline and proves there is nothing but water over the
+; side, and `tools/playthrough.gd` plans the capture layout off the declared
+; bases — all four are in `tools/smoke_test.sh`.
+
+[ext_resource type="Script" path="res://scripts/world/maps/yacht_map.gd" id="1_yacht_map"]
+[ext_resource type="Environment" path="res://resources/config/yacht_env.tres" id="2_yacht_env"]
+
+[node name="Yacht" type="Node3D"]
+script = ExtResource("1_yacht_map")
+void_height = -3.5
+base_radius = 4.0
+
+[node name="Environment" type="WorldEnvironment" parent="."]
+environment = ExtResource("2_yacht_env")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(-0.61217, -0.49044, 0.62025, 0, 0.78441, 0.62025, -0.79072, 0.3797, -0.48019, 0, 30, 0)
+light_color = Color(1, 0.95, 0.86, 1)
+light_energy = 1.2
+light_specular = 0.8
+shadow_enabled = true
+directional_shadow_mode = 1
+directional_shadow_max_distance = 90.0
+directional_shadow_blend_splits = true
+
+[node name="Spawns" type="Node3D" parent="."]
+
+; 0  foredeck, port, beside the fore steps, Team 1
+[node name="Spawn0" type="Marker3D" parent="Spawns"]
+transform = Transform3D(-0.94157, 0, -0.33682, 0, 1, 0, 0.33682, 0, -0.94157, -4.4, 0.12, -15.4)
+
+; 1  aft deck, starboard, at the aft end of the walkway, Team 2
+[node name="Spawn1" type="Marker3D" parent="Spawns"]
+transform = Transform3D(0.97142, 0, 0.23736, 0, 1, 0, -0.23736, 0, 0.97142, 5.4, 0.12, 19)
+
+; 2  foredeck, starboard, beside the fore steps, Team 1
+[node name="Spawn2" type="Marker3D" parent="Spawns"]
+transform = Transform3D(-0.94157, 0, 0.33682, 0, 1, 0, -0.33682, 0, -0.94157, 4.4, 0.12, -15.4)
+
+; 3  aft deck, port, at the aft end of the walkway, Team 2
+[node name="Spawn3" type="Marker3D" parent="Spawns"]
+transform = Transform3D(0.97142, 0, -0.23736, 0, 1, 0, 0.23736, 0, 0.97142, -5.4, 0.12, 19)
+
+; 4  foredeck, centreline, Team 1
+[node name="Spawn4" type="Marker3D" parent="Spawns"]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0.12, -19.8)
+
+; 5  aft deck, starboard, by the transom, Team 2
+[node name="Spawn5" type="Marker3D" parent="Spawns"]
+transform = Transform3D(0.99427, 0, 0.10691, 0, 1, 0, -0.10691, 0, 0.99427, 3, 0.12, 24.8)
+
+; 6  foredeck, centreline, in front of the tender, Team 1
+[node name="Spawn6" type="Marker3D" parent="Spawns"]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0.12, -26)
+
+; 7  aft deck, port, by the transom, Team 2
+[node name="Spawn7" type="Marker3D" parent="Spawns"]
+transform = Transform3D(0.99427, 0, -0.10691, 0, 1, 0, 0.10691, 0, 0.99427, -3, 0.12, 24.8)
+
+[node name="Bases" type="Node3D" parent="."]
+
+; Team 1, the foredeck
+[node name="Team1" type="Marker3D" parent="Bases"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -23)
+
+; Team 2, the aft deck
+[node name="Team2" type="Marker3D" parent="Bases"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 20.5)
+
+[node name="Letters" type="Node3D" parent="."]
+
+; G on the sun deck, two decks over U and B
+[node name="G" type="Marker3D" parent="Letters"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6.2, 2.1)
+
+[node name="U" type="Marker3D" parent="Letters"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.8, 0, -0.5)
+
+[node name="B" type="Marker3D" parent="Letters"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.8, 0, -0.5)

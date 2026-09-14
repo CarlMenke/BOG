@@ -1,0 +1,87 @@
+[gd_resource type="Environment" load_steps=3 format=3 uid="uid://cq2gubyachtenv"]
+
+; Environment for Halcyon Wake. A clear Mediterranean morning at sea: the
+; brightest, bluest map, and the far end of the palette from Lantern Wharf's
+; dusk, Kopje Crossing's noon and the island's night (D-009, D-056, D-057).
+;
+; Derived from `wharf_env.tres`, and the rule held again: the tonemapping, glow
+; and SSAO are the other maps', and the sky, fog and exposure are the difference.
+;
+;   * A clean sky, deep blue overhead and pale at the horizon. It is the ambient
+;     and the reflections, so the white superstructure's shaded faces go a cool
+;     blue and its lit faces stay warm white — that split is what lets one deck
+;     be read against the one under it.
+;   * The ground half of the sky is sea-coloured, so where the sea plane ends
+;     under the fog the horizon does not show a seam.
+;   * **`background_energy_multiplier` is the exposure control** (see
+;     `rust_env.tres`). Set from renders; see D-057.
+;   * Light fog tinted to the horizon, thin enough that the whole hull reads at
+;     once and thick enough that the sea fades out before its edge.
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_yachtsky"]
+sky_top_color = Color(0.18, 0.4, 0.78, 1)
+sky_horizon_color = Color(0.7, 0.82, 0.92, 1)
+sky_curve = 0.12
+sky_energy_multiplier = 1.0
+ground_bottom_color = Color(0.2, 0.36, 0.5, 1)
+ground_horizon_color = Color(0.56, 0.7, 0.8, 1)
+ground_curve = 0.04
+ground_energy_multiplier = 1.0
+sun_angle_max = 6.0
+sun_curve = 0.1
+use_debanding = true
+
+[sub_resource type="Sky" id="Sky_yacht"]
+sky_material = SubResource("ProceduralSkyMaterial_yachtsky")
+radiance_size = 3
+
+[resource]
+resource_name = "YachtEnvironment"
+background_mode = 2
+sky = SubResource("Sky_yacht")
+background_energy_multiplier = 1.0
+ambient_light_source = 3
+reflected_light_source = 2
+tonemap_mode = 3
+tonemap_exposure = 1.0
+tonemap_white = 6.0
+ssao_enabled = true
+ssao_radius = 1.1
+ssao_intensity = 1.2
+ssao_power = 1.4
+ssao_detail = 0.6
+ssao_horizon = 0.08
+ssao_sharpness = 0.98
+ssao_light_affect = 0.0
+ssao_ao_channel_affect = 0.35
+glow_enabled = true
+glow_levels/1 = 0.0
+glow_levels/2 = 0.35
+glow_levels/3 = 0.85
+glow_levels/4 = 1.0
+glow_levels/5 = 0.7
+glow_levels/6 = 0.25
+glow_levels/7 = 0.0
+glow_normalized = true
+glow_intensity = 0.4
+glow_strength = 1.0
+glow_mix = 0.05
+glow_bloom = 0.0
+glow_blend_mode = 1
+glow_hdr_threshold = 2.0
+glow_hdr_scale = 2.0
+glow_hdr_luminance_cap = 10.0
+fog_enabled = true
+fog_light_color = Color(0.66, 0.78, 0.88, 1)
+fog_light_energy = 1.0
+fog_sun_scatter = 0.15
+fog_density = 0.0025
+fog_aerial_perspective = 0.3
+fog_sky_affect = 0.0
+fog_height = -2.0
+fog_height_density = 0.0
+volumetric_fog_enabled = false
+adjustment_enabled = true
+adjustment_brightness = 1.0
+adjustment_contrast = 1.05
+adjustment_saturation = 1.05

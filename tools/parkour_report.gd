@@ -52,6 +52,9 @@ const DEFAULT_MAP := "res://scenes/world/maps/safari.tscn"
 ##   reach           half the width of the square the ASCII map and the top
 ##                   camera frame, in metres
 ##   grid            the ASCII map's cell, in metres
+##   overboard       if true, the map stands on nothing: every edge of the
+##                   ground has nothing under it past the rail down to the
+##                   void, and the void is under the lowest landing (D-057)
 const EXPECT := {
 	"res://scenes/world/maps/safari.tscn": {
 		"min_platforms": 110, "min_big_edges": 6, "summit_zone": "ridge",
@@ -61,12 +64,24 @@ const EXPECT := {
 		"min_platforms": 20, "min_big_edges": 0, "summit_zone": "",
 		"sightline": 25.0, "roof_sightline": 26.0, "reach": 20.0, "grid": 1.0,
 	},
+	"res://scenes/world/maps/yacht.tscn": {
+		"min_platforms": 60, "min_big_edges": 0, "summit_zone": "",
+		"sightline": 21.0, "roof_sightline": 38.0, "reach": 37.0, "grid": 2.0,
+		"overboard": true,
+	},
 }
 
 ## The sightline scan's grid, and where on a Gub the line runs between. Eye to
 ## eye is the fair question: a Gub who can see another's eyes can be seen back.
 const SIGHT_STEP := 2.0
 const EYE := 1.45
+
+## How far past the edge of the deck the overboard check looks for anything to
+## land on: a rail's thickness and a stride out. And how far under the lowest
+## floor the void may sit — a fall of more than a few metres into water is a
+## Gub waiting to be told it is dead.
+const OVERBOARD := 1.0
+const VOID_DEPTH := 5.0
 
 ## The movement model, read off `Gub` and `ProjectSettings` rather than typed, so
 ## a change to the character's jump fails this check instead of quietly
@@ -222,6 +237,7 @@ func _physics_process(_delta: float) -> void:
 	_check_off_limits()
 	_check_spawns()
 	_check_sightlines()
+	_check_overboard()
 	_print_height_map()
 	_draw()
 	_build_camera()
@@ -282,7 +298,11 @@ func _check_physics() -> void:
 				platform.label, _vec(at), float(hit["position"].y), at.y])
 			missing += 1
 
-		shape.transform = Transform3D(Basis.IDENTITY, at + Vector3.UP * CAPSULE_LIFT)
+		# Two centimetres up, so the slab the capsule stands on is not itself the
+		# thing in the way: exactly touching, a top whose height does not round
+		# cleanly in float32 reads as an overlap (D-057 met it on 2.2 m and 7.5 m
+		# steps, and a 3.2 m deck beside them passed).
+		shape.transform = Transform3D(Basis.IDENTITY, at + Vector3.UP * (CAPSULE_LIFT + 0.02))
 		var overlaps := space.intersect_shape(shape, 2)
 		if not overlaps.is_empty():
 			print("  FAIL  %s (%s) has something standing in it" % [platform.label, _vec(at)])
@@ -546,30 +566,7 @@ func _check_sightlines() -> void:
 		return
 	var roof_limit := float(_expect["roof_sightline"])
 	var space := get_world_3d().direct_space_state
-	var capsule := CapsuleShape3D.new()
-	capsule.radius = CAPSULE_RADIUS
-	capsule.height = CAPSULE_HEIGHT
-	var fits := PhysicsShapeQueryParameters3D.new()
-	fits.shape = capsule
-	fits.collision_mask = LAYER_WORLD
-
-	var ground: Array[Vector3] = []
-	var reach := float(_expect["reach"])
-	var x := -reach + SIGHT_STEP * 0.5
-	while x < reach:
-		var z := -reach + SIGHT_STEP * 0.5
-		while z < reach:
-			var ray := PhysicsRayQueryParameters3D.create(Vector3(x, 0.6, z), Vector3(x, -0.6, z))
-			ray.collision_mask = LAYER_WORLD
-			var hit := space.intersect_ray(ray)
-			if not hit.is_empty():
-				var foot: Vector3 = hit["position"]
-				fits.transform = Transform3D(Basis.IDENTITY,
-					foot + Vector3.UP * (CAPSULE_LIFT + 0.05))
-				if space.intersect_shape(fits, 1).is_empty():
-					ground.append(foot)
-			z += SIGHT_STEP
-		x += SIGHT_STEP
+	var ground := _ground_points(space)
 	var roofs: Array[Vector3] = []
 	for platform: StaticMap.Platform in _platforms:
 		roofs.append(platform.centre)
@@ -602,6 +599,99 @@ func _check_sightlines() -> void:
 	for what: String in seen:
 		print("  FAIL  %s" % what)
 	_want("no spawn pad sees the other base's pads (%d do)" % seen.size(), seen.is_empty())
+
+
+## Every standable point of the ground on the sightline grid: a floor within
+## 0.6 m of y = 0 with a Gub's worth of room over it.
+func _ground_points(space: PhysicsDirectSpaceState3D) -> Array[Vector3]:
+	var capsule := CapsuleShape3D.new()
+	capsule.radius = CAPSULE_RADIUS
+	capsule.height = CAPSULE_HEIGHT
+	var fits := PhysicsShapeQueryParameters3D.new()
+	fits.shape = capsule
+	fits.collision_mask = LAYER_WORLD
+	var ground: Array[Vector3] = []
+	var reach := float(_expect["reach"])
+	var x := -reach + SIGHT_STEP * 0.5
+	while x < reach:
+		var z := -reach + SIGHT_STEP * 0.5
+		while z < reach:
+			var ray := PhysicsRayQueryParameters3D.create(Vector3(x, 0.6, z), Vector3(x, -0.6, z))
+			ray.collision_mask = LAYER_WORLD
+			var hit := space.intersect_ray(ray)
+			if not hit.is_empty():
+				var foot: Vector3 = hit["position"]
+				fits.transform = Transform3D(Basis.IDENTITY,
+					foot + Vector3.UP * (CAPSULE_LIFT + 0.05))
+				if space.intersect_shape(fits, 1).is_empty():
+					ground.append(foot)
+			z += SIGHT_STEP
+		x += SIGHT_STEP
+	return ground
+
+
+# --------------------------------------------------------------- overboard ---
+
+## Over the side is the void, from everywhere. Only for a map that says it
+## stands on nothing (a yacht on the sea, D-057).
+##
+## Two questions. Off both ends of every row of the ground grid — marched out
+## to where the deck ends — a column `OVERBOARD` metres further out has nothing
+## in it from above the rail down past the void:
+## no hull flare, no fender, no ledge a falling Gub lands on and stands up from.
+## And the void is under every landing, and not so far under the lowest one
+## that a Gub falls for longer than a moment before the match calls it.
+func _check_overboard() -> void:
+	if not bool(_expect.get("overboard", false)):
+		return
+	var space := get_world_3d().direct_space_state
+	var ground := _ground_points(space)
+	# The outermost standable point of each row of the grid, each side.
+	var rows: Dictionary = {}
+	for foot: Vector3 in ground:
+		var key := roundi(foot.z * 10.0)
+		var row: Array = rows.get(key, [foot, foot])
+		if foot.x < (row[0] as Vector3).x:
+			row[0] = foot
+		if foot.x > (row[1] as Vector3).x:
+			row[1] = foot
+		rows[key] = row
+	var edges := 0
+	var caught: Array[String] = []
+	for key: int in rows:
+		for k: int in 2:
+			var foot: Vector3 = rows[key][k]
+			var side := -1.0 if k == 0 else 1.0
+			# March out to where the deck itself ends, under anything standing
+			# at its edge, and then a rail's thickness and a margin past it.
+			var x := foot.x
+			while absf(x) < float(_expect["reach"]):
+				var probe := PhysicsRayQueryParameters3D.create(Vector3(x, 0.6, foot.z),
+					Vector3(x, -0.6, foot.z))
+				probe.collision_mask = LAYER_WORLD
+				if space.intersect_ray(probe).is_empty():
+					break
+				x += side * 0.25
+			var out := Vector3(x + side * OVERBOARD, foot.y, foot.z)
+			var ray := PhysicsRayQueryParameters3D.create(out + Vector3.UP * 2.0,
+				Vector3(out.x, _map.void_height - 1.0, out.z))
+			ray.collision_mask = LAYER_WORLD
+			var hit := space.intersect_ray(ray)
+			edges += 1
+			if not hit.is_empty():
+				caught.append("%s over the side of %s" % [_vec(hit["position"]), _vec(foot)])
+	for what: String in caught:
+		print("  FAIL  something to land on at %s" % what)
+	_want("over every edge of the deck is nothing but the void (%d edges, %d caught)" % [
+		edges, caught.size()], edges > 0 and caught.is_empty())
+
+	var lowest := INF
+	for platform: StaticMap.Platform in _platforms:
+		lowest = minf(lowest, platform.centre.y)
+	lowest = minf(lowest, 0.0)
+	_want("the void (%.1f) is under the lowest floor (%.1f) and within %.0f m of it" % [
+		_map.void_height, lowest, VOID_DEPTH],
+		_map.void_height < lowest - 1.0 and _map.void_height > lowest - VOID_DEPTH)
 
 
 ## [length, from, to] of the longest clear eye-to-eye line from any point in

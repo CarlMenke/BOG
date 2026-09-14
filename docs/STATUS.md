@@ -22,11 +22,11 @@ island and out to a results screen, and two automated checks now walk that path:
 one in a single process, one across two processes over a real socket.
 
 ```
-bash tools/smoke_test.sh        # 57 checks, ~3 minutes, finds Godot by itself
+bash tools/smoke_test.sh        # 63 checks, ~4 minutes, finds Godot by itself
 bash tools/net_test.sh          # two processes, one socket; ~45 s, run by hand
 ```
 
-`smoke_test.sh` is the gate and it passes, 57 of 57. `net_test.sh` is kept out
+`smoke_test.sh` is the gate and it passes, 63 of 63. `net_test.sh` is kept out
 of it to keep the gate fast; run it by hand after touching networking, the lobby
 or the results screen. It passes all eleven stages (177 + 32 assertions), ten of
 which end in a rematch, with the engine quiet in both processes — the error it
@@ -128,6 +128,9 @@ of what that means:
   kind of map: a 36 m walled box yard at dusk, mirror-symmetric between two
   bases, with no eye-to-eye sightline over 25 m on the ground (**D-056**). It
   declares its own Capture G·U·B bases and letters.
+- **The fifth map** (Halcyon Wake) is built the same way and is the tall one: a
+  66 m superyacht on open water on a bright morning, with four decks joined by
+  stairs and hop steps, the sea as the void, and G two decks up (**D-057**).
 - **The UI** is themed and complete: menu with a live glade behind it, an
   eight-Gub lobby, HUD, scoreboard, kill feed, pause, settings, chat, results.
 - **Combat** is a one-hit spear, a mushroom you cannot be shot through, and a
@@ -198,7 +201,11 @@ of what that means:
    hill to fight over or a perch nobody leaves, and whether knee-high grass hides
    a crouched Gub more than a one-hit spear can afford. **Lantern Wharf** too
    (**D-056**): whether a 36 m yard is chaos in the good sense for eight Gubs,
-   and whether the dusk floodlights read in a fight, are for a person.
+   and whether the dusk floodlights read in a fight, are for a person. And
+   **Halcyon Wake** (**D-057**): whether the flybridge is a hill worth taking or
+   a perch with no cover, whether the 2 m walkways under the upper deck are good
+   flanks or corridors, and whether the third-person camera copes in the salon
+   and under the overhangs.
 4. **Playing it, properly.** A person has walked around the island and thrown
    spears, and the automated checks cover the rest — but nobody has played a
    *match* to a conclusion against another person, and no one has tuned the feel:
@@ -278,9 +285,9 @@ Three tiers, because three different kinds of claim need three different proofs
 | `tools/ragdoll_stability.tscn` | a corpse is still a corpse 150 ticks later |
 | `tools/combat_range.tscn` | the real match path: a spear, a mushroom, a lure, a letter, the Elder's bolt |
 | `tools/net_loopback.tscn` | two processes, one socket, including a *client* using all three abilities, dying and respawning, and ten rematches with the client in the lobby for half of them (D-044). **In the gate** through `net_test.sh`, bound to 127.0.0.1 on a random port |
-| `tools/preview_map.tscn` | Rust, Kopje Crossing and Lantern Wharf: renders one, and checks every spawn pad with the physics. **In the gate** for all three |
+| `tools/preview_map.tscn` | Rust, Kopje Crossing, Lantern Wharf and Halcyon Wake: renders one, and checks every spawn pad with the physics. **In the gate** for all four |
 | `tools/island_report.tscn` | Whisperbloom Hollow as numbers: footprint, slope, every scatter layer's placed count, tree heights, spawn spacing and the capture bases (D-055). **In the gate** on four seeds |
-| `tools/parkour_report.tscn` | every platform on a built map has its rock, fits a Gub, and is reachable from the ground (D-042); on Lantern Wharf also that no jump reaches a tower or wall top, no sightline runs past 25 m (26 m from a roof), and no pad sees the other base's pads (D-056). **In the gate** for both |
+| `tools/parkour_report.tscn` | every platform on a built map has its rock, fits a Gub, and is reachable from the ground (D-042); on Lantern Wharf also that no jump reaches a tower or wall top, no sightline runs past 25 m (26 m from a roof), and no pad sees the other base's pads (D-056); on Halcyon Wake every deck reachable, the mast out of reach, sightlines under 21 m on the main deck and 38 m from a landing, and nothing but the void over every edge of the deck (D-057). **In the gate** for all three |
 | `tools/preview_*.tscn` | it *looks* right. Needs a person, always will |
 
 **`playthrough` is the one that catches integration.** Every other harness looks

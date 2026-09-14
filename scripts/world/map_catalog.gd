@@ -79,6 +79,15 @@ const MAPS: Array[Dictionary] = [
 		# yard with two declared Capture G·U·B bases (D-056).
 		"loading_line": "Lighting the floodlights",
 	},
+	{
+		"id": "yacht",
+		"display_name": "Halcyon Wake",
+		"kind": Kind.STATIC,
+		"scene": "res://scenes/world/maps/yacht.tscn",
+		# Built from a table too, and the tall one: four decks on one hull at
+		# anchor, with the sea as the void (D-057).
+		"loading_line": "Weighing anchor",
+	},
 	# A static map is one more entry and nothing else in this file changes —
 	# the lobby's picker, `SceneFlow`'s loading card and `arena.gd`'s branch all
 	# read this table and none of them names a map.

@@ -73,6 +73,12 @@ extends Node3D
 ## wants somewhere *nobody* stands — the top of a tall stack that would see the
 ## whole map — and the report fails if any jump at all reaches one.
 
+## A map's backdrop — a sea out to the horizon, say — is not the map. Meshes in
+## this group are left out when `tools/preview_map.gd` measures the map's bounds
+## to frame it and to find its middle, so a 900 m sea does not make the yacht on
+## it a dot (D-057). Add them after `super()`: a backdrop is never collision.
+const BACKDROP_GROUP := "map_backdrop"
+
 ## One landing surface, as the parkour checker reads it.
 ##
 ## `radius` is the *inscribed* radius of the slab's footprint, less 0.15 m of

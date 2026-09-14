@@ -213,7 +213,7 @@ and a **static** one is a hand-made scene that brings its own environment, sun,
 lights and spawn markers — the contract is written down in
 `scripts/world/static_map.gd`, and no procedural step runs for one.
 
-There are four maps.
+There are five maps.
 
 **Rust** is the static one: a hand-made industrial arena, 42 x 28 x 64 m,
 instanced whole from `art/maps/rust/rust.glb` (148 meshes, 96,301 triangles) by
@@ -257,6 +257,19 @@ from `SafariMap`), so the same `parkour_report` walks it, proves no jump reaches
 a tower top, and measures the longest eye-to-eye sightline. Its scene also
 declares `Bases` and `Letters` for Capture G·U·B rather than leaving them to the
 fallback.
+
+**Halcyon Wake** is the fourth built map, and the tall one (**D-057**):
+`scenes/world/maps/yacht.tscn` with `YachtMap` extending `StaticMap`. A hull
+lofted from cross-sections (66 m with the swim platform, 13 m beam), and on it a
+main deck at y = 0, an upper deck at 3.2, a sun deck at 6.2 and a flybridge at
+8.8, each deck's open floor declared as a grid of landing records. Stairs are
+invisible collision ramps under dressing treads, because the Gub has no step-up;
+hop steps are plain boxes. The sea is a 2.4 km dressing quad in
+`StaticMap.BACKDROP_GROUP`, which `preview_map` leaves out of the map's bounds,
+and `void_height` is half a metre under it. `parkour_report` walks all four decks,
+holds the mast `off_limits`, measures sightlines, and — for this map only
+(`overboard` in its `EXPECT` row) — proves there is nothing to land on over any
+edge of the deck. It declares `Bases` and `Letters`, with G on the sun deck.
 
 **Whisperbloom Hollow** is the procedural one. It is built
 from one integer seed at load, in an order that is load-bearing:
@@ -303,13 +316,13 @@ declares (**D-051**). A static map built for the mode declares, on its
 - `Spawns` as always; each pad belongs to the nearest base, and in this mode Gubs
   spawn only on their own team's pads.
 
-**Lantern Wharf declares all of them (D-056); every other map plays on a
-placeholder fallback**:
+**Lantern Wharf and Halcyon Wake declare all of them (D-056, D-057); every other
+map plays on a placeholder fallback**:
 the pads are split into one arc per team by bearing, each team's base is the pad
 nearest its arc's middle, and the letters sit between the first two bases (G at
 the midpoint, U and B either side across the axis). The host settles each card
 onto a standable floor near the bases' height once the physics has stepped.
-`tools/playthrough.gd` checks the result on all four maps, and says in its log
+`tools/playthrough.gd` checks the result on all five maps, and says in its log
 line whether the layout was declared or fallen back to. `CaptureBase` draws
 each base in its team's colour, only in this mode.
 
