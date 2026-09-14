@@ -259,7 +259,7 @@ check "lightning kills" "lightning PASS"     "$GODOT" --path "$GODOT_ROOT" --res
 check "mushroom deploys" "snapshot: wrote" \
     "$GODOT" --path "$GODOT_ROOT" --resolution 640x360 --script tools/snapshot.gd -- \
     res://tools/combat_range.tscn "$GODOT_LOG_DIR/mushroom.png" 40 mushroom
-# One of each letter on the ground, measured rather than looked at (D-039).
+# One of each letter on the ground, measured rather than looked at (D-040).
 # `match_rules` builds real cards headless, so it already proves the builder
 # does not throw; what it has no way of seeing is that what came back is a mesh
 # and that the mesh stands 0.60 m. That is the failure a screenshot cannot see

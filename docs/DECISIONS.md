@@ -2888,7 +2888,7 @@ Both were run against the code without them first (D-015): with the invincibilit
 clause removed `ward` fails and the other two still pass; with `_tick_elders`
 removed `expiry` fails. The gate goes from 18 checks to 21.
 
-## D-039 — A letter card is a letter: three meshes through the prop pipeline, self-lit, spun on the ground and held upright in the fist
+## D-040 — A letter card is a letter: three meshes through the prop pipeline, self-lit, spun on the ground and held upright in the fist
 The card the letters mode is about (D-033, D-035) was a `Label3D` glyph on a
 billboard, and the comment above the constants gave the honest reason: *there is
 no card mesh in `art/generated/`*. That was a placeholder with an expiry date on
