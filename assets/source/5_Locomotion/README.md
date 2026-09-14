@@ -9,24 +9,34 @@ was: give the clip an `authored_as="AUTHORED_..."` in `PACKS` and the build
 prints the number to put in `gub.gd`. A locomotion clip that names no constant
 is a clip whose speed nobody will ever match, and its feet will skate.
 
+**Six of the seven files here are declared and built** (D-066). What follows is
+the record of how they were chosen and what they cost; the numbers below are
+printed by `bash tools/build_gub.sh` on every run.
+
 ## What is in here
 
-Five clips, all With Skin, all 0.0 from `GUB_2/Idle.fbx`'s bind pose. Measured
-by `tools/audit_source_packs.py`, with the posture columns measured alongside
-because of the mixed-family warning below:
+Seven clips, all With Skin, all 0.0 from `GUB_2/Idle.fbx`'s bind pose. Measured
+on the finished 1.80 m rig by the build itself:
 
-| file | frames | length | travel | speed | hip height | torso pitch |
-|---|---:|---:|---:|---:|---:|---:|
-| `LeftStrafe.fbx` | 41 | 0.667 s | 2.167 m | 3.250 m/s | 0.628 m | 8.7° |
-| `RightStrafe.fbx` | 41 | 0.667 s | 2.167 m | 3.250 m/s | 0.630 m | 8.7° |
-| `LeftStrafeWalking.fbx` | 63 | 1.033 s | 1.286 m | 1.245 m/s | 0.632 m | 5.5° |
-| `RightStrafeWalking.fbx` | 63 | 1.033 s | 1.286 m | 1.245 m/s | 0.631 m | 5.6° |
-| `StandingRunLeft.fbx` | 46 | 0.750 s | 1.935 m | 2.580 m/s | 0.646 m | 8.4° |
+| file | clip | speed | bearing | hip height | torso pitch |
+|---|---|---:|---:|---:|---:|
+| `LeftStrafe.fbx` | `StrafeLeft` | 3.250 m/s | +27.5° | 0.645 m | 8.7° |
+| `RightStrafe.fbx` | `StrafeRight` | 3.250 m/s | −37.4° | 0.645 m | 8.7° |
+| `LeftStrafeWalking.fbx` | `StrafeWalkLeft` | 1.245 m/s | +35.3° | 0.665 m | 5.5° |
+| `RightStrafeWalking.fbx` | `StrafeWalkRight` | 1.245 m/s | −46.5° | 0.664 m | 5.6° |
+| `RunningBackward.fbx` | `RunBack` | 2.278 m/s | +171.7° | 0.647 m | 7.1° |
+| `WalkingBackward.fbx` | `WalkBack` | 0.871 m/s | +173.1° | 0.683 m | 15.3° |
+| `StandingRunLeft.fbx` | *not declared* | 2.580 m/s | +76.5° | 0.646 m | 8.4° |
 
-*Hip height* is the hips above the lowest joint in the same frame, averaged over
-the clip; *torso pitch* is the Hips→Neck line off vertical, averaged the same
-way. For comparison `GUB_2/Run.fbx` measures **0.569 m** and **45.1°** — it is a
-deep-lean sprint, and neither family here leans anything like it.
+*Bearing* is where the clip travels in degrees off the body's own forward,
+positive to its left, **after** the build has aligned it — so it is where the
+blend point belongs. *Hip height* is the pelvis above the floor and *torso
+pitch* is the Hips→Neck line off vertical, both averaged over the clip.
+
+For comparison `GUB_2/Walk.fbx` measures 0.657 m and **4.1°**, and
+`GUB_2/Run.fbx` 0.575 m and **45.1°** — the sprint is a deep lean and it is the
+one clip in the whole set that is nothing like the others. The two families
+agree about carriage far better than the plan expected; see D-066.
 
 ## Two families, and one of them is barely a strafe
 
@@ -35,37 +45,53 @@ deep-lean sprint, and neither family here leans anything like it.
 Magic/Longbow locomotion packs, which are authored for a torso that holds its
 facing while the legs go elsewhere.
 
-That difference is measurable and it is large. Taking the angle between where the
-body faces and where it actually travels, off three independent measures (the
-shoulder line, the foot direction, and the hip line `build_gub.py` itself uses
-for facing):
+That difference is measurable and it is large — and **which line you measure it
+off changes the answer by more than twenty degrees**, which is the trap this pack
+had in it. Travel in degrees off the body's own forward:
 
-| clip | shoulders | feet | hip line |
-|---|---:|---:|---:|
-| `GUB_2/Run.fbx` | 6° | 3° | — (the reference) |
-| `LeftStrafe.fbx` | 28° | 21° | 19° |
-| `StandingRunLeft.fbx` | **77°** | **46°** | **61°** |
+| clip | by the hip line | by the chest line |
+|---|---:|---:|
+| `GUB_2/Run.fbx` | −10.2° | −5.7° |
+| `LeftStrafe.fbx` | **+8.6°** | **+27.5°** |
+| `StandingRunLeft.fbx` | +50.8° | **+76.5°** |
 
-So `LeftStrafe` is a shallow forward-left **diagonal**, not a sideways move, and
-`StandingRunLeft` is very nearly a true 90° lateral. They are **alternates for
-the same blend point** and the choice is not a matter of taste: a blend space
-whose lateral pole is only 28° off forward has a hole in it where running
-sideways should be.
+`build_gub.py` aligns every clip by its **hip line**, because that is the one
+measurement that stays put while the arms and torso animate. In a sidestep it is
+the pelvis that moves: it turns *into* the step and the chest does not. So
+aligning `LeftStrafe` by its pelvis drags the travel round with it and leaves the
+game a clip that moves 8.6° off forward — a Gub jogging very slightly to one
+side, where the 28° this pack was chosen on is the **shoulder** figure.
 
-The catch is that the lateral one is a set of one. There is no
+The four strafes are therefore declared with `face=CHEST_JOINTS` and nothing else
+is (D-066). `LeftStrafe` is a shallow forward-left **diagonal** even so, and
+`StandingRunLeft` is very nearly a true 90° lateral — they are **alternates for
+the same blend point**, and the lateral one is a set of one. There is no
 `Standing Run Right`, no `Standing Walk Left`, no `Standing Walk Right` With
 Skin, and putting one `Standing *` clip into a lowercase set would move the
 family boundary *inside* the strafe axis, which is worse than having it between
-forward and sideways. Whichever way step 8 goes, it goes there with four clips
-from one family or with three more downloads.
+forward and sideways.
 
-## Still missing
+**The four lowercase diagonals were taken**, and what that costs is measured:
+running sideways plants its feet 0.93 of body speed better than it did and no
+better than that, because a pole that means 90° is being served by a clip that
+means 37. The three downloads above are what would close it, and they are the one
+thing D-066 leaves open.
 
-**A neutral run backward and a neutral walk backward.** Nothing in this folder
-moves the Gub away from where it is facing, at either speed. `_rejected/` has
-`Standing Run Back` (0.617 s, 1.482 m, 2.404 m/s) and `Standing Walk Back`
-(1.200 s, 1.046 m, 0.871 m/s) measured in its manifest, and both need
-re-downloading With Skin before step 8 can close the space.
+## Backward arrived, and it is the best half of this pack
+
+`RunningBackward.fbx` and `WalkingBackward.fbx` were the two files this README
+used to list as missing, and they turned out to be the clips that do the most
+good. Both travel within 8° of straight backward — nothing has to be blended to
+get there — so a backpedal now plants its feet as well as a forward walk does:
+1.03 of body speed of skate down to **0.16** at walking pace, 0.83 down to
+**0.23** at a run.
+
+The one thing to know about them is the **playback rate**. `WalkBack` is authored
+at 0.871 m/s and has to carry a 2.3 m/s backpedal, which is **2.64x** — the
+fastest of any cycle in the game. Its feet are planted, which is what the ratio
+is for, but a Gub backing away at walking pace is visibly scampering. If that
+ever needs to come down the lever is a backward speed penalty in
+`Gub.target_speed`, not a number in the animator.
 
 ## What every clip in every pack has to be
 
@@ -89,8 +115,10 @@ put 105 files in `_rejected/`.
 
 A folder somebody dropped files into is not a promise; a line in `PACKS` is. Add
 a `Clip(...)` for each file in this pack's entry in `tools/build_gub.py`, with
-its clip name, whether it loops, and its alignment reference. Until then the
-pack is skipped and the build says so.
+its clip name, whether it loops, its alignment reference, and — for anything that
+moves sideways — `CHEST_JOINTS` as its `face`. `StandingRunLeft.fbx` is the file
+in here that is deliberately *not* named, and the build reports it every run,
+which is exactly right.
 
     bash tools/build_gub.sh -- --list-packs   # what the pipeline thinks is here
     bash tools/build_gub.sh                   # rebuild art/generated/gub.glb

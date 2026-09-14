@@ -169,6 +169,12 @@ var _model: Node3D
 ## Held rather than found again per frame: `set_draw` runs on every peer's copy
 ## of every drawing Gub, on every frame of every draw.
 var _bow: Node3D
+## The grip `set_bow_grip` was last handed, and how much of `CARRY_TILT` is over
+## it. Kept because the two are composed rather than set one after the other —
+## see `_orient_bow`. A bow that nobody has drawn yet is being carried.
+var _bow_model_scale: float = BOW_SCALE
+var _bow_grip_rotation: Vector3 = BOW_GRIP_ROTATION
+var _carry: float = 1.0
 var _bow_string: MeshInstance3D
 ## The nocked arrow, in the right fist while the bow is drawn.
 var _arrow: Node3D
@@ -437,6 +443,35 @@ func tip_transform() -> Transform3D:
 ## carry pose (a second grip, and a pop between it and the draw), a bone the bow
 ## hangs off that is not the fist, or the spine aim step 8 owes this weapon
 ## anyway — and none of them is a constant in this file.
+## How far the bow is tipped out of the drawing grip while it is only being
+## **carried** — degrees about the grip's own Y and then its Z (D-066).
+##
+## This is the 0.158 m of `Run` that D-065 left ploughing the ground, and the
+## reason it can be fixed here after that record said it could not is that the
+## record was answering a different question. Its sentence was *"every lever
+## that would raise the tip moves the nocking point"*, and that is true of every
+## lever on **the grip** — the one orientation the string's V has to meet the
+## drawing fingers in, at every charge level, which `preview_bow -- measure`
+## solves as an equation with one answer. A tilt that only exists while the bow
+## is **carried**, and is blended away over the same twelfth of a second the
+## draw pose comes up in, meets no string at all: at every charge above zero the
+## bow is back in the grip that equation solved, unmoved to the millimetre.
+##
+## Swept rather than chosen. `preview_bow -- measure` walks a grid of both
+## angles over all eleven clips a Gub carries a bow around in and reports the
+## worst limb tip over the lot; this is the peak of it, and it is a broad one —
+## every tilt within 5° of it on either axis clears 0.25 m. What it buys:
+##
+##     worst limb tip over all eleven carried clips
+##     no tilt      **-0.158 m**  (Run, the bow through the grass)
+##     this tilt    **+0.284 m**  (Walk)
+##
+## which is better than the *best* any clip managed before (Idle, +0.171). One
+## axis alone cannot do it — tilting about the grip's Z rights `Run` and rolls
+## `WalkBack` under instead, bottoming out at -0.021 m — because the axis lives
+## in the fist and the fist is at a different attitude in every clip.
+const CARRY_TILT := Vector2(47.5, -25.0)
+
 const BOW_SCALE := 1.7383
 const BOW_GRIP_OFFSET := Vector3(-0.1927, -0.1376, 0.0989)
 const BOW_GRIP_ROTATION := Vector3(10.162, 165.413, 19.573)
@@ -479,6 +514,48 @@ const STRING_SHAPE := 0
 ## Put a bow in the left fist, or take it away. A visibility toggle for the same
 ## reason the spear's is: a Gub draws several times a life, and rebuilding a
 ## prop for each of them buys nothing.
+## The bow's orientation in the bow hand, `tilt` degrees out of the drawing
+## grip. `tilt` 0 is the grip `preview_bow -- measure` solved and the pose every
+## charge level is fitted to; anything else is the carry.
+##
+## Composed rather than added: two Euler triples do not add, and the carry has
+## to be a rotation *about the bow's own limb-normal* whatever the grip is, or
+## the tilt would mean something different every time the grip moved.
+static func bow_basis(tilt: Vector2, grip_rotation: Vector3 = BOW_GRIP_ROTATION) -> Basis:
+	var grip := Basis.from_euler(grip_rotation * (PI / 180.0))
+	if tilt.length_squared() < 0.0001:
+		return grip
+	return grip * Basis(Vector3.UP, deg_to_rad(tilt.x)) \
+		* Basis(Vector3.BACK, deg_to_rad(tilt.y))
+
+
+## How much of `CARRY_TILT` the bow is currently wearing: 1 while it is only
+## being carried, 0 while it is being drawn or loosed.
+##
+## Handed the animator's own aim weight rather than the charge, and the
+## difference is the loose. The charge is gone on the frame the string goes,
+## and for the length of `Loose` after that the arms are still in an archer's
+## pose out of a different node — a grip driven by the charge would tilt the bow
+## back to the carry underneath a hand that has not moved yet, on the one frame
+## everybody is looking at it.
+##
+## Idempotent and cheap, because it is called every frame on every Gub in the
+## match: an unchanged value writes nothing.
+func set_carry(amount: float) -> void:
+	var want := clampf(amount, 0.0, 1.0)
+	if _bow == null or is_equal_approx(want, _carry):
+		return
+	_carry = want
+	_orient_bow()
+
+
+func _orient_bow() -> void:
+	if _bow == null:
+		return
+	_bow.basis = bow_basis(CARRY_TILT * _carry, _bow_grip_rotation) \
+		.scaled(Vector3.ONE * _bow_model_scale)
+
+
 func set_bow(carried: bool) -> void:
 	if _bow != null:
 		_bow.visible = carried
@@ -527,9 +604,10 @@ func has_arrow() -> bool:
 func set_bow_grip(model_scale: float, offset: Vector3, rotation_degrees: Vector3) -> void:
 	if _bow == null:
 		return
-	_bow.scale = Vector3.ONE * model_scale
+	_bow_model_scale = model_scale
+	_bow_grip_rotation = rotation_degrees
 	_bow.position = offset
-	_bow.rotation_degrees = rotation_degrees
+	_orient_bow()
 
 
 func set_arrow_grip(model_scale: float, offset: Vector3, rotation_degrees: Vector3) -> void:

@@ -14,7 +14,7 @@ extends AnimationTree
 ##
 ## The graph, left to right:
 ##
-##     stand      BlendSpace1D   Idle @ 0 | Walk @ WALK_SPEED | Run @ RUN_SPEED
+##     stand      BlendSpace2D   nine points over the body-relative velocity
 ##     crouch     BlendSpace1D   CrouchIdle @ 0 | CrouchWalk @ CROUCH_SPEED
 ##     stance     Blend2         stand / crouch, by how crouched
 ##     air_one    Animation(JumpOne) behind air_one_seek, scrubbed by the arc
@@ -48,6 +48,15 @@ extends AnimationTree
 ## reaches the same pose from the same charge, and a Gub that is half drawn is
 ## half drawn on all eight screens.
 ##
+## **`stand` is a plane and not a line, which is the whole of D-066.** A Gub
+## aiming holds its facing at the crosshair (`Gub._face_view`) and moves
+## wherever the keys say, so "how fast" stopped being enough to pick a pose
+## with: a Gub running sideways at 5.4 m/s and a Gub running forward at 5.4 m/s
+## used to be the same blend position and the same forward run cycle, with the
+## feet skating through the whole of the difference. The position is now the
+## velocity **in the body's own frame** — x to its right, y forward — and the
+## nine points are Idle, a walk and a run in each of the four directions.
+##
 ## Both blend positions are in **game** metres per second, not in clip units:
 ## each locomotion node carries its own playback rate (`game speed / authored
 ## speed`) in a custom timeline, so a Gub travelling at exactly one of the three
@@ -68,6 +77,8 @@ extends AnimationTree
 const REQUIRED_CLIPS: Array[String] = [
 	"Idle", "Walk", "Run", "CrouchIdle", "CrouchWalk",
 	"JumpOne", "JumpTwo", "Slide", "Throw", "Cast", "Draw", "Loose",
+	"StrafeLeft", "StrafeRight", "StrafeWalkLeft", "StrafeWalkRight",
+	"RunBack", "WalkBack",
 ]
 
 # -------------------------------------------------------- the airborne arc ---
@@ -551,7 +562,11 @@ const UPPER_BODY_BONES: Array[String] = [
 
 # -------------------------------------------------------------- parameters ---
 
-const P_STAND_SPEED := "parameters/stand/blend_position"
+## The locomotion plane's position, which is a `Vector2` of game m/s in the
+## body's own frame — not the scalar it was before D-066. Renamed as well as
+## retyped, so anything still setting the old name fails loudly rather than
+## handing a float to a node that wants a vector.
+const P_STAND_MOVE := "parameters/stand/blend_position"
 const P_CROUCH_SPEED := "parameters/crouch/blend_position"
 const P_STANCE := "parameters/stance/blend_amount"
 const P_AIR_ONE_SEEK := "parameters/air_one_seek/seek_request"
@@ -585,6 +600,25 @@ var _dive_blend: float = 0.0
 ## numbers because they answer two questions, exactly as `_airborne` and
 ## `arc_time` do.
 var _draw_blend: float = 0.0
+## How far the *aim* is over the body, which is a third number beside those two
+## and answers a third question (D-066). `draw_time` is where the string is,
+## `_draw_blend` is whether the bow pose is being shown, and this is whether the
+## torso is turned to the crosshair.
+##
+## It is not `_draw_blend`, and the difference is the loose. The draw layer's
+## weight starts falling on the frame the string goes, and for the length of the
+## `Loose` one-shot after that the Gub is still holding an archer's pose out of
+## a *different* node — so a torso driven by `_draw_blend` would unwind through
+## the recoil and take the bow off the target on the one frame the shot is
+## being watched. This holds while either is running.
+var _aim_blend: float = 0.0
+## The torso modifier, installed in `_ready` rather than declared in `gub.tscn`
+## because the skeleton it hangs off lives inside the imported `art/generated/
+## gub.glb` and reaching into an instanced scene from a `.tscn` means marking
+## its children editable — a large, silent commitment to a node layout the
+## pipeline regenerates. `HeldGear` puts its two `BoneAttachment3D`s on the same
+## skeleton the same way and for the same reason.
+var _aim: GubAim
 
 ## What this animator believes about the body. `_grounded` and `_sliding` are
 ## kept rather than read fresh because the interesting thing about both is the
@@ -630,6 +664,16 @@ func _ready() -> void:
 	_skeleton_path = _find_skeleton_track_prefix(player)
 	tree_root = _build_graph(player)
 	active = true
+
+	# After the graph, because the modifier reads this node's own blend weight
+	# and a modifier installed on a tree that is not running yet would spend its
+	# first frames asking an animator with no graph in it what it was doing.
+	var skeleton := _body.find_child("Skeleton3D", true, false) as Skeleton3D
+	if skeleton == null:
+		push_warning("GubAnimator: no Skeleton3D under this Gub; the torso "
+			+ "will not aim")
+	else:
+		_aim = GubAim.install(skeleton, _body, self)
 
 	# A parameter and not a property, so it can only be set once the graph is
 	# installed. There is deliberately no matching line for the cast: it has no
@@ -682,22 +726,7 @@ func _missing_clips(player: AnimationPlayer) -> PackedStringArray:
 func _build_graph(player: AnimationPlayer) -> AnimationNodeBlendTree:
 	var tree := AnimationNodeBlendTree.new()
 
-	# Blend positions are in game m/s, and each point plays its own clip at the
-	# rate that plants its feet at that speed. Idle sits at 0 at rate 1.
-	var stand := AnimationNodeBlendSpace1D.new()
-	stand.min_space = 0.0
-	stand.max_space = Gub.RUN_SPEED
-	# Every point keeps running whether or not it carries any weight. See
-	# `_blend2` for why, and note that it matters most here: without it the Run
-	# point sits on frame 0 for the whole match until the first sprint, and that
-	# sprint cross-fades a *static* run frame into a mid-stride walk.
-	stand.sync = true
-	stand.add_blend_point(_cycle(player, "Idle", 0.0, 0.0), 0.0, -1, "idle")
-	stand.add_blend_point(_cycle(player, "Walk", Gub.WALK_SPEED, Gub.AUTHORED_WALK),
-		Gub.WALK_SPEED, -1, "walk")
-	stand.add_blend_point(_cycle(player, "Run", Gub.RUN_SPEED, Gub.AUTHORED_RUN),
-		Gub.RUN_SPEED, -1, "run")
-	tree.add_node("stand", stand, Vector2(0, 0))
+	tree.add_node("stand", _locomotion(player), Vector2(0, 0))
 
 	var crouch := AnimationNodeBlendSpace1D.new()
 	crouch.min_space = 0.0
@@ -783,6 +812,103 @@ func _build_graph(player: AnimationPlayer) -> AnimationNodeBlendTree:
 	tree.connect_node("throw", 1, "throw_rate")
 	tree.connect_node("output", 0, "throw")
 	return tree
+
+
+## The nine-point locomotion plane (D-066).
+##
+## Positions are the Gub's velocity **in its own frame**, x to its right and y
+## forward, in game metres per second; every point plays its own clip at the
+## rate that plants its feet at its own position. Idle sits at the origin at
+## rate 1.
+##
+## The triangles are written out rather than left to `auto_triangles`, and that
+## is not distrust of Delaunay — it is that every one of these nine points lies
+## on one of the two axes, so a third of the triples in the set are exactly
+## collinear and which of them survive a degenerate triangulation is not
+## something this graph should be finding out at runtime. Twelve triangles, four
+## quadrants of three: the inner wedge from Idle out to the two walks, and the
+## outer trapezoid between the two walks and the two runs, split on the diagonal
+## from the forward-or-back walk to the sideways run.
+##
+## The shape of it is a **diamond** and not a square — there are no diagonal
+## clips to put at its corners — so the two rings are `|x| + |y| = WALK_SPEED`
+## and `|x| + |y| = RUN_SPEED`, and a velocity handed in raw would be on the
+## wrong ring at every bearing except along an axis. `_body_relative` is where
+## that is dealt with, and the paragraph over it is the measurement of why.
+##
+## What the shape costs, said out loud: a full-speed diagonal is a half-and-half
+## blend of two run cycles rather than a clip of its own, so what cannot be said
+## in this space is "diagonally, but slowly" differently from "diagonally, flat
+## out" in the outermost ring — both land on the same hull edge and differ only
+## in where along it. Closing that is four more clips nobody has.
+func _locomotion(player: AnimationPlayer) -> AnimationNodeBlendSpace2D:
+	var stand := AnimationNodeBlendSpace2D.new()
+	stand.min_space = Vector2(-Gub.RUN_SPEED, -Gub.RUN_SPEED)
+	stand.max_space = Vector2(Gub.RUN_SPEED, Gub.RUN_SPEED)
+	stand.x_label = "right"
+	stand.y_label = "forward"
+	stand.blend_mode = AnimationNodeBlendSpace2D.BLEND_MODE_INTERPOLATED
+	# Before the points, so nothing is triangulated on the way in and then
+	# thrown away: the twelve below are the whole of it.
+	stand.auto_triangles = false
+	# Every point keeps running whether or not it carries any weight. See
+	# `_blend2` for why, and note that it matters most here: without it the Run
+	# point sits on frame 0 for the whole match until the first sprint, and that
+	# sprint cross-fades a *static* run frame into a mid-stride walk. With nine
+	# points instead of three there are eight cycles waiting to be entered for
+	# the first time rather than two.
+	stand.sync = true
+
+	var walk := Gub.WALK_SPEED
+	var run := Gub.RUN_SPEED
+	# The order is the triangle table's: origin, then forward, back, right, left,
+	# walk before run in each.
+	stand.add_blend_point(_cycle(player, "Idle", 0.0, 0.0), Vector2.ZERO, -1, "idle")
+	stand.add_blend_point(_cycle(player, "Walk", walk, Gub.AUTHORED_WALK),
+		Vector2(0.0, walk), -1, "walk")
+	stand.add_blend_point(_cycle(player, "Run", run, Gub.AUTHORED_RUN),
+		Vector2(0.0, run), -1, "run")
+	stand.add_blend_point(_cycle(player, "WalkBack", walk, Gub.AUTHORED_WALK_BACK),
+		Vector2(0.0, -walk), -1, "walk back")
+	stand.add_blend_point(_cycle(player, "RunBack", run, Gub.AUTHORED_RUN_BACK),
+		Vector2(0.0, -run), -1, "run back")
+	stand.add_blend_point(
+		_cycle(player, "StrafeWalkRight", walk, Gub.AUTHORED_STRAFE_WALK_RIGHT),
+		Vector2(walk, 0.0), -1, "walk right")
+	stand.add_blend_point(
+		_cycle(player, "StrafeRight", run, Gub.AUTHORED_STRAFE_RIGHT),
+		Vector2(run, 0.0), -1, "run right")
+	stand.add_blend_point(
+		_cycle(player, "StrafeWalkLeft", walk, Gub.AUTHORED_STRAFE_WALK_LEFT),
+		Vector2(-walk, 0.0), -1, "walk left")
+	stand.add_blend_point(
+		_cycle(player, "StrafeLeft", run, Gub.AUTHORED_STRAFE_LEFT),
+		Vector2(-run, 0.0), -1, "run left")
+
+	for quadrant: Array in LOCOMOTION_QUADRANTS:
+		var near: int = quadrant[0]     # the walk on the forward/back axis
+		var far: int = quadrant[1]      # the run on the same axis
+		var side_near: int = quadrant[2]  # the walk on the sideways axis
+		var side_far: int = quadrant[3]   # the run on the same axis
+		stand.add_triangle(IDLE_POINT, near, side_near)
+		stand.add_triangle(near, side_near, side_far)
+		stand.add_triangle(near, side_far, far)
+	return stand
+
+
+## The order `_locomotion` adds its blend points in, so the triangle table below
+## can name them.
+const IDLE_POINT := 0
+
+## The four quadrants of the locomotion plane, each as
+## [forward-or-back walk, the run beside it, sideways walk, the run beside it].
+## Point indices into the order `_locomotion` adds them in.
+const LOCOMOTION_QUADRANTS: Array = [
+	[1, 2, 5, 6],   # forward-right
+	[1, 2, 7, 8],   # forward-left
+	[3, 4, 5, 6],   # back-right
+	[3, 4, 7, 8],   # back-left
+]
 
 
 ## A two-way blend whose *unweighted* side keeps running.
@@ -930,9 +1056,9 @@ func _process(delta: float) -> void:
 	if _body == null or tree_root == null:
 		return
 
-	var speed := Vector3(_body.velocity.x, 0.0, _body.velocity.z).length()
-	set(P_STAND_SPEED, clampf(speed, 0.0, Gub.RUN_SPEED))
-	set(P_CROUCH_SPEED, clampf(speed, 0.0, Gub.CROUCH_SPEED))
+	var flat := Vector3(_body.velocity.x, 0.0, _body.velocity.z)
+	set(P_STAND_MOVE, _body_relative(flat))
+	set(P_CROUCH_SPEED, clampf(flat.length(), 0.0, Gub.CROUCH_SPEED))
 
 	_track_airtime(delta)
 	_track_slide()
@@ -960,10 +1086,68 @@ func _process(delta: float) -> void:
 		DRAW_BLEND_SPEED * delta)
 	set(P_DRAW_SEEK, draw_time(_body.draw_fraction()))
 	set(P_DRAW, _draw_blend)
+	# The same speed in as the draw pose itself, so the torso arrives with the
+	# bow rather than after it, and the same speed out — which through a loose
+	# starts a fifth of a second later than the draw's does. See `_aim_blend`.
+	var aiming := _body.is_drawing() or bool(get(P_LOOSE_ACTIVE))
+	_aim_blend = move_toward(_aim_blend, 1.0 if aiming else 0.0,
+		DRAW_BLEND_SPEED * delta)
+	# The carried bow's tilt comes off the same weight, and it is set from here
+	# rather than from `GubCombat._tick_draw` beside the string for a reason
+	# that is about what the number *is*: the string is bent by the charge,
+	# which is the player's input, and the bow is tilted by how far the arm has
+	# come up, which is this graph's own blend and is not knowable anywhere else
+	# (D-066). It runs on every peer's copy of every Gub, so a remote archer
+	# brings its bow up out of the carry exactly as the local one does.
+	if _body.held_gear != null:
+		_body.held_gear.set_carry(1.0 - _aim_blend)
 
 	set(P_STANCE, _stance)
 	set(P_AIRBORNE, _airborne)
 	set(P_DIVE, _dive_blend)
+
+
+## A horizontal world velocity turned into a position in the locomotion plane
+## (D-066): x to the Gub's right, y forward.
+##
+## Off `body_yaw` and not off the node's transform: `_model_root` is turned by
+## the same yaw but the Gub mesh is authored facing +Z and counter-rotated 180°
+## inside `gub.tscn`, so reading a basis here would be reading that
+## compensation as well. `facing()` is the accessor that already means "the way
+## the Gub looks" on both sides of that, and it answers off the replicated yaw
+## on a remote Gub — which is the whole reason the sideways pose arrives on
+## seven other screens for nothing.
+##
+## **It is not simply the velocity, and the difference is the shape of the
+## space.** There are four clips on the compass and none on the diagonals, so
+## the plane's rings are **diamonds** rather than circles: the four walk points
+## are the corners of `|x| + |y| = WALK_SPEED` and the four runs the corners of
+## `|x| + |y| = RUN_SPEED`. A velocity written in straight is therefore on the
+## wrong ring everywhere except on an axis — a Gub walking diagonally at 2.3 m/s
+## lands 3.25 out on the L1 measure, which is past the walk ring entirely and
+## into the band where the *run* cycles carry weight. Measured, that was the
+## worst skate anywhere in the space: 1.20 of body speed on a walk diagonal,
+## against 0.15 walking straight forward, with run clips blended into a walk.
+##
+## So the vector is rescaled to put its **L1 norm at its own speed**, which
+## leaves the direction alone and moves the point onto the ring that means that
+## speed. Every ring is then a constant-speed ring at every bearing, which is
+## what the blend points were placed to mean.
+##
+## The component clamp that survives is for the Elder: a boosted Gub runs at
+## 7.3 m/s (D-040) and there is no clip out there, so it sits on the run ring
+## and plays the run cycles slightly slow, which is the trade `Gub.target_speed`
+## already documents for the one-dimensional space.
+func _body_relative(flat: Vector3) -> Vector2:
+	var forward := _body.facing()
+	var right := Vector3(-forward.z, 0.0, forward.x)
+	var move := Vector2(flat.dot(right), flat.dot(forward))
+	var manhattan := absf(move.x) + absf(move.y)
+	if manhattan > 0.0001:
+		move *= move.length() / manhattan
+	return Vector2(
+		clampf(move.x, -Gub.RUN_SPEED, Gub.RUN_SPEED),
+		clampf(move.y, -Gub.RUN_SPEED, Gub.RUN_SPEED))
 
 
 ## Where the body is in its arc, turned into an absolute clip time.
@@ -1193,6 +1377,17 @@ func is_throwing() -> bool:
 		return true
 	return bool(get(P_THROW_ACTIVE)) or bool(get(P_CAST_ACTIVE)) \
 		or bool(get(P_LOOSE_ACTIVE))
+
+
+## How far the torso is turned to the crosshair, 0 to 1 (D-066). Read by
+## `GubAim`, which is the only thing that asks.
+##
+## A weight and not a boolean, for the same reason `_airborne` is: a bow coming
+## up over a run is a torso coming round over the same twelfth of a second, and
+## a modifier switched on would be a shoulder snapping through ninety degrees on
+## one frame.
+func aim_blend() -> float:
+	return _aim_blend
 
 
 ## Airborne, in an airtime a dive was spent in.

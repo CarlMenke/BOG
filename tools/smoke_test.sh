@@ -237,6 +237,68 @@ also "the bow's two ends" "full PASS"
 # field would pass every pose row and be invisible to every real client.
 check "a remote Gub draws the same bow" "draw PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- draw
+# The feet, round the compass (D-066). The most visible animation fault this
+# game had was a Gub running sideways at full speed playing a *forward* run
+# cycle, and the honest measurement of it is not an angle — it is how fast the
+# foot that is on the ground is sliding along it. So the mode drives a Gub held
+# facing one way, as it is held while aiming, through eight bearings at walking
+# and at running speed, and takes the slower of its two toes every tick.
+#
+# Three verdicts, and the order is the usual one of each being the control for
+# the last. `straight` is the two axes the new clips *solve* — forward and
+# backward plant at 0.28 of body speed or better, where before this step the two
+# backward legs measured 0.83 and 1.03 and that line fails on the old build.
+# `compass` is all sixteen legs against a limit drawn between the plane's own
+# worst (1.14, a walking back-diagonal) and the one-dimensional space's (1.36).
+#
+# `crouch` is the control in D-039's sense and it is one that has to come out
+# *badly*: a crouching Gub still has one clip behind a line, so its bearings
+# spread 0.21 to 1.41 across the compass. If they ever stop disagreeing, this
+# measurement has stopped being able to see a skate and the sixteen lines above
+# it mean nothing. `--fixed-fps 60` so every tick is the game's own length;
+# headless, about a second and a half.
+check "feet planted in eight directions" "strafe PASS" \
+    "$GODOT" --headless --fixed-fps 60 --path "$GODOT_ROOT" tools/combat_range.tscn -- strafe
+also "feet planted in eight directions" "straight PASS"
+also "feet planted in eight directions" "compass PASS"
+also "feet planted in eight directions" "crouch PASS"
+# The torso that aims (D-066), swept through everything a player can point it
+# at. D-065 shipped a bow pointing **91 degrees off the Gub's own facing** —
+# an archer stands side-on and the whole angle lives above a pelvis the layer
+# mask throws away — and left the number in `draw`'s own output for this step
+# to drive down.
+#
+# A full draw is held while the view goes all the way round the horizon and then
+# from `PITCH_MIN` to `PITCH_MAX`. `bow` is that 91 answered: the bow's bearing
+# stays within 3 degrees of the crosshair and its line within 5 degrees of it in
+# space. `pitch` is the half the body never had at all — 123 degrees of
+# elevation tracked, with the span itself as the control, because a torso that
+# never moved would agree with a level crosshair perfectly.
+#
+# `release` is the one that would hurt most to lose. Two arrows are fired from
+# one spot at the two ends of the pitch range and have to leave from **the same
+# point in space** while going 122 degrees apart: the origin is the body's
+# (position, eye height and yaw, none of them on the skeleton) and the direction
+# is the camera's, so this is D-025 and D-045 asserted against the one thing
+# most likely to break them. Measured, 0.0000 m.
+check "the torso tracks the crosshair" "spine PASS" \
+    "$GODOT" --headless --fixed-fps 60 --path "$GODOT_ROOT" tools/combat_range.tscn -- spine
+also "the torso tracks the crosshair" "bow PASS"
+also "the torso tracks the crosshair" "pitch PASS"
+also "the torso tracks the crosshair" "release PASS"
+# The carried bow off the ground (D-066). D-065 measured a 1.71 m longbow
+# ploughing `Run` by 0.158 m and said plainly that no lever on the grip could
+# raise it, because every one of them takes the string's V off the drawing
+# fingers. A tilt that only exists while the bow is *carried* meets no string at
+# all, and this is the table that says so: the worst limb tip over all eleven
+# clips a Gub carries a bow around in, which has to stay 0.15 m clear.
+#
+# It runs the same `preview_bow -- measure` that solves the grip, so the same
+# run that would notice a grip going stale notices a carry going into the grass.
+# Headless — nothing is rendered, the PNG is thrown away.
+check "the carried bow clears the ground" "carry PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" --script tools/snapshot.gd -- \
+    res://tools/preview_bow.tscn "$GODOT_LOG_DIR/bow_measure.png" 4 measure
 # The Elder's invincibility, asserted against a real spear rather than in logic
 # (D-040). `match_rules` can prove that `report_kill` refuses the kill; only this
 # can prove that a shaft launched at a body fourteen metres away arrives, is

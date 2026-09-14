@@ -6260,3 +6260,455 @@ arguing with the person using it.
 **`R` for the draw**, which is `respawn`. It is `V` and mouse button 4, both
 held; the whole of that decision is that every other reachable key was taken and
 a hold wants a key the hand is already resting near.
+## D-066 — Locomotion becomes a plane, and the torso is turned onto the crosshair
+
+Two gaps, one step. Running sideways played a forward run cycle and the feet
+skated through the whole of the difference; and the bow the last step shipped
+pointed **91° off the Gub's own facing**, because an archer stands side-on and
+every degree of that angle lives above a pelvis the layer mask throws away.
+
+The second one turned out to be the lever for the first. A torso that can be
+turned onto the crosshair is the same machinery either half needs, and the one
+thing `docs/PLAN_COMBAT.md` says this repo genuinely does not have.
+
+### The plane: nine points, diamond rings, and a position that is not the velocity
+
+`stand` was a `BlendSpace1D` over one number — how fast — with Idle at 0, Walk
+at 2.3 and Run at 5.4. It is now a `BlendSpace2D` over the velocity **in the
+body's own frame**, x to the Gub's right and y forward, with a walk and a run on
+each of the four bearings:
+
+                       Run 5.4
+                       Walk 2.3
+    StrafeLeft  -5.4   Idle 0    5.4  StrafeRight
+    StrafeWalkLeft -2.3           2.3  StrafeWalkRight
+                       WalkBack -2.3
+                       RunBack  -5.4
+
+Every point still plays its own clip at `game speed / authored speed`, so the
+speed difference between two authoring families is handled for free, exactly as
+it was on the line.
+
+**The twelve triangles are written out rather than left to `auto_triangles`.**
+All nine points lie on one of the two axes, so a third of the triples in the set
+are exactly collinear, and which of them survive a degenerate Delaunay is not a
+thing this graph should be finding out at runtime. Four quadrants of three: the
+wedge from Idle out to the two walks, and the trapezoid between the two walks
+and the two runs, split on the diagonal.
+
+**The blend position is the velocity rescaled so its L1 norm is its own speed,
+and that is not a nicety.** There are no diagonal clips, so the rings of this
+space are *diamonds* rather than circles: the four walks are the corners of
+`|x| + |y| = 2.3`. A velocity written in straight is therefore on the wrong ring
+everywhere except on an axis — a Gub walking diagonally at 2.3 m/s lands 3.25
+out on the L1 measure, which is past the walk ring entirely and into the band
+where the **run** cycles carry weight. Measured, that was the worst skate
+anywhere in the space: 1.20 of body speed, with run clips blended into a walk.
+Rescaled, the same leg measures 0.47.
+
+What the diamond still costs, said plainly: a Gub running flat out at 45° asks
+for a point outside the hull, and Godot clamps it to the midpoint of the
+run-forward-to-run-sideways edge. The *pose* is right — a half-and-half blend of
+two run cycles, each at its own full rate — and what is lost is the ability to
+say "diagonally, slowly" differently from "diagonally, flat out" in the
+outermost ring.
+
+### The 28° in the plan is a **shoulder** measurement, and the pipeline would have thrown half of it away
+
+This is the thing that would have shipped a blend space worth almost nothing,
+and it was invisible until the build printed a number nobody had asked it for.
+
+`align_facing` makes every clip point where the rest pose points, and it reads
+"where a clip points" off the **hip line** — the yaw of the left-hip to
+right-hip vector — because that is the one measurement that stays put while the
+arms and torso animate. On a forward cycle the hips and the chest agree: `Run`
+travels 10.2° off its own hip line and 5.7° off its chest line.
+
+**On a sidestep they disagree by more than twenty degrees, and they disagree in
+the direction that matters.** The pelvis turns *into* the step and the chest does
+not — that is what a sidestep is. So aligning `LeftStrafe` by its pelvis drags
+its travel round with it:
+
+    travel, in degrees off the body's own forward, + to its left
+    clip                 by the hips   by the chest
+    GUB_2/Run                 -10.2          -5.7
+    GUB_2/Walk                 -2.9          -6.4
+    LeftStrafe                 +8.6         +27.5
+    RightStrafe               -15.7         -37.4
+    LeftStrafeWalking         +17.6         +35.3
+    RightStrafeWalking        -25.3         -46.5
+    RunningBackward          +171.7        +169.6
+    WalkingBackward          +173.1        +170.6
+    StandingRunLeft           +50.8         +76.5
+
+The plan's table quotes `LeftStrafe` at **28° by the shoulders** and 19° by the
+hip line, and the decision to use these four clips was taken on that 28. Built
+the way every other clip in this project is built, the game would have got the
+8.6 — a Gub jogging very slightly to one side, sold as a strafe.
+
+So `Clip` gained a `face` field, the four strafes set it to `CHEST_JOINTS`, and
+`align_facing` turns each clip onto the rest line of its **own** pair. The two
+rest lines are 1.96° apart on the scaled rig, so this is a change of reference
+and not a two-degree offset smuggled in with it. Nothing else in the table moves:
+`Run` and `Walk` are aligned by the pelvis exactly as they were, which is the
+decisions table's "`GUB_2`'s existing `Run` and `Walk` stay" kept to the letter.
+
+It also happens to be the right *pose* for an aiming game. Chest square to the
+crosshair, hips turned into the step, is what a strafe looks like.
+
+### The feet, before and after, measured rather than argued
+
+`tools/combat_range.tscn -- strafe` holds a Gub facing one way — with the same
+flag the camera raises while somebody is aiming — and drives it round eight
+bearings at both speeds. Every tick it takes both toes in world space and keeps
+the **slower** of the two, which is the planted one at every moment of a cycle
+except the instant they swap. No plant threshold is in that number: a threshold
+is a place for the measurement to disagree with itself when one clip lifts its
+feet higher than another, and `min(left, right)` needs none.
+
+Skate as a fraction of the Gub's own ground speed, averaged over a leg. The
+"before" column is the same harness run against the one-dimensional space:
+
+    bearing        walk before  walk after   run before  run after
+    forward             0.15        0.15         0.28       0.28
+    fwd-right           0.75      **0.47**       0.69     **0.50**
+    right               1.30      **0.80**       1.26     **0.98**
+    back-right          1.33        1.14         1.18       1.00
+    back                1.03      **0.16**       0.83     **0.23**
+    back-left           1.33        1.13         1.05       0.96
+    left                1.30      **0.80**       1.36     **0.93**
+    fwd-left            0.74      **0.46**       0.91       0.67
+    mean                0.99        0.64         0.95       0.69
+    worst               1.33        1.14         1.36       1.00
+
+Three things in that table are worth saying out loud.
+
+**Backward is solved, not improved.** 1.03 to 0.16 and 0.83 to 0.23 — a
+backpedal now plants its feet as well as a forward walk does, because
+`RunningBackward` and `WalkingBackward` travel within 8° of straight backward and
+nothing has to be blended to get there. That is 85% and 72% off, and it is the
+largest single improvement in the step.
+
+**Sideways is a third better and no more.** 1.30 to 0.80, 1.36 to 0.93. These
+four clips are forward-leaning diagonals — 27° to 47° off forward even read off
+the chest — so a pole that means 90° is being served by a clip that means 37,
+and no rate or blend can close the other 53. It is a large and visible
+improvement on a forward run cycle played sideways, and it is not a fix.
+
+**The back diagonals barely move at all**, 1.33 to 1.14 and 1.18 to 1.00, and
+they are the worst legs in the space for a reason that follows directly from the
+last paragraph: with the strafe poles leaning *forward*, the forward-diagonal
+quadrant has two clips 27° apart spanning it and the backward-diagonal quadrant
+has a 149° hole with a clip at each end. A request at -135° is 43° from the
+nearest thing that was ever drawn.
+
+**Closing either is three downloads**, and they are named in
+`assets/source/_rejected/MANIFEST.md`: `Standing Run Right`, `Standing Walk
+Left` and `Standing Walk Right`, With Skin, from the same upload. Their family's
+one member that *is* here, `StandingRunLeft`, measures **76.5° off forward by
+the chest** — a true lateral, against `LeftStrafe`'s 27.5. It was measured and
+is deliberately **not declared**: taking it alone would put the family boundary
+inside the strafe axis, between a lateral run and a diagonal walk, which is
+worse than having it between forward and sideways. It stays on disk as the
+alternate. This is the one thing in this step left for the user to decide, and
+it is a decision about downloading, not about code.
+
+### Posture across the boundaries: the mixed family is not the problem, `Run` is
+
+The step brief's warning was that the playback rate handles speed for free and
+does not handle **posture** — hip height, torso pitch, arm carriage — and that a
+diagonal blend is where two authoring families meet. So the build now measures
+both, on the finished 1.80 m rig, and prints them beside the bearing.
+
+    clip              hip height   torso pitch
+    Idle                 0.542 m         3.4°
+    Walk                 0.657 m         4.1°
+    Run                  0.575 m      **45.1°**
+    StrafeWalkLeft       0.665 m         5.5°
+    StrafeWalkRight      0.664 m         5.6°
+    StrafeLeft           0.645 m         8.7°
+    StrafeRight          0.645 m         8.7°
+    WalkBack             0.683 m        15.3°
+    RunBack              0.647 m         7.1°
+
+(Hip height is the pelvis above the floor, averaged over the clip; torso pitch
+is the Hips-to-Neck line off vertical, averaged the same way. Absolute rather
+than measured against a foot, because the rig is scaled so the rest toes sit at
+zero and `lock_root_motion` leaves a clip's vertical alone — so a clip authored
+ten centimetres higher *renders* ten centimetres higher, which is the number
+that shows up as a Gub rising out of a blend.)
+
+Every boundary in the new plane, worst first:
+
+    Run <-> StrafeLeft / StrafeRight      70 mm   36.4°
+    Run <-> RunBack                       72 mm   38.0°
+    StrafeWalk <-> WalkBack               19 mm    9.8°
+    Walk <-> StrafeWalk                    8 mm    1.4°
+    StrafeLeft <-> RunBack                 2 mm    1.6°
+
+**And the boundary that already ships:** `Walk <-> Run`, which is the middle of
+the existing one-dimensional space and is on screen every time anybody
+accelerates, is **82 mm and 41.0°**. Every new boundary is smaller than one the
+game already has and the user already likes.
+
+So the mixed-family worry is answered, and answered by finding that it was
+pointed at the wrong thing. The two families agree about carriage almost
+exactly — the four strafes sit at 5.5°-8.7° of torso pitch and `GUB_2/Walk` sits
+at 4.1°. The single outlier is **`Run`, at 45.1°**, which disagrees with the
+strafes by 36° and with `Walk` *from its own family* by 41°. It is a deep-lean
+sprint, and the reason it is not a problem is that the game has been blending
+into and out of it since the day it shipped. **No download, and no ask.** The
+fallback the brief reserved — re-fetching one family's `walking` and `running` —
+would not have helped: what it would fix is a family gap that is not there, and
+what it would cost is the run the user chose to keep.
+
+### The spine: a `SkeletonModifier3D`, and why not `LookAtModifier3D`
+
+`UPPER_BODY_BONES` excludes `Hips` and `Spine` with a comment saying the throw's
+own rotation of them would fight the run cycle's weight shift. That is right for
+a throw and wrong for a bow, and D-065 measured how wrong: **91° off facing**,
+with three mask variants that do not move it, because `align_facing` puts a
+clip's whole yaw on the Hips and the Hips are outside the filter (D-029). The
+one rotation that would have carried the difference is the one the layer throws
+away.
+
+So the angle is put back at the spine, by `GubAim`, a `SkeletonModifier3D`
+installed on the skeleton from `GubAnimator._ready`.
+
+**Why not `LookAtModifier3D`, which is the obvious suggestion and is named in the
+plan.** It answers "turn this bone until its forward axis points at that node",
+and that is the wrong question twice over.
+
+- The quantity to drive is not the orientation of any one bone. It is the
+  **offset between two** — where the composed bow points (the line from the
+  drawing fist to the bow fist) against where the crosshair points. A look-at
+  aimed at the spine leaves the arms hanging off it at whatever angle the clip
+  put them, which is the 91°: the modifier would report success with the bow
+  still across the chest. Pointing it at a target pre-turned by 91° would work,
+  and would be this class with a node in the scene standing in for a constant.
+- One bone is the wrong number of bones. A Gub is a blob with 0.28 m of torso
+  between pelvis and collarbones and a 0.36 m head on top; 92° of yaw at a single
+  joint creases it. Spread over `Spine`, `Spine1` and `Spine2` at 25/35/40% it is
+  thirty degrees a joint, which is what a skin cluster is for. `LookAtModifier3D`
+  drives one bone, so three of them would be three nodes sharing one number and
+  three chances to disagree about it.
+
+What is kept from that family is the part that matters: this runs **in the
+skeleton's own modifier stack**, the one place in the frame where the animation
+has finished writing the pose and the skin has not yet been computed. Writing
+bone poses from a sibling node's `_process` is exactly the race
+`SkeletonModifier3D` exists to remove, and `gub.tscn` puts the `AnimationTree`
+*after* the model — a hand-rolled version would have been reading last frame's
+pose.
+
+The turn is yaw first and pitch second, read right to left: the chest is swung
+until the bow is on the body's forward, and *then* tipped about the body's own
+lateral axis. The other order pitches the chest about an axis the bow is still
+across, which raises a shoulder instead of the bow. Both axes are the skeleton's
+and they are not the pair they look like — `Model/gub` is turned 180° inside
+`gub.tscn`, so the body's forward is the skeleton's **+Z** and the body's right
+is its **-X**. Up survives that turn, which is why the yaw can be the
+world-space number `combat_range` measured without being converted first.
+
+Each bone's share is applied in its **parent's** space, conjugated by the
+parent's global basis read fresh, because the bone above has just moved. All
+three shares are about one axis, so they compose by adding their angles and the
+chest ends up turned by exactly the total.
+
+**The pitch is the half the body never had at all.** A `CharacterBody3D` standing
+on a floor has no pitch, so `Gub` gained `sync_aim_pitch` — one float, ON_CHANGE,
+`draw_fraction`'s exact twin, written by the owner off the camera boom and read
+by everyone. It is deliberately *not* on the always-packet beside `sync_yaw`:
+yaw moves a body through the world and this moves a pose. It comes off the boom
+and not off `_view_basis`, which is flat on purpose (`_wish_direction` would
+otherwise walk a Gub into the floor when it looked down), so `set_view_basis`
+took a third argument rather than a pitched basis.
+
+**The weight is the animator's own, and it is not the draw's.** `_aim_blend`
+holds while `is_drawing()` **or** the `Loose` one-shot is running, because the
+draw layer's weight starts falling on the frame the string goes and for the
+length of the recoil the Gub is still holding an archer's pose out of a different
+node. A torso driven by the draw would unwind through the loose and take the bow
+off the target on the one frame everybody is watching.
+
+**The throw and the cast are deliberately left alone.** They read acceptably as
+layers already (D-064 measured the cast), and pitching them would move the frame
+the release rule is measured at — `release`'s "the tick the arm is furthest in
+front of the hips" is a derivation D-025 and D-063 exist to protect. The spine
+aims for the weapon that needs it and for nothing else.
+
+**91° → 3°.** Swept round the whole horizon and through the camera's entire pitch
+range at a full draw, the bow's bearing holds within **3°** of the crosshair and
+its line within **5°** of it in space; `draw`'s own five-charge table now reads
++1, +1, 0, -2, -0 where it read -91, -91, -92, -94, -92. The five degrees that
+are left are mostly not error: `AIM_BONES` turns the chest onto the crosshair
+exactly, and the shoulder, elbow and wrist below it hold whatever the draw clip
+put there, which is a bow arm carried three to five degrees above the line of the
+chest at every pitch.
+
+### The release does not move, and there is a trap under the assertion
+
+D-025 reads the aim at the release from the camera and D-045 keeps a wall behind
+the Gub from moving a spear. A modifier that rotates the spine must not touch
+either, and it cannot: `GubCombat._throw_origin()` is built from
+`global_position`, `eye_height()` and `body_yaw`, and the direction is
+`GubCamera.aim_ray()`. Nothing on the skeleton.
+
+Asserted rather than trusted. `spine` fires two arrows from one spot at the two
+ends of the pitch range and requires them to leave from the **same point in
+space** while going two different ways — measured, **0.0000 m apart and 122°
+apart**. The second clause is the control: without it, "the origin did not move"
+is satisfied by a mode that never turned the view.
+
+Two traps were found writing that check and both are worth leaving written down,
+because each of them makes a check pass for the wrong reason.
+
+**`Skeleton3D.get_bone_global_pose()` does not see a modifier.** The skeleton
+writes the modified pose into the skin and restores the animation's own pose
+behind it so the next frame starts clean — so a bone pose read from
+`_physics_process` is the pose *before* `GubAim` turned the torso, every time.
+`draw`'s 91° went on being 91° with the bow visibly pointing down the range.
+`BoneAttachment3D` updates off `skeleton_updated`, which fires after the modifier
+stack, so the checks read the **attachments** the bow and the arrow actually
+hang from — which is also the only thing a player can see.
+
+**`SpearProjectile.begin` calls `add_child` before it sets the position and the
+facing**, so the `child_entered_tree` signal arrives at an arrow still at the
+origin pointing down -Z. Read there, both shots looked identical and "the
+release point did not move" passed on two zeroes. The read is deferred to the end
+of the physics frame instead.
+
+(And a third, in the harness rather than the game: the aim is read at the
+*release*, which is a tick after the key comes up, so a mode that swung the
+camera to the other end of the sweep on the frame it let go had both its shots
+aimed by the second view.)
+
+### The carried bow comes out of the grass, and D-065's "not tunable out" was answering a different question
+
+D-065 measured a 1.71 m longbow **ploughing `Run` by 0.158 m** at the bottom of
+the arm swing and said plainly that it was not tunable out, because every lever
+that would raise the tip moves the **nocking point**. That is true of every lever
+on *the grip* — the one orientation the string's V has to meet the drawing
+fingers in, at every charge level, which `preview_bow -- measure` solves as an
+equation with one answer.
+
+A tilt that only exists while the bow is **carried** meets no string at all. It
+is blended away over the same twelfth of a second the draw pose comes up in, off
+the same `_aim_blend`, so at every charge above zero the bow is back in the grip
+that equation solved, unmoved to the millimetre. That is the "carry pose (a
+second grip, and a pop between it and the draw)" D-065 itself named as an honest
+fix, with the pop answered: the grip and the pose arrive together because they
+are driven by the same number.
+
+Swept rather than chosen. `preview_bow -- measure` walks a grid of both tilt
+angles over all eleven clips a Gub carries a bow around in and reports the worst
+limb tip over the lot; `CARRY_TILT` is the peak of it, and it is a broad one —
+every tilt within 5° on either axis clears 0.25 m.
+
+    worst limb tip over all eleven carried clips
+    no tilt                   **-0.158 m**   (Run, through the grass)
+    Vector2(47.5, -25.0)      **+0.284 m**   (Walk)
+
+which is better than the *best* any clip managed before (`Idle`, +0.171). **One
+axis alone cannot do it**: tilting about the grip's Z rights `Run` and rolls
+`WalkBack` under instead, bottoming out at -0.021 m, because the axis lives in
+the fist and the fist is at a different attitude in every clip.
+
+The six new locomotion clips were measured on the way past and **not one of them
+ploughs** even untilted — `WalkBack` is the tightest at +0.038 m. `Run` was
+always the only offender, and it is the only clip in the set that leans 45°.
+
+So: **no download.** The carry is fixed, and the grip the string is fitted to is
+byte-for-byte what D-065 solved.
+
+### What proves it
+
+Nine new checks in the gate (77 → 86), all headless.
+
+`combat_range -- strafe` is the sixteen legs and the crouch control, described
+above. `straight` is the line the old build fails: forward and backward plant at
+0.28 of body speed or better where the two backward legs used to measure 0.83
+and 1.03. `compass` holds all sixteen under 1.25, which is a line drawn *between
+the two builds* — over the plane's own worst of 1.14 and under the
+one-dimensional space's 1.36 — rather than a rounding of today's number.
+`crouch` is the control in D-039's sense and it has to come out **badly**: a
+crouching Gub is still one clip behind a line, so its bearings spread 0.21 to
+1.41 across the compass, and if they ever stop disagreeing this measurement has
+stopped being able to see a skate at all. (Its best bearing is
+forward-**left**, not forward, because `CrouchWalk` is authored travelling 33.8°
+to the left — its own small illustration of the same point.)
+
+`combat_range -- spine` is the sweep and the two arrows. `preview_bow --
+measure`, which already solves the grip, now also prints the carry table and a
+`carry PASS` against a 0.15 m floor — so the same run that would notice a grip
+going stale notices a carry going into the grass.
+
+Run against the code without the things they check (D-015): with
+`_body_relative` returning the old scalar, `straight` fails on both backward
+legs (0.83 and 1.03) and `compass` fails at 1.36, with six of the sixteen legs
+past its limit; with `GubAim` returning before it writes anything, `bow` and
+`pitch` fail — the bow 95° off the crosshair and the whole pitch sweep moving
+its elevation by 2° — while `release` still passes, which is the whole point of
+`release` being a separate verdict; with `CARRY_TILT` at
+zero, `carry` fails on `Run` at -0.158 m.
+
+### The pictures
+
+    bash tools/preview_clips.sh 5_Locomotion/LeftStrafe.fbx ... GUB_2/Run.fbx \
+        --out out/loco_clips.png --align mean --azimuth 20
+
+    GODOT --path . --script tools/snapshot.gd -- \
+        res://tools/combat_range.tscn out/strafe_lineup.png 60 strafing
+
+    GODOT --path . --script tools/snapshot.gd -- \
+        res://tools/combat_range.tscn out/aim_lineup.png 60 aiming
+
+The first is the raw pack corrected the way the build corrects it — including
+the chest alignment, so a sheet of `LeftStrafe.fbx` is not 19° away from the clip
+the game plays. `tools/preview_clips.py` learned to read the `face` field out of
+`PACKS` for exactly that.
+
+The other two are the two halves of this step in a real match, and both are built
+out of **replicated fields on dummies** rather than by driving one Gub and
+photographing it eight times. A dummy is a roster entry with no client behind it,
+so the only things those modes write are the handful of `sync_*` floats a real
+client would have sent: if the poses appear, they appear for the reason they have
+to appear on somebody else's screen. `strafing` is eight Gubs facing the camera,
+each running a different bearing at `RUN_SPEED`. `aiming` is five side-on at a
+full draw, from `PITCH_MIN` to `PITCH_MAX`, and it is the frame that answers this
+step's question: five bows, five elevations, one float apiece.
+
+### Rejected
+
+**`StandingRunLeft` as the lateral pole.** Measured at 76.5° off forward by the
+chest against `LeftStrafe`'s 27.5 — it is very nearly the true lateral this space
+wants, and it is a set of one. See above.
+
+**Placing the strafe clips at their measured bearing** rather than at the poles,
+which would make each clip exact at its own angle. It leaves a 60° wedge with
+nothing in it on each side, which a blend space covers by clamping to the hull —
+so a pure lateral would play the same clip it plays now, and every angle between
+would be *worse*. Poles are what "eight directions" means and they degrade
+gracefully.
+
+**Aligning the strafe clips by their travel** instead of by any body line, which
+would plant the feet perfectly at the poles by construction. It turns the body
+58-81° away from the crosshair while strafing, which the spine modifier would
+then have to turn back — 80° of waist twist on a blob, on every strafe rather
+than only while a bow is up. It is how the `Standing *` family is authored and it
+is what to reconsider the day those three downloads arrive.
+
+**A backward speed penalty.** `WalkBack` is authored at 0.871 m/s and has to
+carry a 2.3 m/s backpedal, which is **2.64x** — the fastest playback rate of any
+cycle in the game, and a Gub backing away at walking pace is visibly scampering.
+Its feet are planted, which is what the ratio is for, and slowing the backpedal
+is a movement decision rather than an animation one: the lever is
+`Gub.target_speed`, not a number in the animator.
+
+**Pitching the throw and the cast**, and **a second modifier for the carry**
+(which is a carry pose by another name). Both above.
+
+**A crouch plane.** `CrouchWalk` is the only crouched cycle there is, so the
+crouch space is still a line and a crouching Gub still strafes on a forward clip
+— which is what makes it this step's control. Fixing it is four more downloads
+and it is the least visible case in the game: a crouching Gub moves at 1.6 m/s.

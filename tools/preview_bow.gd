@@ -26,6 +26,15 @@ extends Node3D
 
 const GUB := preload("res://scenes/player/gub.tscn")
 
+## How far clear of the floor the lowest limb tip of a carried bow has to stay,
+## in metres, in every clip a Gub walks around in (D-066).
+##
+## The spear's own grip was tuned to "both ends stay at least 0.15 m up" and
+## this is that number, held to by a prop nearly half a metre longer. The tilt
+## `HeldGear.CARRY_TILT` was swept to actually reaches 0.284, so this is a floor
+## with nearly a hand's width under it rather than a record of today.
+const CARRY_CLEARANCE_MIN := 0.15
+
 ## Model-space landmarks, in the props' own units, measured off the built GLBs.
 ##
 ## The bow's string sits at `STRING_REST_Y` on the model's X axis and is pulled
@@ -79,6 +88,9 @@ func _ready() -> void:
 	if mode == "measure":
 		_measure()
 		get_tree().quit()
+		return
+	if mode == "carry":
+		_carry_sheet()
 		return
 	_sheet()
 
@@ -190,28 +202,99 @@ func _measure() -> void:
 ## Measured off the model's own limb tips through the bone, not off a bounding
 ## box: the mesh runs +-0.5 along its local X and the two ends are what touch.
 func _report_carry(gub: Gub, player: AnimationPlayer, skeleton: Skeleton3D) -> void:
-	var hand := skeleton.find_bone(HeldGear.BOW_HAND_BONE)
 	print("preview_bow: the carry, lowest limb tip above the floor")
-	for clip: String in ["Idle", "Walk", "Run", "CrouchIdle", "CrouchWalk"]:
-		if not player.has_animation(clip):
+	for clip: String in _carried_clips(player):
+		var row := _carry_clearance(gub, player, skeleton, clip,
+			HeldGear.CARRY_TILT)
+		print("  %-16s lowest tip %+.3f m at %.2f s" % [clip, row[0], row[1]])
+	_sweep_carry(gub, player, skeleton)
+
+
+## Every clip a Gub is carrying a bow *around* in — the locomotion plane and the
+## two crouches. The one-shots are left out because a bow in a hand that is
+## throwing a spear is a bow that is not there (`GubCombat._refresh_hand`), and
+## the draw and the loose are the pose this table exists to be the other half of.
+func _carried_clips(player: AnimationPlayer) -> Array[String]:
+	var out: Array[String] = []
+	for clip: String in GubAnimator.REQUIRED_CLIPS:
+		if clip in ["JumpOne", "JumpTwo", "Slide", "Throw", "Cast", "Draw", "Loose"]:
 			continue
-		var length := player.get_animation(clip).length
-		var lowest := INF
-		var at := 0.0
-		for i in 24:
-			var time := length * float(i) / 24.0
-			player.play(clip)
-			player.seek(time, true, true)
-			player.pause()
-			skeleton.force_update_all_bone_transforms()
-			var grip := gub.global_transform * skeleton.global_transform 				* skeleton.get_bone_global_pose(hand) 				* Transform3D(Basis.from_euler(HeldGear.BOW_GRIP_ROTATION * (PI / 180.0)),
-					HeldGear.BOW_GRIP_OFFSET)
-			for end: float in [-0.5, 0.5]:
-				var tip: Vector3 = grip * (Vector3(end, 0.0, 0.0) * HeldGear.BOW_SCALE)
-				if tip.y < lowest:
-					lowest = tip.y
-					at = time
-		print("  %-11s lowest tip %+.3f m at %.2f s" % [clip, lowest, at])
+		if player.has_animation(clip):
+			out.append(clip)
+	return out
+
+
+## The lowest the bow's two limb tips get in one clip, with `tilt` degrees of
+## carry rotation applied, as [metres above the floor, the clip second it
+## happens at].
+##
+## Measured off the model's own limb tips through the bone, not off a bounding
+## box: the mesh runs +-0.5 along its local X and the two ends are what touch.
+func _carry_clearance(gub: Gub, player: AnimationPlayer, skeleton: Skeleton3D,
+		clip: String, tilt: Vector2) -> Array:
+	var hand := skeleton.find_bone(HeldGear.BOW_HAND_BONE)
+	var length := player.get_animation(clip).length
+	var lowest := INF
+	var at := 0.0
+	for i in 24:
+		var time := length * float(i) / 24.0
+		player.play(clip)
+		player.seek(time, true, true)
+		player.pause()
+		skeleton.force_update_all_bone_transforms()
+		var grip := gub.global_transform * skeleton.global_transform 			* skeleton.get_bone_global_pose(hand) 			* Transform3D(HeldGear.bow_basis(tilt), HeldGear.BOW_GRIP_OFFSET)
+		for end: float in [-0.5, 0.5]:
+			var tip: Vector3 = grip * (Vector3(end, 0.0, 0.0) * HeldGear.BOW_SCALE)
+			if tip.y < lowest:
+				lowest = tip.y
+				at = time
+	return [lowest, at]
+
+
+## What a carry tilt buys, swept, so `HeldGear.CARRY_TILT` is a measurement and
+## not a guess (D-066).
+##
+## A bow held rigidly in a fist goes where the fist goes, and `Run` swings that
+## fist low enough to put 0.158 m of limb through the floor. The lever D-065
+## ruled out was moving the *grip*, because every millimetre of that moves the
+## nocking point off the drawing fingers — but a tilt that is only applied while
+## the bow is **carried**, and blended away as the draw comes up, moves nothing
+## the string has to meet. What it costs is this table being true, so here it is.
+func _sweep_carry(gub: Gub, player: AnimationPlayer, skeleton: Skeleton3D) -> void:
+	var clips := _carried_clips(player)
+	print("preview_bow: the carry tilt's neighbourhood — worst limb tip over all "
+		+ "%d clips above" % clips.size())
+	for axis in 2:
+		var line := ""
+		for step in 7:
+			var tilt := HeldGear.CARRY_TILT
+			var nudge := float(step - 3) * 5.0
+			if axis == 0:
+				tilt.x += nudge
+			else:
+				tilt.y += nudge
+			line += "%+8.3f" % _worst_carry(gub, player, skeleton, clips, tilt)
+		print("  about %s, %+.1f to %+.1f in fives: %s"
+			% ["Y" if axis == 0 else "Z",
+				(HeldGear.CARRY_TILT.x if axis == 0 else HeldGear.CARRY_TILT.y) - 15.0,
+				(HeldGear.CARRY_TILT.x if axis == 0 else HeldGear.CARRY_TILT.y) + 15.0,
+				line])
+	var flat := _worst_carry(gub, player, skeleton, clips, Vector2.ZERO)
+	var tilted := _worst_carry(gub, player, skeleton, clips, HeldGear.CARRY_TILT)
+	if tilted >= CARRY_CLEARANCE_MIN:
+		print("preview_bow: every carried clip holds the bow %+.3f m clear "
+			% tilted + "(%+.3f m untilted) — carry PASS" % flat)
+	else:
+		print("preview_bow: carry FAIL — the worst carried clip puts a limb tip "
+			+ "%+.3f m against a %+.3f m floor" % [tilted, CARRY_CLEARANCE_MIN])
+
+
+func _worst_carry(gub: Gub, player: AnimationPlayer, skeleton: Skeleton3D,
+		clips: Array[String], tilt: Vector2) -> float:
+	var worst := INF
+	for clip: String in clips:
+		worst = minf(worst, _carry_clearance(gub, player, skeleton, clip, tilt)[0])
+	return worst
 
 
 ## Put the skeleton in the pose the game would hold at this charge.
@@ -228,6 +311,69 @@ func _pose(player: AnimationPlayer, skeleton: Skeleton3D, charge: float) -> void
 
 
 # ------------------------------------------------------------- the picture ---
+
+## The other half of the bow's life: not drawn, just held, in the clips a Gub
+## walks around in (D-066).
+##
+## Two of each — the same clip at the same frame with the carry tilt on and off —
+## so what the row shows is the thing the numbers claim: a 1.71 m longbow whose
+## lower limb went 0.158 m into the ground at a run, out of the ground and
+## nowhere near the body it is hanging off.
+func _carry_sheet() -> void:
+	var row := Vector3.RIGHT
+	var clips: Array[String] = ["Walk", "Run", "WalkBack"]
+	# A floor, which no other sheet in this file needs and this one is about:
+	# the whole claim is how far a limb tip is above it.
+	var ground := MeshInstance3D.new()
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(40.0, 6.0)
+	ground.mesh = plane
+	var dirt := StandardMaterial3D.new()
+	dirt.albedo_color = Color(0.22, 0.26, 0.22)
+	ground.material_override = dirt
+	add_child(ground)
+	var i := 0
+	for clip: String in clips:
+		for tilted in [false, true]:
+			var gub := _bare_gub()
+			gub.position = row * (float(i) - float(clips.size() * 2 - 1) * 0.5) \
+				* spacing
+			var player := gub.find_child("AnimationPlayer", true,
+				false) as AnimationPlayer
+			var skeleton := gub.find_child("Skeleton3D", true, false) as Skeleton3D
+			if not player.has_animation(clip):
+				i += 1
+				continue
+			# The frame each clip's bow is lowest in, so the row is the worst
+			# case rather than a lucky one — the same sweep `_report_carry`
+			# reports, asked for its time instead of its height.
+			var at: float = _carry_clearance(gub, player, skeleton, clip,
+				HeldGear.CARRY_TILT if tilted else Vector2.ZERO)[1]
+			player.play(clip)
+			player.seek(at, true, true)
+			player.pause()
+			skeleton.force_update_all_bone_transforms()
+			gub.held_gear.set_bow(true)
+			gub.held_gear.set_draw(0.0)
+			gub.held_gear.set_carry(1.0 if tilted else 0.0)
+			# The shaft out of the other fist: a Gub carrying a bow is not
+			# carrying a spear as well (`GubCombat._refresh_hand`), and it is
+			# the one thing in frame that could be mistaken for a limb tip.
+			gub.held_gear.set_carried(false)
+
+			var stamp := Label3D.new()
+			stamp.text = "%s\n%s" % [clip, "carried" if tilted else "no tilt"]
+			stamp.font_size = 52
+			stamp.pixel_size = 0.0016
+			stamp.position = Vector3(0.0, 2.20, 0.0)
+			stamp.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+			gub.add_child(stamp)
+			i += 1
+	# `_build_stage` sizes its orthographic camera off `samples`, so the row's
+	# length is handed over the same way the draw sheet's is.
+	samples = i
+	_build_stage(Vector3(0.0, 0.16, -1.0).normalized())
+
 
 func _sheet() -> void:
 	var azimuth := deg_to_rad(_azimuth)
@@ -251,6 +397,12 @@ func _sheet() -> void:
 		gub.held_gear.set_bow(true)
 		gub.held_gear.set_arrow(true)
 		gub.held_gear.set_draw(charge)
+		# Out of the carry and into the drawing grip, by hand, because this
+		# sheet poses the skeleton straight off the `AnimationPlayer` and there
+		# is no `GubAnimator` here to hand the tilt down (D-066). Every row of
+		# this sheet is a bow being *drawn*, so it is the grip the string was
+		# fitted to and never the carry.
+		gub.held_gear.set_carry(0.0)
 
 		var stamp := Label3D.new()
 		stamp.text = "%d%%" % roundi(charge * 100.0)

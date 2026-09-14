@@ -7,7 +7,9 @@ goes to a single `general-purpose` subagent on Opus at high reasoning effort,
 which reads the code, writes its own plan, implements it, and comes back. The
 orchestrator reviews, runs the gate, and decides.*
 
-*Decision records D-001..D-061 exist on `main`. Gate is 63 checks, green.*
+*Decision records D-001..D-061 existed on `main` when this was written; the
+steps below have since added D-062..D-066. Gate was 63 checks then and is 86
+now, green.*
 
 ---
 
@@ -46,7 +48,7 @@ after it is sequential, because it all lands in `gub_combat.gd`,
 `gub_animator.gd`, `match_state.gd` and `docs/DECISIONS.md` — the exact overlap
 that produced three agents all claiming D-040 in one day.
 
-**The gate is the definition of done.** `bash tools/smoke_test.sh` — 63 checks
+**The gate is the definition of done.** `bash tools/smoke_test.sh` — 86 checks
 today. Run it after every step, before starting the next. A step that adds
 behaviour worth asserting adds a check, and the count in `docs/STATUS.md` moves
 with it (two places: the command comment near line 25 and the "passes, N of N"
@@ -55,7 +57,7 @@ sentence near line 29). Never start a step on a red tree.
 **Decision numbers are claimed at commit time, never reserved.** Immediately
 before writing a record, run
 `grep -oE '^## D-0[0-9]+' docs/DECISIONS.md | tail -1`, take the next number,
-and commit it with the code. Next free at the time of writing is **D-062**.
+and commit it with the code. Next free at the time of writing is **D-067**.
 
 **Commit style.** Read the last few `git log` entries first. Titles are a
 sentence with a clause; bodies explain the *why* and what was rejected, at
@@ -548,13 +550,24 @@ Wave 1, one by one:         +--> [4] spear <-+            |
                                                          +--> [9] great sword
 ```
 
-Wave 0 and **steps 4, 5 and 6 are done, and the gate is at 77 checks.** The
-clips for steps 7 and 8 have arrived and are audited; step 9 additionally needs
-a sword mesh that does not exist yet.
+Wave 0 and **steps 4, 5, 6 and 8 are done, and the gate is at 86 checks.**
+Step 8 was run **before step 7**, deliberately: two of step 6's visible defects
+were its to fix and both are (D-066). Step 7's clips have arrived and are
+audited; step 9 additionally needs a sword mesh that does not exist yet.
 
-Step 6 handed one thing forward on purpose. The composed bow points **91° off
-the Gub's own facing** — an archer stands side-on, and the whole of that angle
-lives in the shoulders and the arms, so no mask moves it (D-065 has the three
-that were measured). That is step 8's spine aim, which this plan already calls
-"the one thing in this whole plan the repo genuinely does not have", and the
-number is printed by `tools/combat_range.tscn -- draw` every run.
+Step 6's handover is closed. The composed bow pointed **91° off the Gub's own
+facing** — an archer stands side-on, and the whole of that angle lives above a
+pelvis the layer mask throws away — and `GubAim`, a `SkeletonModifier3D` over
+three spine bones, brings it to **3°** while also giving the torso the pitch a
+`CharacterBody3D` has never had. `tools/combat_range.tscn -- draw` still prints
+the number every run, and `-- spine` sweeps it. The 1.71 m longbow that ploughed
+`Run` by 0.158 m is out of the grass too, by a carry tilt that is blended away
+as the draw comes up — so it meets no string and D-065's grip is untouched.
+
+**What step 8 leaves open, and it is the user's call:** the four lowercase
+strafes are forward-leaning diagonals (27°-47° off forward, read off the chest),
+so a pole that means 90° is served by a clip that means 37. Running sideways
+improved by about a third and is the weakest axis left. Closing it is three
+downloads With Skin from the same upload — `Standing Run Right`, `Standing Walk
+Left`, `Standing Walk Right` — whose family's one member already here measures
+76.5°, a true lateral. Nothing in the plan waits on them.

@@ -586,6 +586,21 @@ def import_corrected(path, name, reference):
     return arm, mesh, action, declaration, table
 
 
+def declared_facing(path):
+    """The `face` joints `PACKS` gives this file, or the hips if it names none.
+
+    A file this table has never heard of is the normal case here — that is the
+    whole point of this tool — and the hips are what every undeclared clip would
+    get anyway.
+    """
+    wanted = os.path.basename(path)
+    for pack in pipeline.PACKS:
+        for clip in pack.clips:
+            if clip.file == wanted:
+                return clip.facing_joints()
+    return pipeline.HIP_JOINTS
+
+
 def hip_yaws(arm, action):
     """(times, yaw relative to the rest pose, unwrapped) for the hip line.
 
@@ -936,7 +951,11 @@ def prepare(opts, audits, reference):
         # when the question is "where does this clip start".
         moment = {"focus": at, "first": 0.0,
                   "mean": pipeline.LOOP_MEAN}[opts.align]
-        pipeline.align_facing(arm, table, {name: moment})
+        # The joint pair whose line is turned square, which is the pelvis for
+        # everything but a sidestep (D-066). Taken off `PACKS` where this file
+        # is declared, so a sheet of `LeftStrafe.fbx` is corrected the way the
+        # build corrects it and not 19 degrees away from it.
+        pipeline.align_facing(arm, table, {name: (moment, declared_facing(path))})
         pipeline.lock_root_motion(action, declaration)
 
         clips.append({

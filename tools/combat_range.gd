@@ -243,10 +243,42 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##              plates, one amber and one red, at the distance a fight actually
 ##              happens at. `hud_range hud_health` is the same question for your
 ##              own bar. Nothing is asserted here; `health` does the asserting.
+##   strafe   — the feet, in eight directions (D-066). The Gub is held facing
+##              one way, as it is while aiming, and driven round the compass at
+##              walking and at running speed; every tick the *slower* of its two
+##              toes is measured in world space, which is the planted one, and
+##              how fast that foot is sliding is the whole of the fault this
+##              step exists to remove. Printed as a fraction of the Gub's own
+##              ground speed, so 0.0 is a foot nailed down and 2.0 is a foot
+##              going backwards as fast as the body is going forwards.
+##              `standing PASS` is the sixteen legs of the new plane; `crouch`
+##              is the control, and it is a control that is *meant* to be bad —
+##              a crouching Gub still has one clip and a one-dimensional space
+##              behind it, so its sideways legs have to come out visibly worse
+##              than its forward one or this measurement cannot see the thing
+##              it is here to see.
+##   spine    — the torso, swept (D-066). A full draw is held while the view is
+##              taken all the way round the horizon and all the way from
+##              `PITCH_MIN` to `PITCH_MAX`, and three things are asked at every
+##              step: the composed bow has to be pointing where the crosshair
+##              points (`bow`, against the 91° D-065 left behind), the bow has
+##              to be *tipped* to the crosshair's own pitch (`pitch`), and then
+##              two arrows fired from the same spot at the two ends of the pitch
+##              range have to leave from **the same point in space** while going
+##              two different ways (`release`). That last is D-025 and D-045
+##              asserted rather than assumed: a modifier that moved the release
+##              would be a spine that moved a shot.
+##   strafing — the picture `strafe` measures. Eight Gubs in a row facing the
+##              camera, each running a different bearing at RUN_SPEED, posed
+##              entirely out of the `sync_*` fields a real client would have
+##              sent. Nothing is asserted; the eye does it.
+##   aiming   — the picture `spine` measures. Five Gubs side-on at a full draw,
+##              at five pitches from `PITCH_MIN` to `PITCH_MAX`, posed the same
+##              way — two replicated floats apiece and nothing else.
 ##   free     — no script; play it yourself
 const MODES := ["flight", "hit", "arc", "miss", "aim", "mushroom", "cover",
 	"lure", "lure_self", "letter", "cards", "lightning", "blast", "ward", "recharge",
-	"release", "cast", "bow", "draw",
+	"release", "cast", "bow", "draw", "strafe", "spine", "strafing", "aiming",
 	"respawn", "health", "embed", "hurt", "walk", "bhop", "leave", "free"]
 
 ## How long after the cast the verdict is taken, in physics ticks. The click
@@ -657,11 +689,34 @@ const VIEWS := {
 	# the hat is half of what the cast has left to show with.
 	"bow": {"eye": Vector3(4.2, 1.7, 9.6), "look": Vector3(0.0, 1.1, 9.0),
 		"fov": 45.0},
+	# The two rows of D-066. Far enough back and wide enough to hold eight
+	# bodies, and a little above eye level on the strafing row because half of
+	# what it is showing is where the feet are.
+	"strafing": {"eye": Vector3(0.0, 2.6, 11.5), "look": Vector3(0.0, 0.9, 0.0),
+		"fov": 64.0},
+	# Dead level with the bow on the aiming row: the subject is an elevation,
+	# and a camera looking down on it subtracts its own pitch from the answer.
+	"aiming": {"eye": Vector3(0.0, 1.3, 11.0), "look": Vector3(0.0, 1.3, 0.0),
+		"fov": 50.0},
 	"draw": {"eye": Vector3(1.2, 1.5, 3.4), "look": Vector3(1.2, 1.05, 9.0),
 		"fov": 55.0},
 	"cast": {"eye": Vector3(3.8, 1.8, 9.4), "look": Vector3(0.0, 1.15, 9.0),
 		"fov": 50.0},
 }
+
+## The two picture rows (D-066). Both run along +X with the camera in front of
+## them; the strafing row faces the camera and the aiming row stands side-on to
+## it, because the two things being looked at are a pair of legs and a torso.
+const LINEUP_FIRST := Vector3(-8.75, 0.1, 0.0)
+const LINEUP_STEP := 2.5
+const AIM_LINEUP_FIRST := Vector3(-6.0, 0.1, 0.0)
+const AIM_LINEUP_STEP := 3.0
+## Five pitches, the two ends and three between. Read out of `GubCamera` rather
+## than typed, so a view that is ever allowed to look further up or down takes
+## this picture with it.
+const AIM_LINEUP_PITCHES: Array[float] = [
+	GubCamera.PITCH_MIN, -0.55, 0.0, 0.5, GubCamera.PITCH_MAX,
+]
 
 const PLAYER_SPOT := Vector3(0.0, 0.1, 9.0)
 const DUMMY_SPOTS: Array[Vector3] = [
@@ -686,6 +741,159 @@ const AIM_TARGET := Vector3(2.5, 1.2, -34.0)
 ## loot roll into a check that has nothing to do with any of them.
 const RECHARGE_TARGET := Vector3(0.0, 14.0, -30.0)
 
+## `strafe`'s compass, in the Gub's own input space — `Input.get_vector`'s
+## convention, so -y is forward (D-066). Eight legs, and the diagonals are
+## deliberately unnormalised because `Gub._wish_direction` normalises what it is
+## handed and a testbed that pre-normalised would be testing a path the keyboard
+## never takes.
+const STRAFE_COMPASS: Array = [
+	["forward",     Vector2(0.0, -1.0)],
+	["fwd-right",   Vector2(1.0, -1.0)],
+	["right",       Vector2(1.0, 0.0)],
+	["back-right",  Vector2(1.0, 1.0)],
+	["back",        Vector2(0.0, 1.0)],
+	["back-left",   Vector2(-1.0, 1.0)],
+	["left",        Vector2(-1.0, 0.0)],
+	["fwd-left",    Vector2(-1.0, -1.0)],
+]
+
+## The three gaits `strafe` walks the compass at. The third is the **control**:
+## `crouch` still has a one-dimensional space and a single `CrouchWalk` behind
+## it, so it is what every direction looked like before this step, measured by
+## the same code on the same frames. Without it "the strafes are fine" would be
+## a number with nothing to be fine *against*, and a measurement that could not
+## fail is not a measurement (D-039).
+const STRAFE_GAITS: Array = [
+	["walk", false, false],
+	["run", true, false],
+	["crouch", false, true],
+]
+
+## How long each leg is given to reach its speed, and how long it is then
+## measured for, in ticks.
+##
+## Thirty to settle is generous: `GROUND_ACCELERATION` is 48 m/s², so the body
+## is at 5.4 m/s in seven ticks, and the rest is the animator's own blends —
+## `STANCE_BLEND_SPEED` and the locomotion cross-fade — arriving. Forty to
+## measure is 0.67 s, which is longer than a full cycle of every clip in the
+## plane once its playback rate is applied (the slowest is `Walk` at 0.58 s),
+## so every leg is averaged over at least one whole stride and no leg is
+## averaged over a lucky half of one.
+const STRAFE_SETTLE := 30
+const STRAFE_SAMPLE := 40
+
+## What counts as a foot on the floor, in metres above the Gub's own feet.
+##
+## Only used to *report* how much of each leg had a foot down; the skate itself
+## is measured off the slower of the two toes whether or not either is planted,
+## which is the same number without a threshold in it. The rest pose's toe joint
+## sits 0.035 m up, so this is a couple of centimetres of clearance over a foot
+## that is flat on the ground.
+const STRAFE_PLANT_HEIGHT := 0.08
+
+## How far a planted foot may slide, as a fraction of the Gub's own ground
+## speed, averaged over a leg. Two limits, because the plane has two kinds of
+## direction in it and one number over both would have to be the looser one.
+##
+## `STRAFE_STRAIGHT_LIMIT` covers the four bearings a clip was actually
+## downloaded for — forward and backward, at both speeds. Those are the legs the
+## plane *solves* rather than improves, and they measure 0.15, 0.16, 0.23 and
+## 0.28 of body speed. What is left in them is not a fault of the clip: the toe
+## pivots through its own roll-off, the two feet swap over mid-stride, and the
+## playback rate is a ratio of two measurements. 0.40 is comfortably over that
+## and nowhere near the 0.83 and 1.03 the *same two backward legs* measured
+## before this step, which is what makes this line one the old build fails.
+##
+## `STRAFE_LIMIT` covers all sixteen, and its job is the diagonals. 1.25 sits
+## between the plane's own worst (1.14, walking back-and-right, where the
+## nearest clip is 43° away) and the one-dimensional space's worst (1.36,
+## running sideways), so it is a line drawn *between the two builds* rather than
+## a rounding of today's number. It is deliberately not tighter: the
+## back-diagonal quadrant is the one place these four strafes leave a real hole,
+## because they are forward-leaning diagonals themselves, and closing it is
+## three downloads rather than a tolerance (D-066).
+const STRAFE_STRAIGHT_LIMIT := 0.40
+const STRAFE_LIMIT := 1.25
+
+## How much worse the crouch's *worst* bearing has to be than its best, for the
+## control to have shown anything.
+##
+## Three, and it measures 6.7: a crouching Gub is still one clip behind a line,
+## so it can only match one direction and the others fall where the geometry
+## puts them. (Its best bearing is forward-**left**, not forward, because
+## `CrouchWalk` is authored travelling 33.8° to the left — which is its own
+## small illustration of the same point.)
+const STRAFE_CONTROL_SPREAD := 3.0
+
+## `spine`'s sweep. Eight bearings round the horizon and seven pitches from
+## `PITCH_MIN` to `PITCH_MAX`, each held for `SPINE_SETTLE` ticks.
+##
+## Twenty ticks is a third of a second, and what it is waiting for is the
+## **body**, not the modifier: `Gub.TURN_SPEED` is 14 rad/s, so the widest step
+## in the yaw sweep (a quarter turn) takes ten ticks to arrive and the rest is
+## margin. The torso itself is there in a twelfth of a second.
+const SPINE_YAWS := 8
+const SPINE_PITCHES := 7
+const SPINE_SETTLE := 20
+
+## How far off the crosshair the composed bow may point, in degrees. Two
+## numbers, because the sweep asks the question in two conditions.
+##
+## `SPINE_BOW_LIMIT` is the **bearing** — the bow's line flattened onto the
+## ground, which is exactly what D-065 measured at **91°** and what `draw`
+## prints every time the gate runs. It is only asked of the level half of the
+## sweep, and that is not a dodge: flattening a line that is pointing 69° into
+## the ground leaves 36% of it to take a bearing off, so the same centimetre of
+## animation wander reads as three times the angle. The quantity is genuinely
+## ill-conditioned down there, and the number that is not is the next one.
+##
+## `SPINE_APART_LIMIT` is the honest three-dimensional angle between the bow and
+## the crosshair, asked at every sample. Ten degrees, and most of what it is
+## spending is not error but **arm**: `AIM_BONES` turns the chest onto the
+## crosshair exactly, and the shoulder, elbow and wrist below it hold whatever
+## the draw clip put there, which on this clip is a bow arm carried three to
+## five degrees above the line of the chest at every pitch. A tolerance under
+## that would be asserting that an archer holds the bow through the middle of
+## their own sternum.
+const SPINE_BOW_LIMIT := 5.0
+const SPINE_APART_LIMIT := 10.0
+
+## How far the bow's own elevation may be from the crosshair's, in degrees. The
+## same ten and for the same reason as `SPINE_APART_LIMIT` above — the bow arm
+## is not the spine, and what it holds below the chest does not scale with the
+## pitch. What this asserts is that the bow **tracks**: it has to move with the
+## crosshair over the whole range and stay within ten degrees of it, which is
+## the difference between a torso that aims and a torso that does not.
+const SPINE_PITCH_LIMIT := 10.0
+
+## How far the bow's elevation has to travel across the pitch sweep for that
+## agreement to mean anything, in degrees — the control on the same line. Two
+## Gubs holding perfectly level bows agree about everything.
+const SPINE_PITCH_SPAN_MIN := 60.0
+
+## How far the release point may move between the two shots `spine` fires from
+## one spot, in metres.
+##
+## A millimetre, and it could be zero: `GubCombat._throw_origin` is built out of
+## `global_position`, `eye_height()` and `body_yaw`, and not one of those is on
+## the skeleton. What is being asserted is exactly that — that no amount of
+## torso turns into a moved shot (D-025, D-045) — so the tolerance is float
+## noise and a physics body settling, and nothing else.
+const SPINE_RELEASE_TOLERANCE := 0.001
+
+## How long the mode waits for each of its two arrows before giving up, in
+## ticks — and it is four thousand of them for a reason worth knowing before
+## anybody tightens it.
+##
+## `GubCombat` measures a draw, a release and a recharge on a **wall clock**
+## (`_now()`), while everything in this mode counts physics ticks. Headless with
+## `--fixed-fps 60` this scene gets through some thousands of ticks a real
+## second, so a 1.2 s recharge is a few thousand ticks here and a few dozen on a
+## machine actually rendering at sixty. A patience that is a tick count
+## therefore has to be sized for the fast case, and it costs nothing in the slow
+## one, because it is only ever reached when something has genuinely gone wrong.
+const SPINE_PATIENCE := 4000
+
 var _mode: String = "free"
 var _trace: bool = false
 var _pov: bool = false
@@ -703,6 +911,30 @@ var _bhop_hops: int = 0
 var _bhop_was_grounded: bool = true
 var _bhop_row: Dictionary = {}
 var _bhop_failures: int = 0
+
+## `strafe`'s state: which leg of STRAFE_GAITS x STRAFE_COMPASS is running, when
+## it started, and the samples taken so far.
+var _strafe_leg: int = 0
+var _strafe_at: int = 0
+var _strafe_skate: Array[float] = []
+var _strafe_speed: Array[float] = []
+var _strafe_planted: int = 0
+## Last tick's toe positions, in world space, so a step is a difference and not
+## a velocity somebody has to trust the physics for.
+var _strafe_toes: Array[Vector3] = []
+## Whether the leg `_strafe_leg` names has been set up yet.
+var _strafe_open: bool = false
+var _strafe_failures: int = 0
+var _strafe_rows: Array[Dictionary] = []
+
+## `spine`'s state. The sweep is one flat list of (yaw, pitch) pairs walked in
+## order, then two shots.
+var _spine_step: int = 0
+var _spine_at: int = 0
+var _spine_sample: int = 0
+var _spine_rows: Array[Dictionary] = []
+var _spine_shots: Array[Dictionary] = []
+var _spine_failures: int = 0
 ## The bow's two shots, step by step, and the flight of whichever one is in the
 ## air. `_bow_samples` is positions and nothing else — the fit is done at the
 ## end, so the mode measures the arrow rather than asking it.
@@ -964,8 +1196,17 @@ func _dummy_count() -> int:
 		# Nobody to shoot at. `recharge` throws a dozen spears over the back
 		# wall on purpose (see `RECHARGE_TARGET`) and a dummy in the roster
 		# would only be something for one of them to find.
-		"recharge", "bhop", "release", "cast":
+		# Nobody to shoot at, and in `strafe`'s case nobody to walk into either:
+		# a second Gub standing in the range is a capsule eight of the sixteen
+		# legs would run their subject straight through.
+		"recharge", "bhop", "release", "cast", "strafe", "spine":
 			return 0
+		# One per pose in the row. See `_dummy_spot`, which is what puts them
+		# somewhere other than the three the shooting modes share.
+		"strafing":
+			return STRAFE_COMPASS.size()
+		"aiming":
+			return AIM_LINEUP_PITCHES.size()
 		# One each: something to shoot at, and — in `draw` — a *remote* Gub to put
 		# a charge on and read the pose back off.
 		"bow", "draw":
@@ -976,9 +1217,22 @@ func _dummy_count() -> int:
 
 func _spawn_points() -> Array[Transform3D]:
 	var out: Array[Transform3D] = [_facing(PLAYER_SPOT, Vector3(0.0, 0.1, 0.0))]
-	for spot: Vector3 in DUMMY_SPOTS:
-		out.append(_facing(spot, PLAYER_SPOT))
+	for i in maxi(_dummy_count(), DUMMY_SPOTS.size()):
+		out.append(_facing(_dummy_spot(i), PLAYER_SPOT))
 	return out
+
+
+## Where dummy `i` stands. The three `DUMMY_SPOTS` down the range for every mode
+## that shoots at something, and a place in the row for the two that photograph
+## one (D-066) — which need more dummies than there are spots and want them in a
+## line rather than scattered down the range.
+func _dummy_spot(index: int) -> Vector3:
+	match _mode:
+		"strafing":
+			return LINEUP_FIRST + Vector3(LINEUP_STEP * float(index), 0.0, 0.0)
+		"aiming":
+			return AIM_LINEUP_FIRST + Vector3(AIM_LINEUP_STEP * float(index), 0.0, 0.0)
+	return DUMMY_SPOTS[index % DUMMY_SPOTS.size()]
 
 
 static func _facing(from: Vector3, towards: Vector3) -> Transform3D:
@@ -994,7 +1248,7 @@ func _place_everyone() -> void:
 	for i in _dummy_count():
 		var dummy := MatchState.gubs.get(DUMMY_BASE + i) as Gub
 		if dummy != null:
-			dummy.revive_at(_facing(DUMMY_SPOTS[i], PLAYER_SPOT))
+			dummy.revive_at(_facing(_dummy_spot(i), PLAYER_SPOT))
 			_stand_still(dummy)
 
 
@@ -1044,6 +1298,22 @@ func _physics_process(_delta: float) -> void:
 		return
 	if _mode == "leave":
 		_drive_leave()
+		return
+	# Both of these steer the Gub themselves and must not reach the
+	# `look_at_point` below: `strafe` needs the view held dead still while the
+	# body is driven round it, and `spine` *is* a view sweep, so a re-aim every
+	# frame would be the mode fighting itself.
+	if _mode == "strafe":
+		_drive_strafe()
+		return
+	if _mode == "spine":
+		_drive_spine()
+		return
+	if _mode == "strafing":
+		_drive_lineup(_strafing_rows())
+		return
+	if _mode == "aiming":
+		_drive_lineup(_aiming_rows())
 		return
 
 	var player := MatchState.gubs.get(1) as Gub
@@ -2794,20 +3064,38 @@ func _draw_length(gub: Gub) -> float:
 ## It does not decide where an arrow goes. That is read from the camera at the
 ## release and has never come from the body (D-025, D-045).
 func _aim_offset(gub: Gub) -> float:
-	var skeleton := gub.find_child("Skeleton3D", true, false) as Skeleton3D
-	if skeleton == null:
+	var hands := _hand_attachments(gub)
+	if hands.is_empty():
 		return 0.0
-	var left := skeleton.find_bone(HeldGear.BOW_HAND_BONE)
-	var right := skeleton.find_bone(HeldGear.HAND_BONE)
-	if left < 0 or right < 0:
-		return 0.0
-	var along: Vector3 = skeleton.global_transform.basis * (
-		skeleton.get_bone_global_pose(left).origin
-		- skeleton.get_bone_global_pose(right).origin)
+	var along: Vector3 = hands[0].global_position - hands[1].global_position
 	var flat := Vector3(along.x, 0.0, along.z)
 	if flat.length_squared() < 0.0001:
 		return 0.0
 	return rad_to_deg(flat.normalized().signed_angle_to(gub.facing(), Vector3.UP))
+
+
+## The two `BoneAttachment3D`s `HeldGear` hangs the bow and the arrow off, bow
+## hand first — or an empty array on a Gub that has not been given gear.
+##
+## **Read off the attachments and not off `Skeleton3D.get_bone_global_pose`**,
+## which is the thing D-066 had to find out the hard way. A `SkeletonModifier3D`
+## writes into the pose the skin is built from and the skeleton then restores
+## the animation's own pose behind it, so that the next frame starts clean —
+## which means a bone pose read from `_physics_process` is the pose *before*
+## `GubAim` turned the torso, every time, and a check reading it would have gone
+## on reporting 91° at a Gub whose bow was pointing straight down the range.
+## `BoneAttachment3D` updates off `skeleton_updated`, which fires after the
+## modifier stack, so these two nodes are where the props actually are — which
+## is also the only thing a player can see.
+func _hand_attachments(gub: Gub) -> Array[Node3D]:
+	var skeleton := gub.find_child("Skeleton3D", true, false) as Skeleton3D
+	if skeleton == null:
+		return []
+	var bow := skeleton.get_node_or_null("BowHand") as Node3D
+	var draw_hand := skeleton.get_node_or_null("SpearHand") as Node3D
+	if bow == null or draw_hand == null:
+		return []
+	return [bow, draw_hand]
 
 
 ## Whether `gub.tscn` actually puts a field on the wire.
@@ -2827,6 +3115,511 @@ func _replicates(field: String) -> bool:
 		if String(path).ends_with(":" + field):
 			return true
 	return false
+
+
+# ------------------------------------------------- the feet, in eight ways ---
+
+## The foot skate, measured round the compass at three gaits (D-066).
+##
+## The whole fault this step exists to remove is a clip whose feet are drawn
+## travelling one way being played on a body travelling another, and the honest
+## measurement of it is not an angle or a speed ratio — it is **how fast the
+## foot that is on the ground is sliding along it**. So that is what this takes:
+## every tick, both toes in world space, and the slower of the two, which is the
+## planted one at every moment of a cycle except the instant they swap.
+##
+## No plant threshold is in that number, on purpose. A threshold is a place for
+## the measurement to disagree with itself when one clip lifts its feet higher
+## than another does, and `min(left, right)` needs none — a foot in the air is
+## always the faster of the two. The threshold that does exist,
+## `STRAFE_PLANT_HEIGHT`, only decorates the report with how much of each leg
+## had a foot actually down.
+##
+## The Gub is held facing one way with `set_view_basis(..., true, ...)`, which
+## is the same flag the camera raises while somebody is aiming — so this is not
+## an artificial pose, it is the pose this whole weapon set is used in.
+func _drive_strafe() -> void:
+	var player := MatchState.gubs.get(1) as Gub
+	if player == null:
+		return
+	var rig := player.get_node_or_null("CameraRig")
+	if rig != null:
+		rig.process_mode = Node.PROCESS_MODE_DISABLED
+	player.reads_local_input = false
+	# Facing -Z, held there. `face_view` is the aiming flag, so the body does
+	# not turn to follow its own velocity and every leg is a genuine strafe.
+	player.set_view_basis(Basis.IDENTITY, true, 0.0)
+
+	if _strafe_leg >= STRAFE_GAITS.size() * STRAFE_COMPASS.size():
+		_report_strafe()
+		get_tree().quit()
+		return
+
+	var gait: Array = STRAFE_GAITS[_strafe_leg / STRAFE_COMPASS.size()]
+	var heading: Array = STRAFE_COMPASS[_strafe_leg % STRAFE_COMPASS.size()]
+
+	# A flag and not `elapsed == 0`, which is a tick this function is never
+	# called on: `_strafe_at` is set to `_frames` as a leg *ends*, and the next
+	# call is already a tick later. Written the other way this mode ran every
+	# leg from wherever the last one left off, with one set of samples growing
+	# across all twenty-four of them — which reads as a body that never reaches
+	# its own speed and a foot that slides a little more each leg.
+	if not _strafe_open:
+		# Back to the middle for every leg, so none inherits the last one's
+		# momentum and none of them walks off the floor.
+		player.revive_at(Transform3D(Basis.IDENTITY, PLAYER_SPOT))
+		_strafe_skate.clear()
+		_strafe_speed.clear()
+		_strafe_toes.clear()
+		_strafe_planted = 0
+		_strafe_open = true
+		_strafe_at = _frames
+	var elapsed := _frames - _strafe_at
+	player.input_direction = heading[1]
+	player.wants_sprint = gait[1]
+	player.wants_crouch = gait[2]
+
+	if elapsed >= STRAFE_SETTLE:
+		_sample_strafe(player)
+	if elapsed < STRAFE_SETTLE + STRAFE_SAMPLE:
+		return
+
+	var speed := 0.0
+	for v in _strafe_speed:
+		speed += v
+	speed /= maxf(float(_strafe_speed.size()), 1.0)
+	var skate := 0.0
+	var worst := 0.0
+	for v in _strafe_skate:
+		skate += v
+		worst = maxf(worst, v)
+	skate /= maxf(float(_strafe_skate.size()), 1.0)
+	_strafe_rows.append({
+		"gait": gait[0], "heading": heading[0], "speed": speed,
+		"skate": skate, "worst": worst,
+		"planted": float(_strafe_planted) / maxf(float(_strafe_skate.size()), 1.0),
+	})
+	_strafe_leg += 1
+	_strafe_open = false
+
+
+## One tick of one leg: both toes in world space, and the slower of the two.
+##
+## The toes are read off `get_bone_global_pose`, which on a Gub that is not
+## drawing is the whole pose — `GubAim` is the only modifier on this skeleton
+## and its weight is zero unless a bow is up. (If that ever stops being true,
+## this has to move to the attachments the way `_aim_offset` did.)
+func _sample_strafe(player: Gub) -> void:
+	var skeleton := player.find_child("Skeleton3D", true, false) as Skeleton3D
+	if skeleton == null:
+		return
+	var here: Array[Vector3] = []
+	for bone in ["LeftToeBase", "RightToeBase"]:
+		var index := skeleton.find_bone(bone)
+		if index < 0:
+			return
+		here.append(skeleton.global_transform
+			* skeleton.get_bone_global_pose(index).origin)
+	if _strafe_toes.size() == here.size():
+		var dt := get_physics_process_delta_time()
+		var slid := INF
+		for i in here.size():
+			var step: Vector3 = here[i] - _strafe_toes[i]
+			slid = minf(slid, Vector2(step.x, step.z).length() / dt)
+		_strafe_skate.append(slid)
+		_strafe_speed.append(Vector2(player.velocity.x, player.velocity.z).length())
+		var lowest := minf(here[0].y, here[1].y) - player.global_position.y
+		if lowest <= STRAFE_PLANT_HEIGHT:
+			_strafe_planted += 1
+	_strafe_toes = here
+
+
+func _report_strafe() -> void:
+	print("  gait    heading      body speed   planted foot slides    worst   "
+		+ "fraction   foot down")
+	var worst_straight := 0.0
+	var straight_where := ""
+	var worst_any := 0.0
+	var any_where := ""
+	var crouch_best := INF
+	var crouch_worst := 0.0
+	for row: Dictionary in _strafe_rows:
+		var speed: float = row["speed"]
+		var ratio: float = float(row["skate"]) / maxf(speed, 0.01)
+		print("  %-7s %-12s %6.2f m/s   %10.2f m/s %9.2f   %8.2f   %8.0f%%"
+			% [row["gait"], row["heading"], speed, row["skate"], row["worst"],
+				ratio, float(row["planted"]) * 100.0])
+		if row["gait"] == "crouch":
+			crouch_best = minf(crouch_best, ratio)
+			crouch_worst = maxf(crouch_worst, ratio)
+			continue
+		var where := "%s %s" % [row["gait"], row["heading"]]
+		if ratio > worst_any:
+			worst_any = ratio
+			any_where = where
+		if row["heading"] == "forward" or row["heading"] == "back":
+			if ratio > worst_straight:
+				worst_straight = ratio
+				straight_where = where
+
+	var legs := STRAFE_GAITS.size() * STRAFE_COMPASS.size()
+	if _strafe_rows.size() < legs:
+		_strafe_fail("straight", "only %d of %d legs were walked"
+			% [_strafe_rows.size(), legs])
+		return
+
+	# The four bearings with a clip of their own. Before this step the two
+	# backward ones were 0.83 and 1.03 — a forward run cycle played on a body
+	# going the other way — and they are what this line exists to hold down.
+	if worst_straight <= STRAFE_STRAIGHT_LIMIT:
+		print("combat_range: forward and backward plant at %.2f of body speed or better (%s) — straight PASS"
+			% [worst_straight, straight_where])
+	else:
+		_strafe_fail("straight", "%s slid %.2f of its own speed, past the %.2f limit"
+			% [straight_where, worst_straight, STRAFE_STRAIGHT_LIMIT])
+
+	if worst_any <= STRAFE_LIMIT:
+		print("combat_range: sixteen legs round the compass, worst %.2f of body speed (%s) — compass PASS"
+			% [worst_any, any_where])
+	else:
+		_strafe_fail("compass", "%s slid %.2f of its own speed, past the %.2f limit"
+			% [any_where, worst_any, STRAFE_LIMIT])
+
+	# The control, and it is one that has to come out *badly*. A crouching Gub
+	# is still on one clip behind a one-dimensional space, which is what every
+	# direction was before this step; if its bearings do not disagree with each
+	# other then this measurement cannot see a skate at all and the sixteen
+	# lines above mean nothing (D-039).
+	if crouch_worst > crouch_best * STRAFE_CONTROL_SPREAD:
+		print("combat_range: the crouch's one clip still spreads %.2f to %.2f across the compass — crouch PASS"
+			% [crouch_best, crouch_worst])
+	else:
+		_strafe_fail("crouch", "the one-clip control spread only %.2f to %.2f, "
+			% [crouch_best, crouch_worst]
+			+ "so this measurement would not have noticed the fault it is here for")
+
+	if _strafe_failures == 0:
+		print("combat_range: strafe PASS")
+
+
+func _strafe_fail(label: String, why: String) -> void:
+	_strafe_failures += 1
+	print("combat_range: %s FAIL — %s" % [label, why])
+
+
+# ------------------------------------------------------------ the pictures ---
+
+## Eight Gubs in a row, each running a different way while facing the camera,
+## and five holding a full draw at five different pitches (D-066).
+##
+## These are the two frames the user judges this step by, and both of them are
+## built out of **replicated fields on dummies** rather than by driving one Gub
+## and photographing it eight times. That is not a shortcut, it is the sharper
+## version of the check: a dummy is a roster entry with no client behind it, so
+## the only things these modes write are the handful of `sync_*` floats a real
+## client would have sent. If the poses appear, they appear for the reason they
+## have to appear on somebody else's screen (D-025, D-065).
+func _drive_lineup(rows: Array) -> void:
+	# The Gub this testbed normally drives stands in the middle of the range and
+	# has nothing to do with either row, so it is simply not in the picture.
+	# Hidden rather than moved: the floor ends not far behind the camera, and a
+	# subject walked off it to get out of shot is a subject falling into the
+	# void through the whole exposure.
+	var player := MatchState.gubs.get(1) as Gub
+	if player != null:
+		player.visible = false
+	for i in rows.size():
+		var dummy := MatchState.gubs.get(DUMMY_BASE + i) as Gub
+		if dummy == null:
+			continue
+		var row: Dictionary = rows[i]
+		var spot: Vector3 = row["spot"]
+		dummy.sync_position = spot
+		dummy.sync_yaw = Gub.yaw_towards(row["look"] as Vector3)
+		dummy.sync_grounded = true
+		dummy.sync_crouching = false
+		dummy.sync_sliding = false
+		dummy.sync_velocity = row["velocity"]
+		dummy.sync_draw = row["draw"]
+		dummy.sync_aim_pitch = row["pitch"]
+		if _frames < 4:
+			dummy.revive_at(Transform3D(Basis(Vector3.UP, dummy.sync_yaw), spot))
+
+
+## The strafing row: the eight compass bearings, every Gub facing the camera, so
+## what a column shows is one direction's cycle and what the row shows is how
+## differently the plane poses them.
+func _strafing_rows() -> Array:
+	var rows: Array = []
+	for i in STRAFE_COMPASS.size():
+		var heading: Vector2 = STRAFE_COMPASS[i][1]
+		var spot := LINEUP_FIRST + Vector3(LINEUP_STEP * float(i), 0.0, 0.0)
+		# Facing the camera, which is down +Z here, so the row is read the way
+		# the keys are: a Gub strafing to *its* left moves to the viewer's right.
+		var look := Vector3.BACK
+		var forward := -look
+		var right := Vector3(-forward.z, 0.0, forward.x)
+		var wish := (right * heading.x + forward * -heading.y).normalized()
+		rows.append({
+			"spot": spot, "look": look, "velocity": wish * Gub.RUN_SPEED,
+			"draw": -1.0, "pitch": 0.0,
+		})
+	return rows
+
+
+## The aiming row: five full draws at five pitches, every Gub side-on, because
+## the whole subject is how far the torso has tipped and a Gub photographed
+## head-on has tipped by nothing at all.
+func _aiming_rows() -> Array:
+	var rows: Array = []
+	for i in AIM_LINEUP_PITCHES.size():
+		var spot := AIM_LINEUP_FIRST + Vector3(AIM_LINEUP_STEP * float(i), 0.0, 0.0)
+		rows.append({
+			"spot": spot, "look": Vector3.RIGHT, "velocity": Vector3.ZERO,
+			"draw": 1.0, "pitch": AIM_LINEUP_PITCHES[i],
+		})
+	return rows
+
+# --------------------------------------------------------- the torso, swept --
+
+## The spine that aims, swept through everything a player can point it at
+## (D-066).
+##
+## A full draw is held for the whole of this while the view is walked round the
+## horizon and then from `PITCH_MIN` to `PITCH_MAX`. Three things come out of
+## it, and the third is the one that had to be asserted rather than believed.
+func _drive_spine() -> void:
+	var player := MatchState.gubs.get(1) as Gub
+	if player == null:
+		return
+	var rig := player.get_node_or_null("CameraRig") as GubCamera
+	var combat := player.get_node_or_null("Combat") as GubCombat
+	if rig == null or combat == null:
+		return
+	player.reads_local_input = false
+	player.input_direction = Vector2.ZERO
+	var elapsed := _frames - _spine_at
+	var samples := SPINE_YAWS + SPINE_PITCHES
+
+	match _spine_step:
+		0:  # settle, then draw and hold
+			if _frames < 20:
+				return
+			combat.try_draw_bow()
+			_spine_next(1)
+		1:  # held until the charge says it is full, not until a frame count does
+			if player.draw_fraction() < 1.0:
+				return
+			_spine_next(2)
+		2:  # the sweep
+			var pitch := 0.0
+			var yaw := 0.0
+			if _spine_sample < SPINE_YAWS:
+				# Round the horizon at a level view. The body follows, because a
+				# drawing Gub faces its own crosshair (`_face_view`), so this is
+				# also a test that the correction is a *body-relative* rotation
+				# and not a world-space one that happens to work at yaw zero.
+				yaw = TAU * float(_spine_sample) / float(SPINE_YAWS)
+			else:
+				var step := _spine_sample - SPINE_YAWS
+				pitch = lerpf(GubCamera.PITCH_MIN, GubCamera.PITCH_MAX,
+					float(step) / float(SPINE_PITCHES - 1))
+			rig.set_view(yaw, pitch)
+			if elapsed < SPINE_SETTLE:
+				return
+			_spine_rows.append({
+				"yaw": yaw, "pitch": pitch,
+				"level": _spine_sample < SPINE_YAWS,
+				"bow": _aim_offset(player),
+				"elevation": _bow_elevation(player),
+				"apart": _bow_off_crosshair(player, rig),
+			})
+			_spine_sample += 1
+			_spine_at = _frames
+			if _spine_sample >= samples:
+				_report_spine_sweep()
+				rig.set_view(0.0, GubCamera.PITCH_MIN)
+				_spine_next(3)
+		3:  # the first of two shots, at the bottom of the pitch range
+			if elapsed < SPINE_SETTLE:
+				return
+			combat.release_draw()
+			_spine_next(4)
+		4:  # **the view is not touched until that arrow is out.**
+			#
+			# The aim is read at the *release* and the release is a tick after
+			# the key comes up (D-025), so a mode that swung the camera to the
+			# other end of the sweep on the frame it let go would have both its
+			# shots aimed by the second view — which is exactly what happened,
+			# and what it looked like was a release point that never moved for
+			# a reason that had nothing to do with the spine.
+			if _spine_shots.is_empty() and elapsed < SPINE_PATIENCE:
+				return
+			rig.set_view(0.0, GubCamera.PITCH_MAX)
+			_spine_next(5)
+		5:  # let the bow come back, then draw again at the top of the range
+			rig.set_view(0.0, GubCamera.PITCH_MAX)
+			# Asked every tick until it takes, which is what a player holding
+			# the key does. One call on the frame `has_bow` first says yes is a
+			# frame earlier than the draw's own gate opens — the client spends
+			# `BOW_RELEASE_TIME` *plus* the recharge and the bow reappears on
+			# the first of the two — so a single attempt is refused and the
+			# second shot silently never happens.
+			if not combat.has_bow():
+				return
+			combat.try_draw_bow()
+			if not player.is_drawing():
+				return
+			_spine_next(6)
+		6:
+			if player.draw_fraction() < 1.0 or elapsed < SPINE_SETTLE:
+				return
+			combat.release_draw()
+			_spine_next(7)
+		7:
+			if _spine_shots.size() < 2 and elapsed < SPINE_PATIENCE:
+				return
+			_report_spine_release()
+			if _spine_failures == 0:
+				print("combat_range: spine PASS")
+			get_tree().quit()
+
+
+func _spine_next(step: int) -> void:
+	_spine_step = step
+	_spine_at = _frames
+
+
+## How far above the horizon the composed bow is pointing, in degrees. The same
+## line `_aim_offset` measures the bearing of — the two fists, off the
+## attachments the props actually hang from — asked about its rise instead.
+func _bow_elevation(gub: Gub) -> float:
+	var hands := _hand_attachments(gub)
+	if hands.is_empty():
+		return 0.0
+	var along: Vector3 = hands[0].global_position - hands[1].global_position
+	if along.length_squared() < 0.0001:
+		return 0.0
+	return rad_to_deg(asin(clampf(along.normalized().y, -1.0, 1.0)))
+
+
+## The angle between the composed bow and the crosshair, in degrees, in three
+## dimensions — the one form of the question that is as well conditioned looking
+## at the sky as it is looking at the horizon.
+##
+## The crosshair's own direction comes from `aim_ray`, which is the *unobstructed*
+## camera's (D-045) and is the same vector `GubCombat` reads at the release, so
+## this compares the bow against the thing the arrow will actually follow rather
+## than against the angles the mode happened to ask for.
+func _bow_off_crosshair(gub: Gub, rig: GubCamera) -> float:
+	var hands := _hand_attachments(gub)
+	if hands.is_empty():
+		return 0.0
+	var along: Vector3 = hands[0].global_position - hands[1].global_position
+	if along.length_squared() < 0.0001:
+		return 0.0
+	return rad_to_deg(along.angle_to(rig.aim_ray()["direction"] as Vector3))
+
+
+func _report_spine_sweep() -> void:
+	var worst_bearing := 0.0
+	var worst_apart := 0.0
+	var worst_pitch := 0.0
+	var low := INF
+	var high := -INF
+	print("  view yaw   view pitch   bow bearing   bow elevation   off the crosshair")
+	for row: Dictionary in _spine_rows:
+		var pitch := rad_to_deg(float(row["pitch"]))
+		var elevation: float = row["elevation"]
+		if row["level"]:
+			worst_bearing = maxf(worst_bearing, absf(float(row["bow"])))
+		worst_apart = maxf(worst_apart, float(row["apart"]))
+		worst_pitch = maxf(worst_pitch, absf(elevation - pitch))
+		low = minf(low, elevation)
+		high = maxf(high, elevation)
+		print("  %+8.0f   %+10.0f   %+11.0f   %+13.0f   %16.0f"
+			% [rad_to_deg(float(row["yaw"])), pitch, float(row["bow"]),
+				elevation, float(row["apart"])])
+
+	var fails: Array[String] = []
+	if worst_bearing > SPINE_BOW_LIMIT:
+		fails.append("the bow's bearing was %.0f deg off the crosshair at its worst"
+			% worst_bearing)
+	if worst_apart > SPINE_APART_LIMIT:
+		fails.append("the bow was %.0f deg off the crosshair in space at its worst"
+			% worst_apart)
+	if fails.is_empty():
+		print("combat_range: the bow held %.0f deg of bearing and %.0f deg in space off the crosshair, against D-065's 91 — bow PASS"
+			% [worst_bearing, worst_apart])
+	else:
+		_spine_fail("bow", "; ".join(fails))
+
+	var span := high - low
+	fails = []
+	if worst_pitch > SPINE_PITCH_LIMIT:
+		fails.append("the bow was %.0f deg off the crosshair's own pitch at its worst"
+			% worst_pitch)
+	# The control on the same line: a torso that never moved would agree with a
+	# level crosshair perfectly and disagree with nothing.
+	if span < SPINE_PITCH_SPAN_MIN:
+		fails.append("the bow only swung through %.0f deg of elevation, so tracking means nothing"
+			% span)
+	if fails.is_empty():
+		print("combat_range: the bow tracked %.0f deg of elevation, within %.0f of the crosshair — pitch PASS"
+			% [span, worst_pitch])
+	else:
+		_spine_fail("pitch", "; ".join(fails))
+
+
+## Two arrows, from one spot, at the two ends of the pitch range.
+##
+## What has to be true is that they left from **the same point** and went two
+## different ways: the origin is the body's (position, eye height and yaw, none
+## of them on the skeleton) and the direction is the camera's, so a torso that
+## turned through 123 degrees between the two shots must have moved the second
+## and not the first. That is D-025 and D-045 asserted against the thing most
+## likely to break them — a modifier that reaches into the pose the release
+## would otherwise be taken from.
+func _report_spine_release() -> void:
+	if _spine_shots.size() < 2:
+		_spine_fail("release", "only %d of 2 arrows were ever loosed"
+			% _spine_shots.size())
+		return
+	var a: Dictionary = _spine_shots[0]
+	var b: Dictionary = _spine_shots[1]
+	var moved: float = (a["origin"] as Vector3).distance_to(b["origin"])
+	var turned := rad_to_deg((a["direction"] as Vector3)
+		.angle_to(b["direction"] as Vector3))
+	var swept := rad_to_deg(GubCamera.PITCH_MAX - GubCamera.PITCH_MIN)
+	var fails: Array[String] = []
+	if moved > SPINE_RELEASE_TOLERANCE:
+		fails.append("the release point moved %.4f m between them" % moved)
+	# The control: if the two shots went the same way, "the origin did not move"
+	# is satisfied by a mode that never turned the view at all.
+	if turned < swept - 5.0:
+		fails.append("the two shots only differ by %.0f deg where the sweep was %.0f"
+			% [turned, swept])
+	if fails.is_empty():
+		print("combat_range: two arrows %.0f deg apart left the same point to within %.4f m — release PASS"
+			% [turned, moved])
+	else:
+		_spine_fail("release", "; ".join(fails))
+
+
+## Where one arrow started and which way it went, taken once the launch has
+## finished writing both. See the deferred call that gets here.
+func _note_spine_shot(arrow: ArrowProjectile) -> void:
+	if not is_instance_valid(arrow):
+		return
+	_spine_shots.append({
+		"origin": arrow.global_position,
+		"direction": -arrow.global_transform.basis.z,
+	})
+
+
+func _spine_fail(label: String, why: String) -> void:
+	_spine_failures += 1
+	print("combat_range: %s FAIL — %s" % [label, why])
 
 
 func _report_draw() -> void:
@@ -3057,6 +3850,16 @@ func _watch_spawned(node: Node) -> void:
 	if arrow != null:
 		if _mode == "bow" and _bow_arrow == null:
 			_bow_arrow = arrow
+		if _mode == "spine":
+			# Deferred, and that is the whole of it: `SpearProjectile.begin`
+			# calls `add_child` **first** and sets the position and the facing
+			# after, so this signal arrives at an arrow that is still at the
+			# origin pointing down -Z. Read here, both shots looked identical
+			# and "the release point did not move" passed on two zeroes. A
+			# deferred call is flushed at the end of this physics frame, by
+			# which time `begin` has finished and the arrow has not yet had a
+			# `_physics_process` of its own to fly in.
+			_note_spine_shot.call_deferred(arrow)
 		return
 	var spear := node as SpearProjectile
 	if spear != null and _mode == "release" and _release_spear_at == 0:

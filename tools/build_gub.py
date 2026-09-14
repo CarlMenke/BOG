@@ -246,6 +246,27 @@ PREFIX = "mixamorig:"
 HIPS = "Hips"
 HIP_JOINTS = ("LeftUpLeg", "RightUpLeg")
 
+## The other pair a clip's facing can be taken off — the two clavicle roots,
+## which is the chest rather than the pelvis (D-066).
+##
+## `HIP_JOINTS` is the default and stays the default: on a forward cycle the two
+## lines agree to within seven degrees (`Run` measures -10.2° off its travel by
+## the hips and -5.7° by the chest), and the pelvis is the steadier of the two
+## because it does not carry the arm swing. On a **sidestep** they disagree by
+## more than twenty, and they disagree in the one direction that matters: the
+## pelvis turns into the step and the chest does not, which is what a sidestep
+## *is*. Aligning `LeftStrafe` by its pelvis leaves it travelling 8.6° off
+## forward — a Gub jogging very slightly to one side — where the same clip
+## aligned by its chest travels 27.5° off, which is the number the plan's own
+## table reports and the number the decision to use these clips was taken on.
+##
+## The two rest lines lie within 1.96° of each other on the scaled rig
+## (-176.03° by the hips, -174.07° by the chest, printed by `align_facing`), and
+## each clip is turned onto the rest line of its **own** pair — so swapping one
+## for the other is a change of reference and not a two-degree offset smuggled
+## in with it.
+CHEST_JOINTS = ("LeftShoulder", "RightShoulder")
+
 # 1.80 m. The old Gub was 1.81 m, and the collision capsule (STAND_HEIGHT 1.55)
 # and eye height in `gub.gd` are tuned to that, so matching it keeps the whole
 # body-and-camera rig valid. Everything else in this script is derived from it.
@@ -285,7 +306,7 @@ LOOP_MEAN = None
 
 
 class Clip(collections.namedtuple(
-        "Clip", "file name loop align rise_kept floor_limit authored_as")):
+        "Clip", "file name loop align face rise_kept floor_limit authored_as")):
     """One source file, the name it takes in Godot, and its per-clip rules.
 
     `file`         the FBX, inside its pack's folder.
@@ -294,6 +315,10 @@ class Clip(collections.namedtuple(
                    pack, because every clip lands in one AnimationPlayer.
     `loop`         exported with LOOP_SUFFIX, so Godot marks it LOOP_LINEAR.
     `align`        LOOP_MEAN, or a time in seconds — see the comment above.
+    `face`         the pair of joints whose line *is* this clip's facing, which
+                   `align_facing` turns onto the rest pose's own. None means
+                   HIP_JOINTS, which is what every clip but the four strafes
+                   wants; see CHEST_JOINTS for why a sidestep is the exception.
     `rise_kept`    how much of the clip's own hips rise above its first key
                    survives, 0.0..1.0. None means "leave the vertical alone",
                    which is what everything but the two jumps wants. Setting it
@@ -313,14 +338,18 @@ class Clip(collections.namedtuple(
     """
     __slots__ = ()
 
-    def __new__(cls, file, name, loop, align,
+    def __new__(cls, file, name, loop, align, face=None,
                 rise_kept=None, floor_limit=None, authored_as=None):
-        return super().__new__(cls, file, name, loop, align,
+        return super().__new__(cls, file, name, loop, align, face,
                                rise_kept, floor_limit, authored_as)
 
     def rise(self):
         """The fraction of the rise to keep — 1.0, untouched, when unset."""
         return 1.0 if self.rise_kept is None else self.rise_kept
+
+    def facing_joints(self):
+        """The joint pair this clip's facing is read off — hips unless said."""
+        return HIP_JOINTS if self.face is None else self.face
 
 
 class Pack(collections.namedtuple("Pack", "folder what clips")):
@@ -473,9 +502,56 @@ PACKS = (
          (
              Clip("Standing1HMagicAttack1.fbx", "Cast", False, 0.467),
          )),
+    # The six directions `GUB_2` never had, and the pack that turns the
+    # locomotion blend space from a line into a plane (D-066).
+    #
+    # All six loop and all six align on LOOP_MEAN, for the reason `Walk` and
+    # `Run` do: a cycle sways either side of where it is going and pinning one
+    # frame of it would bake half a sway into the rest pose.
+    #
+    # Every one of them names an `authored_as`, which on this pack is the whole
+    # point of the field. A blend point plays its clip at `game speed / authored
+    # speed`, so a strafe whose speed nobody measured is a strafe whose feet
+    # skate by exactly the ratio nobody looked at — which is the fault this pack
+    # exists to fix, reintroduced one axis over. Left and right get **separate**
+    # constants rather than one shared number even though the two clips are
+    # mirror images that measure the same to three decimals: they are two files
+    # and two measurements, and a single constant would be an assumption about
+    # Mixamo's mirroring sitting where a measurement is supposed to be.
+    #
+    # **The four strafes are aligned by the chest and not by the pelvis**, which
+    # is the one thing in this table that is not a copy of a line above it. In a
+    # sidestep the pelvis turns into the step and the chest does not, so the two
+    # lines disagree by more than twenty degrees — and `align_facing` turning
+    # the pelvis square to the rest pose drags the travel round with it, leaving
+    # `LeftStrafe` moving 8.6° off forward instead of the 27.5° it is actually
+    # authored at. See CHEST_JOINTS, and D-066 for what it is worth in skate.
+    #
+    # **`StandingRunLeft.fbx` is deliberately not declared**, the way
+    # `2_Spear_Suite/SpearThrow.fbx` and three of the bow's five are not. It is
+    # the *better* lateral — see D-066 for the bearings — and it is a set of
+    # one: there is no `Standing Run Right` and no `Standing Walk Left/Right`
+    # With Skin anywhere in `_rejected/`, so taking it would put the family
+    # boundary inside the strafe axis instead of between forward and sideways.
+    # It stays on disk as the alternate, and the build reports it as a file
+    # PACKS does not name, which is exactly right.
     Pack("5_Locomotion",
          "strafe left, strafe right and run backward, and their walk equivalents: "
-         "the set that stops the feet skating sideways"),
+         "the set that stops the feet skating sideways",
+         (
+             Clip("LeftStrafe.fbx",         "StrafeLeft",      True, LOOP_MEAN,
+                  CHEST_JOINTS, authored_as="AUTHORED_STRAFE_LEFT"),
+             Clip("RightStrafe.fbx",        "StrafeRight",     True, LOOP_MEAN,
+                  CHEST_JOINTS, authored_as="AUTHORED_STRAFE_RIGHT"),
+             Clip("LeftStrafeWalking.fbx",  "StrafeWalkLeft",  True, LOOP_MEAN,
+                  CHEST_JOINTS, authored_as="AUTHORED_STRAFE_WALK_LEFT"),
+             Clip("RightStrafeWalking.fbx", "StrafeWalkRight", True, LOOP_MEAN,
+                  CHEST_JOINTS, authored_as="AUTHORED_STRAFE_WALK_RIGHT"),
+             Clip("RunningBackward.fbx",    "RunBack",         True, LOOP_MEAN,
+                  authored_as="AUTHORED_RUN_BACK"),
+             Clip("WalkingBackward.fbx",    "WalkBack",        True, LOOP_MEAN,
+                  authored_as="AUTHORED_WALK_BACK"),
+         )),
     Pack("6_Utility",
          "a drink or a quaff, for the heal potion"),
 )
@@ -1015,9 +1091,9 @@ def sample_bones(arm, action, bones):
     return frames, tracks
 
 
-def rest_facing(arm):
-    left = arm.data.bones[HIP_JOINTS[0]].head_local
-    right = arm.data.bones[HIP_JOINTS[1]].head_local
+def rest_facing(arm, joints=HIP_JOINTS):
+    left = arm.data.bones[joints[0]].head_local
+    right = arm.data.bones[joints[1]].head_local
     return math.atan2(right.y - left.y, right.x - left.x)
 
 
@@ -1029,7 +1105,7 @@ def wrap_pi(angle):
 # The authored numbers: travel, speed, and the moments the game keys off
 # ---------------------------------------------------------------------------
 
-def measure_clip(arm, action, clip):
+def measure_clip(arm, action, clip, reference=LOOP_MEAN, joints=HIP_JOINTS):
     """Everything §2 measured, measured again on the built rig.
 
     Run before the root motion is locked and the jumps are clamped, because
@@ -1037,8 +1113,18 @@ def measure_clip(arm, action, clip):
     feet were drawn for) and when the body leaves the ground (the window the
     animator scrubs). Locking removes the travel; clamping removes the rise; the
     times stay where they are.
+
+    `reference` is the clip's own `align`, and it is here for the **bearing**
+    (D-066). A one-dimensional blend space only ever needed the travel's
+    *length*; a two-dimensional one is laid out by its direction, and the
+    direction that matters is the one the clip will have after `align_facing`
+    has turned it — relative to the body's own forward at the same reference
+    moment, not to any world axis. So it is computed off `joints` — the very
+    line `align_facing` is about to turn square — which is what makes the number
+    the animator lays a blend point out from the same number the build produces.
     """
-    bones = (HIPS, "LeftToeBase", "RightToeBase", "RightHand", "Head") + HIP_JOINTS
+    bones = ((HIPS, "LeftToeBase", "RightToeBase", "RightHand", "Head", "Neck")
+             + HIP_JOINTS + tuple(j for j in joints if j not in HIP_JOINTS))
     frames, tracks = sample_bones(arm, action, bones)
     hips = tracks[HIPS]
     n = len(frames)
@@ -1047,6 +1133,52 @@ def measure_clip(arm, action, clip):
 
     travel = math.hypot(hips[-1].x - hips[0].x, hips[-1].y - hips[0].y)
     speed = travel / duration if duration > 0 else 0.0
+
+    # Which way those metres go, in degrees off the body's own forward, positive
+    # to the **left** (D-066).
+    #
+    # Forward is this clip's own facing line turned a quarter turn, the same
+    # construction `reach()` below and `align_facing` both use: with the
+    # left-to-right line as the body's right and Z as up, forward is Z x right,
+    # which in Blender's right-handed XY is that line's yaw plus 90°.
+    # Taken at the clip's own alignment reference, because that is the moment
+    # `align_facing` pins to the rest pose — so this is what the travel will be
+    # relative to the Gub's forward once the clip is in the game, and it is the
+    # number a blend point's position is.
+    face_left, face_right = tracks[joints[0]], tracks[joints[1]]
+    side_yaws = [math.atan2(face_right[i].y - face_left[i].y,
+                            face_right[i].x - face_left[i].x)
+                 for i in range(n)]
+    if reference is LOOP_MEAN:
+        face = math.atan2(sum(math.sin(y) for y in side_yaws),
+                          sum(math.cos(y) for y in side_yaws))
+    else:
+        face = side_yaws[min(n - 1, int(round(reference * FPS)))]
+    bearing = 0.0
+    if travel > 1e-4:
+        bearing = math.degrees(wrap_pi(
+            math.atan2(hips[-1].y - hips[0].y, hips[-1].x - hips[0].x)
+            - (face + math.pi / 2.0)))
+
+    # Posture, which is the half of a mixed-family blend space the playback rate
+    # cannot fix (D-066). Hip height is the pelvis above the floor and torso
+    # pitch is the Hips -> Neck line off vertical, both averaged over the whole
+    # clip — a mean rather than any one frame, because what two clips being
+    # blended have to agree about is their carriage and not their phase.
+    #
+    # Absolute rather than measured against a foot: the rig is scaled so the
+    # rest pose's toes sit on z=0 and `lock_root_motion` never touches a clip's
+    # vertical unless its `rise_kept` says to, so a clip authored with its
+    # pelvis ten centimetres higher *renders* ten centimetres higher, and that
+    # is exactly the number that shows up as a Gub rising out of a blend.
+    hip_heights = [hips[i].z for i in range(n)]
+    pitches = []
+    for i in range(n):
+        spine = tracks["Neck"][i] - hips[i]
+        flat = math.hypot(spine.x, spine.y)
+        pitches.append(math.degrees(math.atan2(flat, spine.z)))
+    hip_height = sum(hip_heights) / n
+    torso_pitch = sum(pitches) / n
 
     ground = min(arm.data.bones["LeftToeBase"].head_local.z,
                  arm.data.bones["RightToeBase"].head_local.z)
@@ -1081,6 +1213,10 @@ def measure_clip(arm, action, clip):
         "duration": duration,
         "travel": travel,
         "speed": speed,
+        "bearing": bearing,
+        "facing": "chest" if joints is CHEST_JOINTS else "hips",
+        "hip_height": hip_height,
+        "torso_pitch": torso_pitch,
         "hips_first": standing,
         "hips_min": min(p.z for p in hips),
         "hips_max": max(p.z for p in hips),
@@ -1136,11 +1272,24 @@ def measure_clip(arm, action, clip):
 
 
 def report_measurements(rows):
-    log("  clip         frames  length   travel   speed    hips z: first  min    max")
+    log("  clip            frames  length   travel   speed    hips z: first  min    max")
     for r in rows:
-        log("  %-11s %5d  %6.3f  %6.3f  %6.3f            %.3f  %.3f  %.3f"
+        log("  %-14s %5d  %6.3f  %6.3f  %6.3f            %.3f  %.3f  %.3f"
             % (r["clip"], r["frames"], r["duration"], r["travel"], r["speed"],
                r["hips_first"], r["hips_min"], r["hips_max"]))
+    log()
+    # Direction and carriage, which is what a 2D locomotion space is laid out
+    # from and what it can get wrong (D-066). The bearing says where a blend
+    # point belongs; the two posture columns say what blending two of them
+    # actually costs, because the playback rate handles the speed difference
+    # between two authoring families for free and handles none of this.
+    log("  travel bearing (deg off the body's own forward, + is to its left) "
+        "and carriage:")
+    log("  clip            facing   bearing   hip height   torso pitch")
+    for r in rows:
+        log("  %-14s %-6s  %+7.1f°   %8.3f m   %8.1f°"
+            % (r["clip"], r["facing"], r["bearing"], r["hip_height"],
+               r["torso_pitch"]))
     log()
     log("  airborne windows (foot clearance over %.2f m / over %.2f m, which is what "
         "§2's figures used):" % (FOOT_CLEARANCE, FOOT_CLEARANCE_WIDE))
@@ -1279,22 +1428,24 @@ def lock_root_motion(action, clip):
 # 6. Facing
 # ---------------------------------------------------------------------------
 
-def clip_facing(arm, action, reference):
+def clip_facing(arm, action, reference, joints=HIP_JOINTS):
     """The clip's facing at its reference moment, relative to nothing yet.
 
     Forward kinematics, not a Euler angle off the root quaternion: the Hips bone
     carries the rig's own rest orientation and its "yaw" is not the body's. The
     line between the two hip joints is the one measurement that stays put while
-    the arms and torso animate.
+    the arms and torso animate — except on a sidestep, where the pelvis is the
+    thing that moves and the chest is the thing that stays. `joints` is which
+    line this clip is read off; see CHEST_JOINTS.
     """
-    frames, tracks = sample_bones(arm, action, HIP_JOINTS)
-    left, right = tracks[HIP_JOINTS[0]], tracks[HIP_JOINTS[1]]
+    frames, tracks = sample_bones(arm, action, joints)
+    left, right = tracks[joints[0]], tracks[joints[1]]
     yaws = [math.atan2(right[i].y - left[i].y, right[i].x - left[i].x)
             for i in range(len(frames))]
     # The rest pose sits at -176°, so raw yaws straddle the ±180° seam and a
     # plain min/max of them would read as a 360° swing. Everything is reported
     # relative to the rest facing instead.
-    relative = [wrap_pi(y - rest_facing(arm)) for y in yaws]
+    relative = [wrap_pi(y - rest_facing(arm, joints)) for y in yaws]
     if reference is LOOP_MEAN:
         # A circular mean, for the same reason.
         x = sum(math.cos(y) for y in yaws)
@@ -1330,26 +1481,34 @@ def rotate_hips_yaw(action, clip, angle):
 
 
 def align_facing(arm, actions, references):
-    """Make every clip point where the rest pose points, at its reference moment."""
-    reference_yaw = rest_facing(arm)
-    log("  rest pose faces %+.2f° (yaw of the left-hip -> right-hip line)"
-        % math.degrees(reference_yaw))
+    """Make every clip point where the rest pose points, at its reference moment.
+
+    `references` is {clip: (reference moment, the joint pair its facing is read
+    off)}. Almost every clip is read off the hips; the four strafes are read off
+    the chest, and the line below says which so that a sheet of the build log is
+    still a complete account of where each clip ended up pointing (D-066).
+    """
+    log("  rest pose faces %+.2f° by the hip line, %+.2f° by the chest line"
+        % (math.degrees(rest_facing(arm, HIP_JOINTS)),
+           math.degrees(rest_facing(arm, CHEST_JOINTS))))
     results = []
     for clip, action in actions.items():
-        reference = references[clip]
-        before, low, high = clip_facing(arm, action, reference)
+        reference, joints = references[clip]
+        reference_yaw = rest_facing(arm, joints)
+        before, low, high = clip_facing(arm, action, reference, joints)
         offset = wrap_pi(before - reference_yaw)
         rotate_hips_yaw(action, clip, -offset)
-        after, low2, high2 = clip_facing(arm, action, reference)
+        after, low2, high2 = clip_facing(arm, action, reference, joints)
         residual = math.degrees(wrap_pi(after - reference_yaw))
         if abs(residual) > 1.0:
             raise SystemExit("%s: still %+.2f° off the rest facing after alignment"
                              % (clip, residual))
         results.append((clip, math.degrees(offset), residual,
                         math.degrees(high2 - low2)))
-        log("  %-11s %-9s was %+7.2f°, turned by %+7.2f°, now %+5.2f° "
+        log("  %-15s %-9s %-5s was %+7.2f°, turned by %+7.2f°, now %+5.2f° "
             "(clip turns through %.0f° of real motion)"
             % (clip, "mean" if reference is LOOP_MEAN else "@%.2fs" % reference,
+               "chest" if joints is CHEST_JOINTS else "hips",
                math.degrees(offset), -math.degrees(offset), residual,
                math.degrees(high2 - low2)))
     return results
@@ -1746,6 +1905,13 @@ def check_declarations():
             if clip.align is not LOOP_MEAN and not isinstance(clip.align, (int, float)):
                 raise SystemExit("%s: align must be LOOP_MEAN or a time in "
                                  "seconds, not %r" % (clip.name, clip.align))
+            # Which line a clip's facing is read off is a decision about that
+            # clip, and a typo in it would not fail — it would build a Gub that
+            # runs sideways at a slightly wrong angle, which is the exact class
+            # of fault this pack exists to remove.
+            if clip.face is not None and clip.face not in (HIP_JOINTS, CHEST_JOINTS):
+                raise SystemExit("%s: face must be None, HIP_JOINTS or "
+                                 "CHEST_JOINTS, not %r" % (clip.name, clip.face))
     source = CROUCH_IDLE[0]
     if source not in names:
         raise SystemExit("CrouchIdle is cut from %r, which no pack builds" % source)
@@ -1785,7 +1951,9 @@ def main():
     report_rest_pose(arm, mesh)
 
     log("\n-- authored motion (measured before anything is locked or clamped)")
-    rows = dict((c.name, measure_clip(arm, actions[c.name], c.name)) for c in clips)
+    rows = dict((c.name, measure_clip(arm, actions[c.name], c.name, c.align,
+                                      c.facing_joints()))
+                for c in clips)
     report_measurements([rows[c.name] for c in clips])
 
     log("\n-- root motion")
@@ -1812,8 +1980,8 @@ def main():
     actions["CrouchIdle"] = synth_crouch_idle(arm, actions, source_clip, source_frame, hold)
 
     log("\n-- facing")
-    references = dict((c.name, c.align) for c in clips)
-    references["CrouchIdle"] = LOOP_MEAN
+    references = dict((c.name, (c.align, c.facing_joints())) for c in clips)
+    references["CrouchIdle"] = (LOOP_MEAN, HIP_JOINTS)
     align_facing(arm, actions, references)
 
     log("\n-- loops")
@@ -1854,9 +2022,9 @@ def main():
         if clip.authored_as is None:
             continue
         row = rows[clip.name]
-        log("    %-22s := %.3f   # %s: %.3f m over %.3f s"
+        log("    %-26s := %.3f   # %s: %.3f m over %.3f s, bearing %+.1f°"
             % (clip.authored_as, row["speed"], clip.name, row["travel"],
-               row["duration"]))
+               row["duration"], row["bearing"]))
 
     # A moment that never happens in a clip prints as "n/a" rather than
     # crashing the summary after the asset has already been written. So does a

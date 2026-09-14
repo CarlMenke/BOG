@@ -144,7 +144,8 @@ func _process(delta: float) -> void:
 	# Not while spectating: the corpse is not ours to steer, and turning the view
 	# would spin a body somebody else is still watching.
 	if _spectating == null:
-		_body.set_view_basis(global_transform.basis, _aiming or _body_is_throwing())
+		_body.set_view_basis(global_transform.basis,
+			_aiming or _body_is_throwing(), _pitch)
 
 
 func _body_is_throwing() -> bool:

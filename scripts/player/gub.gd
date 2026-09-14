@@ -63,6 +63,25 @@ const AUTHORED_WALK := 1.079
 const AUTHORED_RUN := 4.314
 const AUTHORED_CROUCH_WALK := 1.273
 
+## The same measurement for the six directions `GUB_2` never had (D-066). Left
+## and right are separate numbers rather than one shared one because they are
+## two files and two measurements — they happen to agree to three decimals on
+## this pack and that is a fact about Mixamo's mirroring, not a promise.
+##
+## The two backward clips are the slow ones and that is what makes them the
+## interesting pair: 0.871 m/s of authored walk has to carry a 2.3 m/s
+## backpedal, which is **2.64x**, the fastest playback rate of any cycle in the
+## game. Its feet are planted — that is what the ratio is for — but a Gub
+## backing away at walking pace is visibly scampering, and the lever if that
+## ever needs to come down is a backward speed penalty in `target_speed` rather
+## than a number here.
+const AUTHORED_STRAFE_LEFT := 3.250
+const AUTHORED_STRAFE_RIGHT := 3.250
+const AUTHORED_STRAFE_WALK_LEFT := 1.245
+const AUTHORED_STRAFE_WALK_RIGHT := 1.245
+const AUTHORED_RUN_BACK := 2.278
+const AUTHORED_WALK_BACK := 0.871
+
 ## How fast the Gub actually moves. Chosen for how the game plays, not for what
 ## the clips were made at: walking is brisk, sprinting is nearly twice that, and
 ## crouching is slow enough that choosing it costs you something. Each of these
@@ -263,6 +282,24 @@ const LAYER_DEPLOYABLE := 8
 ## misses a packet is corrected by the next one and is wrong about a pose for a
 ## sixtieth of a second.
 @export var sync_draw: float = -1.0
+## Where this Gub is aiming, above or below the horizon, in radians (D-066).
+##
+## The one thing about a Gub that the body itself has never had. `body_yaw` is
+## replicated because the body turns; nothing pitches, because a
+## `CharacterBody3D` standing on a floor has no business leaning — so until the
+## torso started tracking the crosshair there was nothing here to send.
+##
+## Read off the camera boom and not off `_view_basis`: the rig yaws and the boom
+## under it pitches, and the basis the camera hands down for movement is the
+## rig's, which is flat on purpose (`_wish_direction` would otherwise walk a
+## Gub into the floor when it looked down).
+##
+## ON_CHANGE and one float, for D-065's reasons exactly: a Gub that is not
+## looking around sends nothing, one that is sends a float a tick, and a peer
+## that misses a packet is wrong about a torso for a sixtieth of a second. It
+## is deliberately **not** on the always-packet beside `sync_yaw`, because yaw
+## moves a body through the world and this moves a pose.
+@export var sync_aim_pitch: float = 0.0
 ## Bumped once per ordinary jump, for the same reason and read the same way.
 ## Nothing has to *fire* on a jump — the animator scrubs the jump clip by where
 ## the body is in its arc, and leaving the ground with a positive vertical
@@ -370,6 +407,10 @@ var _was_grounded: bool = true
 var _fall_speed: float = 0.0
 ## Set by the camera each frame; movement is relative to where you are looking.
 var _view_basis: Basis = Basis.IDENTITY
+## The boom's pitch on the Gub we own, handed down by `set_view_basis`. The
+## local half of `aim_pitch()`, exactly as `draw` is the local half of
+## `draw_fraction()`.
+var aim_pitch_local: float = 0.0
 ## While aiming or throwing the body faces the camera instead of the direction
 ## of travel, so a thrown spear goes where the crosshair is.
 var _face_view: bool = false
@@ -536,9 +577,16 @@ func is_local() -> bool:
 
 
 ## Called by the camera rig each frame so movement is relative to the view.
-func set_view_basis(basis: Basis, face_view: bool) -> void:
+##
+## `pitch` is the boom's, and it is a third argument rather than a pitched
+## `basis` because the two are wanted for opposite reasons: everything that
+## reads `_view_basis` — `_wish_direction`, `_face` — wants it flat, and the
+## only thing that wants the pitch is a torso that is not steering anything
+## (D-066).
+func set_view_basis(basis: Basis, face_view: bool, pitch: float = 0.0) -> void:
 	_view_basis = basis
 	_face_view = face_view
+	aim_pitch_local = pitch
 
 
 func _physics_process(delta: float) -> void:
@@ -709,6 +757,15 @@ func is_drawing() -> bool:
 ## first frame of the window.
 func draw_fraction() -> float:
 	return maxf(draw if is_local() else sync_draw, 0.0)
+
+
+## Where this Gub is aiming, above or below the horizon, in radians (D-066).
+##
+## The same two-sided accessor as `draw_fraction` and for the same reason: one
+## code path for the Gub you are driving and the seven you are watching, so
+## `GubAim` never asks which kind it is looking at.
+func aim_pitch() -> float:
+	return aim_pitch_local if is_local() else sync_aim_pitch
 
 
 func is_crouching() -> bool:
@@ -1130,6 +1187,7 @@ func _publish() -> void:
 	sync_sliding = is_sliding()
 	sync_grounded = is_on_floor()
 	sync_draw = draw
+	sync_aim_pitch = aim_pitch_local
 	sync_life = life
 
 
