@@ -26,10 +26,56 @@ signal clock_changed(seconds_left: float)
 signal match_finished(summary: Dictionary)
 signal local_death(respawn_in: float)
 signal local_respawn()
+## One player's letter set changed. Carries the peer rather than the mask,
+## because the mask is already in `stats` by the time this fires and a signal
+## that carries state is a second copy of it waiting to disagree.
+signal letters_changed(peer_id: int)
+## One player has started, finished or lost a letter hold. Carries the peer for
+## the same reason `letters_changed` does: the hold itself is already in
+## `_letter_holds` when this fires, and a signal that carries a copy of it is a
+## copy waiting to disagree.
+##
+## Fires on **every** peer, not just the holder's, because a Gub standing in the
+## open ten seconds from a letter is the whole tension of the mode and has to
+## read from across the clearing (D-035).
+signal letter_hold_changed(peer_id: int)
+## One player has become, or stopped being, the Elder. Carries the peer for the
+## same reason the two above do: `_elders` already holds the answer by the time
+## this fires, and a signal carrying a copy of it is a copy waiting to disagree.
+##
+## Fires on **every** peer. The robe is the tell that says who is dangerous, and
+## a tell only its wearer can see is not a tell (D-038).
+signal elder_changed(peer_id: int)
 
 enum Phase { IDLE, WARMUP, PLAYING, POST_MATCH }
 
 const GUB_SCENE := preload("res://scenes/player/gub.tscn")
+const PICKUP_SCENE := preload("res://scenes/items/pickup.tscn")
+
+## Letters are a three-bit mask on the player's stats row, not a set.
+##
+## A mask because `stats` is replicated whole, as a Dictionary, on every score
+## change — an int costs three bits of that and an `Array[String]` costs an
+## allocation per player per push. It is also what the HUD wants: three lamps
+## lit or unlit is `mask & LETTER_G`, with no membership test and no ordering to
+## get wrong.
+const LETTER_G := 1
+const LETTER_U := 2
+const LETTER_B := 4
+## All three. The win condition is one comparison against this.
+const LETTER_ALL := LETTER_G | LETTER_U | LETTER_B
+## Index order for the uniform roll and for rendering. G, U, B, left to right,
+## the way the word reads — which is emphatically *not* an order they have to be
+## collected in (D-033).
+const LETTERS: Array[int] = [LETTER_G, LETTER_U, LETTER_B]
+
+## How far above the death point the drop's ground query starts, and how far
+## down it looks. A Gub dies standing, or mid-ragdoll, or on a slope, so the ray
+## starts above head height and is allowed to fall a Gub's height or so before
+## giving up — past that the death happened over a drop and an item left there
+## would hang in the air.
+const DROP_RAY_UP := 1.4
+const DROP_RAY_DOWN := 4.0
 
 ## Anything below this has left the island and is not coming back. It is the
 ## *default* floor rather than the only one: -45 is a property of a floating
@@ -222,6 +268,28 @@ func _on_left_lobby(_reason: int, _message: String) -> void:
 ## player who closed the game.
 func _on_player_left(peer_id: int) -> void:
 	var gub: Gub = gubs.get(peer_id)
+	# A disconnect is a death, as far as a letter hold is concerned (D-035):
+	# nothing is awarded and the card goes back on the ground where the body
+	# was. Read before the Gub is freed, because the body is the only thing that
+	# knows where "there" is — and if it is already gone, `Vector3.INF` tells
+	# `_interrupt_letter_hold` there is nowhere to put the card.
+	var last_spot := gub.global_position if is_instance_valid(gub) else Vector3.INF
+	if Net.is_host and phase == Phase.PLAYING:
+		_interrupt_letter_hold(peer_id, last_spot)
+	# And on every peer, host included, the row goes whatever the phase is. A
+	# hold belonging to somebody who is no longer in the match is a countdown
+	# nothing will ever stop.
+	if _letter_holds.erase(peer_id):
+		letter_hold_changed.emit(peer_id)
+	# The robe goes with them and does not come back. It is one of the three
+	# things that end an Elder (D-040) and the only one that is not a clock or a
+	# cliff — and unlike the card there is nothing to put on the ground, because
+	# a robe is consumed rather than re-dropped (D-038). So the row simply goes,
+	# on every peer, host included, whatever the phase. Leaving it would be a
+	# twenty-second countdown belonging to somebody who has closed the game, and
+	# a `gubs` entry it cannot be taken off.
+	if _elders.erase(peer_id):
+		elder_changed.emit(peer_id)
 	if is_instance_valid(gub):
 		gub.queue_free()
 	gubs.erase(peer_id)
@@ -325,6 +393,8 @@ func _process(delta: float) -> void:
 	_tick_clock(delta)
 	_tick_respawns()
 	_tick_void()
+	_tick_letter_holds()
+	_tick_elders()
 
 
 func _tick_clock(delta: float) -> void:
@@ -1313,6 +1383,11 @@ func _finish(reason: String) -> void:
 @rpc("authority", "call_remote", "reliable")
 func _sync_finish(summary: Dictionary) -> void:
 	_set_phase(Phase.POST_MATCH)
+	# A hold still running when the whistle goes grants nothing (D-035). The
+	# match is over; nobody is owed the last two seconds of it. Cleared on every
+	# peer rather than left to expire, so the results screen is not shown over a
+	# Gub still counting down to a letter it can never have.
+	_clear_letter_holds()
 	match_finished.emit(summary)
 
 

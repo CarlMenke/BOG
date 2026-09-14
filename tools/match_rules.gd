@@ -116,6 +116,127 @@ func _leader(summary: Dictionary) -> int:
 	return int(order[0]) if not order.is_empty() else -1
 
 
+## Put one letter card on the ground the way a death would, and hand back the id
+## a collector would address it by.
+##
+## Through `_spawn_drop` rather than by building a `Pickup` here, because the
+## rules being checked below are about what `claim_pickup` does with a real
+## entry in the real index — a stand-in would prove the harness agrees with
+## itself. `_drop_loot` cannot be used: it needs a world to cast its ground ray
+## in and these scenarios deliberately have none.
+func _drop_card(letter: int) -> int:
+	return MatchState._spawn_drop(Pickup.Kind.LETTER, letter, Vector3.ZERO)
+
+
+## Put one Elder robe on the ground, the same way and for the same reason.
+##
+## `_drop_loot`'s roll cannot be used here either — it needs a world to cast its
+## ground ray in and these scenarios have none. What the *roll* does is checked
+## where it can be: `tools/combat_range.tscn lightning` kills a dummy with
+## `elder_drop_chance` forced to 1 and walks the player's own body into what
+## falls out, which is the whole chain in a world with geometry in it.
+func _drop_robe() -> int:
+	return MatchState._spawn_drop(Pickup.Kind.ELDER_ROBE, 0, Vector3.ZERO)
+
+
+## Is this Gub actually wearing the cloth, as opposed to merely being listed as
+## the Elder? Two claims, and the interesting bug is the one where they
+## disagree — a Gub that is the Elder in the rules and a plain Gub on screen is
+## the worst outcome available, because the robe is the only warning anyone gets.
+func _wearing_robe(peer_id: int) -> bool:
+	var gub: Gub = MatchState.gubs.get(peer_id)
+	if not is_instance_valid(gub) or gub.elder_robe == null:
+		return false
+	return gub.elder_robe.is_worn()
+
+
+## Fire one bolt the way the host fires one, straight at `_host_cast_lightning`.
+##
+## Aimed at nothing in particular: there is no geometry in these scenarios, so
+## the ray finds thin air and no one dies. That is deliberate — what is being
+## checked here is the *gating*, and "the bolt kills what it hits" is
+## `tools/combat_range.tscn lightning`'s job, in a scene that has a target
+## standing in it.
+func _cast(peer_id: int) -> void:
+	var combat := _combat(peer_id)
+	if combat != null:
+		combat._host_cast_lightning(Vector3.ZERO, Vector3.FORWARD)
+
+
+## Bolts and ward flashes free themselves after a second; a harness that quits in
+## four frames has to take them away itself, or Godot reports every one of them
+## as a leak and a PASS printed over a wall of warnings teaches people to ignore
+## warnings.
+##
+## Both kinds, because both are spawned into `MatchState._spawn_root()`, which
+## in a harness with no `spawned_items` group is this node. A ward flash is what
+## a spear turned aside by a robe leaves behind (D-040), and the Elder scenario
+## now makes several.
+func _sweep_effects() -> void:
+	for child in get_children():
+		if child is LightningBolt or child is WardFlash:
+			child.free()
+
+
+## Is that card still lying there to be walked over? A collected card is erased
+## from the index; a card that was passed over is not. This is the difference
+## between "consumed" and "left alone", which is the whole duplicate-versus-busy
+## distinction (D-035).
+func _card_live(pickup_id: int) -> bool:
+	return MatchState._pickups.has(pickup_id)
+
+
+## The letter on the newest card in the world — the one a death or a disconnect
+## has just put back. Ids only ever go up within a match, so the highest is the
+## most recent.
+func _newest_card_letter() -> int:
+	var newest := 0
+	var letter := 0
+	for id: int in MatchState._pickups:
+		if id >= newest:
+			newest = id
+			letter = MatchState._pickups[id].letter
+	return letter
+
+
+## A Gub's combat node and its hand, or null if that Gub never got one.
+##
+## Every other scenario here is pure bookkeeping and touches neither. The hold
+## needs both, because "you cannot throw, and the card is in the hand where the
+## spear was" is half the mechanic and it lives on the Gub — and the half most
+## likely to rot, since a hand driven by anything other than `has_spear()` looks
+## right until the frame it does not (D-035).
+func _combat(peer_id: int) -> GubCombat:
+	var gub: Gub = MatchState.gubs.get(peer_id)
+	if not is_instance_valid(gub):
+		return null
+	return gub.get_node_or_null("Combat") as GubCombat
+
+
+func _hand(peer_id: int) -> HeldSpear:
+	var gub: Gub = MatchState.gubs.get(peer_id)
+	return gub.held_spear if is_instance_valid(gub) else null
+
+
+## Run a hold's clock down to zero and let the host finish it, rather than
+## making the harness sit through ten real seconds of a config dial.
+func _expire_hold(peer_id: int) -> void:
+	MatchState._letter_holds[peer_id]["ends_at"] = 0.0
+	MatchState._tick_letter_holds()
+
+
+## The same for a robe (D-040), and deliberately the same shape: wind the row's
+## deadline back and let the host's own tick be the thing that notices.
+##
+## Winding the clock rather than calling `_end_elder` directly is the point.
+## `_end_elder` is also what a void death and a disconnect call, so a check that
+## used it would pass with `_tick_elders` deleted entirely — and "the robe burns
+## out on its own" would then be a claim about a function nothing runs.
+func _expire_elder(peer_id: int) -> void:
+	MatchState._elders[peer_id]["ends_at"] = 0.0
+	MatchState._tick_elders()
+
+
 # ---------------------------------------------------------------- scenarios ---
 
 func _run_kill_limit() -> void:

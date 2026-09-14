@@ -150,6 +150,15 @@ func _ready() -> void:
 		push_error("GubCombat expects to be a child of a Gub")
 		return
 	_config = Net.config
+	# Every peer's copy of every Gub listens, not just the local one: the whole
+	# point of the hold is that it is visible across the clearing (D-035), and
+	# what makes it visible is this Gub's hand on *your* screen. The connection
+	# dies with the node, so there is nothing to undo on a respawn or a leave.
+	MatchState.letter_hold_changed.connect(_on_letter_hold_changed)
+	# And the same for the robe, for the same reason: the crackle around an
+	# Elder's fist is the tell that the most dangerous Gub in the clearing is
+	# loaded, and it has to be on *your* screen, not only on theirs (D-038).
+	MatchState.elder_changed.connect(_on_elder_changed)
 
 
 func _now() -> float:
@@ -321,7 +330,16 @@ func _tick_windup() -> void:
 	# Dead, respawned, or no longer ours: the throw is off. The windup animation
 	# is already playing and is left alone — it is cosmetic and fades out on its
 	# own — but no spear comes out of it.
-	if not _gub.alive or not _gub.is_local():
+	#
+	# Walking over a letter card mid-windup cancels it the same way (D-035). The
+	# cooldown is handed back, which is not generosity: the host never saw a
+	# throw, so its `_server_spear_ready_at` never moved, and leaving the local
+	# prediction spent would be this client alone believing in a recharge
+	# nothing else has. The spear comes back the moment the hold ends.
+	if not _gub.alive or not _gub.is_local() or is_holding_letter():
+		if _gub.alive and is_holding_letter():
+			_spear_ready_at = 0.0
+			cooldowns_changed.emit()
 		_windup_release_at = 0.0
 		return
 	if _now() < _windup_release_at:
@@ -381,6 +399,12 @@ func _request_throw_spear(origin: Vector3, direction: Vector3) -> void:
 
 func _host_throw_spear(origin: Vector3, direction: Vector3) -> void:
 	if not _gub.alive or _now() < _server_spear_ready_at:
+		return
+	# The authoritative half of the hold gate (D-035). The client refuses to ask
+	# while it is holding a card; this is what makes that true of a client that
+	# has been modified not to, and the row it reads is the host's own — the
+	# only copy of a hold that can be trusted or finished.
+	if is_holding_letter():
 		return
 	# The client picks the aim, but not the spawn point: clamping the origin to
 	# somewhere near the Gub stops a modified client throwing from across the map.

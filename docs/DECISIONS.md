@@ -1871,3 +1871,104 @@ player as the netcode being wrong.
 > What survives unamended is everything above this paragraph: planting along the
 > camera's forward, the direction on the wire, and the host flattening whatever
 > arrives.
+
+## D-035 — A letter is earned by standing still for ten seconds, and dying gives it back to the map
+Touching a letter card used to grant the letter. Now it starts a **hold**: the
+Gub holds the card up for `letter_hold_time` seconds — ten by default — cannot
+throw a spear for any of them, and only then is the letter theirs.
+
+**Why the card is not the prize.** A card that pays on contact makes the whole
+mode a footrace, and a footrace is decided before anybody is in range of
+anybody. The two Gubs sprinting for a card were never going to fight over it:
+whoever was closer took it and the other one turned around. The hold moves the
+contest from *before* the card to *after* it, which is the only place a contest
+can actually happen — the card is now a ten-second announcement that its holder
+is standing somewhere with no spear, and that announcement is the mode.
+
+It is also what gives the drop rate somewhere to hide. At 8% (D-033) cards are
+scarce enough that the coupon-collector arithmetic is brutal; the hold means
+each card that *does* appear is worth a fight, so scarcity reads as tension
+rather than as waiting.
+
+**Dying re-drops the card; it is not destroyed.** This is the half that makes
+the rest work. A card that evaporated with its carrier would mean killing a
+holder costs the match a letter, so the correct play against somebody nine
+seconds into a hold would be to kill them and *nothing else would happen* — the
+mode would grind to a halt in a lobby that understood it. Re-dropping makes the
+kill a transfer instead of a deletion: the card lands at the corpse, free for
+anyone, and the killer is standing over it. And with a letter potentially a
+hundred deaths from being replaced, a card leaving circulation is a match that
+can stop being winnable at all.
+
+A letter therefore gets a fallback the abilities do not. `_drop_loot` skips a
+drop it cannot settle onto ground, which is right for a mushroom — another one
+exists after the next death — but a card that cannot find ground under the
+corpse, because the carrier was lured off the edge, is put back on a **spawn
+pad** instead. The pads are the one set of points on any map guaranteed to be
+standable and reachable. A card turning up somewhere slightly arbitrary is a far
+smaller problem than a letter leaving the match.
+
+A **disconnect is treated exactly as a death**, down to the re-drop, with the
+last known position of the Gub as the place. Anything else makes closing the
+game the cheapest way to deny a card to everybody.
+
+**Movement is untouched, and that is a decision, not an omission.** The obvious
+instinct is to slow a carrier down — every game with a flag in it does. It was
+considered and rejected by the user directly. Taking the spear away is already
+the cost, and it is a cost that is *legible to the other player*: an empty hand
+across a clearing is information, and information is what makes somebody walk
+toward you. A movement penalty is only felt by the person paying it, adds
+nothing anybody else can read, and turns "hold this in the open" into "hold this
+in a corner", which is the least interesting ten seconds the mode could produce.
+Layering both would make carrying a letter simply bad.
+
+**Duplicates do not start a hold, and one hold at a time.** A card for a letter
+you already hold is consumed on touch exactly as before — standing still for ten
+seconds to be told "no change" would be the most miserable thing in the game.
+A card walked over *while* a hold is running is left on the ground untouched,
+not consumed and not queued: it is still there for you when you finish, and
+still there for whoever gets to it first, which is the more interesting version
+of both outcomes.
+
+**It lives on `MatchState`, not on the Gub.** The hold is match state: it has to
+survive being watched by peers who collected nothing, it ends in `award_letter`
+which is already there, and — the part that decides it — the host must be the
+only machine that can finish one. A countdown running on the client that stands
+to gain from it is not a countdown. Clients keep their own copy purely to draw
+it, and `is_holding_letter` is the *presence* of that row rather than
+`remaining > 0`, so a client whose clock runs out a round trip early shows zero
+and waits instead of putting a spear back in a hand the host still refuses to
+throw with.
+
+**The hand and the throw gate are one thing.** `GubCombat.has_spear()` is the
+single gate — the throw asks it, the host asks it again, the aim marker asks it,
+and `_refresh_hand` draws from it — so a hold is not a rule bolted on beside the
+spear, it is the fact that the hand the spear comes out of has a card in it.
+There is deliberately no second timer anywhere in the chain; the spear's own
+header has insisted on that property since it was written, and this is the
+second reason for it rather than an exception to it.
+
+**The card in the hand brings a light, and that is what actually reads.** The
+first pass put the glyph in the fist and left it there. Checked from the
+touchline in `tools/combat_range.tscn letter`, a gold G in a gold Gub's fist at
+twenty metres is a gold smudge on a gold body — the size was never the problem,
+the contrast was. The card now carries a small `OmniLight3D`, the same trick the
+card on the ground already uses, and a Gub mid-hold is lit up like a lamp from
+across the clearing. Its position in the hand is derived from the spear's own
+measured grip rather than guessed: it rides 22 cm up the shaft, the one volume
+around that hand already proven clear of the Gub's skin in every carried clip.
+
+**No new animation.** The Gub has eight Mixamo clips and no raised-arm pose, and
+adding one means new source FBX and a headless Blender rebuild. The card in the
+existing hand, with the spear visibly gone, is the tell. It is a real
+compromise — the `Idle` guard reads as "boxer holding a letter" rather than
+"holding it aloft" — and it is worth revisiting only if the pose turns out to be
+what people miss, which the light makes unlikely.
+
+`letter_hold_time` is a lobby dial beside `letter_drop_chance`, and **zero is a
+legal value** meaning "grant on touch" — the mode as it was, for a host who
+finds the hold miserable. Zero is taken as a special case in
+`_begin_letter_hold` rather than as a hold that expires on the next tick,
+because a one-frame hold is one frame of the spear leaving the hand and coming
+back: a visible flicker for the one setting chosen precisely so that there is
+nothing to see.

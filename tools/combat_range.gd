@@ -49,6 +49,39 @@ const DUMMY_BASE := 900
 ##              can actually be dragged — see `lure_self`.
 ##   lure_self— a lure dropped at the player's own feet, which is the only way
 ##              to watch the pull actually move a Gub in a one-client testbed
+##   letter   — kills a dummy with the letters condition on and the drop chance
+##              forced to 1, puts the card down at the player's feet, and lets
+##              the player's own body walk into it. So this is the *whole*
+##              collection path — the roll, the `Pickup` area's overlap,
+##              `claim_pickup`, the hold — and then it simply stands there, which
+##              is the state the mechanic is about: a Gub in the open with a
+##              letter up and no spear (D-035). The only mode here whose picture
+##              is of a Gub doing nothing, on purpose.
+##   lightning— the whole Elder, end to end: a robe dropped out of a real death
+##              with `elder_drop_chance` forced to 1, walked over by the
+##              player's own body, and then one bolt at the middle dummy. It is
+##              the mode that catches "the bolt does not actually kill
+##              anything", which no logic test can: `tools/match_rules.gd`
+##              proves the robe makes an Elder and that the cooldown gates a
+##              second cast, but it has no world, no geometry and nothing
+##              standing fourteen metres away to be hit. This prints its own
+##              verdict, because a still frame of a lightning bolt looks
+##              identical whether or not anybody died at the end of it.
+##   ward     — the other half of the Elder, and the half no logic test can
+##              reach: **a real spear, in the air, thrown at a real Elder**
+##              (D-040). `tools/match_rules.gd` can assert that `report_kill`
+##              refuses the kill; it cannot assert that a shaft launched at a
+##              body fourteen metres away arrives, is turned aside, and leaves
+##              the Gub standing. The mushroom spent its whole life passing a
+##              check that only proved a PNG existed (D-039) — this is that
+##              lesson applied to the rule it would hurt most to get wrong.
+##
+##              Three verdicts out of one run, and the second is what makes the
+##              first mean anything: the Elder survives a spear, the robe then
+##              **burns out on its own clock** while the run is watching, and the
+##              *same* throw at the *same* Gub kills it once the robe is off.
+##              Without that control, "did not die" is satisfied by a spear that
+##              never left the hand.
 ##   walk     — holds W for a second and requires the Gub to have gone somewhere.
 ##              Trivial-looking, and it is here because movement was wired up in
 ##              this file and in the sandbox and nowhere else, so every testbed
