@@ -4718,3 +4718,145 @@ version is two or three `Decal` nodes projecting a drifting caustic texture
 upward. The teak bake costs about 160 ms at load (build 46 -> 215 ms), behind a
 loading screen; if that ever matters, ship a pre-baked 512 instead of
 multiplying two textures at load.
+
+## D-059 — Rust gets a measured sky, air, and a horizon past its own fence
+The second of the four atmosphere passes (D-058). Rust had the best geometry of
+the four static maps and the least feel: a 96,301-triangle bought `.glb` of a
+drilling yard, lit by one `DirectionalLight3D` at 50 degrees under a two-colour
+`ProceduralSkyMaterial`, with plain distance fog, nothing in the air and nothing
+at all beyond the container walls. It read as a render of an asset pack rather
+than as a place.
+
+It was also structurally the odd one out. Kopje Crossing, Lantern Wharf and
+Halcyon Wake each have a `scripts/world/maps/<map>_map.gd extends StaticMap` that
+builds geometry from tables, calls `super()` to sweep it into world-space trimesh
+collision (D-031), and then adds non-colliding dressing after the call. Rust
+pointed `static_map.gd` at the scene directly, so there was nowhere to put
+anything. It now has `rust_map.gd`, which builds no geometry — the `.glb` is the
+map and is never edited (D-029, D-030) — and for which `super()` is therefore the
+*first* line of `_ready()` rather than the middle one. The rule is unchanged and
+is the whole safety argument: everything below that call is dressing, and nothing
+below it can be stood on, shot or landed on.
+
+**The hour is measured, not chosen.** The sky is `resources/config/rust_sky.tres`:
+a 2k CC0 HDR panorama (`assets/hdri/kiara_6_afternoon_2k.hdr`, Poly Haven, 6.0 MB,
+sources recorded beside it) sampled through `resources/shaders/rust_sky.gdshader`,
+and it is the map's ambient and reflection source as well as its background — so
+the fill on every shaded face is the real colour of light bouncing off dry ground
+rather than a guess at it. The panorama's own sun was measured off the file at
+elevation 36.46 and azimuth -138.03. The scene's `Sun` was dropped from 50 degrees
+to that same 36.46, and the dome is yawed 170.97 degrees to put its sun on the
+map's authored bearing of +51 — worth keeping, because at +51 every container in
+the yard has a lit face and a dark one. After that the bright spot in the sky and
+the shadows on the ground are the same sun, verified by a render aimed at the
+computed direction: the panorama's sun sits dead centre of frame. At 36.46 a 3 m
+container throws 4.0 m of shadow instead of 2.5, so the aisles carry bars of shade
+across them. It was not taken lower: the drilling tower is 35.65 m and at 20
+degrees its shadow is 98 m, longer than the arena.
+
+**A photograph does not move**, and a static dome can end up feeling more like a
+backdrop than the ramp it replaced. So three layers are drawn over it, and all
+three are the same weather — dust: a warm haze band on the horizon that breathes
+over about two minutes, thin dust cirrus that crosses the dome in ninety seconds,
+and the aerosol corona round the sun that the panorama lost when its disc clipped
+to white at 24 EV. A clear-sky HDRI was chosen partly so that added cirrus does
+not double what the photograph already has in it.
+
+**`background_energy_multiplier` was re-measured**, the way the old 1.45 was
+found, because a photograph does not carry a procedural ramp's radiance and the
+old number meant nothing against it. Eight pad views, 40 ticks in:
+
+| energy | crushed | mud | clipped | p5 | mean |
+|---|---|---|---|---|---|
+| 0.75 | 0.309% | 2.50% | 0.040% | 17 | 88 |
+| **0.90** | **0.091%** | **1.29%** | **0.043%** | **25** | **102** |
+| 1.00 | 0.025% | 0.90% | 0.046% | 30 | 111 |
+| 1.15 | 0.007% | 0.59% | 0.052% | 37 | 120 |
+
+Nothing crushes anywhere on that curve, which is itself the finding — the old sky
+left 9% of the frame black at 1.0 and this one leaves a tenth of a percent — so
+the number is chosen at the *other* end, where the yard starts to flatten.
+
+What `rust_map.gd` adds after `super()`, and what it cost:
+
+- **A horizon.** A tank farm at 118 m, a flare stack at 152, a cracking column at
+  168, three more derricks, five transmission pylons and four buttes out to 415 m.
+  One `SurfaceTool` commit, 6,458 triangles, one draw call, no shadows, all in
+  `StaticMap.BACKDROP_GROUP` so `tools/preview_map.gd` still frames the 43 x 64 m
+  yard and not the 900 m basin (D-057). Everything out there is tall because it has
+  to be: the `.glb` rings the yard with a berm topping out at 12.6 m, which from
+  eye height on a pad is about seventeen degrees up.
+- **Air.** 240 wind-blown grit near the ground, 420 slow dust over the whole yard,
+  44 of smoke off the flare — 704 particles against Whisperbloom Hollow's 672.
+  Every emitter carries `use_fixed_seed`, so two clients see the same motes in the
+  same place.
+- **Heat shimmer**, as six screen-space refraction panels
+  (`resources/shaders/rust_heat.gdshader`). This belongs to no other map in the
+  game: the island is a cold night, the wharf is dusk, the yacht is a sea breeze,
+  and Rust is the only place where the ground itself is hot enough to bend the
+  light coming off it. The panels stand against the walls and along the roof lines,
+  never across the open ground a fight happens on, and all of them are above head
+  height. Measured cost, from two renders of pad 0 with the panels built and not:
+  0.20% of the frame changes by more than one step out of 255.
+- **Volumetric fog**, which `rust_env.tres` used to argue against. The old argument
+  — volumetrics buy the island its torch shafts and buy daylight a grey wash — was
+  right about the wrong case. The knob is `volumetric_fog_anisotropy`, and at 0.8
+  the scattering is forward enough that the gaps between the container stacks throw
+  real shafts on the side the sun comes from while the rest of the yard is
+  untouched.
+- **Light with life.** A gas flare flickering on three incommensurate rates
+  (time-driven, so every client sees the same flame without anything being sent
+  about it), and two sodium lamps still alight on the yard's own structure. They
+  are the only warm things in a map of blue-grey steel and bleached caliche.
+- **Ground.** Eleven `Decal` nodes — oil stains and tyre tracks, both textures
+  computed rather than loaded — projected on to the bought geometry without editing
+  a triangle of it, so none of it is lost the next time `tools/prepare_map.py`
+  re-exports the map.
+- **Ambient audio wiring**, node for node as `scripts/world/ambience.gd::_build_audio`.
+  `ambient_wind.wav` is on disk and plays; `ambient_rust_yard.wav` is named and is
+  not there yet. Nothing was synthesised to stand in for it.
+
+Distance fog went from 0.0016 to 0.0035 for the new horizon, and the arithmetic
+rather than the look is what was checked: 6.8% at 20 m, where a Gub silhouette has
+to be recognisable; 14.5% at 45 m, the longest sightline on the map; 41% at the
+flare.
+
+### What checks it
+No new gate lines, for the reason D-058 gives: this changes how the map looks and
+nothing about what it promises. `preview_map` reports the same bounds and the same
+centre as before the pass — which is what caught the one real bug in this work, a
+22 m shimmer panel against the west wall pushing the framed bounds out to 30 m and
+moving the "middle of the map" every pad is measured against. It is in
+`BACKDROP_GROUP` now. 63 of 63, green.
+
+`tools/preview_elder.gd` was updated in the same commit rather than by the pass:
+it copies Rust's sun basis, colour and energy so the Elder's robe can be judged
+against a second lighting set-up, and those constants were stale the moment the
+sun moved. Its `noon` mode is now `afternoon`, with `noon` kept as an alias.
+
+### Rejected
+- **A low sun (8-13 degrees).** Every "hot desert sunset" panorama shortlisted was
+  down there; it would put half the yard in shade and throw the derrick's shadow
+  past the map edge. Wrong for an eight-player shooter.
+- **The HDRI alone, with no shader over it.** A photographic dome that fails to
+  move is worse than a gradient that never promised to.
+- **Rotating the map to suit the panorama.** The +51 degree bearing was authored so
+  every container has a lit face and a dark one. Turning the dome is cheaper and
+  keeps that judgement.
+- **A fake warm bounce-fill directional light.** The panorama's ochre lower
+  hemisphere does it for real.
+- **Downloaded PBR texture sets.** The `.glb` cannot be edited and its own 51
+  textures are the look, so a downloaded set had nowhere to go. The decal textures
+  are computed instead, as `wharf_map.gd` computes its corrugation, and cost zero
+  repository bytes.
+
+### Left for later
+Rust-bleed streaks down vertical surfaces were planned and cut: `Decal` projects
+down, and doing container sides properly needs per-wall placement against imported
+geometry. The shimmer panels are not perfectly transparent — blending the screen
+back over itself lifts the darkest pixels behind a panel by about 27%, which at
+this alpha reads as the haze it is meant to be, but is a real measured
+imperfection rather than zero. And the frame cost was budgeted, not profiled:
+one extra froxel pass, one backdrop draw call, 704 particles, six screen-texture
+reads, three unshadowed lights and eleven decals, none of it measured in an
+eight-player match.

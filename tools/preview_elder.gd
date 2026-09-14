@@ -6,7 +6,7 @@ extends Node3D
 ##       res://tools/preview_elder.tscn out/elder.png <ticks> <view> <light> [clip] [time]
 ##
 ##   view:   mid | back | far | pair | sheet
-##   light:  studio | dusk | noon
+##   light:  studio | dusk | afternoon   ("noon" still accepted for afternoon)
 ##
 ## This scene is not only a camera. **It is the check that the robe binds**, and
 ## it does the attach exactly the way a game would: load the Gub, find its
@@ -19,7 +19,8 @@ extends Node3D
 ## rather than in game with a robe lying on the floor.
 ##
 ## `light` is not decoration either. The brief is a material, and the two places
-## it has to survive are Whisperbloom Hollow's torch-lit night and Rust's noon.
+## it has to survive are Whisperbloom Hollow's torch-lit night and Rust's late
+## afternoon.
 ## Both are built from the *shipped* resources and constants — `arena_env.tres`
 ## with `arena.gd`'s moon and `torch.gd`'s flame, `rust_env.tres` with the exact
 ## `Sun` transform out of `rust.tscn` — so what this renders is the light the map
@@ -45,12 +46,21 @@ const TORCH_ATTENUATION := 1.7
 ## Rust, from `scenes/world/maps/rust.tscn`. The basis is copied rather than
 ## re-derived: it is row-major in the `.tscn` and `Transform3D` takes columns, so
 ## re-typing it is how a sun ends up pointing at the sky.
+##
+## These are Rust's *late afternoon* — the atmosphere pass (D-059) dropped the sun
+## from 50 degrees to 36.46, which is the elevation measured off the HDR panorama
+## the map's sky is now made of, and cooled it toward the horizon. Copied again
+## rather than read from the scene: this tool renders the Elder against two fixed
+## lighting set-ups on purpose, so that two runs a month apart are comparable, and
+## loading the map to ask it would make every render depend on the map's edit
+## history. The cost of that choice is exactly this — it has to be copied across
+## by hand when the scene moves, and it was stale for one commit.
 const RUST_ENV := "res://resources/config/rust_env.tres"
 const SUN_BASIS := Basis(
-	Vector3(0.62926, 0.0, -0.77722),
-	Vector3(-0.59535, 0.64285, -0.48201),
-	Vector3(0.4996, 0.766, 0.4045))
-const SUN_COLOR := Color(1.0, 0.94, 0.85)
+	Vector3(0.62932, 0.0, -0.77715),
+	Vector3(-0.46178, 0.80429, -0.37397),
+	Vector3(0.62505, 0.59423, 0.50616))
+const SUN_COLOR := Color(1.0, 0.93, 0.82)
 const SUN_ENERGY := 1.35
 
 const FAR_DISTANCE := 20.0
@@ -302,7 +312,7 @@ func _caption(text: String, where: Vector3) -> void:
 	label.pixel_size = 0.0020
 	label.position = where
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	# Outlined, because the same white caption is read against Rust's pale noon
+	# Outlined, because the same white caption is read against Rust's pale sand
 	# sky in one shot and Whisperbloom's black undergrowth in the next.
 	label.outline_size = 20
 	label.outline_modulate = Color(0.0, 0.0, 0.0, 0.85)
@@ -366,7 +376,10 @@ func _build_light() -> void:
 			torch.light_energy = TORCH_ENERGY
 			torch.omni_range = TORCH_RANGE
 			torch.omni_attenuation = TORCH_ATTENUATION
-		"noon":
+		# "noon" is kept as an alias: it is what this mode was called for the
+		# whole of the Elder's development, and it is in the shell history of
+		# everyone who has rendered one.
+		"afternoon", "noon":
 			_world(RUST_ENV)
 			var sun := DirectionalLight3D.new()
 			add_child(sun)
