@@ -3983,3 +3983,85 @@ team's colour, with no collision.
   a hand showing a card is the disagreement D-035 exists to prevent. If
   playtesting says carriers need to fight, it is a dial on the throw gate, not
   a second kind of carry.
+
+## D-052 — Jumps carry momentum, and timed hops build it up to 1.3x run speed
+*Amends the feel of D-026's single jump. D-026's input design, the dive and its
+roll (D-029) are unchanged.*
+
+The user: *"bunny hopping / jumping need to account for momentum a little
+more"*. Asked for a cap, the user chose 1.3x the Gub's current run speed, scaled
+by whatever multipliers apply, and to tune it after a playtest.
+
+**What was scrubbing it.** Two things, one after the other. In the air,
+`_handle_movement` pulled horizontal speed toward `wish * target_speed` at
+AIR_ACCELERATION (12 m/s²), so anything above target was cut back to it. On the
+first ground tick, before `_handle_jump` could fire a buffered press,
+GROUND_ACCELERATION (48 m/s², 0.8 m/s a tick) cut it again. And nothing ever put
+speed above target in the first place, so keeping momentum alone would have
+changed nothing a player could feel.
+
+**The rule.**
+- **Kept, not cut.** Horizontal speed between target and the cap is steered
+  toward the stick at the usual rate but keeps its length, in the air and for
+  `LANDING_GRACE` (0.1 s) after a landing. Only while pushing forward of the
+  current travel: let go, or pull back, and the Gub slows as before. Speed
+  above the cap (a lure fling, a robe coming off) bleeds down the old way
+  until it reaches the cap, so nothing is clamped in one tick.
+- **Gained by timing.** A jump fired inside the landing grace, within ~45° of
+  the way the Gub is travelling (`HOP_ALIGNMENT` 0.7) and at 0.9x target or
+  more, adds `HOP_GAIN` (0.04) of target speed, up to `HOP_SPEED_CAP` (1.3) of
+  it. The first jump out of a run gets nothing, because it is not a landing.
+  A plain run of hops reaches the cap on the eighth timed hop after it, about
+  five and a half seconds of unbroken chain.
+- **A landing is a real landing.** The grace is only given after
+  `HOP_MIN_AIRTIME` (0.2 s) in the air, so the floor flickering under a Gub
+  running over bumps is not a string of landings.
+- **Everything is a fraction of `target_speed`**, so the Elder's boost (D-040)
+  and the carrier's slowdown (D-051) scale the cap and the gain with nothing
+  else knowing about them.
+- **Vertical take-off is untouched.** `jump_velocity()` and the jump arc are
+  the same numbers, so the animator's arc ratio (D-040) holds.
+- **The dive keeps its tuning.** No momentum is kept through a dive's airtime
+  (`_air_jump_spent`), so a dive still decays toward target as it did and is
+  no longer. A dive landing starts the roll lock and gets no grace. By the time
+  the lock lets the buffered jump fire, ROLL_FRICTION has already slowed the
+  body and the jump is ordinary.
+- Remote Gubs follow snapshots and run none of this. They show the carried
+  speed through `sync_velocity`, like an Elder's 7.3 m/s. Up to 1.3x run, the
+  run cycle skates a little.
+
+**Measured** by `tools/combat_range.tscn -- bhop` (headless, `--fixed-fps 60`),
+top horizontal speed in m/s. Before is this commit's check run against the
+movement code before it:
+
+| subject | run | one jump | before: top with hops | after: top with hops | late hop |
+|---|---|---|---|---|---|
+| Gub | 5.40 | 5.40 | 5.40 (1.00x) | 7.02 (1.30x) | 5.40 |
+| Elder (1.35) | 7.29 | 7.29 | 7.29 (1.00x) | 9.48 (1.30x) | 7.29 |
+| Capture carrier (0.9) | 4.86 | 4.86 | 4.86 (1.00x) | 6.32 (1.30x) | 4.86 |
+
+**Checked.** In the gate as "bunny hops carry, up to a cap". For each subject:
+sprint, one jump, ten hops pressed on the first ground tick, a hop pressed 0.25 s
+after landing, and a dive whose roll is jumped out of. Hops must reach 1.15x and
+stay at or below 1.3x (+0.02 m/s). Running, one jump and the late hop may not
+beat run speed, and the hop out of a dive roll may not beat the larger of its
+ground speed and run speed. Against the old movement all three subjects fail at
+1.00x. With `LANDING_GRACE` at 0 the hops fail, and at 5 s the late hop keeps
+the bonus and fails. 47 checks to 48.
+
+### Rejected
+- **Keeping momentum without a gain.** Nothing in plain movement exceeds target,
+  so there would be nothing to keep.
+- **A gain for any jump, not only one timed off a landing.** Then jumping once
+  out of a run would be faster than running, and it would stop being a skill.
+- **Momentum through the dive's airtime.** 9.5 m/s held all the way to the
+  floor lengthens every dive. That is a dive retune, not a hop.
+- **Clamping to the cap at once.** A lure fling or a robe coming off would lose
+  metres per second in one tick. Bleeding down the old way reads better.
+- **Scaling `jump_velocity()` with the hop speed.** Hop height would change with
+  speed and break the animator's arc ratio (D-040).
+- **Absolute m/s numbers for the cap and gain.** The Elder's boost and the
+  carrier's slowdown would stop applying to hop speed, and D-040 and D-051 put
+  every speed through `target_speed` so that could not happen. A chained
+  carrier still reaches 6.32 m/s, above a plain Gub's run. It is 0.7 m/s under
+  a hopping chaser, so the carrier can still be caught.

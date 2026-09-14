@@ -135,6 +135,14 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##              Trivial-looking, and it is here because movement was wired up in
 ##              this file and in the sandbox and nowhere else, so every testbed
 ##              could be walked around while the actual game could not.
+##   bhop     — runs the local Gub down the range three times, as itself, as the
+##              Elder and as a capture carrier, and times its hops (D-052). Each
+##              run: sprint, one jump, ten hops pressed on the first ground tick,
+##              one hop pressed late, and a dive re-jumped out of its roll. Hop
+##              speed has to climb past 1.15x run and stop at the 1.3x cap; the
+##              run, the single jump, the late hop and the dive hop may not be
+##              faster than run. Prints each run's numbers. Headless, run it with
+##              `--fixed-fps 60` so it is not three runs of real time.
 ##   leave    — tears the session down out from under a live Gub and keeps
 ##              ticking, which is what leaving a match actually does: `Net`
 ##              nulls the multiplayer peer and `SceneFlow` then fades for 0.22 s
@@ -143,7 +151,7 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##   free     — no script; play it yourself
 const MODES := ["flight", "hit", "arc", "miss", "aim", "mushroom", "cover",
 	"lure", "lure_self", "letter", "cards", "lightning", "ward", "recharge",
-	"respawn", "walk", "leave", "free"]
+	"respawn", "walk", "bhop", "leave", "free"]
 
 ## How long after the cast the verdict is taken, in physics ticks. The click
 ## only starts the windup — the bolt leaves at `MatchConfig.lightning_delay`,
@@ -364,6 +372,16 @@ var _frames: int = 0
 ## Where the `walk` mode started measuring from.
 var _walk_from: Vector3 = Vector3.ZERO
 var _acted: bool = false
+
+## `bhop`'s state. One subject at a time out of BHOP_SUBJECTS, each walked
+## through the steps in `_drive_bhop`; `_bhop_row` collects its numbers.
+var _bhop_subject: int = 0
+var _bhop_step: int = 0
+var _bhop_at: int = 0
+var _bhop_hops: int = 0
+var _bhop_was_grounded: bool = true
+var _bhop_row: Dictionary = {}
+var _bhop_failures: int = 0
 var _items: Node3D
 var _players: Node3D
 var _aim_at: Vector3 = Vector3.ZERO
@@ -515,7 +533,7 @@ func _dummy_count() -> int:
 		# Nobody to shoot at. `recharge` throws a dozen spears over the back
 		# wall on purpose (see `RECHARGE_TARGET`) and a dummy in the roster
 		# would only be something for one of them to find.
-		"recharge":
+		"recharge", "bhop":
 			return 0
 		_:
 			return 2
@@ -581,6 +599,9 @@ func _physics_process(_delta: float) -> void:
 		return
 	if _mode == "walk":
 		_drive_walk()
+		return
+	if _mode == "bhop":
+		_drive_bhop()
 		return
 	if _mode == "leave":
 		_drive_leave()
@@ -1601,6 +1622,137 @@ func _drive_walk() -> void:
 		print("combat_range: walked %.2f m, wanted %.2f — walk FAIL"
 			% [travelled, WALK_MIN_DISTANCE])
 	get_tree().quit()
+
+
+## Where every `bhop` run starts and which way it goes: along +X, on a line clear
+## of both blocks and the back wall. A Gub that reaches BHOP_WRAP is moved back
+## by twice that, velocity and all, so ten Elder hops fit on a 90 m floor.
+const BHOP_START := Vector3(-38.0, 0.1, 25.0)
+const BHOP_WRAP := 40.0
+const BHOP_SUBJECTS := ["gub", "elder", "carrier"]
+const BHOP_HOPS := 10
+## Ground ticks a late hop waits before pressing: 0.25 s, well past LANDING_GRACE.
+const BHOP_LATE_TICKS := 15
+## How far over a speed a verdict tolerates, in m/s. Floats, not a feel margin.
+const BHOP_EPSILON := 0.02
+
+
+## Drive the local Gub through timed hops. See the `bhop` entry in MODES' notes.
+##
+## This writes `input_direction` and the view basis directly rather than pressing
+## keys: the `walk` mode already proves the keyboard is wired, and this one is
+## about what the movement code does with a press landing on one exact tick,
+## which an `Input.action_press` a frame early or late would blur.
+func _drive_bhop() -> void:
+	var player := MatchState.gubs.get(1) as Gub
+	if player == null:
+		return
+	var rig := player.get_node_or_null("CameraRig")
+	if rig != null:
+		rig.process_mode = Node.PROCESS_MODE_DISABLED
+	player.reads_local_input = false
+	player.set_view_basis(Basis(Vector3.UP, -PI / 2.0), false)
+	if player.global_position.x > BHOP_WRAP:
+		player.global_position.x -= BHOP_WRAP * 2.0
+
+	var grounded := player.is_on_floor()
+	var speed := Vector2(player.velocity.x, player.velocity.z).length()
+	var target := player.target_speed()
+	var elapsed := _frames - _bhop_at
+
+	match _bhop_step:
+		0:  # dress the subject and put it on the start line
+			var subject: String = BHOP_SUBJECTS[_bhop_subject]
+			player.set_elder(subject == "elder")
+			if subject == "carrier":
+				Net.config.win_condition = MatchConfig.WinCondition.CAPTURE
+				MatchState._letter_holds[1] = {"letter": 1, "ends_at": INF}
+			player.revive_at(Transform3D(Basis(Vector3.UP, -PI / 2.0), BHOP_START))
+			player.input_direction = Vector2(0.0, -1.0)
+			player.wants_sprint = true
+			_bhop_row = {"subject": subject, "run": 0.0, "once": 0.0, "hops": 0.0,
+				"late": 0.0, "dive_before": 0.0, "dive_after": 0.0}
+			_bhop_next(1)
+		1:  # sprint on the ground
+			if elapsed > 40:
+				_bhop_row["run"] = maxf(_bhop_row["run"], speed)
+			if elapsed >= 70:
+				player.request_jump()
+				_bhop_next(2)
+		2:  # one plain jump out of a run, and a while on the ground after it
+			_bhop_row["once"] = maxf(_bhop_row["once"], speed)
+			if grounded and elapsed > 70:
+				_bhop_hops = 0
+				_bhop_next(3)
+		3:  # ten hops, each pressed on the first ground tick
+			_bhop_row["hops"] = maxf(_bhop_row["hops"], speed)
+			if grounded and (not _bhop_was_grounded or _bhop_hops == 0):
+				if _bhop_hops >= BHOP_HOPS:
+					_bhop_next(4)
+				else:
+					player.request_jump()
+					_bhop_hops += 1
+		4:  # landed from the last timed hop: wait, then hop late
+			if elapsed == BHOP_LATE_TICKS:
+				player.request_jump()
+			elif elapsed > BHOP_LATE_TICKS and not grounded:
+				_bhop_row["late"] = maxf(_bhop_row["late"], speed)
+				if elapsed > BHOP_LATE_TICKS + 8:
+					player.request_jump()  # airborne: this is the dive
+					_bhop_next(5)
+		5:  # the dive: keep pressing jump from touchdown until it leaves again
+			if grounded:
+				player.request_jump()
+				_bhop_row["dive_before"] = speed
+			elif _bhop_was_grounded and _bhop_row["dive_before"] > 0.0:
+				_bhop_row["dive_after"] = speed
+				_bhop_verdict(target)
+				_bhop_subject += 1
+				if _bhop_subject >= BHOP_SUBJECTS.size():
+					print("combat_range: %s" % ("bhop PASS" if _bhop_failures == 0
+						else "bhop FAIL (%d)" % _bhop_failures))
+					get_tree().quit()
+					return
+				_bhop_next(0)
+			elif elapsed > 600:
+				print("combat_range: bhop %s never came out of its dive — bhop FAIL"
+					% _bhop_row["subject"])
+				get_tree().quit()
+				return
+	_bhop_was_grounded = grounded
+
+
+func _bhop_next(step: int) -> void:
+	_bhop_step = step
+	_bhop_at = _frames
+
+
+## One subject's numbers and whether they hold. `target` is its run speed with
+## every multiplier in, which is what the cap is a multiple of.
+func _bhop_verdict(target: float) -> void:
+	var row := _bhop_row
+	var cap := target * Gub.HOP_SPEED_CAP
+	var problems: Array[String] = []
+	if row["run"] > target + BHOP_EPSILON:
+		problems.append("running is faster than run speed")
+	if row["once"] > target + BHOP_EPSILON:
+		problems.append("one jump is faster than run speed")
+	if row["hops"] < target * 1.15:
+		problems.append("timed hops never reached 1.15x")
+	if row["hops"] > cap + BHOP_EPSILON:
+		problems.append("timed hops went past the cap")
+	if row["late"] > target + BHOP_EPSILON:
+		problems.append("a late hop kept its bonus")
+	# Against run speed as well: the tick the roll lets go, ordinary ground
+	# acceleration is allowed to bring a slow roll back up to target. What must
+	# not happen is anything past that.
+	if row["dive_after"] > maxf(row["dive_before"], target) + BHOP_EPSILON:
+		problems.append("a hop out of a dive roll gained speed")
+	_bhop_failures += problems.size()
+	print("combat_range: bhop %-7s run %.2f  once %.2f  hops %.2f (%.2fx, cap %.2f)  late %.2f  dive hop %.2f -> %.2f — %s" % [
+		row["subject"], row["run"], row["once"], row["hops"], row["hops"] / target,
+		cap, row["late"], row["dive_before"], row["dive_after"],
+		"ok" if problems.is_empty() else "FAIL: " + ", ".join(problems)])
 
 
 func _unhandled_input(event: InputEvent) -> void:

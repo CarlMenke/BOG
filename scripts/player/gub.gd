@@ -65,6 +65,39 @@ const GROUND_FRICTION := 42.0
 const AIR_ACCELERATION := 12.0
 const AIR_FRICTION := 1.5
 
+## Bunny hopping (D-052). A jump used to throw its speed away twice: in the air,
+## AIR_ACCELERATION pulled anything above `target_speed` back down to it, and on
+## the first ground frame GROUND_ACCELERATION (0.8 m/s a tick) scrubbed the rest
+## before a re-jump could fire. Now speed you already have is *kept* — steered,
+## not cut — in the air and for LANDING_GRACE after touching down, and a jump
+## fired inside that grace while holding roughly the way you are travelling adds
+## HOP_GAIN of your target speed, up to HOP_SPEED_CAP of it. A run of well-timed
+## hops climbs from 5.4 m/s to 7.0 in eight hops after the first jump; miss one and the ground
+## takes the bonus back in a couple of frames.
+##
+## Every number is a fraction of `target_speed`, so the Elder's boost and the
+## capture carrier's slowdown scale the cap with them and nothing else has to
+## know. The take-off *vertical* speed is untouched: `jump_velocity` is what the
+## animator scrubs the arc by (D-040).
+##
+## The cap, as a multiple of the Gub's current target speed. The thing to tune
+## after a playtest: 1.0 turns the gain off (momentum is still kept, but nothing
+## is ever above target to keep).
+const HOP_SPEED_CAP := 1.3
+## Added per timed hop, as a fraction of target speed.
+const HOP_GAIN := 0.04
+## How long after touching down the ground leaves speed above target alone. Six
+## ticks: long enough for a press made on landing (or buffered by JUMP_BUFFER
+## just before it) to fire, short enough that standing still is not a hop.
+const LANDING_GRACE := 0.1
+## A landing only counts as the end of a hop after this long in the air, so the
+## floor flickering under a Gub running over bumps is not a string of landings.
+const HOP_MIN_AIRTIME := 0.2
+## The hop only pays if you are already moving at near your target speed, and
+## pressing within ~45 degrees of the way you are going.
+const HOP_MIN_SPEED := 0.9
+const HOP_ALIGNMENT := 0.7
+
 ## The dive: jump again while already in the air and the Gub commits to a leap
 ## along whichever way it is trying to go. Once per airtime — that is what makes
 ## it a decision rather than free flight. The animator shows it with the
@@ -260,6 +293,8 @@ var _slide_time: float = 0.0
 var _slide_cooldown: float = 0.0
 ## Counts down through the roll after a dive landing. See ROLL_LOCK.
 var _roll_lock: float = 0.0
+## Counts down on the ground after a landing. See LANDING_GRACE.
+var _landing_grace: float = 0.0
 ## How long the Gub has been off the ground, in seconds, reset on touchdown.
 ## Read by `_detect_landing` to decide whether an airtime was long enough to be
 ## worth rolling out of — see ROLL_MIN_AIRTIME.
@@ -518,6 +553,7 @@ func _tick_timers(delta: float) -> void:
 	# a ledge and carries over its edge — and the lock ends there, or the fall
 	# would have no air control and ROLL_FRICTION instead of AIR_FRICTION.
 	_roll_lock = maxf(0.0, _roll_lock - delta) if is_on_floor() else 0.0
+	_landing_grace = maxf(0.0, _landing_grace - delta) if is_on_floor() else 0.0
 
 
 func _apply_gravity(delta: float) -> void:
@@ -637,10 +673,64 @@ func _handle_movement(delta: float) -> void:
 	var friction := GROUND_FRICTION if accelerating else AIR_FRICTION
 
 	var horizontal := Vector3(velocity.x, 0.0, velocity.z)
-	if wish.length_squared() > 0.001:
+	if _keeps_momentum(horizontal, wish, speed):
+		# Steer, keeping the length. The chord toward the wish is always a
+		# little shorter than the arc, so put the length back.
+		var kept := horizontal.length()
+		var steered := horizontal.move_toward(wish * kept, acceleration * delta)
+		if steered.length_squared() > 0.0001:
+			horizontal = steered.normalized() * kept
+	elif wish.length_squared() > 0.001:
 		horizontal = horizontal.move_toward(wish * speed, acceleration * delta)
 	else:
 		horizontal = horizontal.move_toward(Vector3.ZERO, friction * delta)
+	velocity.x = horizontal.x
+	velocity.z = horizontal.z
+
+
+## Should speed above target be left alone this tick, rather than pulled back
+## to target? See HOP_SPEED_CAP.
+##
+## Only speed between target and the cap: anything faster (a lure's fling, a
+## robe coming off mid-air) bleeds down the ordinary way until it reaches the
+## cap, so nothing is clamped in one frame. Only while pushing forward-ish — let
+## go of the stick, or pull back, and the Gub slows as it always did. Only in
+## the air or inside the landing grace — a Gub running on the ground is at its
+## target in a couple of ticks. And not in a dive's airtime: the dive has its
+## own tuned speed and roll (D-026), and keeping 9.5 m/s all the way to the
+## floor would lengthen every dive rather than reward a hop.
+func _keeps_momentum(horizontal: Vector3, wish: Vector3, speed: float) -> bool:
+	if wish.length_squared() < 0.001 or _air_jump_spent:
+		return false
+	if is_on_floor() and _landing_grace <= 0.0:
+		return false
+	var moving := horizontal.length()
+	return moving > speed and moving <= hop_speed_cap() + 0.001 \
+		and wish.dot(horizontal) > 0.0
+
+
+## The fastest a Gub can carry by hopping, in m/s: HOP_SPEED_CAP of whatever it
+## is asking to travel at now, so the Elder and the capture carrier scale it.
+func hop_speed_cap() -> float:
+	return target_speed() * HOP_SPEED_CAP
+
+
+## A jump fired inside the landing grace, pointed the way the Gub is already
+## going at near its target speed, adds HOP_GAIN of target to that speed, up to
+## the cap. Never takes speed away: above the cap it does nothing.
+func _hop_gain() -> void:
+	var horizontal := Vector3(velocity.x, 0.0, velocity.z)
+	var speed := target_speed()
+	var moving := horizontal.length()
+	if moving < speed * HOP_MIN_SPEED:
+		return
+	var wish := _wish_direction()
+	if wish.dot(horizontal / moving) < HOP_ALIGNMENT:
+		return
+	var boosted := minf(moving + speed * HOP_GAIN, hop_speed_cap())
+	if boosted <= moving:
+		return
+	horizontal *= boosted / moving
 	velocity.x = horizontal.x
 	velocity.z = horizontal.z
 
@@ -815,6 +905,9 @@ func _handle_jump() -> void:
 	_coyote = 0.0
 	if is_sliding():
 		_end_slide()
+	if _landing_grace > 0.0:
+		_hop_gain()
+	_landing_grace = 0.0
 	velocity.y = jump_velocity()
 	# Before the emit, so anything listening already sees the new value. The
 	# animator does not use the signal — it is local-only — but it does watch
@@ -836,6 +929,12 @@ func _detect_landing(grounded_before: bool) -> void:
 	if grounded_now and not grounded_before and _air_jump_spent \
 			and _airtime >= ROLL_MIN_AIRTIME and ROLL_LOCK > 0.0:
 		_roll_lock = ROLL_LOCK
+	# After the roll decision, so a dive landing never gets the grace: the roll
+	# already owns that ground time, and a dive hop chained into a speed hop is
+	# exactly what the lock is there to stop.
+	if grounded_now and not grounded_before and _airtime >= HOP_MIN_AIRTIME \
+			and not is_rolling():
+		_landing_grace = LANDING_GRACE
 	# Touching anything at all gives the dive back, including a ledge caught on
 	# the way down. Tying it to `landed` instead would leave a Gub that stepped
 	# gently off a rock unable to dive for the rest of the match.
@@ -1030,6 +1129,7 @@ func revive_at(spawn: Transform3D, life_number: int = -1) -> void:
 	_jump_buffered = 0.0
 	_airtime = 0.0
 	_roll_lock = 0.0
+	_landing_grace = 0.0
 	_apply_capsule(STAND_HEIGHT)
 	# The replicated fields are seeded here, field by field, and deliberately
 	# *not* by calling `_publish()`. `_publish` ends with

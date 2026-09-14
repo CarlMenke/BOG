@@ -201,6 +201,17 @@ also "a spear cannot kill the Elder" "control PASS"
 # Headless, and it quits itself around tick 280.
 check "a respawn hands back nothing" "respawn PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- respawn
+# Bunny hopping (D-052). The local Gub runs the range as itself, as the Elder
+# and as a capture carrier: ten hops pressed on the first ground tick have to
+# climb past 1.15x run speed and stop at the 1.3x cap, while running, one jump,
+# a hop pressed a quarter-second late and a hop out of a dive roll may not beat
+# run speed. Against the movement before D-052 every subject tops out at 1.00x;
+# with LANDING_GRACE stretched to five seconds the late hop keeps its bonus.
+#
+# Headless and `--fixed-fps 60`, so it is ~2 s rather than three runs of real
+# time, and every tick is the same length as the game's.
+check "bunny hops carry, up to a cap" "bhop PASS" \
+    "$GODOT" --headless --fixed-fps 60 --path "$GODOT_ROOT" tools/combat_range.tscn -- bhop
 # Gubs in their team's colour (D-046), read off the material the renderer will
 # draw with rather than off what the script meant to set. One Gub per team has
 # to be in exactly its nameplate colour, a free-for-all Gub has to be back on the
