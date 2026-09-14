@@ -1,0 +1,79 @@
+[gd_resource type="Sky" load_steps=4 format=3 uid="uid://cq7gubrustsky"]
+
+; The sky over Rust. All tuning lives here; `rust_sky.gdshader` only declares
+; the knobs and their fallbacks, exactly as `arena_sky.tres` does for the
+; island's.
+;
+; The base is a real photograph — `assets/hdri/kiara_6_afternoon_2k.hdr`, a CC0
+; 2k panorama of a clear afternoon in a dry rocky valley — and it is also this
+; map's ambient and reflection source (`rust_env.tres` sets both to SKY), so a
+; container in the tower's shadow is filled by the same warm ground bounce that
+; is visibly under the horizon in the dome above it. Nothing about that is
+; available from a two-colour ramp.
+;
+; INCREMENTAL process mode, like the island's: the haze breathes over about two
+; minutes and a dust streak takes ninety seconds to cross the dome, so a single
+; radiance mip per frame is invisible and costs a fraction of REALTIME.
+; `radiance_size = 3` is 256 px, which is the size every other sky in this
+; project uses and is plenty for a dome whose only sharp feature is a sun.
+
+[ext_resource type="Shader" path="res://resources/shaders/rust_sky.gdshader" id="1_rust_sky_shader"]
+[ext_resource type="Texture2D" path="res://assets/hdri/kiara_6_afternoon_2k.hdr" id="2_rust_panorama"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_rust_sky"]
+shader = ExtResource("1_rust_sky_shader")
+shader_parameter/panorama = ExtResource("2_rust_panorama")
+shader_parameter/panorama_energy = 1.0
+
+; 170.97 degrees, and it is a solved number rather than a taste one.
+;
+; The panorama's sun is at azimuth -138.03 (compass `atan2(x, z)`), measured off
+; the file — see `assets/hdri/SOURCES.md`. `rust.tscn`'s `Sun` was authored at
+; +51, over the north-west corner, because at that bearing every container in
+; the yard has a lit face and a dark one. Keeping the map's bearing and turning
+; the dome is the cheaper of the two moves, and `rot_y` in the shader takes a
+; compass bearing *down* by its argument, so the yaw that puts -138.03 on to +51
+; is -138.03 - 51 = -189.03, which is +170.97 the short way round.
+shader_parameter/sky_yaw_degrees = 170.97
+shader_parameter/sun_panorama_dir = Vector3(-0.53784, 0.59423, -0.59801)
+shader_parameter/sky_energy = 1.0
+
+; The haze: warm, and deep enough to take the far mountains in the panorama down
+; to a suggestion, because a hot afternoon is the one weather where you cannot
+; see the distance clearly. `haze_height` 0.22 puts the top of the band about
+; thirteen degrees above the horizon, which from inside the yard is roughly the
+; strip of sky that shows over the container walls — so the haze is where the
+; player actually looks, and the zenith stays a clean deep blue to contrast it.
+shader_parameter/haze_color = Color(0.78, 0.7, 0.57, 1)
+shader_parameter/haze_energy = 0.45
+shader_parameter/haze_height = 0.22
+shader_parameter/haze_breath = 0.35
+shader_parameter/haze_breath_speed = 0.008
+
+; Dust cirrus. Thin on purpose: `streak_opacity` 0.30 against the island's cloud
+; 0.50, because this sky's argument is that there is no weather coming, only
+; dust that has been in the air for a week.
+shader_parameter/streak_color = Color(0.84, 0.8, 0.73, 1)
+shader_parameter/streak_lit_color = Color(1, 0.97, 0.9, 1)
+shader_parameter/streak_opacity = 0.2
+shader_parameter/streak_coverage = 0.56
+shader_parameter/streak_scale = 1.9
+shader_parameter/streak_speed = 0.011
+shader_parameter/streak_horizon_fade = 0.1
+shader_parameter/streak_parallax = 0.0009
+
+; The corona. The panorama caps at 24 EV and its sun is clipped to white, so the
+; orange that should be wrapped round it is gone from the file and has to be put
+; back. Two lobes: the tight one is the glare, the wide one is a quarter of the
+; sky going pale because the air is full of grit.
+shader_parameter/corona_color = Color(1, 0.9, 0.7, 1)
+shader_parameter/corona_energy = 1.6
+shader_parameter/corona_tight = 240.0
+shader_parameter/corona_wide = 5.5
+shader_parameter/corona_wide_mix = 0.16
+
+[resource]
+resource_name = "RustSky"
+sky_material = SubResource("ShaderMaterial_rust_sky")
+process_mode = 2
+radiance_size = 3

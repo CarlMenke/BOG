@@ -1,32 +1,50 @@
-[gd_resource type="Environment" format=3 uid="uid://bq2gubrustenv"]
+[gd_resource type="Environment" load_steps=2 format=3 uid="uid://bq2gubrustenv"]
 
-; Environment for Rust. Hot, dry, mid-afternoon — the opposite end of the day
+; Environment for Rust. Hot, dry, late afternoon — the opposite end of the day
 ; from `arena_env.tres`, which is Whisperbloom Hollow's torch-lit dusk (D-009).
 ;
-; This file is *only* lighting. None of the island's look comes across: not the
-; sky shader with the moon and the aurora in it, not the volumetric fog the
-; torch shafts live in, not the night palette. Rust's own textures are the look,
-; and the whole job here is to expose them — bright enough that a container in
-; the tower's shadow still reads, dim enough that the sunlit yard does not
-; clip. Everything below was set from renders, not from taste.
+; This file used to be *only* lighting, and said so: a two-colour
+; `ProceduralSkyMaterial`, plain distance fog, no volumetrics, nothing at all in
+; the air. That was an honest description of a map that read as a lighting test.
+; What it is now is the light *and* the medium the light travels through, and
+; the two are matched to each other on purpose.
 ;
-;   * A plain `ProceduralSkyMaterial`: pale blue overhead, warm haze at the
-;     horizon. It is also the only source of ambient and of reflections
-;     (`ambient_light_source`/`reflected_light_source` both the sky), so the
-;     fill light and the sky agree by construction. No shader, no moon, no
-;     aurora — there is nothing in it to go and look at.
-;   * **`background_energy_multiplier` is the exposure control here, not
+;   * **The sky is `rust_sky.tres`**, a measured 2k CC0 HDR panorama with
+;     drifting dust drawn over it. It is still the only source of ambient and of
+;     reflections (`ambient_light_source`/`reflected_light_source` both the
+;     sky), which is worth far more than it was: the panorama's lower hemisphere
+;     is warm ochre rock, so the fill on every shaded face in the yard is the
+;     real colour of light bouncing off dry ground rather than a guess at it.
+;     That single change is why the numbers below moved the way they did.
+;   * **`background_energy_multiplier` is still the exposure control here, not
 ;     `ambient_light_energy`.** With `ambient_light_source` set to SKY, Godot
 ;     4.7 takes ambient from the sky's radiance cubemap and *ignores*
 ;     `ambient_light_energy` and `ambient_light_sky_contribution` entirely —
-;     measured, not assumed: sweeping the energy from 1.0 to 2.0 produced
-;     byte-identical renders, and only switching the source off changed
-;     anything. (Which also means `arena_env.tres`'s 2.5 does nothing. Left
-;     alone; that is the island's file and its look is already signed off.)
-;     So 1.45 is the number that matters, and it was found by rendering: at 1.0
-;     the shadow under the drilling tower crushed 9% of the frame to black, at
-;     1.45 that is 1.6% and nothing anywhere clips. Above about 1.8 the yard
-;     goes flat.
+;     measured on this map, not assumed: sweeping the energy from 1.0 to 2.0
+;     produced byte-identical renders, and only switching the source off
+;     changed anything. (Which also means `arena_env.tres`'s 2.5 does nothing.
+;     Left alone; that is the island's file and its look is already signed off.)
+;
+;     So this is the number that matters, and it was re-measured when the sky
+;     changed, because a photograph does not carry a procedural ramp's radiance
+;     and the old 1.45 meant nothing against it. All eight spawn-pad views,
+;     rendered 40 ticks in at 2560x1440, crushed being luma under 2/255, mud
+;     under 12/255, clipped being any channel at 255:
+;
+;         0.75   crushed 0.309%   mud 2.50%   clipped 0.040%   p5  17   mean  88
+;         0.90   crushed 0.091%   mud 1.29%   clipped 0.043%   p5  25   mean 102   <-
+;         1.00   crushed 0.025%   mud 0.90%   clipped 0.046%   p5  30   mean 111
+;         1.15   crushed 0.007%   mud 0.59%   clipped 0.052%   p5  37   mean 120
+;
+;     Nothing crushes anywhere on this curve, which is itself the finding: the
+;     old sky left 9% of the frame black at 1.0 and this one leaves a tenth of a
+;     percent at 0.90, because the ambient now comes off a real sunlit desert.
+;     So the number is chosen at the *other* end — the point past which the yard
+;     starts to flatten. Above about 1.15 the shaded side of a container and the
+;     sunlit ground in front of it converge and the whole reason for dropping the
+;     sun to 36 degrees is thrown away. 0.90 keeps a 25-to-191 range across the
+;     eight views with a tenth of a percent crushed, which is contrast a hot
+;     afternoon should have and shadow detail a player can still read a Gub in.
 ;   * ACES at white 6.0 and exposure 1.0, which is `arena_env.tres`'s
 ;     tonemapping unchanged — the two maps should not need different eyes.
 ;
@@ -36,41 +54,49 @@
 ;     own material emissive so it can be seen coming (D-027), and with glow off
 ;     it simply is not. The threshold is 2.0 rather than the island's 1.45,
 ;     because everything here is already lit to about 1.0 by the sun and the
-;     island's threshold would bloom the whole arena.
+;     island's threshold would bloom the whole arena. It now also carries the
+;     flare burning on the horizon and the two sodium lamps still alight in the
+;     yard, which is the second reason to keep it.
 ;   * **SSAO, at about half the island's intensity.** It is what puts a barrel
 ;     on the ground rather than beside it. `ssao_light_affect` is 0 so it only
 ;     darkens the ambient — under a hard sun, letting AO bite into direct light
 ;     is most of what "murky" means.
-;   * **Plain distance fog, no volumetrics.** Volumetrics buy the island its
-;     torch shafts and are worth the cost at night; in daylight they buy a grey
-;     wash that height fog gives for nothing. The density is low (0.0016)
-;     because this arena is 64 m long and fog tuned for a 55 m island would hide
-;     the far end of it.
+;   * **Volumetric fog, which this file used to argue against.** The old
+;     argument — that volumetrics buy the island its torch shafts at night and
+;     buy nothing but a grey wash in daylight — was right about the wrong case.
+;     The knob that changes the answer is `volumetric_fog_anisotropy`, and at
+;     0.8 the scattering is strongly forward: the fog only brightens where you
+;     are looking *into* the sun through it. So the gaps between the container
+;     stacks throw real shafts on the side the light comes from and the rest of
+;     the yard is left alone, which is the opposite of a wash. Density 0.011 is
+;     about a third of what a mist wants, `volumetric_fog_sky_affect` is 0 so
+;     the dome is never fogged twice, and `volumetric_fog_gi_inject` is 0
+;     because there is no GI on this map to inject.
+;   * **Distance fog, warmed and deepened.** 0.0035 against the old 0.0016,
+;     because the map now has a horizon past its own walls — a tank farm at
+;     118 m, a flare at 152, a cracking column at 168 and buttes out to 415 —
+;     and with the old density they sat at the same contrast as the yard and
+;     read as toys on a shelf. The readability arithmetic is the thing to check
+;     rather than the look, and `1 - exp(-density * metres)` is all of it: at
+;     20 m, where a Gub silhouette has to be recognisable, this is 6.8% fog; at
+;     45 m, the longest sightline anywhere on the map, 14.5%; at 152 m, where
+;     the flare stands, 41%. Nothing inside the yard is hidden and everything
+;     outside it is softened. `fog_aerial_perspective` 0.6 makes the far stuff
+;     take the sky's own colour instead of a flat grey, and `fog_sky_affect` is
+;     0 so the sky keeps the haze `rust_sky.tres` paints into it rather than
+;     getting a second one here.
 ;   * **No SDFGI**, as on the island, and for a better reason here: the geometry
 ;     never moves, and nothing in the frame budget is going spare.
 
-[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_rustsky"]
-sky_top_color = Color(0.26, 0.44, 0.74, 1)
-sky_horizon_color = Color(0.79, 0.73, 0.62, 1)
-sky_curve = 0.13
-sky_energy_multiplier = 1.0
-ground_bottom_color = Color(0.36, 0.3, 0.24, 1)
-ground_horizon_color = Color(0.71, 0.64, 0.53, 1)
-ground_curve = 0.04
-ground_energy_multiplier = 1.0
-sun_angle_max = 12.0
-sun_curve = 0.08
-use_debanding = true
+[ext_resource type="Sky" path="res://resources/config/rust_sky.tres" id="1_rust_sky"]
 
-[sub_resource type="Sky" id="Sky_rust"]
-sky_material = SubResource("ProceduralSkyMaterial_rustsky")
-radiance_size = 3
+[ext_resource type="Sky" path="res://resources/config/rust_sky.tres" id="1_rust_sky"]
 
 [resource]
 resource_name = "RustEnvironment"
 background_mode = 2
-sky = SubResource("Sky_rust")
-background_energy_multiplier = 1.45
+sky = ExtResource("1_rust_sky")
+background_energy_multiplier = 0.9
 ambient_light_source = 3
 reflected_light_source = 2
 tonemap_mode = 3
@@ -103,15 +129,25 @@ glow_hdr_threshold = 2.0
 glow_hdr_scale = 2.0
 glow_hdr_luminance_cap = 10.0
 fog_enabled = true
-fog_light_color = Color(0.74, 0.69, 0.58, 1)
+fog_light_color = Color(0.79, 0.71, 0.57, 1)
 fog_light_energy = 1.0
-fog_sun_scatter = 0.12
-fog_density = 0.0016
-fog_aerial_perspective = 0.2
+fog_sun_scatter = 0.2
+fog_density = 0.0035
+fog_aerial_perspective = 0.6
 fog_sky_affect = 0.0
-fog_height = -2.0
-fog_height_density = 0.02
-volumetric_fog_enabled = false
+fog_height = 2.0
+fog_height_density = 0.015
+volumetric_fog_enabled = true
+volumetric_fog_density = 0.011
+volumetric_fog_albedo = Color(0.88, 0.82, 0.7, 1)
+volumetric_fog_emission = Color(0, 0, 0, 1)
+volumetric_fog_emission_energy = 0.0
+volumetric_fog_anisotropy = 0.8
+volumetric_fog_length = 96.0
+volumetric_fog_detail_spread = 2.0
+volumetric_fog_gi_inject = 0.0
+volumetric_fog_ambient_inject = 0.12
+volumetric_fog_sky_affect = 0.0
 adjustment_enabled = true
 adjustment_brightness = 1.0
 adjustment_contrast = 1.04

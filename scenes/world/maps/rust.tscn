@@ -2,20 +2,31 @@
 
 ; Rust — the arena's second map, and the first hand-made one (D-029, D-030).
 ;
-; Almost nothing is authored here. The geometry is the imported `.glb` exactly
-; as `tools/prepare_map.py` wrote it, and `scripts/world/static_map.gd` does the
-; two things the import cannot: it bakes world-space trimesh collision onto
-; physics layer 1, and it puts back the back-face culling the importer turned
-; off. Neither is expressible in a scene file, which is why this one is four
-; nodes and a list of coordinates.
+; The geometry is the imported `.glb` exactly as `tools/prepare_map.py` wrote
+; it, and it is never edited. What sits around it has grown: this scene used to
+; be four nodes because `scripts/world/static_map.gd` did the only two things
+; the import cannot — bake world-space trimesh collision on physics layer 1, and
+; put back the back-face culling the importer turned off — and neither is
+; expressible in a scene file.
 ;
-; The four nodes are the contract in `static_map.gd`:
+; It now points at `scripts/world/maps/rust_map.gd` instead, which `extends
+; StaticMap` and does exactly that same work by calling `super()` first, and
+; then adds the atmosphere after it. That is the shape the other three static
+; maps have had since Kopje Crossing, and the rule they share is the one that
+; matters here: **everything a map script adds after `super()` is dressing and
+; is never collision**. Rust owns no geometry to build, so for this map the
+; script is nothing *but* the part after the call.
 ;
-;   Environment  a daylit `WorldEnvironment`, because `arena.gd` builds none for
-;                a static map and the island's is a torch-lit night (D-009).
-;   Sun          the key light, and the only light on the map. There is no
-;                `Lights` node: the arena is outdoors under a 50-degree sun and
-;                the containers that do have interiors are open at one end.
+; The nodes are the contract in `static_map.gd`:
+;
+;   Environment  a late-afternoon `WorldEnvironment`, because `arena.gd` builds
+;                none for a static map and the island's is a torch-lit night
+;                (D-009). Its sky is a measured CC0 HDR panorama with drifting
+;                dust over it (`rust_sky.tres`), and it is also the map's only
+;                ambient and reflection source.
+;   Sun          the key light, and still the only light the *scene* carries;
+;                the flare on the horizon and the two sodium lamps that survived
+;                are built by the script.
 ;   Geometry     the `.glb`, instanced whole and never edited.
 ;   Spawns       eight `Marker3D`s on the main walkable plane, each facing the
 ;                middle of the arena. Their heights differ because the yard is
@@ -27,29 +38,51 @@
 ; `tools/smoke_test.sh` runs that as a gate — so a pad that ends up inside a
 ; shipping container fails a build rather than being discovered by a player.
 
-[ext_resource type="Script" path="res://scripts/world/static_map.gd" id="1_static_map"]
+[ext_resource type="Script" path="res://scripts/world/maps/rust_map.gd" id="1_rust_map"]
 [ext_resource type="Environment" path="res://resources/config/rust_env.tres" id="2_rust_env"]
 [ext_resource type="PackedScene" path="res://art/maps/rust/rust.glb" id="3_rust_glb"]
 
 [node name="Rust" type="Node3D"]
-script = ExtResource("1_static_map")
+script = ExtResource("1_rust_map")
 void_height = -13.0
 
 [node name="Environment" type="WorldEnvironment" parent="."]
 environment = ExtResource("2_rust_env")
 
-; Warm, high and hard, and the only light on the map. The basis below is what
-; `looking_at` gives for a sun 50 degrees above the horizon and roughly over the
-; north-west corner — high enough that nothing casts a shadow across half the
-; arena, off-axis enough that every container still has a lit face and a dark
-; one. Serialised ROW-major, which is how a `.tscn` stores a `Transform3D`;
-; writing the three axes out as columns instead reads back as the inverse
-; rotation and aims the sun at the sky.
+; Warm, low and hard, and the key light. The basis below is what `looking_at`
+; gives for a sun 36.46 degrees above the horizon on a bearing of +51, which is
+; roughly over the north-west corner.
+;
+; The bearing is the one this map was authored with and is deliberately
+; unchanged: at +51 every container in the yard has a lit face and a dark one,
+; and that judgement is older and better than anything the hour is worth. What
+; changed is the elevation, from 50 down to 36.46, and the number is not a taste
+; one — it is the sun elevation *measured* off the HDR panorama the sky is now
+; made of (`assets/hdri/SOURCES.md`), so the shadows on the ground and the
+; bright spot in the dome are the same sun. `rust_sky.tres` turns the dome by
+; 170.97 degrees to put them on the same bearing; nothing turns the map.
+;
+; 50 degrees was the flattest light in the day and it looked it — a 3 m
+; container threw 2.5 m of shadow and every face in the yard was lit. At 36.46
+; the same container throws 4.0 m, so the aisles carry bars of shade across
+; them and a stack reads as a stack. It was not taken lower than the panorama
+; offered: the drilling tower is 35.65 m and at 20 degrees its shadow would be
+; 98 m, longer than the arena.
+;
+; Serialised ROW-major, which is how a `.tscn` stores a `Transform3D`; writing
+; the three axes out as columns instead reads back as the inverse rotation and
+; aims the sun at the sky.
+;
+; `light_angular_distance` is the sun's own angular width. A real sun is about
+; half a degree across and its shadows soften with distance from what casts
+; them; at 50 degrees and 2.5 m of shadow that did not matter, and at 36 degrees
+; and 4 m it is the difference between a shadow and a decal.
 [node name="Sun" type="DirectionalLight3D" parent="."]
-transform = Transform3D(0.62926, -0.59535, 0.4996, 0, 0.64285, 0.766, -0.77722, -0.48201, 0.4045, -1, 24, -5)
-light_color = Color(1, 0.94, 0.85, 1)
+transform = Transform3D(0.62932, -0.46178, 0.62505, 0, 0.80429, 0.59423, -0.77715, -0.37397, 0.50616, -1, 24, -5)
+light_color = Color(1, 0.93, 0.82, 1)
 light_energy = 1.35
 light_specular = 0.4
+light_angular_distance = 0.55
 shadow_enabled = true
 directional_shadow_mode = 1
 directional_shadow_max_distance = 90.0
