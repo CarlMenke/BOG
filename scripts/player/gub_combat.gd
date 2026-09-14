@@ -466,6 +466,19 @@ func _ready() -> void:
 	# Elder's fist is the tell that the most dangerous Gub in the clearing is
 	# loaded, and it has to be on *your* screen, not only on theirs (D-038).
 	MatchState.elder_changed.connect(_on_elder_changed)
+	# A life starting is the one moment the hand has to be drawn and cannot be
+	# drawn from here: children are readied before their parent, so `held_gear`
+	# does not exist yet when this runs (D-069). `revive_at` is what `_create_gub`
+	# and `_do_respawn` both end with, on every peer, and it already emits — so
+	# the hand is right on the frame the body appears rather than on the next
+	# one.
+	#
+	# It was the next one until the weapon became a choice, and it did not
+	# matter: `HeldGear` builds its spear visible, every Gub had a spear, and
+	# `_tick_hand` tidied the rest a frame later. Now two Gubs in three spawn
+	# holding the wrong thing, and one frame of that is one frame of a bow Gub
+	# with a shaft in its fist on eight screens.
+	_gub.respawned.connect(_refresh_hand)
 
 
 func _now() -> float:
@@ -579,6 +592,28 @@ func channel_fraction() -> float:
 	return clampf((_now() - _channel_at) / _channel_seconds, 0.0, 1.0)
 
 
+## Did this Gub bring `weapon`? (D-069)
+##
+## **The fourth clause of the one gate, and deliberately not a fourth gate.**
+## `has_spear()`, `has_bow()` and `has_sword()` were already three statements of
+## one sentence — "is there a weapon in that hand right now" — with three things
+## able to answer no: the Elder replaces your weapon (D-038), a letter hold
+## disarms it (D-035), and a drink needs the fist (D-067). A lobby pick is the
+## fourth thing that can answer no, so it is one more clause in each of the three
+## and not a check anybody has to remember to make somewhere else. Every place
+## that already asked `has_spear()` — the throw, the host's second opinion, the
+## aim marker, the hand — is gated on the pick for free, which is the property
+## `has_spear()`'s own header has insisted on since D-035.
+##
+## Read off `Gub.weapon`, which is seeded from the roster row when the Gub is
+## built and cannot change for the life of it (the pick locks at Start, D-069).
+## A null `_gub` answers no rather than defaulting to a spear: a combat node with
+## no body has no hands either, and the three cooldown accessors above already
+## take that view.
+func carries(weapon: int) -> bool:
+	return _gub != null and _gub.weapon == weapon
+
+
 ## Whether there is a potion that can be drunk right now.
 ##
 ## The mirror of `has_spear()` and `has_bow()`, and it shares both of their
@@ -611,8 +646,15 @@ func has_potion() -> bool:
 ## one was what the first contact sheet of this feature showed, and the fix is
 ## the rule this function already is rather than a fourth place that has to
 ## remember.
+## The **fourth** is the lobby pick (D-069), and it is the first clause rather
+## than the last because it is the only one that was never true and then false: a
+## Gub that chose a bow has no spear for the whole match, so this is a statement
+## about what it brought and the other three are statements about what has since
+## happened to it. `carries` carries the argument for why it is here.
 func has_spear() -> bool:
-	return not is_elder() and spear_cooldown() <= 0.0 		and not is_holding_letter() and not is_channelling()
+	return carries(Loadout.Weapon.SPEAR) and not is_elder() \
+		and spear_cooldown() <= 0.0 \
+		and not is_holding_letter() and not is_channelling()
 
 
 ## Whether there is a bow to draw, and the exact mirror of `has_spear()`
@@ -634,8 +676,15 @@ func has_spear() -> bool:
 ## What it does **not** share is the recharge. `bow_recharge` is its own dial and
 ## is much shorter than the spear's, because a spear is a guaranteed kill and an
 ## arrow is not.
+## It shares the lobby pick too (D-069), which is the newest of the four and the
+## one that makes this function mean something it never did: before it, every Gub
+## in the match had a bow and the only question was whether it was ready. Now the
+## common answer is no, for the same reason the common answer to `has_spear()`
+## is.
 func has_bow() -> bool:
-	return not is_elder() and bow_cooldown() <= 0.0 		and not is_holding_letter() and not is_channelling()
+	return carries(Loadout.Weapon.BOW) and not is_elder() \
+		and bow_cooldown() <= 0.0 \
+		and not is_holding_letter() and not is_channelling()
 
 
 ## Whether there is a great sword to swing, and the third mirror of `has_spear()`
@@ -653,8 +702,15 @@ func has_bow() -> bool:
 ## `is_busy()`'s job and it is where the three `try_` functions ask it, so this
 ## can stay what its two siblings are: a statement about whether this Gub has the
 ## weapon at all.
+## Which, since D-069, is a question with a real answer: the lobby pick is the
+## fourth clause here as it is on the two above, and it is what finally makes the
+## sword a *weapon* rather than a fourth thing every Gub happened to have. See
+## `_wants_sword` for the visible half of that — a great sword is carried now,
+## because a Gub that chose one has genuinely given up its spear, which is the
+## exact condition D-068 said it did not have.
 func has_sword() -> bool:
-	return not is_elder() and sword_cooldown() <= 0.0 \
+	return carries(Loadout.Weapon.SWORD) and not is_elder() \
+		and sword_cooldown() <= 0.0 \
 		and not is_holding_letter() and not is_channelling()
 
 
@@ -1282,13 +1338,30 @@ func _tick_hand() -> void:
 	# check above is what makes "once" true — the poll runs every frame and this
 	# line is only reached on the frame the answer changed.
 	#
-	# `has_spear()` and not `want`, because `want` is also true through a
-	# windup: a chime at the moment the arm goes back would be announcing a
-	# spear that is on its way out of the hand rather than back into it. And a
-	# Gub mid-letter-hold never reaches here at all, which is the point D-035
-	# makes about a cue that lies.
-	if want and _gub.alive and _gub.is_local() and has_spear():
+	# The gate and not `want`, because `want` is also true through a windup: a
+	# chime at the moment the arm goes back would be announcing a spear that is
+	# on its way out of the hand rather than back into it. And a Gub
+	# mid-letter-hold never reaches here at all, which is the point D-035 makes
+	# about a cue that lies.
+	#
+	# `_weapon_ready()` and not `has_spear()` since D-069. It used to be the
+	# spear's alone because every Gub had a spear and the other two were extras;
+	# now two players in three never carry one, and a readiness cue that only
+	# fires for a third of the lobby is a cue that has quietly been deleted for
+	# the rest of it. Exactly one of the three can be true at a time, so this is
+	# still one chime on the one frame the answer changed.
+	if _gub.alive and _gub.is_local() and _weapon_ready():
 		AudioDirector.play_2d(AudioDirector.SPEAR_READY)
+
+
+## Has this Gub's own weapon — whichever one it picked — just become available?
+##
+## The loadout makes the three gates mutually exclusive (`carries` is true of at
+## most one), so this is a disjunction that can never be ambiguous: it is "is the
+## weapon I brought in my hand", asked without the caller having to know which
+## one that is.
+func _weapon_ready() -> bool:
+	return has_spear() or has_bow() or has_sword()
 
 
 ## Should this fist be holding a shaft right now?
@@ -1527,14 +1600,29 @@ func _wants_arrow() -> bool:
 	return not is_elder() and not is_holding_letter() and _gub.is_drawing()
 
 
-## Should the fists be holding a great sword right now (D-068)?
+## Should the fists be holding a great sword right now (D-068, D-069)?
 ##
-## `_wants_shaft`'s fourth sibling, and the shortest of the four because there is
-## no cooldown in it: the sword is **not carried**. It exists for the length of
-## one swing and no longer, so the whole question is "is a swing running", which
-## `Gub.is_spinning()` answers on every peer — the click to the last frame of the
-## follow-through, including the 0.800 s after the blade has already been through
-## somebody.
+## `_wants_shaft`'s fourth sibling, and since D-069 the closest of the four to
+## it: **the great sword is carried.** It was not, and the reason it was not is
+## written into D-068 in as many words — "there is no weapon-select in this game,
+## so a carried great sword would be a Gub that had permanently given up its
+## spear". There is a weapon-select now, and a Gub that picked the sword *has*
+## permanently given up its spear. The premise is gone, so the exception is.
+##
+## It matters more than tidiness. `HeldGear`'s own header says what empty hands
+## mean: *"seeing an empty pair of them across the clearing is how you know it is
+## safe to approach"*. A swordsman with nothing in its fists is a melee one-shot
+## wearing the one tell this game reserves for harmless, which is the worst lie
+## the hand could tell — and a carried sword is also the whole of the user's
+## *"your character should only show the weapon you have selected"* for one of
+## the three picks.
+##
+## `has_sword() or is_swinging()`, which is the shaft's `has_spear() or
+## _is_throw_windup()` with the sword's own carve-out: the click spends the
+## cooldown, so `has_sword()` goes false the instant the swing starts and
+## `is_spinning()` is what keeps the blade in the fists through the 1.867 s the
+## clip runs. After it the recharge is still running and the hands are genuinely
+## empty, exactly as they are between a throw and the spear growing back.
 ##
 ## The other two clauses are the hand rule rather than the gate: an Elder has
 ## lightning instead of its weapons and a fist holding a letter card is not
@@ -1543,7 +1631,8 @@ func _wants_arrow() -> bool:
 ## (`_tick_windup`) while the body goes on spinning, which is exactly the right
 ## three things to happen.
 func _wants_sword() -> bool:
-	return not is_elder() and not is_holding_letter() and is_swinging()
+	return not is_elder() and not is_holding_letter() \
+		and (has_sword() or is_swinging())
 
 
 # -------------------------------------------------------- the great sword ---
@@ -2094,6 +2183,21 @@ func _on_elder_changed(peer_id: int) -> void:
 ## Idempotent and cheap, which is what lets `_tick_hand` call it as often as it
 ## likes: every path that can change the answer ends here, and so does a frame
 ## on which nothing changed except that a deadline passed.
+## `_refresh_hand` for callers outside this node.
+##
+## Exactly one exists: `GubBackdrop`, which changes `Gub.weapon` on a ring Gub
+## when the lobby roster moves and then has to ask for the hand to be redrawn.
+## In a match nothing needs it — `Gub.weapon` is fixed before the body is built
+## and every other thing that can change a hand already ends at `_refresh_hand`
+## from inside here.
+##
+## A one-line forwarder rather than making `_refresh_hand` public, so that the
+## underscore keeps meaning what it means in this file: the hand is this node's
+## business, and the one outside caller is asking rather than reaching.
+func refresh_hand() -> void:
+	_refresh_hand()
+
+
 func _refresh_hand() -> void:
 	if _gub == null or _gub.held_gear == null:
 		return
@@ -2565,6 +2669,12 @@ func _begin_channel() -> void:
 	var animator := _gub.get_node_or_null("AnimationTree") as GubAnimator
 	if animator != null:
 		animator.play_drink(GubAnimator.drink_rate_for_channel(_channel_seconds))
+	# Both fists, now rather than on the next frame's `_tick_hand`. D-067 put
+	# `not is_channelling()` in `has_spear()` precisely so that the *hand* obeys
+	# a drink, and a poll a frame behind is a frame of the bottle coming up with
+	# the weapon still in the fist — which is the picture that decision was
+	# written against. The same call on the way back down, in `_end_channel`.
+	_refresh_hand()
 	cooldowns_changed.emit()
 
 
@@ -2579,6 +2689,9 @@ func _end_channel() -> void:
 		var animator := _gub.get_node_or_null("AnimationTree") as GubAnimator
 		if animator != null:
 			animator.stop_drink()
+	# The other half of `_begin_channel`'s call: the weapon goes back into the
+	# fist on the frame the bottle leaves the lips, not the one after it.
+	_refresh_hand()
 	cooldowns_changed.emit()
 
 

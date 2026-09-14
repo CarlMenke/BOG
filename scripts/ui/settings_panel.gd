@@ -31,10 +31,18 @@ const CONTROL_REFERENCE: Array[Array] = [
 	["Sprint", "sprint"],
 	["Crouch / slide", "crouch"],
 	["Jump", "jump"],
+	# One line per weapon, because a player has one weapon (D-069). Before the
+	# lobby pick this list said "Throw spear" and stopped, which was already
+	# missing the bow and the sword and was merely incomplete; now two players in
+	# three would come here to find out which key their own weapon is on and
+	# find somebody else's. Listed together and in the picker's own order.
 	["Throw spear", "throw_spear"],
+	["Draw bow", "draw_bow"],
+	["Swing great sword", "swing_sword"],
 	["Aim", "aim"],
 	["Plant mushroom", "place_mushroom"],
 	["Throw lure", "throw_lure"],
+	["Drink potion", "drink_potion"],
 	["Scoreboard", "scoreboard"],
 	["Chat", "chat"],
 	["Pause", "pause"],

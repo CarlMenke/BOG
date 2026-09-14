@@ -164,6 +164,11 @@ var _failures: int = 0
 var _client_id: int = 0
 ## Client only: what `user://settings.cfg` said before this run touched it.
 var _original_name: Variant = null
+## The client's saved weapon, put back in `_finish` beside the name and for the
+## same reason: `Net.set_weapon` writes the pick through to `Settings`, both
+## processes share one `user://settings.cfg`, and a harness has no business
+## choosing what the next real game starts with (D-069).
+var _original_weapon: Variant = null
 var _running: bool = true
 
 # Everything the session did, recorded from signals rather than sampled. A
@@ -282,8 +287,12 @@ func _run_host() -> void:
 	_check("the host is peer 1", Net.local_id(), 1)
 
 	# See HOST_NAME: named in place rather than through `Settings`, which both
-	# processes share.
+	# processes share. The weapon is set the same way and for a second reason —
+	# `host_lobby` seeds that row from `Settings.chosen_weapon()`, so without
+	# this line stage 4 would open on whatever the last run happened to leave
+	# behind and would pass or fail depending on it (D-069).
 	Net.players[1]["name"] = HOST_NAME
+	Net.players[1]["weapon"] = Loadout.DEFAULT
 	Net.roster_changed.emit()
 
 	var code := InviteCode.encode(LOOPBACK_IP, Net.hosting_port())
@@ -298,6 +307,8 @@ func _run_host() -> void:
 		ok = await _stage_roster()
 	if ok:
 		ok = await _stage_names()
+	if ok:
+		ok = await _stage_weapons()
 	if ok:
 		ok = await _stage_config()
 	if ok:
@@ -319,9 +330,9 @@ func _run_host() -> void:
 	await _finish()
 
 
-## 1/11. A client connects, and both sides notice.
+## 1/12. A client connects, and both sides notice.
 func _stage_connect() -> bool:
-	print("net_loopback: stage 1/11 — connection")
+	print("net_loopback: stage 1/12 — connection")
 	if not await _await_until("a peer to connect", JOIN_TIMEOUT,
 			func() -> bool: return not _peer_connected.is_empty()):
 		return false
@@ -338,14 +349,14 @@ func _stage_connect() -> bool:
 	return true
 
 
-## 2/11. Both sides hold the same roster, and the name got there through
+## 2/12. Both sides hold the same roster, and the name got there through
 ## `_request_join`.
 ##
 ## The client's copy is fetched over the control channel, which is this
 ## harness's own `@rpc` rather than the game's chat — if it were chat, a broken
 ## chat would look like a broken roster here and the real check would never run.
 func _stage_roster() -> bool:
-	print("net_loopback: stage 2/11 — roster replication")
+	print("net_loopback: stage 2/12 — roster replication")
 	_check("the roster has two players", Net.player_count(), 2)
 	var mine := _roster_digest()
 	var reply := await _request("roster", {}, STEP_TIMEOUT)
@@ -358,11 +369,11 @@ func _stage_roster() -> bool:
 	return true
 
 
-## 3/11. The client asked for a name the host already had, and `_unique_name`
+## 3/12. The client asked for a name the host already had, and `_unique_name`
 ## disambiguated it — on the host, where the decision belongs, and on the
 ## client, which only ever sees the answer.
 func _stage_names() -> bool:
-	print("net_loopback: stage 3/11 — name collision")
+	print("net_loopback: stage 3/12 — name collision")
 	_check("the host kept its name", Net.player_name(1), HOST_NAME)
 	_check("the host renamed the client", Net.player_name(_client_id),
 		CLIENT_UNIQUE_NAME)
@@ -378,11 +389,92 @@ func _stage_names() -> bool:
 	return true
 
 
-## 4/11. `MatchConfig.to_dict()` over the wire and `apply_dict` on the far side —
+## 4/12. A weapon picked on the client, decided by the host, and read back on
+## both sides (D-069).
+##
+## **The one stage that can prove this at all.** `weapon_select.tscn` drives the
+## same request in an offline session, where `OfflineMultiplayerPeer` swallows
+## `rpc_id` silently and the local call does all the work — which is exactly the
+## shape of the bug D-024 took two real processes to find. Here the request
+## leaves one process as a packet and the answer comes back as a whole roster,
+## so a `_request_weapon` that was never reachable from a client would fail here
+## and nowhere else.
+##
+## It also asks the question the lobby's authority model exists for: the client
+## sends an ordinal that is not a weapon, and the host has to turn it into a
+## spear rather than into an index off the end of a list.
+func _stage_weapons() -> bool:
+	print("net_loopback: stage 4/12 — weapon replication")
+	_check("both rows start on the default", Net.player_weapon(1),
+		Loadout.Weapon.SPEAR)
+	_check("the client's too", Net.player_weapon(_client_id),
+		Loadout.Weapon.SPEAR)
+
+	# Client -> host. `set_weapon` on a client is an `rpc_id(1, ...)` and nothing
+	# else; the row does not move until the host says so and broadcasts.
+	if (await _request("weapon", {"want": Loadout.Weapon.BOW}, STEP_TIMEOUT)).is_empty():
+		return false
+	await _await_until("the client's pick to arrive", STEP_TIMEOUT,
+		func() -> bool: return Net.player_weapon(_client_id) == Loadout.Weapon.BOW)
+	_check("the host took the client's pick",
+		Net.player_weapon(_client_id), Loadout.Weapon.BOW)
+	_check("and did not touch its own", Net.player_weapon(1),
+		Loadout.Weapon.SPEAR)
+
+	# A client that lies. The parameter is typed, so the only lie that can reach
+	# the host is an ordinal out of range — and `Loadout.sanitize` is the whole of
+	# what stands between it and a roster row.
+	if (await _request("weapon", {"want": 4242}, STEP_TIMEOUT)).is_empty():
+		return false
+	await _await_until("the bogus pick to be refused", STEP_TIMEOUT,
+		func() -> bool: return Net.player_weapon(_client_id) == Loadout.Weapon.SPEAR)
+	_check("a weapon that does not exist becomes a spear",
+		Net.player_weapon(_client_id), Loadout.Weapon.SPEAR)
+
+	# Host -> client, which is the rebroadcast rather than the request, and the
+	# half the ring in the lobby is drawn from.
+	Net.set_weapon(Loadout.Weapon.SWORD)
+	_check("the host took its own pick", Net.player_weapon(1),
+		Loadout.Weapon.SWORD)
+	var reply := await _request("weapon", {"want": Loadout.Weapon.BOW,
+		"expect_host": Loadout.Weapon.SWORD}, STEP_TIMEOUT)
+	if reply.is_empty():
+		return false
+	await _await_until("the client's second pick", STEP_TIMEOUT,
+		func() -> bool: return Net.player_weapon(_client_id) == Loadout.Weapon.BOW)
+	_check("the client is on the bow it asked for the second time",
+		Net.player_weapon(_client_id), Loadout.Weapon.BOW)
+
+	# And the client goes back to the spear before the stage ends, because every
+	# stage after this one was written against a Gub that has one: stage 8 has
+	# the client *throw* a spear at the host, which is the only place in this
+	# harness a non-host peer makes anything happen at all (D-024). An archer
+	# cannot, and that is the feature working.
+	#
+	# The **host** keeps its sword for the rest of the run, which is what leaves
+	# a non-default weapon on the wire through the match, the kill, the respawn
+	# and the ten rematches — the thing stage 11 asserts survived. Nothing here
+	# needs the host to throw: this harness's kills go through
+	# `MatchState.report_kill` directly.
+	if (await _request("weapon", {"want": Loadout.Weapon.SPEAR}, STEP_TIMEOUT)).is_empty():
+		return false
+	await _await_until("the client back on a spear", STEP_TIMEOUT,
+		func() -> bool: return Net.player_weapon(_client_id) == Loadout.Weapon.SPEAR)
+	_check("the client is back on a spear for the stages that need one",
+		Net.player_weapon(_client_id), Loadout.Weapon.SPEAR)
+	_check("and the host is still on its sword", Net.player_weapon(1),
+		Loadout.Weapon.SWORD)
+	print("net_loopback:   host %s, client %s" % [
+		Loadout.weapon_name(Net.player_weapon(1)),
+		Loadout.weapon_name(Net.player_weapon(_client_id))])
+	return true
+
+
+## 5/12. `MatchConfig.to_dict()` over the wire and `apply_dict` on the far side —
 ## a flat Dictionary of primitives rather than a Resource, so that receiving one
 ## never means decoding an object (D-004).
 func _stage_config() -> bool:
-	print("net_loopback: stage 4/11 — config replication")
+	print("net_loopback: stage 5/12 — config replication")
 	var settings := Net.config.duplicate_config()
 	settings.map = CONFIG_MAP
 	settings.map_seed = CONFIG_SEED
@@ -411,10 +503,10 @@ func _stage_config() -> bool:
 	return true
 
 
-## 5/11. Chat in both directions, through `Net.send_chat`, asserting the text and
+## 6/12. Chat in both directions, through `Net.send_chat`, asserting the text and
 ## who it says sent it.
 func _stage_chat() -> bool:
-	print("net_loopback: stage 5/11 — chat both directions")
+	print("net_loopback: stage 6/12 — chat both directions")
 	var before := _chat.size()
 	if (await _request("say", {"text": CLIENT_CHAT}, STEP_TIMEOUT)).is_empty():
 		return false
@@ -443,11 +535,11 @@ func _stage_chat() -> bool:
 	return true
 
 
-## 6/11. Ready up, then start. `can_start_match()` refuses until every non-host
+## 7/12. Ready up, then start. `can_start_match()` refuses until every non-host
 ## peer has readied, so the client's `_request_ready` has to have arrived for
 ## this to be reachable at all.
 func _stage_match_start() -> bool:
-	print("net_loopback: stage 6/11 — match start")
+	print("net_loopback: stage 7/12 — match start")
 	_check("the host cannot start yet", Net.can_start_match(), false)
 	if (await _request("ready", {}, STEP_TIMEOUT)).is_empty():
 		return false
@@ -469,7 +561,7 @@ func _stage_match_start() -> bool:
 	return true
 
 
-## 7/11. The arena, and then the one thing no stage here had ever asked a
+## 8/12. The arena, and then the one thing no stage here had ever asked a
 ## *client* to do: use an ability.
 ##
 ## Both peers build the real island from the replicated seed, and then the
@@ -486,7 +578,7 @@ func _stage_match_start() -> bool:
 ## host sends it the instant *its own* island finishes. See the note below for
 ## how close that actually runs.
 func _stage_abilities() -> bool:
-	print("net_loopback: stage 7/11 — the arena, and the client's abilities in it")
+	print("net_loopback: stage 8/12 — the arena, and the client's abilities in it")
 	var started := Time.get_ticks_msec()
 	if not await _await_until("the host's arena", ARENA_TIMEOUT,
 			func() -> bool: return get_tree().current_scene is Arena):
@@ -588,10 +680,10 @@ func _stage_abilities() -> bool:
 	return true
 
 
-## 8/11. The host decides a death through `MatchState.report_kill` — the same
+## 9/12. The host decides a death through `MatchState.report_kill` — the same
 ## call a landed spear makes — and the client is asked what it saw.
 func _stage_kill() -> bool:
-	print("net_loopback: stage 8/11 — a hit and then a kill, over the wire")
+	print("net_loopback: stage 9/12 — a hit and then a kill, over the wire")
 	# Somewhere that is not the client's own spawn pad. Left where it spawned,
 	# the client dies on its pad and `_next_spawn` hands the same pad straight
 	# back — it is the one furthest from the host — so the respawn in stage 9
@@ -673,7 +765,7 @@ func _stage_kill() -> bool:
 	return true
 
 
-## 9/11. The client comes back with nothing in its hands, and the host's copy of
+## 10/12. The client comes back with nothing in its hands, and the host's copy of
 ## it comes back to where it actually is.
 ##
 ## A player's report: *"you spawn with either an item or the elder randomly, it
@@ -696,7 +788,7 @@ func _stage_kill() -> bool:
 ## in — so the host's copy is required to follow the client to wherever it
 ## respawned, over a real socket, with the life number crossing it.
 func _stage_respawn() -> bool:
-	print("net_loopback: stage 9/11 — a respawn over the wire")
+	print("net_loopback: stage 10/12 — a respawn over the wire")
 	var gub: Gub = MatchState.gubs.get(_client_id)
 	if not _require("the host still has the client's Gub", is_instance_valid(gub)):
 		return false
@@ -753,7 +845,7 @@ func _stage_respawn() -> bool:
 	return true
 
 
-## 10/11. Run the match to a result and rematch it, ten times in a row.
+## 11/12. Run the match to a result and rematch it, ten times in a row.
 ##
 ## A player: *"rematch only works 50% of the time / takes a while"*. Every round
 ## ends the match the way a real one ends — a kill that reaches the kill limit,
@@ -771,7 +863,7 @@ func _stage_respawn() -> bool:
 ## went. A warmup that begins with a peer missing from `_arena_ready` is the
 ## `ARENA_READY_TIMEOUT` path, and fails the round outright.
 func _stage_rematch() -> bool:
-	print("net_loopback: stage 10/11 — a match to a result and a rematch, %d times"
+	print("net_loopback: stage 11/12 — a match to a result and a rematch, %d times"
 		% REMATCHES)
 	# One kill ends a match from here on, and there is no countdown before the
 	# next: ten rounds of the island build are the cost of this stage and
@@ -846,6 +938,21 @@ func _stage_rematch() -> bool:
 
 	_tracing = false
 	MatchState.phase_changed.disconnect(_trace_phase)
+	# D-069 on top of D-048: a rematch is the same match again, so the weapons
+	# stand exactly as the teams do. Ten rounds is the interesting number here —
+	# `request_rematch` broadcasts nothing, so a weapon that went missing would
+	# have to have been dropped by something else entirely.
+	_check("the host kept its sword through %d rematches" % REMATCHES,
+		Net.player_weapon(1), Loadout.Weapon.SWORD)
+	_check("and the client its spear", Net.player_weapon(_client_id),
+		Loadout.Weapon.SPEAR)
+	var weapons := await _request("weapons", {}, STEP_TIMEOUT)
+	if weapons.is_empty():
+		return false
+	_check("the client agrees about its own",
+		int(weapons.get("mine", -1)), Loadout.Weapon.SPEAR)
+	_check("and about the host's", int(weapons.get("host", -1)),
+		Loadout.Weapon.SWORD)
 	print("net_loopback:   %d rematches, slowest %.2f s" % [REMATCHES, slowest])
 	return true
 
@@ -932,14 +1039,14 @@ func _process(_delta: float) -> void:
 		_traced_ready = reported
 
 
-## 11/11. The client goes away and the host clears up after it. `Net.player_left`
+## 12/12. The client goes away and the host clears up after it. `Net.player_left`
 ## and `MatchState._on_player_left` are the newest code in the networking layer
 ## and have never run against a socket.
 func _stage_disconnect() -> void:
 	if _client_id == 0 or not Net.has_player(_client_id):
-		print("net_loopback: stage 11/11 — skipped, no client to disconnect")
+		print("net_loopback: stage 12/12 — skipped, no client to disconnect")
 		return
-	print("net_loopback: stage 11/11 — disconnect")
+	print("net_loopback: stage 12/12 — disconnect")
 
 	# Its tally first, while it can still answer.
 	var tally := await _request("finish", {}, STEP_TIMEOUT)
@@ -992,6 +1099,12 @@ func _run_client(code: String) -> void:
 	# CLIENT_NAME; retype it in Settings if you care.
 	_original_name = Settings.get_value("player_name")
 	Settings.set_value("player_name", CLIENT_NAME)
+	# And the weapon, which rides in with the name on `_request_join` (D-069):
+	# the same argument as the line above, and the same restore in `_finish`.
+	# Stage 4 opens by asserting that both rows are on the default, which is only
+	# a statement about this build if the harness puts them there.
+	_original_weapon = Settings.get_value("weapon")
+	Settings.set_value("weapon", Loadout.DEFAULT)
 
 	if not _require("the code dialled", Net.join_lobby(code)):
 		print("net_loopback: %s" % _join_failure)
@@ -1038,6 +1151,25 @@ func _serve(message: Dictionary) -> void:
 			_check("the host's name arrived intact", Net.player_name(1), HOST_NAME)
 			reply["mine"] = mine
 			reply["host"] = Net.player_name(1)
+		"weapon":
+			# The shipping call, which on a client is an `rpc_id(1, ...)` and a
+			# local `Settings` write and nothing else: the row this peer holds does
+			# not move until the host's rebroadcast lands (D-069).
+			var asked: int = int(payload.get("want", Loadout.DEFAULT))
+			if payload.has("expect_host"):
+				var want_host: int = int(payload["expect_host"])
+				await _await_until("the host's own weapon", STEP_TIMEOUT,
+					func() -> bool: return Net.player_weapon(1) == want_host)
+				_check("the host's pick arrived on the client",
+					Net.player_weapon(1), want_host)
+			Net.set_weapon(asked)
+			# Sanitized on the way into `Settings` even when the wire carries the
+			# raw number, which is the other place that function is the only guard.
+			reply["saved"] = Settings.chosen_weapon()
+			reply["mine"] = Net.player_weapon(Net.local_id())
+		"weapons":
+			reply["mine"] = Net.player_weapon(Net.local_id())
+			reply["host"] = Net.player_weapon(1)
 		"config":
 			var want: Dictionary = payload.get("want", {})
 			var got := Net.config.to_dict()
@@ -1396,8 +1528,13 @@ func _take_any(timeout: float) -> Dictionary:
 func _roster_digest() -> Array:
 	var out: Array = []
 	for peer_id: int in Net.peer_ids():
+		# The weapon is in here with the name, the team and the ready flag
+		# because it is the same kind of thing: one more key in the roster row,
+		# broadcast whole with the rest of it (D-069). Stage 2 compares this
+		# digest byte for byte across the socket, so putting the weapon in it is
+		# how every later stage gets "and the weapons still agree" for nothing.
 		out.append([peer_id, Net.player_name(peer_id), Net.player_team(peer_id),
-			Net.is_ready(peer_id)])
+			Net.is_ready(peer_id), Net.player_weapon(peer_id)])
 	return out
 
 
@@ -1456,6 +1593,8 @@ func _await_until(what: String, timeout: float, ready: Callable) -> bool:
 func _finish() -> void:
 	if _original_name != null:
 		Settings.set_value("player_name", _original_name)
+	if _original_weapon != null:
+		Settings.set_value("weapon", _original_weapon)
 	MatchState.reset()
 	for i in 4:
 		await get_tree().process_frame

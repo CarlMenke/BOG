@@ -104,7 +104,7 @@ var _camera: Camera3D
 var _fire: OmniLight3D
 var _gub_root: Node3D
 var _gubs: Array[Gub] = []
-## `[{name, team}, ...]`, in the order they should stand.
+## `[{name, team, weapon}, ...]`, in the order they should stand.
 var _roster: Array[Dictionary] = []
 var _elapsed: float = 0.0
 
@@ -122,7 +122,11 @@ func _ready() -> void:
 	_build_camera()
 	if _roster.is_empty():
 		# Whoever is at the keyboard, so the menu is never an empty stage.
-		set_roster([{"name": Settings.sanitized_player_name(), "team": MatchConfig.TEAM_NONE}])
+		set_roster([{
+			"name": Settings.sanitized_player_name(),
+			"team": MatchConfig.TEAM_NONE,
+			"weapon": Settings.chosen_weapon(),
+		}])
 
 
 func _process(delta: float) -> void:
@@ -195,6 +199,12 @@ func _apply_slot(index: int) -> void:
 	var team: int = entry.get("team", MatchConfig.TEAM_NONE)
 	gub.display_name = String(entry.get("name", "Gub"))
 	gub.team = team
+	# The weapon the lobby picked, on the same call that repaints the team and
+	# for the same reason (D-069): every roster change comes through here, so a
+	# weapon chosen in the strip is in the ring's hands on the next refresh. The
+	# hand itself is `GubCombat`'s — this only says which weapon the Gub has, and
+	# `_refresh_weapon` below is what asks the combat node to redraw from it.
+	_equip(gub, Loadout.sanitize(entry.get("weapon", Loadout.DEFAULT)))
 	# Every roster change comes through here, so a team switched in the lobby
 	# repaints the Gub standing in the ring as well as its plate (D-046).
 	gub.set_team_tint(team)
@@ -202,6 +212,23 @@ func _apply_slot(index: int) -> void:
 	if plate != null:
 		plate.set_display_name(gub.display_name)
 		plate.set_team(team)
+
+
+## Give this backdrop Gub a weapon and put it in its hands.
+##
+## The hand is drawn by `GubCombat._refresh_hand` and by nothing else, here
+## exactly as in a match — which is the point of the ring being real `gub.tscn`
+## instances (see the header). So this sets the field the gate reads and then
+## asks the gate to run again; it does not touch `HeldGear`, because a second
+## opinion about what is in a fist is the one thing that file refuses to have.
+##
+## Idempotent, because `set_roster` is called on every roster change and most of
+## them are about somebody else.
+func _equip(gub: Gub, weapon: int) -> void:
+	gub.weapon = weapon
+	var combat := gub.get_node_or_null("Combat") as GubCombat
+	if combat != null:
+		combat.refresh_hand()
 
 
 func _slot_transform(index: int, count: int) -> Transform3D:

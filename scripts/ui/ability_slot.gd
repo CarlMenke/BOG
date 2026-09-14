@@ -41,7 +41,12 @@ extends Control
 ## Appended to, never reordered: the ordinal is what `hud.tscn` stores in each
 ## slot's exported `kind`, and inserting one in the middle would silently turn
 ## every tile in the scene into a different tile.
-enum Kind { SPEAR, MUSHROOM, LURE, LIGHTNING, POTION }
+## The five glyphs this square can draw, plus the two the weapon select added
+## (D-069). The first slot on the bar is whichever weapon this Gub actually
+## brought, the way it has always been the bolt for an Elder — so a bow player
+## reads their own recharge off it instead of watching a spear tile that will
+## never light.
+enum Kind { SPEAR, MUSHROOM, LURE, LIGHTNING, POTION, BOW, SWORD }
 
 const SIZE := 62.0
 const RADIUS := 5.0
@@ -95,16 +100,28 @@ func _ready() -> void:
 	_name.text = label_text
 
 
-## Make this slot stand for something else. The key cap is deliberately left
-## alone: it is read out of the input map for whichever action this slot fires,
-## and the Elder's bolt is fired by the same button the spear was — which is the
-## point of it replacing the spear rather than being a fourth thing to learn.
-func set_kind(next: Kind, next_label: String) -> void:
+## Make this slot stand for something else.
+##
+## The key cap is left alone unless `next_action` says otherwise, and the two
+## cases are the difference between the Elder and a loadout. An Elder's bolt is
+## fired by **the same button the spear was**, which is the point of it replacing
+## the spear rather than being a fourth thing to learn — so that call passes no
+## action and the cap does not move. A bow and a great sword are fired by their
+## own keys (`draw_bow`, `swing_sword`), so the tile that stands for one has to
+## carry that key or it is telling a player to press the wrong thing (D-069).
+##
+## Read out of the input map rather than typed in, exactly as `_ready` does it,
+## so a rebound key moves both.
+func set_kind(next: Kind, next_label: String,
+		next_action: String = "") -> void:
 	if kind == next:
 		return
 	kind = next
 	label_text = next_label
 	_name.text = next_label
+	if not next_action.is_empty():
+		action = next_action
+		_cap.text = SettingsPanel.primary_key(action)
 	queue_redraw()
 
 
@@ -280,6 +297,39 @@ func _draw_glyph(tint: Color) -> void:
 			draw_line(c + Vector2(neck, -7), c + Vector2(neck, -12), tint, 2.0)
 			draw_rect(Rect2(c + Vector2(-neck - 2, -16), Vector2(neck * 2 + 4, 4)),
 				tint, true)
+		Kind.BOW:
+			# A limb bowing left with its string straight down the right, which
+			# is the one silhouette a bow has that nothing else on this bar
+			# could be. The arrow is left off deliberately: the tile says
+			# whether the *weapon* is ready, and a drawn arrow on a dark tile
+			# would be the tile claiming a nocked shot it does not have.
+			var limb := PackedVector2Array()
+			for i in 17:
+				var t := float(i) / 16.0
+				# Three-quarters of a circle's worth of arc, opening right, so
+				# the tips turn back toward the string the way real limbs do.
+				var angle := PI * (-0.42 + t * 0.84)
+				limb.append(c + Vector2(cos(angle) * 15.0 - 5.0,
+					sin(angle) * 15.0))
+			draw_polyline(limb, tint, 2.4)
+			draw_line(limb[0], limb[limb.size() - 1], tint, 1.6)
+		Kind.SWORD:
+			# On the diagonal for the spear's reason — a vertical line in a
+			# square reads as a divider — and heavier than the spear's shaft,
+			# because the one thing a great sword is beside a spear is *broad*.
+			# Crossguard across the grip, a dot for the pommel, and the blade
+			# runs past both of them to a point.
+			var butt := c + Vector2(-11, 13)
+			var grip := c + Vector2(-6, 8)
+			var point := c + Vector2(13, -14)
+			var along := (point - butt).normalized()
+			var across := Vector2(-along.y, along.x)
+			draw_line(butt, point - along * 4.0, tint, 4.0)
+			draw_colored_polygon(PackedVector2Array([
+				point, point - along * 6.0 + across * 3.4,
+				point - along * 6.0 - across * 3.4]), tint)
+			draw_line(grip + across * 7.0, grip - across * 7.0, tint, 2.4)
+			draw_circle(butt, 2.6, tint)
 		Kind.LIGHTNING:
 			# The classic jagged bolt, as one filled polygon rather than a
 			# polyline, so it keeps its weight at the same size the spear's

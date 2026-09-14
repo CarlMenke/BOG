@@ -21,7 +21,7 @@ extends Node
 ##        hud_elder, killfeed, scoreboard, scoreboard_letters, pause, results,
 ##        results_letters, dead, spectate,
 ##        hud_letters_teams, scoreboard_letters_teams, results_letters_teams,
-##        reload_timer.
+##        reload_timer, weapon_tiles.
 ##
 ## `hud_health` is your own health bar part-empty (D-062). `hud` has it full,
 ## which is the state it spends most of a match in and the least interesting one
@@ -38,6 +38,19 @@ extends Node
 ##
 ##     ... --resolution 1600x900 --script tools/snapshot.gd -- \
 ##         res://tools/hud_range.tscn out/reload_timer.png 130 reload_timer
+##
+## `weapon_tiles` is the second mode here that prints a verdict and sits in the
+## gate (D-069). The first square on the ability bar is whichever weapon the
+## local Gub actually brought — it has always swapped to a bolt for an Elder, and
+## now it swaps for a lobby pick too — so this stands the same HUD up three times
+## with three loadouts and requires the glyph, the caption **and the key cap** to
+## follow. The cap is the half that is easy to get wrong and impossible to see in
+## a screenshot of one loadout: a bolt is fired by the spear's own button and a
+## bow is not, so a tile that kept the spear's cap would be telling an archer to
+## press the wrong thing. Its shot is the three tiles as a player sees them:
+##
+##     ... --resolution 1600x900 --script tools/snapshot.gd -- \
+##         res://tools/hud_range.tscn out/weapon_tiles.png 40 weapon_tiles
 ##
 ## The three `*_letters_teams` modes are the letters pictures under Teams, where
 ## the lamps, a team row on the scoreboard and a team row on the results table
@@ -161,6 +174,9 @@ func _stage() -> void:
 		"reload_timer":
 			_stage_kills()
 			_run_reload_timer()
+		"weapon_tiles":
+			_stage_kills()
+			_run_weapon_tiles()
 		"dead":
 			_stage_kills()
 			var dying: Dictionary = MatchState.stats.get(1, {})
@@ -403,6 +419,77 @@ func _stage_elder() -> void:
 ## what `_draw` draws -- rather than recomputed from `GubCombat`, because the
 ## thing under test is the HUD's choice of *when* to hand the tile a timer, and
 ## recomputing it here would be testing a copy of that choice.
+## The first tile is the weapon this Gub picked (D-069).
+##
+## Three loadouts through the one HUD, because the tile is not rebuilt per
+## weapon — `AbilitySlot.set_kind` mutates the square that is already there, and
+## the thing most likely to rot is a field it forgets to move. So this drives the
+## real refresh by changing `Gub.weapon` under it, the way the lobby's pick does
+## before the body is ever built, and reads the square back.
+##
+## The Elder is checked last and is the reason the key cap is asserted at all: it
+## is the one kind that must *keep* the spear's button, so a `set_kind` that
+## updated the cap unconditionally would break it and a check that only looked at
+## glyphs would not notice.
+func _run_weapon_tiles() -> void:
+	var slot := _hud.get_node("%SpearSlot") as AbilitySlot
+	var combat := _local_combat()
+	var gub: Gub = MatchState.gubs.get(1)
+	if slot == null or combat == null or not is_instance_valid(gub):
+		print("hud_range: no weapon tile or local Gub - weapon_tiles FAIL")
+		return
+
+	var failures := PackedStringArray()
+	var want := [
+		[Loadout.Weapon.SPEAR, AbilitySlot.Kind.SPEAR, "Spear", "throw_spear"],
+		[Loadout.Weapon.BOW, AbilitySlot.Kind.BOW, "Bow", "draw_bow"],
+		[Loadout.Weapon.SWORD, AbilitySlot.Kind.SWORD, "Sword", "swing_sword"],
+	]
+	for row: Array in want:
+		gub.weapon = row[0]
+		combat.refresh_hand()
+		combat.cooldowns_changed.emit()
+		await RenderingServer.frame_pre_draw
+		if slot.kind != row[1]:
+			failures.append("%s: glyph is %d, wanted %d"
+				% [row[2], slot.kind, row[1]])
+		if slot.label_text != row[2]:
+			failures.append("%s: caption says %s" % [row[2], slot.label_text])
+		if slot.action != row[3]:
+			failures.append("%s: key cap fires %s, wanted %s"
+				% [row[2], slot.action, row[3]])
+		print("  %-6s glyph %d, caption %s, key %s"
+			% [row[2], slot.kind, slot.label_text,
+				SettingsPanel.primary_key(slot.action)])
+
+	# And the Elder, which replaces whatever you picked (D-038) and keeps the
+	# spear's own button doing it.
+	MatchState._do_set_elder(1, true, 20.0)
+	combat.cooldowns_changed.emit()
+	await RenderingServer.frame_pre_draw
+	if slot.kind != AbilitySlot.Kind.LIGHTNING:
+		failures.append("an Elder's tile is %d, wanted the bolt" % slot.kind)
+	if slot.action != "throw_spear":
+		failures.append("an Elder's bolt fires %s, wanted throw_spear" % slot.action)
+	print("  %-6s glyph %d, caption %s, key %s"
+		% ["Elder", slot.kind, slot.label_text,
+			SettingsPanel.primary_key(slot.action)])
+	MatchState._do_set_elder(1, false, 0.0)
+
+	# Back to the sword the loop left it on, so the picture this mode also takes
+	# is of a weapon a player can pick rather than of a robe that has just burned
+	# out.
+	gub.weapon = Loadout.Weapon.SWORD
+	combat.cooldowns_changed.emit()
+
+	if failures.is_empty():
+		print("hud_range: the tile follows the pick - weapon_tiles PASS")
+	else:
+		for line: String in failures:
+			print("  " + line)
+		print("hud_range: weapon_tiles FAIL")
+
+
 func _run_reload_timer() -> void:
 	var slot := _hud.get_node("%SpearSlot") as AbilitySlot
 	var crosshair := _hud.get_node("%Crosshair") as Crosshair

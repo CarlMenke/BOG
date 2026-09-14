@@ -7,6 +7,7 @@ extends Node
 ##
 ##   * the ENet peer and its lifecycle,
 ##   * the roster — who is here, what they are called, which team they are on,
+##     and which weapon they picked,
 ##   * lobby chat.
 ##
 ## Match rules, scoring and spawning live in `MatchState`. Keeping them apart
@@ -49,7 +50,13 @@ signal return_to_lobby_requested()
 ## The host wants the same match again, same roster, same settings.
 signal rematch_requested()
 
-## peer_id -> {name: String, team: int, ready: bool}
+## peer_id -> {name: String, team: int, ready: bool, weapon: int}
+##
+## `weapon` is a `Loadout.Weapon` ordinal and is one more key here rather than a
+## channel of its own (D-069). It has exactly `team`'s lifecycle — seeded by
+## `_make_player`, changed by a request the host validates, carried on every
+## rebroadcast, kept across a rematch and forgotten when the peer goes — which is
+## the whole of why it needed no new plumbing.
 var players: Dictionary = {}
 var config: MatchConfig = MatchConfig.new()
 
@@ -117,7 +124,8 @@ func host_lobby(port: int = DEFAULT_PORT) -> bool:
 	# Once, here, rather than inside `invite_code()`: see `_resolve_public_address`.
 	_resolve_public_address()
 
-	players = {1: _make_player(Settings.sanitized_player_name(), 0)}
+	players = {1: _make_player(Settings.sanitized_player_name(), 0,
+		Settings.chosen_weapon())}
 	roster_changed.emit()
 	joined_lobby.emit()
 	return true
@@ -143,7 +151,8 @@ func start_offline() -> void:
 	_clear_public_address()
 	config = MatchConfig.new()
 
-	players = {1: _make_player(Settings.sanitized_player_name(), 0)}
+	players = {1: _make_player(Settings.sanitized_player_name(), 0,
+		Settings.chosen_weapon())}
 	roster_changed.emit()
 	joined_lobby.emit()
 
@@ -224,6 +233,19 @@ func player_team(peer_id: int) -> int:
 	return info.get("team", MatchConfig.TEAM_NONE)
 
 
+## Which weapon this player brought, as a `Loadout.Weapon` (D-069).
+##
+## `player_team`'s shape exactly, including the defaulted `get`. That default is
+## load-bearing twice over: a roster row written by a harness that predates this
+## (`tools/match_rules.gd` and `tools/ui_range.gd` both build rows by hand) has
+## no `weapon` key at all and must read as a spear, and so must a row that
+## somehow arrived carrying nonsense — `Loadout.sanitize` is the same answer for
+## both, so there is one rule rather than two.
+func player_weapon(peer_id: int) -> int:
+	var info: Dictionary = players.get(peer_id, {})
+	return Loadout.sanitize(info.get("weapon", Loadout.DEFAULT))
+
+
 func is_ready(peer_id: int) -> bool:
 	var info: Dictionary = players.get(peer_id, {})
 	return info.get("ready", false)
@@ -262,8 +284,10 @@ func can_start_match() -> bool:
 	return true
 
 
-func _make_player(display_name: String, team: int) -> Dictionary:
-	return {"name": display_name, "team": team, "ready": false}
+func _make_player(display_name: String, team: int,
+		weapon: int = Loadout.DEFAULT) -> Dictionary:
+	return {"name": display_name, "team": team, "ready": false,
+		"weapon": Loadout.sanitize(weapon)}
 
 
 ## Put the next joiner on whichever team is smallest, so lobbies self-balance.
@@ -379,7 +403,12 @@ func _announce_departure(peer_id: int) -> void:
 
 func _on_connected_to_server() -> void:
 	_cancel_connect_timer()
-	_request_join.rpc_id(1, Settings.sanitized_player_name())
+	# The weapon rides in with the name rather than following it as a second
+	# request, so a rejoining player is never on the roster as a spear for a
+	# round trip (D-069). Both are *asked for* and neither is believed: the host
+	# uniquifies the one and sanitizes the other.
+	_request_join.rpc_id(1, Settings.sanitized_player_name(),
+		Settings.chosen_weapon())
 
 
 func _on_connection_failed() -> void:
@@ -412,7 +441,7 @@ func _broadcast_roster() -> void:
 
 
 @rpc("any_peer", "call_remote", "reliable")
-func _request_join(desired_name: String) -> void:
+func _request_join(desired_name: String, weapon: int = Loadout.DEFAULT) -> void:
 	if not is_host:
 		return
 	var peer_id := multiplayer.get_remote_sender_id()
@@ -420,7 +449,7 @@ func _request_join(desired_name: String) -> void:
 		_reject.rpc_id(peer_id, Leave.LOBBY_FULL, "This lobby is full.")
 		return
 	var clean := _unique_name(sanitize_name(desired_name), peer_id)
-	players[peer_id] = _make_player(clean, _smallest_team())
+	players[peer_id] = _make_player(clean, _smallest_team(), weapon)
 	_broadcast_roster()
 	roster_changed.emit()
 
@@ -498,6 +527,53 @@ func _request_team(team: int) -> void:
 	if config.random_teams:
 		return
 	players[peer_id]["team"] = clampi(int(team), 0, config.team_count - 1)
+	_broadcast_roster()
+	roster_changed.emit()
+
+
+## Ask the host for a weapon (D-069).
+##
+## `set_team`'s twin down to the line breaks, because it is the same thing: a
+## change to one key of one roster row, requested by its owner and made by the
+## host. It is also saved locally, which `set_team` does not do and
+## `set_name_local` does — a team belongs to the lobby you are in, and a weapon
+## is a preference you bring with you.
+func set_weapon(weapon: int) -> void:
+	Settings.set_value("weapon", Loadout.sanitize(weapon))
+	if not in_session:
+		return
+	if is_host:
+		_request_weapon(weapon)
+	else:
+		_request_weapon.rpc_id(1, weapon)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_weapon(weapon: int) -> void:
+	if not is_host:
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	if peer_id == 0:
+		peer_id = 1
+	if not players.has(peer_id):
+		return
+	# **The lock-in** (D-069). A pick is free to change for as long as people are
+	# still arriving and is fixed the moment the host presses Start, alongside
+	# the map and the teams — so this is refused exactly while `match_running`,
+	# which `_begin_match` sets and `_return_to_lobby` clears. A rematch keeps it
+	# set, which is what makes "a rematch is the same match again" true of the
+	# weapons as well as of the teams (D-048).
+	#
+	# Refused rather than queued. A request that took effect a match later would
+	# be a player who picked a bow, played a spear, and then found a bow in their
+	# hands in a match they never asked for it in.
+	if match_running:
+		return
+	# Nothing else to check. All three weapons are always available to everyone —
+	# there is no host dial gating them and so no failure mode where a player
+	# cannot have one and is not told why — which leaves `sanitize` as the whole
+	# of the validation, and it is the only thing a lying client could reach.
+	players[peer_id]["weapon"] = Loadout.sanitize(weapon)
 	_broadcast_roster()
 	roster_changed.emit()
 

@@ -1335,6 +1335,13 @@ func _process(delta: float) -> void:
 	# brings its bow up out of the carry exactly as the local one does.
 	if _body.held_gear != null:
 		_body.held_gear.set_carry(1.0 - _aim_blend)
+		# And the sword's, from the same line for the same reason (D-069). Its
+		# weight is the spin rather than a blend, because `Swing` is a full-body
+		# state that replaces the pose outright instead of coming up over one
+		# (D-068) — but where it is read from matters as much as what it is: on
+		# every peer's copy of every Gub, so a remote swordsman lifts its blade
+		# out of the carry exactly as the local one does.
+		_body.held_gear.set_sword_carry(0.0 if _body.is_spinning() else 1.0)
 
 	set(P_STANCE, _stance)
 	set(P_AIRBORNE, _airborne)

@@ -393,6 +393,23 @@ var elder_robe: ElderRobe
 ## but its owner (D-050). Switched by whoever decides what is carried.
 var carrier_marker: CarrierMarker
 var team: int = MatchConfig.TEAM_NONE
+## Which weapon this Gub brought to the match, as a `Loadout.Weapon` (D-069).
+##
+## Seeded by whoever builds the Gub — `MatchState._create_gub` off the roster,
+## `GubBackdrop._apply_slot` off the lobby's, a testbed by hand — and read by
+## `GubCombat`, which gates `has_spear`, `has_bow` and `has_sword` on it.
+##
+## **A field on the body rather than a question asked of `Net` each time**, which
+## is the opposite of how `is_elder()` and `is_holding_letter()` are done, and
+## the difference is what the value *is*. Those two are match state that changes
+## under a Gub while it stands there, so a copy of either would be a second
+## opinion about who is dangerous. A weapon is fixed the moment the host presses
+## Start and cannot change for the rest of the match — and the Gubs in the lobby
+## ring have peer ids that are in no roster at all (`GubBackdrop`), so a lookup
+## would have nothing to find for the very Gubs this feature is most visible on.
+## It is therefore `team`'s kind of value and gets `team`'s treatment: set once,
+## beside the plate and the tint, from the row the peer already has.
+var weapon: int = Loadout.DEFAULT
 ## The body's own skinned mesh out of `gub.glb`, found once in `_ready` before
 ## anything else is hung off the skeleton — so never the spear, and never the
 ## robe (D-046). Null only on a rig a re-import has broken.

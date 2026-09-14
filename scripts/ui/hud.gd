@@ -357,12 +357,29 @@ func _refresh_abilities() -> void:
 		# "Bolt" rather than "Lightning": the tile is 62 px wide and the other
 		# three labels are Spear, Shield and Lure. A caption that overhangs its
 		# own square would be the one thing on this bar that does not line up.
-		_spear_slot.set_kind(AbilitySlot.Kind.LIGHTNING, "Bolt")
+		_spear_slot.set_kind(AbilitySlot.Kind.LIGHTNING, "Bolt", "throw_spear")
 		_spear_slot.set_armed(combat.has_lightning(),
 			combat.lightning_cooldown() if spear_timed else 0.0,
 			Net.config.lightning_cooldown)
+	elif combat.carries(Loadout.Weapon.BOW):
+		# And for everybody else the tile is *their* weapon, on the same
+		# sentence again (D-069). Before the lobby pick this branch could not
+		# exist, because every Gub had a spear and the bow and the sword were
+		# extras with no tile of their own. Now two players in three would be
+		# looking at a Spear tile that is dark for the whole match and times a
+		# recharge they are not spending — which is the exact misinformation
+		# D-054 cut the old ring out of this bar to avoid.
+		_spear_slot.set_kind(AbilitySlot.Kind.BOW, "Bow", "draw_bow")
+		_spear_slot.set_armed(combat.has_bow(),
+			combat.bow_cooldown() if spear_timed else 0.0,
+			Net.config.bow_recharge)
+	elif combat.carries(Loadout.Weapon.SWORD):
+		_spear_slot.set_kind(AbilitySlot.Kind.SWORD, "Sword", "swing_sword")
+		_spear_slot.set_armed(combat.has_sword(),
+			combat.sword_cooldown() if spear_timed else 0.0,
+			Net.config.sword_recharge)
 	else:
-		_spear_slot.set_kind(AbilitySlot.Kind.SPEAR, "Spear")
+		_spear_slot.set_kind(AbilitySlot.Kind.SPEAR, "Spear", "throw_spear")
 		_spear_slot.set_armed(combat.has_spear(),
 			combat.spear_cooldown() if spear_timed else 0.0,
 			Net.config.spear_recharge)

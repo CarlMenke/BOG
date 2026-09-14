@@ -610,6 +610,14 @@ func _create_gub(peer_id: int, spawn: Transform3D, life: int) -> void:
 	gub.peer_id = peer_id
 	gub.display_name = Net.player_name(peer_id)
 	gub.team = Net.player_team(peer_id)
+	# Off this peer's own copy of the roster, exactly as the name and the team
+	# above are, which is why the weapon needed no replication of its own
+	# (D-069): the roster is broadcast whole before `_begin_match` and both are
+	# reliable on one channel, so every machine already has the row this reads
+	# by the time it builds anything. What that buys is that the lobby ring and
+	# the match are one code path — `GubBackdrop` seeds the same field from the
+	# same row, and `GubCombat` is the only thing that reads it.
+	gub.weapon = Net.player_weapon(peer_id)
 	# Ownership is set *before* the node enters the tree, which is also what
 	# Godot's own spawner pattern does. Set it afterwards and every child whose
 	# `_ready` branches on `is_local()` runs once believing it belongs to this

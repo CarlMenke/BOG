@@ -204,7 +204,18 @@ var _card: Node3D
 ## for the fifth time the same reason: whatever is in this fist is in it because
 ## `GubCombat._refresh_hand` put it there, and there is nowhere for a second
 ## opinion to live.
+##
+## Carried at rest since D-069 rather than only during a swing, which is why the
+## two fields below exist: the grip the swing is fitted to is not a grip a Gub
+## can walk around in, exactly as the bow's drawing grip was not (D-066).
 var _sword: Node3D
+## The grip `set_sword_grip` was last handed, and how much of `SWORD_CARRY_TILT`
+## is over it. Composed rather than set one after the other — see
+## `_orient_sword`. A sword nobody is swinging is being carried.
+var _sword_model_scale: float = SWORD_SCALE
+var _sword_grip_offset: Vector3 = SWORD_GRIP_OFFSET
+var _sword_grip_rotation: Vector3 = SWORD_GRIP_ROTATION
+var _sword_carry: float = 1.0
 
 
 func attach_to(skeleton: Skeleton3D) -> bool:
@@ -486,6 +497,98 @@ const SWORD_GRIP_OFFSET := Vector3(0.6116, 0.4206, -0.8159)
 const SWORD_GRIP_ROTATION := Vector3(65.102, -180.000, -143.141)
 
 
+## The carried sword's rotation out of the swinging grip, in degrees about the
+## sword's own axes (D-069).
+##
+## **The same lever the bow's `CARRY_TILT` is, for the same reason and measured
+## the same way.** Every number in the block above is a measurement of `Swing`
+## and none of them may move: the scale is what puts the pommel in the left fist
+## and the offset is what puts the fore-grip in the right, and a millimetre of
+## either is a two-handed weapon held in one and a half hands on the one frame
+## everybody is looking at it. But a tilt applied only while the sword is
+## **carried**, and taken off as the swing starts, moves nothing the second fist
+## has to meet — and the sword badly needs one, because 2.1 m of blade rigidly
+## attached to a fist that `Run` swings down to knee height is 2.1 m of blade in
+## the grass.
+##
+## Swept by `tools/preview_sword.tscn -- carry`, which prints the neighbourhood
+## the same way `preview_bow` prints the bow's, so this is a measurement and not
+## a guess. What it buys, over the twelve clips a sword is carried in:
+##
+##   untilted   the point **0.351 m under the floor** through `Run` and
+##              `StrafeRight` — the swinging grip aims a 2.11 m blade down
+##   at -62     every clip 0.353 m clear at worst, `RunBack` the tightest
+##
+## -62 is the middle of a plateau, not a cliff edge: -65 is the peak at 0.35 and
+## anything from -55 to -70 holds above 0.15, so a clip that moves by a few
+## degrees of wrist does not put the blade back in the grass. The second axis is
+## zero because it is: the sweep peaks at 0 and every step away from it costs.
+const SWORD_CARRY_TILT := Vector2(-62.0, 0.0)
+
+## Where the sword sits in the fist, `tilt` degrees out of the swinging grip.
+##
+## **A whole transform and not just a basis, which is the one place this departs
+## from `bow_basis` and the one place it had to.** A bow's model origin is its
+## middle and it hangs about a palm's width from the grip, so rotating it about
+## its own origin is near enough rotating it about the hand. A great sword's
+## model origin is its **point**, a metre and a half from the fist: rotate that
+## about the origin and the pommel swings round a tip that never moves, which
+## moves the hand rather than the sword. The first sweep of this found the tilt
+## did nothing at all, because the lowest thing on the prop *is* that origin.
+##
+## So the carry turns the sword about the point that must not move — the
+## fore-grip, which by the derivation in `SWORD_GRIP_OFFSET` is the palm — and
+## the offset comes back changed along with the basis.
+##
+## The two axes are the two perpendicular to the blade. `Vector3.UP` is the
+## sword's own length here (the model runs +Y from point to pommel), so a
+## rotation about it would spin the edge without moving either end; `RIGHT` and
+## `BACK` are the ones that tip a blade up out of the grass.
+##
+## Composed rather than added, for `bow_basis`'s reason: two Euler triples do not
+## add, and the carry has to mean the same rotation whatever the grip is.
+static func sword_transform(tilt: Vector2, model_scale: float = SWORD_SCALE,
+		offset: Vector3 = SWORD_GRIP_OFFSET,
+		grip_rotation: Vector3 = SWORD_GRIP_ROTATION) -> Transform3D:
+	var grip := Basis.from_euler(grip_rotation * (PI / 180.0))
+	if tilt.length_squared() < 0.0001:
+		return Transform3D(grip.scaled(Vector3.ONE * model_scale), offset)
+	var turned := grip * Basis(Vector3.RIGHT, deg_to_rad(tilt.x)) \
+		* Basis(Vector3.BACK, deg_to_rad(tilt.y))
+	# The fore-grip, in the hand's frame, before and after. It is the palm, so
+	# it is the one point on this prop that a carry pose may not move.
+	var hold := Vector3(0.0, SWORD_FORE_HAND, 0.0) * model_scale
+	var pivot := offset + grip * hold
+	return Transform3D(turned.scaled(Vector3.ONE * model_scale),
+		pivot - turned * hold)
+
+
+## How much of `SWORD_CARRY_TILT` the sword is wearing: 1 while it is only being
+## carried, 0 through a swing.
+##
+## Binary where the bow's is continuous, and that is the clip's doing rather than
+## a shortcut. A draw comes up over `DRAW_BLEND_SPEED` and the bow has to travel
+## with the arm, so its carry is the arm's own blend weight. `Swing` does not
+## blend in — it is a full-body state that replaces the pose outright (D-068) —
+## so there is no interval over which a partial tilt would be the truth.
+##
+## Idempotent and cheap for the bow's reason: called every frame on every Gub in
+## the match, and an unchanged value writes nothing.
+func set_sword_carry(amount: float) -> void:
+	var want := clampf(amount, 0.0, 1.0)
+	if _sword == null or is_equal_approx(want, _sword_carry):
+		return
+	_sword_carry = want
+	_orient_sword()
+
+
+func _orient_sword() -> void:
+	if _sword == null:
+		return
+	_sword.transform = sword_transform(SWORD_CARRY_TILT * _sword_carry,
+		_sword_model_scale, _sword_grip_offset, _sword_grip_rotation)
+
+
 ## Put a great sword in the right fist, or take it away. A visibility toggle for
 ## the spear's reason: a Gub swings several times a life and rebuilding a prop
 ## for each of them buys nothing.
@@ -539,9 +642,10 @@ func set_sword_grip(model_scale: float, offset: Vector3,
 		rotation_degrees: Vector3) -> void:
 	if _sword == null:
 		return
-	_sword.scale = Vector3.ONE * model_scale
-	_sword.position = offset
-	_sword.rotation_degrees = rotation_degrees
+	_sword_model_scale = model_scale
+	_sword_grip_offset = offset
+	_sword_grip_rotation = rotation_degrees
+	_orient_sword()
 
 
 # --------------------------------------------------------------- the bow ---

@@ -13,7 +13,8 @@ extends Node
 ##         res://tools/ui_range.tscn out.png 40 <mode>
 ##
 ## Modes: menu, menu_join, menu_notice, settings, settings_network,
-##        lobby, lobby_full, lobby_teams, lobby_client, lobby_map, lobby_capture.
+##        lobby, lobby_full, lobby_teams, lobby_client, lobby_map, lobby_capture,
+##        lobby_weapons.
 
 const MENU_SCENE := preload("res://scenes/ui/main_menu.tscn")
 const LOBBY_SCENE := preload("res://scenes/ui/lobby.tscn")
@@ -36,6 +37,13 @@ const FAKE_CHAT: Array[Array] = [
 	[0, "reroll the seed, that island had one bridge"],
 ]
 
+## What each stand-in brings (D-069). Cycled rather than all-spear so that every
+## lobby shot is also a shot of the ring carrying three different things, which
+## is the half of this feature a list of names cannot show.
+const FAKE_WEAPONS := [Loadout.Weapon.BOW, Loadout.Weapon.SWORD,
+	Loadout.Weapon.SPEAR, Loadout.Weapon.BOW, Loadout.Weapon.SWORD,
+	Loadout.Weapon.SPEAR, Loadout.Weapon.BOW]
+
 var _mode: String = "lobby"
 
 
@@ -55,6 +63,10 @@ func _ready() -> void:
 			_open_lobby(4, false, false)
 		"lobby_map", "lobby_capture":
 			_open_lobby(3, _mode == "lobby_capture", true)
+		"lobby_weapons":
+			# Three Gubs, three weapons, and the panels folded away so the ring
+			# and the strip are what the shot is of (D-069).
+			_open_lobby(2, false, true)
 		_:
 			_open_lobby(3, false, true)
 
@@ -126,6 +138,7 @@ func _open_lobby(extra: int, teams: bool, as_host: bool) -> void:
 			# One straggler who has not readied up, so the start button has a
 			# reason to be disabled and the gate hint has something to say.
 			"ready": i != 1,
+			"weapon": FAKE_WEAPONS[i % FAKE_WEAPONS.size()],
 		}
 	if not as_host:
 		# Everything downstream branches on this, so flipping it is the whole
@@ -142,6 +155,35 @@ func _open_lobby(extra: int, teams: bool, as_host: bool) -> void:
 		await _show_map_row(lobby)
 	elif _mode == "lobby_capture":
 		await _show_capture_rules(lobby)
+	elif _mode == "lobby_weapons":
+		await _collapse_to_weapons(lobby)
+
+
+## The collapsed lobby: panels folded away, the ring in the open, the strip under
+## it (D-069).
+##
+## The real button, pressed, rather than reaching in and setting `_picking`. The
+## collapse is one boolean and one refresh, so a tool that set the boolean would
+## prove nothing the boolean could not prove about itself — pressing the button
+## is what proves the button is wired to the boolean.
+func _collapse_to_weapons(lobby: Node) -> void:
+	var button := lobby.get_node_or_null("%CollapseButton") as Button
+	if button == null:
+		push_warning("ui_range: the lobby has no collapse button")
+		return
+	button.pressed.emit()
+	# The local player takes the third weapon, so the shot carries all three at
+	# once: the two stand-ins have a bow and a sword between them.
+	#
+	# Written straight into the roster row rather than through `Net.set_weapon`,
+	# for the reason `_show_public_address` gives about the address field: that
+	# call writes the pick through to `Settings`, every checkout shares one
+	# `user://settings.cfg`, and a screenshot tool has no business changing the
+	# weapon the next real game starts with.
+	Net.players[1]["weapon"] = Loadout.Weapon.SPEAR
+	Net.roster_changed.emit()
+	await get_tree().process_frame
+	await get_tree().process_frame
 
 
 ## Capture G·U·B picked, and the panel scrolled to its own rules section

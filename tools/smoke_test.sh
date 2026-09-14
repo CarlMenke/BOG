@@ -456,6 +456,16 @@ check "the great sword fits both fists" "fit PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" --script tools/snapshot.gd -- \
     res://tools/preview_sword.tscn "$GODOT_LOG_DIR/sword_measure.png" 4 measure
 also "the great sword fits both fists" "blade PASS"
+# And the sword a Gub walks around with, which is a different prop problem from
+# the one above and the same one the carried bow had (D-066, D-069). Since the
+# weapon is a choice a swordsman carries its sword between swings, and the grip
+# the swing is fitted to points 2.11 m of blade at the floor: untilted, the point
+# is 0.351 m *under* the grass through `Run`. `SWORD_CARRY_TILT` is the tilt that
+# fixes it, applied only while carrying so nothing the second fist has to meet
+# moves, and this is that number holding across all twelve clips a sword is
+# carried in. The same run prints the neighbourhood, so a tilt going stale is
+# caught by the run that would have been used to fix it. Headless.
+check "the carried great sword clears the ground" "carry PASS"     "$GODOT" --headless --path "$GODOT_ROOT" --script tools/snapshot.gd --     res://tools/preview_sword.tscn "$GODOT_LOG_DIR/sword_carry.png" 4 carry
 # A shaft standing in a Gub who is still alive, and then in the corpse that Gub
 # becomes (D-062). This is the half of the damage model that is not a number:
 # until now a projectile that hit somebody who lived had nowhere to go, because
@@ -541,6 +551,25 @@ also "team colours on the body" "team_tint: PASS"
 # which also wants the chip hidden and every plate at its old size. Headless,
 # both quit on tick 30. The picture, from the Gub's own camera:
 #     ... --resolution 1600x900 --script tools/snapshot.gd -- #         res://tools/team_plates.tscn out/team_plates.png 40
+# The lobby weapon pick, which is a roster key and therefore a *wire* feature
+# before it is a UI one (D-069). `match_rules` already covers the half that is a
+# Gub — the gate, the hand and the three overrides that take a weapon away — so
+# this covers the half that is a row: the default for a row that never heard of
+# weapons, the request going through the host and coming back on the rebroadcast,
+# a bogus ordinal refused into a spear, the lock the moment Start is pressed, a
+# rematch keeping the pick, and the real lobby scene collapsing to the strip and
+# back. Its `ring` stage is the one that matters most and is the cheapest to
+# lose: three **remote** Gubs in the backdrop, each holding only what its row
+# says, which is the lobby half of "show only the weapon you selected".
+#
+# Headless; it instances the real lobby and the real glade and quits itself in
+# about two seconds.
+check "a weapon picked in the lobby" "weapon_select: PASS"     "$GODOT" --headless --path "$GODOT_ROOT" tools/weapon_select.tscn
+also "a weapon picked in the lobby" "weapon_select: roster PASS"
+also "a weapon picked in the lobby" "weapon_select: lock PASS"
+also "a weapon picked in the lobby" "weapon_select: lobby PASS"
+also "a weapon picked in the lobby" "weapon_select: ring PASS"
+
 check "teammate names through walls" "team_plates: ally PASS"     "$GODOT" --headless --path "$GODOT_ROOT" tools/team_plates.tscn
 also "teammate names through walls" "team_plates: enemy PASS"
 also "teammate names through walls" "team_plates: hud PASS"
@@ -736,6 +765,17 @@ check "letter cards are meshes" "cards PASS" \
 # around 240. The picture worth looking at is the same mode at 130:
 #     ... --resolution 1600x900 --script tools/snapshot.gd -- \
 #         res://tools/hud_range.tscn out/reload_timer.png 130 reload_timer
+# The first square on the ability bar is whichever weapon this Gub actually
+# brought (D-069). It has swapped to a bolt for an Elder since D-038; it now
+# swaps for a lobby pick too, because two players in three would otherwise spend
+# a match watching a Spear tile that is dark for all of it and times a recharge
+# they are not spending — the exact misinformation D-054 cut the old ring out of
+# this bar to avoid. Three loadouts through one HUD, with the glyph, the caption
+# and the **key cap** required to follow: a bolt is fired by the spear's own
+# button and a bow is not, so the cap is the half that is easy to get wrong and
+# invisible in a screenshot of one loadout. The Elder is checked last, because it
+# is the one kind that must keep the spear's button.
+check "the weapon tile follows the pick" "weapon_tiles PASS"     "$GODOT" --path "$GODOT_ROOT" --resolution 640x360 --script tools/snapshot.gd --     res://tools/hud_range.tscn "$GODOT_LOG_DIR/weapon_tiles.png" 40 weapon_tiles
 check "spear reload timer on the tile" "reload_timer PASS" \
     "$GODOT" --path "$GODOT_ROOT" --resolution 640x360 --script tools/snapshot.gd -- \
     res://tools/hud_range.tscn "$GODOT_LOG_DIR/reload_timer.png" 270 reload_timer

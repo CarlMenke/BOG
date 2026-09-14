@@ -1303,9 +1303,25 @@ func _ready() -> void:
 ## behind it is real.
 func _start_session() -> void:
 	Net.start_offline()
+	# Everybody on the range brings the mode's weapon, including the player's own
+	# row, which `start_offline` has already written from `Settings` (D-069).
+	#
+	# Before the lobby pick this line did not need to exist: every Gub had all
+	# three weapons and a mode simply used the one it was about. Now `has_bow()`
+	# and `has_sword()` are false for a spear Gub, so a range that did not say
+	# which weapon it was testing would be a range where the bow and the sword
+	# modes silently do nothing at all.
+	#
+	# The dummies get it too rather than only the player. It costs nothing —
+	# they never attack — and it means a mode whose *subject* is a dummy gets
+	# the right one without a second rule: `draw` reads a bow off a **remote**
+	# Gub, which is the whole point of that mode.
+	var weapon := _mode_weapon()
+	Net.players[1]["weapon"] = weapon
 	for i in _dummy_count():
 		Net.players[DUMMY_BASE + i] = {
 			"name": "Dummy %d" % (i + 1), "team": 0, "ready": true,
+			"weapon": weapon,
 		}
 	Net.roster_changed.emit()
 
@@ -1406,6 +1422,33 @@ func _dummy_count() -> int:
 			return 1
 		_:
 			return 2
+
+
+## Which weapon this mode is about (D-069).
+##
+## The spear unless the mode says otherwise, which is the same default the lobby
+## has and for the same reason: every mode that predates the weapon select was
+## written against a Gub carrying one, and none of them should have to say so.
+##
+## **Never `Settings.chosen_weapon()`, tempting as it is for `free`.** `free` is
+## also what this scene falls back to for any argument it does not recognise,
+## which is how `tools/hud_range.gd` runs it — so a range that read the saved
+## preference would make two gate checks depend on whatever weapon the person at
+## this keyboard last picked in a lobby. A harness that behaves differently on
+## two machines is not a harness.
+func _mode_weapon() -> int:
+	match _mode:
+		# Everything that draws a string. `spine` is the one that does not look
+		# like a bow mode and is: D-066 measured the aiming spine by where the
+		# *bow* ends up pointing, because a bow is the longest, straightest thing
+		# a Gub holds and is therefore the honest readout of where a torso is
+		# aimed. Starve it of one and it has nothing to measure.
+		"bow", "draw", "spine", "aiming":
+			return Loadout.Weapon.BOW
+		"sword", "chain":
+			return Loadout.Weapon.SWORD
+		_:
+			return Loadout.Weapon.SPEAR
 
 
 func _spawn_points() -> Array[Transform3D]:

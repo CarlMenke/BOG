@@ -59,6 +59,7 @@ func _ready() -> void:
 	_run_void_credit()
 	_run_spawn_protection()
 	_run_random_teams()
+	_run_loadout()
 	await _run_capture()
 	_run_capture_layout()
 	_run_capture_lobby()
@@ -89,13 +90,19 @@ func _ready() -> void:
 
 ## Put `Net` and `MatchState` into a running match with `count` fake players.
 ## Teams are assigned round-robin, so team scenarios get two of each.
-func _begin(count: int, configure: Callable, root: Node = null) -> void:
+func _begin(count: int, configure: Callable, root: Node = null,
+		weapons: Array = []) -> void:
 	MatchState.reset()
 	Net.start_offline()
 	Net.players.clear()
 	for i in count:
 		Net.players[PEERS[i]] = {
 			"name": "P%d" % i, "team": i % 2, "ready": true,
+			# Spears all round unless a scenario says otherwise, which is what
+			# every scenario above this one was written against and what a lobby
+			# that never opens the picker plays (D-069). `_run_loadout` is the
+			# one that deals three different weapons.
+			"weapon": weapons[i] if i < weapons.size() else Loadout.DEFAULT,
 		}
 	Net.roster_changed.emit()
 	# Every scenario starts from a clean, fast config. Spawn protection in
@@ -906,6 +913,149 @@ func _run_elder() -> void:
 	_check("and leaves no robe behind", MatchState._pickups.size(), pickups)
 
 	_sweep_effects()
+
+
+## The lobby pick, where it actually lands: on a Gub, in a match (D-069).
+##
+## `tools/weapon_select.tscn` has the other half — the roster row, the request
+## path, the lock and the rematch. This is the half that only exists once a body
+## has been built from that row: `MatchState._create_gub` seeds `Gub.weapon` off
+## the roster, `GubCombat` gates its three `has_*` on it, and the three things
+## that could already take a weapon away have to go on doing exactly that.
+##
+## Why it is here and not there: these are real Gubs with real combat nodes and
+## real hands, spawned by the host through `register_arena`, and this file is
+## already the one place that stands those up (see `_combat` and `_hand`).
+func _run_loadout() -> void:
+	_scenario("three Gubs, three weapons")
+	_begin(3, func(c: MatchConfig) -> void:
+		c.mode = MatchConfig.Mode.FREE_FOR_ALL
+		c.win_condition = MatchConfig.WinCondition.KILL_LIMIT
+		c.kill_limit = 50
+		c.time_limit = 0
+		c.letter_hold_time = 10.0
+		# Deliberately unlike each other and unlike the defaults, so that a gate
+		# reading the wrong clock is visible rather than accidentally right.
+		c.spear_recharge = 3.0
+		c.bow_recharge = 1.0
+		c.sword_recharge = 6.0,
+		null, [Loadout.Weapon.SPEAR, Loadout.Weapon.BOW, Loadout.Weapon.SWORD])
+
+	var want := {1: Loadout.Weapon.SPEAR, 901: Loadout.Weapon.BOW,
+		902: Loadout.Weapon.SWORD}
+	for peer_id: int in want:
+		var gub: Gub = MatchState.gubs.get(peer_id)
+		_check("%d got a Gub" % peer_id, is_instance_valid(gub), true)
+		if not is_instance_valid(gub):
+			continue
+		# Seeded from this peer's own copy of the roster by `_create_gub`, beside
+		# the name and the team, which is why no replication was needed for it.
+		_check("%d's Gub carries what the roster says" % peer_id,
+			gub.weapon, want[peer_id])
+
+		var combat := _combat(peer_id)
+		var hand := _hand(peer_id)
+		_check("%d has a combat node" % peer_id, combat != null, true)
+		if combat == null or hand == null:
+			continue
+		# **The gate, and there is still only one of it.** Each of the three is
+		# the same sentence with a different weapon in it, and the loadout is one
+		# more clause on all three rather than a fourth thing to ask.
+		_check("%d: a spear?" % peer_id, combat.has_spear(),
+			want[peer_id] == Loadout.Weapon.SPEAR)
+		_check("%d: a bow?" % peer_id, combat.has_bow(),
+			want[peer_id] == Loadout.Weapon.BOW)
+		_check("%d: a great sword?" % peer_id, combat.has_sword(),
+			want[peer_id] == Loadout.Weapon.SWORD)
+		# And the hand, which is drawn from the gate and may not disagree with
+		# it. This is the user's *"only show the weapon you have selected"*.
+		_check("%d: a shaft in the fist?" % peer_id, hand.is_carried(),
+			want[peer_id] == Loadout.Weapon.SPEAR)
+		_check("%d: a bow in the other one?" % peer_id, hand.has_bow(),
+			want[peer_id] == Loadout.Weapon.BOW)
+		_check("%d: a hilt in both?" % peer_id, hand.has_sword(),
+			want[peer_id] == Loadout.Weapon.SWORD)
+		_check("%d: no arrow until it draws" % peer_id, hand.has_arrow(), false)
+		_check("%d: no letter" % peer_id, hand.has_letter(), false)
+		_check("%d: no crackle" % peer_id, hand.is_charged(), false)
+
+	# **Three cooldowns, and a Gub only spends one of them.** The other two go on
+	# ticking and must not be able to reach into a hand they have nothing to do
+	# with — which is the thing that would quietly come apart if the gate had
+	# been written as a `match` on the weapon somewhere else.
+	var archer := _combat(901)
+	if archer != null:
+		archer._spear_ready_at = archer._now() + 1000.0
+		archer._sword_ready_at = archer._now() + 1000.0
+		archer._refresh_hand()
+		_check("a spear recharge the archer is not using changes nothing",
+			archer.has_bow(), true)
+		_check("and leaves the bow in the hand", _hand(901).has_bow(), true)
+		_check("while the spear it does not have stays absent",
+			archer.has_spear(), false)
+
+	# The three overrides, unchanged and re-verified rather than reasoned about.
+	#
+	# A letter hold disarms whatever you picked (D-035). It was the spear's rule
+	# and then the bow's; it is now one rule over three weapons, and it is the
+	# same clause in the same three functions.
+	var card := _drop_card(MatchState.LETTER_G)
+	MatchState.claim_pickup(card, 902)
+	var swordsman := _combat(902)
+	_check("a hold disarms the swordsman", swordsman.has_sword(), false)
+	_check("and takes the sword out of the fists", _hand(902).has_sword(), false)
+	_check("putting the card there instead", _hand(902).has_letter(), true)
+	_expire_hold(902)
+	_check("and the sword comes back when the hold ends",
+		swordsman.has_sword(), true)
+	_check("into the fists", _hand(902).has_sword(), true)
+
+	# The Elder replaces whatever you picked (D-038), which before this step was
+	# a sentence about the spear and is now a sentence about all three.
+	MatchState.claim_pickup(_drop_robe(), 901)
+	_check("the archer is the Elder", MatchState.is_elder(901), true)
+	_check("an Elder has no bow", archer.has_bow(), false)
+	_check("nor a spear it never had", archer.has_spear(), false)
+	_check("nor a sword it never had", archer.has_sword(), false)
+	_check("the bow leaves the hand", _hand(901).has_bow(), false)
+	_check("and lightning is there instead", archer.has_lightning(), true)
+	_check("with the fist crackling to say so", _hand(901).is_charged(), true)
+	_expire_elder(901)
+	_check("and the bow comes back when the robe burns out",
+		archer.has_bow(), true)
+	_check("into the hand it left", _hand(901).has_bow(), true)
+
+	# A drink empties both fists (D-067). The most obviously true of the three
+	# for a two-handed weapon, and the one that had to be re-checked against a
+	# sword that is now *carried* rather than appearing for the length of a swing.
+	swordsman.grant_potion(1)
+	swordsman._server_potions = 1
+	swordsman._host_drink_potion()
+	_check("the swordsman is drinking", swordsman.is_channelling(), true)
+	_check("and has no sword while it does", swordsman.has_sword(), false)
+	_check("with nothing in either fist", _hand(902).has_sword(), false)
+	swordsman._do_stop_drink()
+	swordsman._refresh_hand()
+	_check("the sword comes back when the bottle goes down",
+		swordsman.has_sword(), true)
+
+	# And the default: a row that never touched the picker plays the match it
+	# always played. This is the promise the whole step rests on.
+	_begin(2, func(c: MatchConfig) -> void:
+		c.mode = MatchConfig.Mode.FREE_FOR_ALL
+		c.win_condition = MatchConfig.WinCondition.KILL_LIMIT
+		c.kill_limit = 50
+		c.time_limit = 0)
+	Net.players[1].erase("weapon")
+	var plain := _combat(1)
+	if plain != null:
+		MatchState.gubs[1].weapon = Net.player_weapon(1)
+		plain._refresh_hand()
+		_check("a row with no weapon on it is a spear Gub",
+			plain.has_spear(), true)
+		_check("with a shaft in its fist", _hand(1).is_carried(), true)
+		_check("and neither of the other two", plain.has_bow(), false)
+		_check("nor the third", plain.has_sword(), false)
 
 
 func _run_time_limit() -> void:

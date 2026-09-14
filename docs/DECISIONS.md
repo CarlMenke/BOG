@@ -7411,4 +7411,354 @@ search rather than a re-download, and it would be a different weapon: carrying i
 means choosing between it and the spear, which means a weapon select, which is a
 mechanic this game does not have.
 
+*(**Overtaken by D-069.** The game has a weapon select now, so a Gub that picked
+the great sword *has* permanently given up its spear and the sword is carried
+between swings. What that took was not a sheathe clip but a **carry tilt** on the
+swinging grip — `HeldGear.SWORD_CARRY_TILT`, −62°, swept by
+`tools/preview_sword.tscn -- carry` and in the gate — which holds 2.11 m of blade
+0.353 m clear of the grass in all twelve clips a Gub walks around in, against
+0.351 m *under* it untilted. A real shoulder-carry pose is still the better
+answer and is still a Mixamo trip.)*
+
 And the balance note above.
+
+## D-069 — You pick one weapon in the lobby, and it is one more key in the roster row
+The user: *"you should be able to select your weapon for the match in the lobby.
+Also, the main lobby menu should be collapsable and then menu select should be
+different then the weapon select. Your character should only show the weapon you
+have selected in both the game and the lobby."*
+
+D-068's own closing note asked for this in as many words — carrying a great
+sword "means choosing between it and the spear, which means a weapon select,
+which is a mechanic this game does not have". Now it does — and the section
+below on the great sword is that sentence of D-068 being cashed in.
+
+Four things were decided before any of it was written, and none of them is
+re-opened here: the pick is **locked when the host presses Start**, alongside the
+map and the teams; **all three weapons are always available to everyone**, with
+no host dial and therefore no failure mode where a player cannot have one and is
+not told why; **the panel stack collapses** to reveal the ring with a strip under
+it, because reading a lobby and choosing a weapon are two different things to be
+looking at; and the default is the **spear**, so a player who never opens the
+picker plays exactly the match they played yesterday.
+
+### It is a roster key, and that is the whole of the networking
+`Net.players` is `peer_id -> {name, team, ready}`, host-authoritative and
+rebroadcast whole rather than diffed (D-004). `weapon` is a fourth key in that
+dictionary and it has `team`'s lifecycle exactly: `_make_player` seeds it,
+`set_weapon` → `_request_weapon` → `_broadcast_roster` is the same request →
+host → rebroadcast path `set_team` takes, every peer reads it off its own copy,
+and it is forgotten when the peer goes. There is no second channel, no
+`MultiplayerSynchronizer` field and no new RPC shape — `_request_weapon` is
+`_request_team` with a different clamp on it.
+
+That one choice is why *"in the game and the lobby"* is one feature and not two.
+`MatchState._create_gub` already reads `Net.player_name` and `Net.player_team`
+off the local roster to build a body; it now reads `Net.player_weapon` the same
+way, on the line below, and no packet was added to make that work. The roster
+goes out before `_begin_match` and both are reliable on one channel, so every
+machine has the row before it builds anything (D-046, D-048 rely on the same
+ordering).
+
+**A client that lies gets nothing**, and there is almost nothing to lie about:
+with no restriction to enforce, the only thing out there is an ordinal that is
+not one of the three. `Loadout.sanitize` is the whole validation, and it is the
+same function that reads a roster row, a `settings.cfg` and a value off the wire
+— one rule rather than three.
+
+**The lock is `Net.match_running`.** It is set by `_begin_match` on every peer
+and cleared by `_return_to_lobby`, which makes "locked from Start until everybody
+is home" a property of a flag that already existed rather than a new piece of
+state. A request that arrives while it is set is **refused, not queued**: a pick
+that took effect a match later would be a player who chose a bow, played a spear,
+and then found a bow in their hands in a match they never asked for it in.
+
+**A rematch keeps the pick, for D-048's reason and by D-048's mechanism.**
+`request_rematch` deals nothing, broadcasts nothing and changes no row, so the
+weapons stand exactly as the teams do — until everyone is back in the lobby. And
+D-044's path is covered by the same fact: a client sitting in the lobby when the
+rematch broadcast lands walks to the arena carrying the row it already had, since
+nothing about the pick lives in the scene it is leaving.
+
+**A reconnect is a fresh row, and the weapon comes back anyway.** Leaving erases
+the row — the name, the team and the weapon together — so there is nothing on the
+host to restore. What comes back is the *preference*: `set_weapon` writes
+`Settings["weapon"]` the way `set_name_local` writes `player_name`, and
+`_request_join` carries it in with the name so that a rejoining player is never
+on the roster as a spear for a round trip. It is asked for, not believed: the
+host uniquifies the name and sanitizes the weapon, as it does for any request.
+
+### `has_spear()` grew a fourth clause, not a fourth gate
+`gub_combat.gd` calls `has_spear()` **the one gate** — the throw asks it, the
+host asks it before honouring a request, the aim marker asks it, and the hand is
+drawn from it — and the file's headers have insisted since D-035 that anything
+wanting to take a weapon away *adds a clause here and gets all four for free*.
+Three things already did: the Elder replaces your weapon (D-038), a letter hold
+disarms it (D-035), and a drink needs the fist (D-067).
+
+A lobby pick is the fourth, and it is written as the fourth:
+
+```gdscript
+func has_spear() -> bool:
+    return carries(Loadout.Weapon.SPEAR) and not is_elder() \
+        and spear_cooldown() <= 0.0 \
+        and not is_holding_letter() and not is_channelling()
+```
+
+with the identical line on `has_bow()` and `has_sword()`. `carries` reads
+`Gub.weapon` and nothing else. **Nothing anywhere branches on which weapon a Gub
+has** — there is no `match` on a loadout in the input handling, the animator, the
+HUD or the hand; the three `try_` functions still ask their own gate and get
+"no" for two Gubs in three. That is what keeps it one gate: the pick is a reason
+the answer is no, in the place all the other reasons live.
+
+`Gub.weapon` is a field on the body rather than a question asked of `Net` each
+time, which is the *opposite* of how `is_elder()` and `is_holding_letter()` are
+done, and the difference is what the value is. Those two are match state that
+changes under a Gub while it stands there, so a copy would be a second opinion
+about who is dangerous. A weapon is fixed before the body exists and cannot
+change while it lives — and the Gubs in the lobby ring have peer ids that are in
+no roster at all, so a lookup would find nothing for the very Gubs this feature
+is most visible on. It is `team`'s kind of value and it gets `team`'s treatment:
+set once, beside the plate and the tint, from the row the peer already has.
+
+**The three cooldowns needed nothing.** `spear_recharge`, `bow_recharge` and
+`sword_recharge` were already independent clocks on independent fields; a Gub now
+spends one of them and the other two tick away behind a `carries` that is false.
+`match_rules` pins that down by pushing a bow Gub's spear and sword deadlines a
+thousand seconds out and requiring its bow to be unmoved.
+
+**The three overrides were re-verified, not reasoned about.** An Elder has
+lightning instead of whatever you picked, a letter hold disarms whatever you
+picked, and a drink empties both fists whatever is in them — each asserted
+against the weapon that is actually there rather than against the spear.
+
+### The great sword is carried now, and D-068 said why it could not be
+D-068 kept the sword out of the hands except during a swing, and gave a reason
+rather than a preference: *"there is no sheathe clip anywhere in the pack and
+there is no weapon-select in this game, so a carried great sword would be a Gub
+that had permanently given up its spear."* A Gub that picks the sword **has**
+permanently given up its spear. The premise is gone, so the exception is.
+
+It is not tidiness. `HeldGear`'s header says what empty hands mean — *"seeing an
+empty pair of them across the clearing is how you know it is safe to approach"* —
+and a swordsman standing there with nothing in its fists is a melee one-shot
+wearing the one tell this game reserves for harmless. It is also the user's
+*"only show the weapon you have selected"* for one pick in three.
+
+What it cost is a **carry grip**, and it is the bow's problem again (D-066) with
+a longer lever on it. Every number in the sword block is a measurement of `Swing`
+and none may move — the scale is what puts the pommel in the left fist — so the
+lever is a rotation applied *only while carrying* and taken off as the spin
+starts, which moves nothing the second fist has to meet.
+`tools/preview_sword.tscn -- carry` sweeps it and is in the gate:
+
+| | worst end above the floor, over twelve carried clips |
+|---|---|
+| swinging grip, untilted | **−0.351 m** — the point through the grass in `Run` |
+| `SWORD_CARRY_TILT`, −62° | **+0.353 m**, `RunBack` the tightest |
+
+−62 is the middle of a plateau rather than a peak: −55 to −70 all clear the
+0.15 m floor the spear and the carried bow are held to, so a clip that moves by a
+few degrees of wrist does not put the blade back in the grass. The second axis is
+zero because the sweep says zero.
+
+**A pivot bug worth recording**, because the first version of this reported that
+no tilt helped at all. `bow_basis` rotates the prop about its own model origin,
+which for a bow is its middle and near enough its grip. The sword's model origin
+is its **point**, a metre and a half from the fist, so rotating about it swings
+the pommel round a tip that never moves — and the tip is the lowest thing on the
+prop. `sword_transform` therefore returns a whole transform and turns the sword
+about the **fore-grip**, which is the palm and is the one point a carry pose may
+not move.
+
+### The lobby: two surfaces, one refresh
+`lobby.gd`'s `_refresh()` is one function for the whole screen on purpose —
+*"the alternative is a dozen partial refreshes and one of them is always missing
+a case"* — so the collapse is a **view state `_refresh` reads**, not a second
+update path. `_picking` is one boolean, `_refresh_surface` is one more call in
+the list `_refresh` already makes, and nothing else in the file touches
+`visible` on either surface. A roster change arriving while the picker is open
+redraws the picker and the surface together and cannot leave one behind.
+
+The strip is **three plain `Button`s in an `HBoxContainer`**, which is the whole
+of the input work. This lobby has never handled a key event of its own: every
+control on it is a focusable `Control` and Godot's `ui_left`/`ui_right`/
+`ui_accept` walk them, which is why the team picker already works on a keyboard
+without a line of code about keyboards. Inventing a strip out of `TextureRect`s
+and an `_unhandled_input` would have been three new ways to be inconsistent with
+the rest of the screen.
+
+Two ways in, and both are the same request: a click picks, and so does moving
+onto a button, which is the decision's own *"the Gub swaps weapons live as you
+move through it"*. A strip you had to arrow onto and then confirm would make the
+ring's Gub a preview of something that had not happened, and the point of the
+ring is that it shows what the roster says. `_writing_picker` is what keeps the
+rebuild from reading its own `focus_entered` back as a pick, the same guard
+`MatchSettingsPanel._applying` is.
+
+The ring updates through `GubBackdrop.set_roster`, the same call that repaints a
+team switch (D-046) — and those are **remote** Gubs by construction (that file's
+header explains why), so the lobby is one more place the remote-Gub hand path is
+looked at before eight people rely on it. `_equip` sets `Gub.weapon` and then
+asks `GubCombat.refresh_hand()`; it does not touch `HeldGear`, because a second
+opinion about what is in a fist is the one thing that file refuses to have.
+
+**The caret has to be handed back, and that is the one thing "rebuild it all"
+cost.** Every roster change frees and rebuilds those three buttons — including
+the change this player's *own* pick causes — so on the first version, choosing a
+weapon with the arrow keys was the last thing the arrow keys ever did: the button
+holding focus was freed and focus went nowhere. `_rebuild_weapon_picker` now
+notes whether the strip had the caret and puts it back on the current pick, under
+`_writing_picker` so the `grab_focus` does not read back as a pick. It is also
+the one rebuild in this file that **detaches** before it frees: `queue_free`
+alone lands at the end of the frame, and unlike the player list and the team
+picker this strip is read back immediately.
+
+Escape backs out one surface at a time — the picker first, the lobby second.
+One key that always left the session would make the collapse a place you can
+fall out of a lobby from, and the collapsed lobby is where a player is least
+sure which screen they are on.
+
+The player list gained a weapon column too. The ring is the better read and is
+why the feature is shaped this way, but eight Gubs at four metres is not a list
+you can scan, and "who else took the sword" is a question people ask before they
+ready up. So did the settings panel's controls reference: `draw_bow`,
+`swing_sword` and `drink_potion` had never been on it, which was merely
+incomplete when every Gub had every weapon and is two players in three looking up
+somebody else's key once they do not.
+
+### Two things that were a frame late and are not any more
+Both surfaced as failures in the new checks, and both are real.
+
+**The hand at spawn.** `HeldGear` builds its spear visible and `_tick_hand` tidied
+the rest a frame later, which was invisible while every Gub had a spear. Now two
+Gubs in three would spawn holding a shaft for one frame on eight screens.
+`GubCombat` connects to `Gub.respawned` — which `_create_gub` and `_do_respawn`
+both end with, on every peer — so the hand is right on the frame the body
+appears. It cannot be done in `GubCombat._ready`: children are readied before
+their parent, so `held_gear` does not exist yet.
+
+**The hand at a drink.** `_begin_channel` and `_end_channel` now call
+`_refresh_hand` rather than waiting for the poll. D-067 put `not is_channelling()`
+into `has_spear()` *precisely so that the hand obeys a drink*, and a frame of the
+bottle coming up with the weapon still in the fist is the picture that decision
+was written against.
+
+### The first tile on the ability bar is your weapon now
+The bar's first square has swapped to a bolt for an Elder since D-038, on the
+argument that the Elder's weapon *replaces* the spear rather than being a fourth
+thing to learn. A lobby pick is the same sentence one step further: two players
+in three would otherwise spend a whole match looking at a **Spear** tile that is
+dark for all of it and times a `spear_recharge` they are not spending. That is
+precisely the misinformation D-054 cut the old cooldown ring out of this bar to
+avoid, so the branch that already existed gained two more arms rather than the
+bar gaining a fifth slot — which is also D-068's own "if a tile ever arrives it
+should arrive for both", arriving for both.
+
+Two glyphs were drawn beside the other five, in the same vector primitives and
+to the same 62 px square: a bow as a limb bowing left against a straight string,
+deliberately with **no arrow on it** (the tile says whether the weapon is ready,
+and a nocked arrow on a dark tile would be the tile claiming a shot it does not
+have); and a great sword on the diagonal, for the spear's reason that a vertical
+line in a square reads as a divider, heavier than the spear's shaft because broad
+is the one thing a great sword is beside one.
+
+**The key cap moved with it, and that is the part worth the line of code.**
+`AbilitySlot.set_kind` deliberately left the cap alone, because an Elder's bolt
+is fired by the spear's own button. A bow is not — it is `draw_bow` — so the cap
+is now updated when, and only when, the caller passes an action. The Elder's call
+passes none and keeps LMB; a bow's tile says V and a sword's says R, read out of
+the input map so a rebound key moves both. `hud_range -- weapon_tiles` stands the
+same HUD up under all four and checks the glyph, the caption and the cap, with
+the Elder last precisely because it is the one that must *not* move.
+
+### The readiness chime is no longer the spear's alone
+`_tick_hand` sounded `SPEAR_READY` on the frame `has_spear()` turned true. With
+two players in three never carrying a spear, that is a cue quietly deleted for
+most of the lobby, so it now fires on `_weapon_ready()` — `has_spear() or
+has_bow() or has_sword()`, which the loadout makes mutually exclusive. Still one
+chime, still only on the frame the answer changed, still only for the Gub whose
+hand it is.
+
+### Checked
+`tools/weapon_select.tscn`, new and in the gate as five checks, covers the half
+that is a **row**: the default for a row with no `weapon` key at all (which is
+every harness in `tools/` and would be any older peer), a request through the
+host and back on the rebroadcast, four bogus ordinals refused into a spear, the
+lock at Start, three rematches keeping two different picks, the return to the
+lobby unlocking them, the real lobby scene collapsing to the strip and back with
+its buttons picking by click *and* by focus and going dead while a match runs,
+and three **remote** backdrop Gubs each holding only what its row says — then
+swapping, to prove the old weapon leaves the hand as the new one arrives.
+76 assertions.
+
+`tools/match_rules.tscn` gains `_run_loadout`, the half that is a **Gub**: three
+real Gubs spawned by the host with three different weapons, each one's three
+gates and three hand slots checked against what it picked, the cooldown
+independence above, the three overrides, and a roster row with the key deleted
+producing a spear Gub identical to today's. It rolls into the existing "match
+rules" check, so the count does not move for it — 888 assertions now.
+
+`tools/preview_sword.tscn -- carry` is the sixth new check and the table above
+is its output; `tools/hud_range.tscn weapon_tiles` is the seventh.
+`tools/ui_range.tscn lobby_weapons` is the picture: the panels folded away, the
+ring in the open and the strip under it. Every lobby mode now deals its stand-ins
+different weapons, so the ordinary `lobby` shot is also a shot of the ring
+carrying three things at once.
+
+`tools/net_loopback.gd` gains **stage 4 of 12**, and it is the one stage that
+can prove the thing this record is mostly about. Every other harness here drives
+the request in an *offline* session, where `OfflineMultiplayerPeer` swallows
+`rpc_id` silently and the local call does all the work — which is precisely the
+shape of the bug D-024 took two real processes to find. Over the socket: the
+client picks a bow and the host's row moves only after the host says so; the
+client sends an ordinal that is not a weapon and gets a spear; the host picks a
+sword and the client's copy learns it from the rebroadcast; and after **ten
+rematches** both sides still hold what they picked, which is D-048's rule and
+D-044's path at once. `_roster_digest` carries the weapon now, so stage 2's
+byte-for-byte roster comparison covers it for free from here on.
+
+Gate 100 → **107**. `net_test.sh` green, now twelve stages and 200 + 34
+assertions against 186 + 33.
+
+### Rejected
+- **A `MatchConfig` dial to restrict the weapons.** Decided against before the
+  step began, and the reason is in the decisions table: a lobby where a player
+  cannot pick something and is not told why.
+- **A parallel replication channel for the weapon** — a `sync_weapon` on the Gub,
+  or its own RPC. The roster is already broadcast whole on every change and is a
+  few hundred bytes; a second road for one integer is a second road that can
+  disagree with the first.
+- **Asking `Net.player_weapon` from `GubCombat` on every call** instead of
+  seeding `Gub.weapon`. The lobby ring's Gubs are in no roster, so it would
+  answer "spear" for exactly the Gubs the feature is most visible on.
+- **A `match` on the weapon in the input handling.** It would work and it would
+  be the end of "one gate": three places to add a fourth weapon to instead of
+  one, and a hand that could disagree with a throw again.
+- **Keeping the great sword swing-only.** See above — the one reason D-068 gave
+  for it was the absence of this step.
+- **A confirm step on the strip.** The pick is host-authoritative and the round
+  trip is a lobby's worth of milliseconds; a confirm would add a state in which
+  the ring and the roster disagree, for nothing.
+- **Letting the strip change a weapon mid-match.** Refused rather than queued;
+  see the lock above.
+
+### What this leaves open
+**The playtest, which is now the only thing worth testing.** The plan's closing
+note already asked for it and this step makes it sharp: until now every Gub had a
+spear and the bow and the sword were additions, so the three had never had to
+hold up against *each other*. A one-shot you must lead, a 20–80 draw that
+out-ranges everything (and an Elder whose range went up with nothing coming down
+to compensate, D-065), and a melee one-shot that is also the best mobility in the
+game (D-068). Every one of those is a number in `MatchConfig` with a lobby dial
+on it, so whichever turns out to be wrong is a slider and not a step.
+
+**A carry pose, rather than a carry tilt.** −62° holds the blade out of the grass
+and reads well in the ring, but it is a rigid prop on an `Idle` authored for
+empty fists. A Mixamo shoulder-carry over the locomotion set would be the real
+answer, and it is the same shopping trip as the sheathe D-068 asked for.
+
+**The weapon is not in the kill feed or the scoreboard.** "Killed by a bow" is a
+thing a player would now like to know, and `Gub.Cause` already carries it — but
+that is the HUD's step and not this one.

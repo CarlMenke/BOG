@@ -1,11 +1,11 @@
 # Plan — health, the bow, and a spear you can see leave the hand
 
-> **COMPLETE.** All nine steps are done and the gate is at **100 checks**, green.
-> The plan added **D-062..D-068**: health and one door for every hit, a throw you
+> **COMPLETE.** All ten steps are done and the gate is at **107 checks**, green.
+> The plan added **D-062..D-069**: health and one door for every hit, a throw you
 > can see leave the hand, the Elder's own cast, the bow, the locomotion plane and
-> the aiming spine, the heal potion, and the great sword. What each step left
-> open is written into its own record; what the *plan* leaves open is collected
-> at the bottom of this file.
+> the aiming spine, the heal potion, the great sword, and a weapon you choose in
+> the lobby. What each step left open is written into its own record; what the
+> *plan* leaves open is collected at the bottom of this file.
 
 *Written 2026-09-14. This is an orchestration plan, not a design document: it
 says what each step is for, what it may touch, what it must not touch, and how
@@ -600,11 +600,12 @@ out to be wrong is a slider and not a step.
 `SPEAR_THROW` and `SPEAR_HIT_BODY` borrowed, because `audio/sfx/` has a spear in
 it and nothing else. Three recordings would close it.
 
-**A sheathe for the great sword**, if it is ever meant to be carried rather than
-appearing for the length of a swing. There is no sheathe clip anywhere in the
-pack, so that is a fresh Mixamo search — and it is a different weapon, because
-carrying a two-handed sword means choosing between it and the spear, which means
-a weapon select this game does not have (D-068).
+**A sheathe for the great sword.** ~~if it is ever meant to be carried~~ — step
+10 happened, so it *is* carried (D-069), and the carry is a −62° tilt on the
+swinging grip rather than a pose: enough to keep 2.11 m of blade out of the grass
+in all twelve clips a Gub walks around in, and measured, but still a rigid prop
+in an `Idle` authored for empty fists. A shoulder-carry over the locomotion set
+is the real answer and it is the same Mixamo trip the sheathe was.
 
 ---
 
@@ -615,3 +616,76 @@ improved by about a third and is the weakest axis left. Closing it is three
 downloads With Skin from the same upload — `Standing Run Right`, `Standing Walk
 Left`, `Standing Walk Right` — whose family's one member already here measures
 76.5°, a true lateral. Nothing in the plan waits on them.
+
+---
+
+## Step 10 — Pick your weapon in the lobby
+
+*Added 2026-09-14, after the nine steps above landed. D-068's closing note
+predicted it: carrying a great sword means choosing between it and the spear,
+"which means a weapon select this game does not have". Now it does.*
+
+The user's words: *"you should be able to select your weapon for the match in the
+lobby. Also, the main lobby menu should be collapsable and then menu select
+should be different then the weapon select. Your character should only show the
+weapon you have selected in both the game and the lobby."*
+
+**Four decisions, taken before the step starts:**
+
+| | |
+|---|---|
+| **Lock-in** | The pick is **locked when the host presses Start**, alongside the map and the teams. Free to change while people are still joining. |
+| **Host restriction** | **None.** All three are always available. No dial, and no failure mode where a player cannot pick something and is not told why. |
+| **Layout** | The panel stack **collapses** to reveal the Gub in the glade, with a weapon strip under it; the Gub swaps weapons live as you move through it. Menu navigation and weapon selection are separate surfaces, which is what the user asked for. |
+| **Default** | The spear — what every Gub carries today, so a player who never opens the picker notices nothing. |
+
+**Where it goes.** `Net.players` is already `peer_id -> {name, team, ready}`,
+host-authoritative and rebroadcast whole rather than diffed. `weapon` is one more
+key in that dictionary, with the same lifecycle `team` has and the same request →
+host → rebroadcast path (D-004). Nothing about the lobby's authority model
+changes.
+
+**Why "in the game and the lobby" is one feature and not two.** `GubBackdrop`
+instances ordinary `gub.tscn` as **remote** Gubs — deliberately, so the menu is
+one more place the remote-Gub path gets looked at before eight people rely on it.
+So `HeldGear` reading a loadout instead of assuming a spear is the whole job, and
+the lobby inherits it.
+
+**What it changes underneath.** `has_spear()` is described in `gub_combat.gd` as
+*"the one gate"* — the throw asks it, and the hand is drawn from it. It becomes
+loadout-gated, `has_sword()` joins it and `has_bow()` beside it, and the
+existing overrides stay exactly as they are: the Elder replaces whatever you
+picked (D-038), a letter hold disarms it (D-035), and a drink empties both fists
+(D-067). The gate keeps being one gate.
+
+**The balance consequence, stated rather than discovered.** Today every Gub has a
+spear and the bow and sword are additions. Once a player picks *one*, the three
+have to hold up against each other for the first time: a one-shot you must lead,
+a 20-80 draw that out-ranges everything, and a melee one-shot that is also the
+best mobility in the game. That is the playtest the plan's closing note already
+asks for, and this step makes it the only thing worth testing.
+
+*Done when:* a pick round-trips host → client → host and survives a rematch; a
+Gub shows only its chosen weapon in the lobby ring and in a match, verified on a
+**remote** Gub rather than only a local one; the picker collapses and restores;
+an Elder still overrides the pick and a letter hold still disarms it; and a
+player who never touches the picker plays a spear Gub identical to today's.
+
+**Done, as D-069.** The weapon is one more key in `Net.players`, with `team`'s
+lifecycle and `team`'s request → host → rebroadcast path, so `_create_gub` reads
+it off the local roster on the line under the name and no packet was added.
+`has_spear()` grew a **fourth clause** rather than a fourth gate — `carries(...)`
+beside the Elder, the letter and the drink, the identical line on `has_bow()` and
+`has_sword()` — and nothing anywhere branches on which weapon a Gub has. The
+three cooldowns needed nothing: they were already independent, and a Gub now
+spends one of them.
+
+Two things fell out that were not in the brief. The great sword is **carried
+between swings** now, because the one reason D-068 gave for hiding it was the
+absence of this step, and an empty-handed swordsman wears the tell this game
+reserves for harmless; that cost a measured carry tilt, swept by
+`preview_sword -- carry` and in the gate. And two hands were a frame late — at
+spawn and at a drink — which was invisible while every Gub had a spear and is a
+shaft in a bow Gub's fist once it is not.
+
+Gate **100 → 107**; `net_test.sh` green.

@@ -22,16 +22,19 @@ island and out to a results screen, and two automated checks now walk that path:
 one in a single process, one across two processes over a real socket.
 
 ```
-bash tools/smoke_test.sh        # 100 checks, ~5 minutes, finds Godot by itself
+bash tools/smoke_test.sh        # 107 checks, ~5 minutes, finds Godot by itself
 bash tools/net_test.sh          # two processes, one socket; ~45 s, run by hand
 ```
 
-`smoke_test.sh` is the gate and it passes, 100 of 100. `net_test.sh` is kept out
+`smoke_test.sh` is the gate and it passes, 107 of 107. `net_test.sh` is kept out
 of it to keep the gate fast; run it by hand after touching networking, the lobby
-or the results screen. It passes all eleven stages (186 + 33 assertions), ten of
+or the results screen. It passes all twelve stages (200 + 34 assertions), ten of
 which end in a rematch, with the engine quiet in both processes — the error it
-had reported at "match start" since D-022 was its own teardown. Rematch was stalling for 25 s whenever a
-client had pressed BACK TO LOBBY; D-044 is the fix and the measurement.
+had reported at "match start" since D-022 was its own teardown. Rematch was
+stalling for 25 s whenever a client had pressed BACK TO LOBBY; D-044 is the fix
+and the measurement. Stage 4 is the weapon pick crossing the socket (D-069),
+which is the one place it can be proved: every other harness drives it in an
+offline session, where `rpc_id` reaches nobody and the local call does the work.
 
 **Both binaries build**, which had never been done before: `build/windows/GUB.exe`
 and a universal `build/macos/GUB.app` that boots clean. See the README.
@@ -284,10 +287,10 @@ Three tiers, because three different kinds of claim need three different proofs
 
 | tool | proves |
 |---|---|
-| `tools/smoke_test.sh` | **the gate** — import, and one hundred checks |
+| `tools/smoke_test.sh` | **the gate** — import, and one hundred and seven checks |
 | `tools/cursor_flow.tscn` | entering a match takes the mouse, and leaving gives it back |
 | `tools/playthrough.tscn` | the whole path, menu to results; 50 assertions on the island, 58 on Rust. Takes a map id after a `--` |
-| `tools/match_rules.tscn` | 195 assertions across 14 scoring scenarios |
+| `tools/match_rules.tscn` | 888 assertions across 20 scoring scenarios, the last of them three Gubs carrying three different weapons (D-069) |
 | `tools/invite_codes.tscn` | 2675 assertions over 1296 endpoints, plus the host's typed public address |
 | `tools/combat_range.tscn cover` | a mushroom stops a spear, the same throw without one does not, and a Gub cannot walk into the cap (D-039) |
 | `tools/combat_range.tscn recharge` | the spear is back in the fist after twelve throws, and an emptied fist refills itself (D-039) |
@@ -299,19 +302,20 @@ Three tiers, because three different kinds of claim need three different proofs
 | `tools/combat_range.tscn spine` | the torso that aims (D-066), swept round the whole horizon and through the camera's whole pitch range at a full draw: the bow holds within 3° of bearing and 5° in space of the crosshair (against D-065's **91°**), tracks 123° of elevation, and two arrows fired from one spot at the two ends of that range leave from the *same point* 122° apart — D-025 and D-045 asserted against the thing most likely to break them. **In the gate**, headless; `-- aiming` is the picture |
 | `tools/combat_range.tscn sword` | the great sword, end to end (D-068). It opens with a **rehearsal** — one swing at nobody, with the blade read off the bone attachment at the release — because nothing in the mode can be placed until that number exists: `Swing` turns the body through a revolution inside the skeleton, and at the release the blade is **55–66° off the Gub's own facing**, so a sweep along `-basis.z` would point at empty grass. Then the fists are checked on all 112 ticks of a swing, the kill is required to land `SWING_RELEASE_TIME` after the click and *within three ticks of the blade's own full extension*, 0.35 m inside the reach dies and 0.35 m outside lives, and an Elder takes nothing and wards. **In the gate**, headless |
 | `tools/combat_range.tscn chain` | the swing as a movement tech, measured the way D-052 measured the hop and against the same ceiling (D-068). A Gub at a dead stop chains seven swings — 0.00, then 2.00 after the first, then **7.02** from the last, which is 1.30x run and is exactly `HOP_SPEED_CAP` — and a Gub that builds 7.02 with ten timed hops first has to *keep* it when it swings. Neither may pass the cap. **In the gate**, headless and deliberately **not** `--fixed-fps`: the spin and the recharge are wall-clock deadlines |
-| `tools/preview_sword.tscn` | the great sword in the hands (D-068): `-- measure` solves the grip as an equation — a two-handed hilt has to reach from the fist that holds it to the fist that joins it, so the sword's **size is a measurement of the swing** (1.26 m, from fists 0.096–0.231 m apart) — and prints the three constants `HeldGear` carries, the point's 1.443 m reach at the release, and how far the blade dips. The default sheet is seven Gubs across the swing, each set back by the advance it has covered by then, with a compass ring and a hip-line spoke under every one. **In the gate**, headless |
+| `tools/preview_sword.tscn` | the great sword in the hands (D-068): `-- measure` solves the grip as an equation — a two-handed hilt has to reach from the fist that holds it to the fist that joins it, so the sword's **size is a measurement of the swing** (1.26 m, from fists 0.096–0.231 m apart) — and prints the three constants `HeldGear` carries, the point's 1.443 m reach at the release, and how far the blade dips. The default sheet is seven Gubs across the swing, each set back by the advance it has covered by then, with a compass ring and a hip-line spoke under every one. `-- carry` is the other number the prop needs now that it is **carried between swings** (D-069): the swinging grip puts the point 0.351 m under the grass through `Run`, and `SWORD_CARRY_TILT` — swept here, −62° about the blade's own cross-axis, applied only while carrying — holds all twelve carried clips 0.353 m clear. Both modes **in the gate**, headless |
 | `tools/combat_range.tscn cast` | the Elder's half of the same question, and a different question (D-064): the bolt appears `MatchConfig.lightning_delay` after the click, the composed arm is 83% of the way out when it does, and the tick it appears on is the tick that arm stops going forward — which on `Cast` is a third of a second before it is furthest forward |
 | `tools/combat_range.tscn potion` | the heal potion, end to end (D-067): a real death rolls the fifth `Pickup.Kind` and a dummy standing on the corpse collects it through its own `Area3D`; drinking it delivers **no** health on the frame of the click, some of it half way through and all forty at the end; a hit half way in ends the channel, spends the potion and keeps the half that had arrived; running ends a channel and a *lure* dragging the same Gub at 4.5 m/s does not; two potions are lost on death; and the three lobby dials survive `to_dict`/`apply_dict` and both clamps. **In the gate**, headless, with the channel shortened to 1.5 s |
 | `tools/combat_range.tscn ward` | a real spear cannot kill an Elder, the robe burns out on its own, and the same throw kills once it has (D-040) |
 | `tools/combat_range.tscn bhop` | timed hops climb to 1.3x run speed and no further, as a Gub, an Elder and a capture carrier; running, one jump, a late hop and a hop out of a dive roll do not beat run speed (D-052). **In the gate**, headless with `--fixed-fps 60` |
 | `tools/combat_range.tscn respawn` | a Gub that dies holding a mushroom and an Elder that dies in its robe both come back empty-handed, including a remote Gub whose client is 200 ms behind the host (D-043) |
+| `tools/weapon_select.tscn` | the lobby weapon pick as a **roster row** (D-069): the default for a row that never heard of weapons, a request through the host and back on the rebroadcast, a bogus ordinal refused into a spear, the lock the moment Start is pressed, three rematches keeping it, the real lobby collapsing to the strip and back, and three **remote** backdrop Gubs each holding only what its row says. The half that is a *Gub* — the gate, the hand and the three overrides — is `match_rules`. **In the gate**, headless |
 | `tools/team_tint.tscn` | every Gub's body is in its team's nameplate colour, free-for-all is the imported yellow, the Elder's robe stays purple, a corpse keeps its colour, and a lobby team switch repaints the Gub (D-046). **In the gate**, headless; through `snapshot.gd` it renders the lineup |
 | `tools/letter_carriers.tscn` | a letter card that starts a hold puts "Name picked up G" in the feed and a wasted duplicate puts nothing; carriers behind a wall, enemy included, have a gold card marker over their heads drawn through it and above the nameplate, your own hold marks nothing on your screen, and the marker goes on bank and on death; the same in free-for-all (`-- ffa`) (D-050). **In the gate**, headless; through `snapshot.gd` it renders the Gub's own view with the feed |
 | `tools/capture_preview.tscn` | a Capture G·U·B match in the real arena: both team bases drawn, three letter cards at home, every Gub on its own team's pad (D-051). **In the gate** on Kopje Crossing, headless; takes a map id; through `snapshot.gd` it renders the view from above Team 1's base. The mode's rules are `match_rules`, and the base/letter layout on every map is checked by `playthrough` |
 | `tools/team_plates.tscn` | a teammate's nameplate is drawn through a wall and never fades, an enemy's beside it is occluded and faded as before, the HUD chip says which team you are on, and free-for-all plates are unchanged (`-- ffa`) (D-047). **In the gate**, headless; through `snapshot.gd` it renders the Gub's own view |
 | `tools/ragdoll_stability.tscn` | a corpse is still a corpse 150 ticks later |
 | `tools/combat_range.tscn` | the real match path: a spear, a mushroom, a lure, a letter, the Elder's bolt |
-| `tools/net_loopback.tscn` | two processes, one socket, including a *client* using all three abilities, dying and respawning, and ten rematches with the client in the lobby for half of them (D-044). **In the gate** through `net_test.sh`, bound to 127.0.0.1 on a random port |
+| `tools/net_loopback.tscn` | two processes, one socket, including a *client* using all three abilities, dying and respawning, a weapon picked on the client and decided by the host (D-069), and ten rematches with the client in the lobby for half of them (D-044). **In the gate** through `net_test.sh`, bound to 127.0.0.1 on a random port |
 | `tools/preview_map.tscn` | Rust, Kopje Crossing, Lantern Wharf and Halcyon Wake: renders one, and checks every spawn pad with the physics. **In the gate** for all four |
 | `tools/island_report.tscn` | Whisperbloom Hollow as numbers: footprint, slope, every scatter layer's placed count, tree heights, spawn spacing and the capture bases (D-055). **In the gate** on four seeds |
 | `tools/parkour_report.tscn` | every platform on a built map has its rock, fits a Gub, and is reachable from the ground (D-042); on Lantern Wharf also that no jump reaches a tower or wall top, no sightline runs past 25 m (26 m from a roof), and no pad sees the other base's pads (D-056); on Halcyon Wake every deck reachable, the mast out of reach, sightlines under 21 m on the main deck and 38 m from a landing, and nothing but the void over every edge of the deck (D-057). **In the gate** for all three |
@@ -337,12 +341,20 @@ screen to the flow.
 spawns hollow top canopy tree`,
 plus `match` for real Gubs and the diagnostic flags in its `FLAGS` dictionary.
 `ui_range` modes: `menu menu_join menu_notice settings lobby lobby_full
-lobby_teams lobby_client lobby_map`. `lobby_map` scrolls the Match panel down to
-the Map section, which is the only way to photograph it — the panel scrolls and
-the section is below the fold at every size the game runs at. `hud_range` modes:
+lobby_teams lobby_client lobby_map lobby_weapons`. `lobby_map` scrolls the Match
+panel down to the Map section, which is the only way to photograph it — the panel
+scrolls and the section is below the fold at every size the game runs at.
+`lobby_weapons` presses the real collapse button, so it is the picker surface:
+panels folded away, the ring in the open and the weapon strip under it (D-069).
+Every lobby mode now deals its stand-ins different weapons, so any of them is
+also a shot of the ring carrying three things at once. `hud_range` modes:
 `hud hud_teams hud_cooldown hud_letters hud_hold hud_elder killfeed scoreboard
 scoreboard_letters pause results results_letters dead spectate hud_letters_teams
-scoreboard_letters_teams results_letters_teams`.
+scoreboard_letters_teams results_letters_teams reload_timer weapon_tiles`. The
+last two are the two that print a verdict and sit in the gate: `reload_timer`
+measures the recharge sweep against the real clock (D-054), and `weapon_tiles`
+stands the same HUD up under three loadouts and an Elder and requires the first
+square's glyph, caption **and key cap** to follow the pick (D-069).
 
 **A trap worth knowing in `zsh`:** unquoted `$args` is not word-split, so passing
 several trailing arguments through a variable silently sends them as one string

@@ -98,6 +98,13 @@ size_flags_vertical = 4
 theme_type_variation = &"HeadLabel"
 text = "LOBBY"
 
+[node name="CollapseButton" type="Button" parent="UI/Root/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+theme_type_variation = &"GhostButton"
+text = "WEAPON   ▾"
+
 [node name="Spacer" type="Control" parent="UI/Root/Header"]
 layout_mode = 2
 size_flags_horizontal = 3
@@ -137,7 +144,8 @@ size_flags_vertical = 4
 theme_type_variation = &"GhostButton"
 text = "Copy"
 
-[node name="Body" type="HBoxContainer" parent="UI/Root"]
+[node name="PanelStack" type="HBoxContainer" parent="UI/Root"]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -150,54 +158,89 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/separation = 18
 
-[node name="Players" type="PanelContainer" parent="UI/Root/Body"]
+[node name="Players" type="PanelContainer" parent="UI/Root/PanelStack"]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_type_variation = &"CardPanel"
 
-[node name="Body" type="VBoxContainer" parent="UI/Root/Body/Players"]
+[node name="Body" type="VBoxContainer" parent="UI/Root/PanelStack/Players"]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="Heading" type="HBoxContainer" parent="UI/Root/Body/Players/Body"]
+[node name="Heading" type="HBoxContainer" parent="UI/Root/PanelStack/Players/Body"]
 layout_mode = 2
 
-[node name="Title" type="Label" parent="UI/Root/Body/Players/Body/Heading"]
+[node name="Title" type="Label" parent="UI/Root/PanelStack/Players/Body/Heading"]
 layout_mode = 2
 theme_type_variation = &"LeadLabel"
 text = "Gubs"
 
-[node name="Spacer" type="Control" parent="UI/Root/Body/Players/Body/Heading"]
+[node name="Spacer" type="Control" parent="UI/Root/PanelStack/Players/Body/Heading"]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="PlayerCount" type="Label" parent="UI/Root/Body/Players/Body/Heading"]
+[node name="PlayerCount" type="Label" parent="UI/Root/PanelStack/Players/Body/Heading"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 4
 theme_type_variation = &"AccentLabel"
 text = "1 / 8"
 
-[node name="Scroll" type="ScrollContainer" parent="UI/Root/Body/Players/Body"]
+[node name="Scroll" type="ScrollContainer" parent="UI/Root/PanelStack/Players/Body"]
 layout_mode = 2
 size_flags_vertical = 3
 horizontal_scroll_mode = 0
 
-[node name="PlayerList" type="VBoxContainer" parent="UI/Root/Body/Players/Body/Scroll"]
+[node name="PlayerList" type="VBoxContainer" parent="UI/Root/PanelStack/Players/Body/Scroll"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 3
 
-[node name="MatchSettings" parent="UI/Root/Body" instance=ExtResource("4_settings")]
+[node name="MatchSettings" parent="UI/Root/PanelStack" instance=ExtResource("4_settings")]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 1.3
 
-[node name="Chat" parent="UI/Root/Body" instance=ExtResource("5_chat")]
+[node name="Chat" parent="UI/Root/PanelStack" instance=ExtResource("5_chat")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
+
+[node name="WeaponRow" type="VBoxContainer" parent="UI/Root"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 56.0
+offset_top = -300.0
+offset_right = -56.0
+offset_bottom = -110.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_constants/separation = 10
+alignment = 2
+
+[node name="Caption" type="Label" parent="UI/Root/WeaponRow"]
+layout_mode = 2
+theme_type_variation = &"SectionLabel"
+horizontal_alignment = 1
+text = "YOUR WEAPON"
+
+[node name="WeaponPicker" type="HBoxContainer" parent="UI/Root/WeaponRow"]
+unique_name_in_owner = true
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 12
+
+[node name="WeaponBlurb" type="Label" parent="UI/Root/WeaponRow"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SmallLabel"
+horizontal_alignment = 1
+text = ""
 
 [node name="Footer" type="HBoxContainer" parent="UI/Root"]
 layout_mode = 1

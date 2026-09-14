@@ -12,6 +12,11 @@ const DEFAULTS := {
 	# identity
 	"player_name": "",
 	"last_invite_code": "",
+	# The weapon last picked in a lobby, as a `Loadout.Weapon` ordinal (D-069).
+	# Local like the name and for the same reason: it is what this machine asks
+	# for when it next joins somewhere, and the roster the host keeps is the
+	# only authority on what it actually got.
+	"weapon": 0,
 	# network — the playit.gg tunnel address this machine hands out when it
 	# hosts, as `host:port`. Blank means "use whatever interface I am on", which
 	# is the LAN/Tailscale behaviour and the right default for everyone who is
@@ -69,6 +74,17 @@ func sanitized_player_name() -> String:
 		collapsed += " " if is_space else c
 		last_was_space = is_space
 	return collapsed.substr(0, 16).strip_edges()
+
+
+## The weapon this machine last picked, as a `Loadout.Weapon` (D-069).
+##
+## `sanitized_player_name`'s sibling, and written the same way round: the stored
+## value is whatever was last saved, and this is the one place that turns it
+## into something safe to hand to `Net`. A `settings.cfg` edited by hand — or
+## written by a build that had a fourth weapon in it — comes back as a spear
+## rather than as an index into nothing.
+func chosen_weapon() -> int:
+	return Loadout.sanitize(get_value("weapon"))
 
 
 func load_from_disk() -> void:
