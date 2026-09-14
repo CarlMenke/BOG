@@ -70,3 +70,6 @@ art/maps/*/*
 
 # Smoke-test logs and frames
 .smoke/
+
+# Preview and range-tool renders
+out/

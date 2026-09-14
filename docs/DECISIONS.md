@@ -1724,3 +1724,150 @@ shadow under the drilling tower stops crushing (9% of the frame below 8/255 at
 `arena_env.tres`'s `ambient_light_energy = 2.5` does nothing — left alone, since
 that is the island's file and its look is already signed off, but the comment
 there is wrong about why it is dark.
+
+
+## D-032 — Mushrooms and lures are carried stock off corpses, not abilities on a timer
+The mushroom and the lure used to be abilities: `mushroom_cooldown` and
+`lure_cooldown` refilled them forever, so every Gub in the match had one of each
+roughly every twelve and eighteen seconds regardless of how the match was going.
+That is a metronome, not an economy — it cost nothing to spend one badly, and a
+player who had been losing for five minutes was armed exactly as well as the
+player who had been beating them.
+
+**They are inventory now, and the only source is a death.** One item drops per
+kill, rolled once on the host in `MatchState._drop_loot`, and the only way to get
+a mushroom is to walk over one. The two config dials that replaced the cooldowns
+are named for what they do — `mushroom_use_delay` and `lure_use_delay`, a floor
+on how fast a stack can be emptied, not a refill rate. Renaming rather than
+retuning was the point: `mushroom_cooldown = 1.5` would have been a lie sitting
+in the lobby for the next person to read.
+
+**Spawning empty was the contentious half, and it was chosen deliberately.**
+Spawning with one of each would have kept the old feel for the first thirty
+seconds of a life and made the drops a top-up; it also would have meant every
+respawn hands out free cover, which is precisely the thing that makes a losing
+player's death cheap. Starting at zero makes the first kill of a match worth
+something to everyone watching it, and it makes "I am holding two mushrooms" a
+real position rather than a bookkeeping detail. The spear is untouched and is
+still the thing you always have, so an empty Gub is inconvenienced, never
+helpless.
+
+**Carried stock is lost on death; letters are not.** `GubCombat.reset` zeroes
+both counts on every respawn, which is what stops the player who is already
+winning compounding into the player who cannot be approached. The drop is an
+*independent* roll rather than the victim's actual inventory, for the same
+reason: dropping a hoard would make the hoarder the most profitable thing on the
+map and would let two players trade the same six mushrooms back and forth
+forever. Stock has to leave the economy when its owner does.
+
+**Nothing drops for a `VOID` death.** The Gub went off the edge; an item spawned
+where it was would go off the edge too, and a drop nobody can reach is worse than
+no drop. A self-kill does drop — a death is a death, and the alternative is a
+rule nobody would guess.
+
+There is no cap, no slot limit and no inventory screen. The only decision worth
+having here is "spend it or keep it", and a cap adds "throw one away" to that in
+exchange for nothing.
+
+What would have to be true to revisit it: if matches routinely reach five minutes
+with nobody holding anything — which happens if kills are rare rather than if
+drops are — the answer is a starting stock of one, not a return to the timer.
+
+## D-033 — Letters are uniform, duplicates are wasted, and this reverses the first instinct
+`WinCondition.LETTERS` ends the match when one Gub holds G, U and B, which is how
+the Gubs card game this is named after ends. Three decisions inside it are worth
+writing down, because two of them look like oversights.
+
+**A card's letter is `randi() % 3` and nothing else.** The first instinct — and an
+earlier instruction, which this reverses — was to hand out the letter the picker
+still needed, or to make them arrive in order. Both were dropped on purpose. A
+card that knows who is about to pick it up is not an object in the world, it is a
+progress bar with a mesh on it: two players racing for the same card would be
+racing for different things, and the card on the ground would be worth more to
+whoever is behind. Uniform means the thing lying in the grass is the same thing
+for everybody, which is what makes contesting it a fight rather than an
+arithmetic problem.
+
+**Picking up a letter you already hold consumes it and grants nothing.** This is
+the price of the rule above, and the alternative is worse in a way that is easy
+to miss: a duplicate that refuses to be collected is a card three players take
+turns walking over, sitting in the open, permanently, as the most conspicuous
+object on the map. Consuming it keeps the map clean and makes the third player to
+arrive pay for being third.
+
+The cost is real and is not hidden: collecting three distinct letters with
+duplicates wasted is the coupon-collector problem, 3·(1 + ½ + ⅓) ≈ 5.5 cards into
+one pair of hands, and in a contested lobby most cards land in somebody else's.
+At the shipping `letter_drop_chance` of 0.08 that is hundreds of deaths. **That
+number is the one the user asked for and it ships unchanged**, with the dial
+exposed in the lobby's Match panel — so the correction, if the first real match
+wants one, is five seconds of slider rather than a release. The arithmetic being
+written down here is the whole reason the dial exists.
+
+**Letters are kept on death, and they are per player even in Teams.** They are
+the only thing on a stats row a respawn does not touch, which is what makes them
+progress rather than a streak. In Teams a team wins when *one of its members*
+completes the set; the letters do not pool. A team of four pooling three letters
+would beat a team of two before anybody had to fight for the third, and the card
+game's ending is one hand with the whole word in it.
+
+Stored as a three-bit mask on `MatchState.stats` rather than as a set, because
+`stats` is replicated whole on every score change and an int costs three bits of
+that where an `Array[String]` costs an allocation per player per push. It is also
+what the HUD wants: three lamps are `mask & LETTER_G`, with no membership test and
+no ordering to get wrong.
+
+## D-034 — A mushroom is planted where the camera is looking, not where the body is pointed
+`GubCombat._mushroom_spot` used `_gub.facing()`, which is the body's yaw. The body
+faces wherever it is *moving*, not wherever you are *looking* — that is the whole
+design of the camera rig (see the header of `gub_camera.gd`) — so planting cover
+while strafing put it out to one side, and planting it while backing away from a
+fight put it behind you. Cover you have to stop and square up to is cover you die
+placing.
+
+**It now uses the camera's forward, flattened to horizontal and normalised**, and
+the yaw handed to `ShieldMushroom.plant` is the camera's too, so the cap faces the
+way you were looking rather than the way your feet happen to be.
+
+**Which forced the direction onto the wire**, and that is the part worth knowing.
+`GubCamera` shuts itself down on every copy but the owner's, so the host's copy of
+a remote Gub's rig has never moved and never will — asking it would have planted
+every client's mushroom due north while the host's worked perfectly, which is the
+exact shape of the bug D-024 was. So `try_place_mushroom` reads the look on the
+client that owns the Gub and sends it, precisely as `_request_throw_spear` already
+sends the aim it read at the release.
+
+The host still owns everything that matters. It flattens and normalises whatever
+arrives (a client is free to send a zero, a NaN, or a vector pointing at the sky),
+and both validation rays are unchanged — the blocked-ahead ray and the
+ground-below ray never depended on which direction was handed in, and they are
+what keeps a mushroom out of a wall and off a cliff edge. What a modified client
+gains from this is the ability to choose a direction, which it could already do by
+turning.
+
+**And the mushroom is a quarter bigger**, asked for directly: at the old size the
+cap cleared a standing Gub's shoulders but not its head, so cover you were behind
+still showed the one part of you worth throwing at. `MODEL_SCALE` is 1.25 and the
+five collision constants are the same 1.25 applied by hand. They have to move
+together — scale one and not the other and the mushroom either stops spears a foot
+outside itself or lets them through a cap you can see, both of which read to a
+player as the netcode being wrong.
+
+> **Superseded by D-039, and it is the whole of that entry's first half.** Every
+> sentence in the paragraph above is wrong in a way that took a player in a real
+> match to find. `mushroom.glb.import` already applies a `root_scale` of 1.25, so
+> `MODEL_SCALE = 1.25` made a planted mushroom **1.5625** rather than 1.25. The
+> five collision constants were never a fit to the mesh, so scaling them
+> preserved nothing. And because this asset's canopy starts halfway up it,
+> scaling the mushroom to widen the cap also *raised* it: the cap ended up
+> spanning 1.86–2.44 m over a Gub 1.55 m tall, with a 0.55 m post the only thing
+> anywhere in the band a body occupies. A Gub half a metre off the line of fire
+> was 13% covered. The complaint this paragraph is answering — "cover you were
+> behind still showed the one part of you worth throwing at" — was a symptom of
+> collision constants that had never been measured, and making the whole mushroom
+> bigger was the wrong remedy for it. The quarter is kept in **width** and the
+> height comes back down; see D-039.
+>
+> What survives unamended is everything above this paragraph: planting along the
+> camera's forward, the direction on the wire, and the host flattening whatever
+> arrives.

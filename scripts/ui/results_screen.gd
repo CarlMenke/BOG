@@ -16,6 +16,10 @@ signal rematch()
 
 const CURSOR_REASON := "results"
 
+## Every stat column is this wide, letters included, so a row with three columns
+## and a row with two still line up down the table.
+const STAT_WIDTH := 86
+
 @onready var _headline: Label = %Headline
 @onready var _subtitle: Label = %Subtitle
 @onready var _rows: VBoxContainer = %Rows
@@ -117,6 +121,8 @@ static func _reason_text(reason: String) -> String:
 			return "Time ran out."
 		"elimination":
 			return "Last Gub standing."
+		"letters":
+			return "Somebody spelled it."
 		_:
 			return "The match ended."
 
@@ -131,12 +137,19 @@ func _fill_table(summary: Dictionary) -> void:
 	var ranking: Array = summary.get("ranking", [])
 	var teams: bool = int(summary.get("mode", MatchConfig.Mode.FREE_FOR_ALL)) \
 		== MatchConfig.Mode.TEAMS
+	# From the snapshot, not from `Net.config`. The config is live and mutable —
+	# the host can be changing the next match's settings while people are still
+	# reading this table — and the whole point of this screen is that it shows
+	# the match that ended rather than the one being set up.
+	var letters: bool = int(summary.get("win_condition", MatchConfig.WinCondition.KILL_LIMIT)) \
+		== MatchConfig.WinCondition.LETTERS
 	for place in ranking.size():
 		_rows.add_child(_row(place + 1, int(ranking[place]),
-			stats.get(ranking[place], {}), teams))
+			stats.get(ranking[place], {}), teams, letters))
 
 
-func _row(place: int, peer_id: int, entry: Dictionary, teams: bool) -> Control:
+func _row(place: int, peer_id: int, entry: Dictionary, teams: bool,
+		letters: bool) -> Control:
 	var mine := peer_id == Net.local_id()
 	var row := PanelContainer.new()
 	row.theme_type_variation = "RowPanel"
@@ -168,14 +181,50 @@ func _row(place: int, peer_id: int, entry: Dictionary, teams: bool) -> Control:
 
 	line.add_child(_stat("%d" % int(entry.get("kills", 0)), "KILLS", UIPalette.TEXT))
 	line.add_child(_stat("%d" % int(entry.get("deaths", 0)), "DEATHS", UIPalette.TEXT_DIM))
+	if letters:
+		line.add_child(_letters_stat(int(entry.get("letters", 0))))
 	return row
+
+
+## The final hands, in the same three glyphs the scoreboard column and the HUD
+## lamps use. `ranking()` already sorts by letter count under this condition, so
+## the table reads top to bottom as the race actually finished — and *which*
+## letters somebody was short of is the only interesting thing left on a losing
+## row, which is exactly what a count of them would have thrown away.
+##
+## Shaped as a `_stat` so it keeps the same column rhythm as KILLS and DEATHS
+## rather than becoming a third kind of cell.
+func _letters_stat(mask: int) -> Control:
+	var box := VBoxContainer.new()
+	box.custom_minimum_size.x = STAT_WIDTH
+	box.add_theme_constant_override("separation", 0)
+
+	var glyphs := HBoxContainer.new()
+	glyphs.alignment = BoxContainer.ALIGNMENT_END
+	glyphs.add_theme_constant_override("separation", 7)
+	for bit: int in MatchState.LETTERS:
+		var glyph := Label.new()
+		# The one table, shared with the card lying in the world, so no two
+		# places in this game can disagree about which bit is which.
+		glyph.text = MatchState.letter_name(bit)
+		glyph.add_theme_color_override("font_color",
+			UIPalette.GUB if mask & bit != 0 else UIPalette.faded(UIPalette.TEXT, 0.22))
+		glyphs.add_child(glyph)
+	box.add_child(glyphs)
+
+	var caption := Label.new()
+	caption.text = "LETTERS"
+	caption.theme_type_variation = "SectionLabel"
+	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	box.add_child(caption)
+	return box
 
 
 ## A number over its own caption, so the table needs no separate header row and
 ## stays readable however few columns a mode happens to use.
 func _stat(value: String, caption: String, colour: Color) -> Control:
 	var box := VBoxContainer.new()
-	box.custom_minimum_size.x = 86
+	box.custom_minimum_size.x = STAT_WIDTH
 	box.add_theme_constant_override("separation", 0)
 
 	var number := Label.new()

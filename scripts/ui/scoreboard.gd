@@ -25,6 +25,7 @@ const COLUMN_WIDTH := 92
 @onready var _summary: Label = %Summary
 @onready var _clock: Label = %Clock
 @onready var _lives_heading: Label = %LivesHeading
+@onready var _letters_heading: Label = %LettersHeading
 @onready var _scrim: ColorRect = %Scrim
 
 
@@ -72,6 +73,10 @@ func rebuild() -> void:
 	_summary.text = config.summary()
 	_refresh_clock()
 	_lives_heading.visible = config.win_condition == MatchConfig.WinCondition.LIVES
+	# Mutually exclusive with the lives column by construction — they are two
+	# values of one enum — so the two headings can share the far right of the
+	# table without ever having to be laid out around each other.
+	_letters_heading.visible = config.win_condition == MatchConfig.WinCondition.LETTERS
 
 	if config.mode == MatchConfig.Mode.TEAMS:
 		_build_teams(config)
@@ -164,11 +169,42 @@ func _player_row(peer_id: int, config: MatchConfig) -> Control:
 
 	line.add_child(_number(str(MatchState.kills(peer_id)), UIPalette.TEXT))
 	line.add_child(_number(str(MatchState.deaths(peer_id)), UIPalette.TEXT_DIM))
+	if config.win_condition == MatchConfig.WinCondition.LETTERS:
+		line.add_child(_letters_cell(peer_id))
 	if config.win_condition == MatchConfig.WinCondition.LIVES:
 		var left := MatchState.lives_left(peer_id)
 		line.add_child(_number("OUT" if left <= 0 else str(left),
 			UIPalette.DANGER if left <= 0 else UIPalette.GOOD))
 	return row
+
+
+## The three letters as three letters, lit or not — never as "2 of 3".
+##
+## This column exists to answer one question, and it is the question that
+## decides whether you push or hide: **who is one away, and one away from
+## what.** A count cannot answer the second half. A player holding G and U is
+## beaten by the next B to drop anywhere on the map; a player holding G and B is
+## not, if the U is in somebody's fist. Both of them are "2".
+##
+## Built as three labels rather than one string because each has its own colour
+## and a `Label` has one — the alternative is bbcode in a `RichTextLabel`, which
+## is a markup parser and a second font stack for three characters.
+func _letters_cell(peer_id: int) -> Control:
+	var box := HBoxContainer.new()
+	box.custom_minimum_size.x = COLUMN_WIDTH
+	box.alignment = BoxContainer.ALIGNMENT_END
+	box.add_theme_constant_override("separation", 7)
+	var mask := MatchState.letters_for(peer_id)
+	for bit: int in MatchState.LETTERS:
+		var glyph := Label.new()
+		# The one table, shared with the card in the world and the lamps on the
+		# HUD, so no two of the three can disagree about which bit is which.
+		glyph.text = MatchState.letter_name(bit)
+		glyph.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		glyph.add_theme_color_override("font_color",
+			UIPalette.GUB if mask & bit != 0 else UIPalette.faded(UIPalette.TEXT, 0.22))
+		box.add_child(glyph)
+	return box
 
 
 func _number(text: String, colour: Color) -> Label:

@@ -51,8 +51,8 @@ var time_left: float = 0.0
 ## in its `_ready`, before `register_arena`, and reset with everything else.
 var void_height: float = VOID_HEIGHT
 
-## peer_id -> {kills, deaths, lives_left, alive, respawn_at, last_attacker,
-##             last_attacker_at}
+## peer_id -> {kills, deaths, letters, lives_left, alive, respawn_at,
+##             last_attacker, last_attacker_at}
 var stats: Dictionary = {}
 ## peer_id -> Gub
 var gubs: Dictionary = {}
@@ -65,6 +65,53 @@ var _finished: bool = false
 ## peer_id -> true once that peer has built its island and can be spawned into.
 var _arena_ready: Dictionary = {}
 var _arena_ready_deadline: float = 0.0
+
+## pickup_id -> Pickup, on every peer. The id is what the spawn and the
+## collection messages address, because a spawned node's *path* is not something
+## two machines agree on — see the header of `scripts/items/pickup.gd`.
+var _pickups: Dictionary = {}
+## Host only. Never reused within a match, so a collect message can never land
+## on the item that replaced the one it was about.
+var _next_pickup_id: int = 1
+
+## peer_id -> {letter: int, ends_at: float}, on every peer. A row exists exactly
+## while that Gub is holding a card up, which is what `is_holding_letter` asks
+## and what `GubCombat` gates the throw on (D-035).
+##
+## `ends_at` is in local `_now()` seconds on whichever machine wrote it, so the
+## host's row and a client's row for the same hold differ by the latency of one
+## reliable RPC. That is deliberate and it is the same split the ability
+## cooldowns already use: the client's copy exists so the HUD can count down
+## without asking, and **only the host's copy can finish a hold**. A client
+## whose clock runs out early simply shows zero and waits — `is_holding_letter`
+## is the presence of the row, never `remaining <= 0`, so nothing pops back into
+## a hand before the host says so.
+var _letter_holds: Dictionary = {}
+
+## peer_id -> {ends_at: float}, on every peer, for exactly as long as that Gub
+## is the Elder.
+##
+## A row rather than a bare `true` since D-040, because the robe is now a clock:
+## it lasts `elder_duration` seconds and then burns out, where it used to last
+## until its wearer was killed. `ends_at` is in local `_now()` seconds on
+## whichever machine wrote it, exactly as `_letter_holds` is and with exactly
+## the same split — the client's copy exists so the HUD can count down without
+## asking, and **only the host's copy can end one**. `is_elder` is the presence
+## of the row and never `remaining <= 0`, so a client whose clock runs out early
+## shows zero and waits rather than taking a robe off a Gub the host still says
+## is wearing one.
+##
+## A set rather than a field on the `stats` row, and the difference matters.
+## `stats` is what a respawn rewrites and what the scoreboard reads; the robe is
+## neither a score nor something a life owns. It is closer to a letter hold: a
+## thing the host declares, every peer renders, and a clock ends — which is why
+## it lives beside `_letter_holds` and is written by the same shape of RPC.
+##
+## **More than one Elder can exist at once**, and that needs no special handling
+## (D-038). Two robes can be on the ground at the same time and both can be
+## picked up; two Elders is a fight worth having and an artificial "only one"
+## rule would mean a robe that refuses to be collected.
+var _elders: Dictionary = {}
 
 
 func _ready() -> void:
@@ -192,6 +239,13 @@ func reset() -> void:
 			gub.queue_free()
 	gubs.clear()
 	stats.clear()
+	# The nodes themselves belong to the arena's `spawned_items` and go with it;
+	# this is only the index. Holding freed pickups across a match would make
+	# `claim_pickup` chase instance ids that no longer resolve.
+	_pickups.clear()
+	_next_pickup_id = 1
+	_clear_letter_holds()
+	_clear_elders()
 	_arena_ready.clear()
 	_arena_ready_deadline = 0.0
 	_finished = false
@@ -228,6 +282,9 @@ func _new_stats() -> Dictionary:
 	return {
 		"kills": 0,
 		"deaths": 0,
+		# Kept for the whole match, across every death. Letters are the one
+		# thing on this row that a respawn does not touch (D-033).
+		"letters": 0,
 		"lives_left": config().lives,
 		"alive": true,
 		"respawn_at": 0.0,
@@ -539,6 +596,593 @@ func _same_team(a: int, b: int) -> bool:
 	return Net.player_team(a) == Net.player_team(b)
 
 
+# ------------------------------------------------------------------- drops ---
+
+## One item falls out of every death. This is where everything a Gub can gain
+## now comes from (D-032): abilities are not granted by a timer any more, so a
+## match with nobody dying in it is a match where nobody is armed with anything
+## but a spear.
+##
+## Host only, rolled once, replicated — the roll must not be made per-peer or
+## eight machines would each draw a different card for the same corpse.
+##
+## The dropped item is an **independent roll**, not the victim's carried stock.
+## What they were holding is simply lost. Dropping the actual inventory would
+## make a player who had hoarded six mushrooms the most profitable thing on the
+## map to kill, and the hoard would then bounce between two people who keep
+## killing each other — stock has to leave the economy when its owner does, or
+## nothing is ever really spent.
+##
+## Nothing drops for a `VOID` death: the Gub fell off the map, and an item
+## spawned where it was is an item that falls too. A self-kill does drop. A
+## death is a death, and making suicide the one death that costs the map an item
+## is a rule nobody would guess and everybody would notice.
+func _drop_loot(cause: Gub.Cause, point: Vector3) -> void:
+	if cause == Gub.Cause.VOID:
+		return
+	var spot := _drop_spot(point)
+	if spot == Vector3.INF:
+		return
+
+	# **The roll order is letter, then robe, then the remainder split evenly
+	# between mushroom and lure**, and it is written down here because it is
+	# exactly the kind of thing that silently changes the balance of the game
+	# when somebody reorders it for tidiness. The two named chances are taken off
+	# the top in that order and what is left is halved; move the robe in front of
+	# the letter and a letters match quietly drops fewer cards than the dial in
+	# the lobby says it does.
+	#
+	# Letters only exist as a drop in the mode that scores them; in every other
+	# mode that chance is zero. **The robe is not gated on anything** — the Elder
+	# is a weapon rather than a scoring mechanic, and a weapon that only exists
+	# in one of four modes is a weapon nobody learns (D-038).
+	#
+	# The last branch reads the dials rather than the enum on purpose: the two
+	# halves of the remainder stay halves whatever the first two numbers turn out
+	# to be, including a host who has dragged both sliders to the top.
+	var letters_on := config().win_condition == MatchConfig.WinCondition.LETTERS
+	var letter_chance := config().letter_drop_chance if letters_on else 0.0
+	var robe_chance := config().elder_drop_chance
+	var remainder := maxf(0.0, 1.0 - letter_chance - robe_chance)
+	var roll := randf()
+	var kind := Pickup.Kind.LURE
+	var letter := 0
+	if roll < letter_chance:
+		kind = Pickup.Kind.LETTER
+		# Uniform over G, U and B, with no reference to anybody's progress
+		# (D-033). A card is a card.
+		letter = LETTERS[randi() % LETTERS.size()]
+	elif roll < letter_chance + robe_chance:
+		kind = Pickup.Kind.ELDER_ROBE
+	elif roll < letter_chance + robe_chance + remainder * 0.5:
+		kind = Pickup.Kind.MUSHROOM
+
+	_spawn_drop(kind, letter, spot)
+
+
+## Put one item on the ground at `spot`, on every peer, and return the id it was
+## given. Host only — `_next_pickup_id` is the host's counter and an id minted
+## anywhere else would collide with one the host is about to hand out.
+##
+## Shared by the loot roll above and by the card a dead carrier drops (D-035),
+## which is the whole reason it is its own function: a re-dropped letter has to
+## be the same kind of object as a rolled one, indistinguishable to anybody who
+## walks over it.
+func _spawn_drop(kind: Pickup.Kind, letter: int, spot: Vector3) -> int:
+	var id := _next_pickup_id
+	_next_pickup_id += 1
+	_spawn_pickup.rpc(id, kind, letter, spot)
+	_spawn_pickup(id, kind, letter, spot)
+	return id
+
+
+## Settle the death point onto the ground, or `Vector3.INF` if there is none
+## under it. The same shape as `GubCombat._mushroom_spot`'s ground query and for
+## the same reason: an item floating over a gorge is an item nobody can reach,
+## and skipping the drop is a better answer than teasing the lobby with one.
+func _drop_spot(point: Vector3) -> Vector3:
+	var world := _world()
+	if world == null:
+		return Vector3.INF
+	var from := point + Vector3.UP * DROP_RAY_UP
+	var query := PhysicsRayQueryParameters3D.create(
+		from, from + Vector3.DOWN * (DROP_RAY_UP + DROP_RAY_DOWN))
+	query.collision_mask = 1  # world geometry only
+	var hit := world.direct_space_state.intersect_ray(query)
+	return hit["position"] if not hit.is_empty() else Vector3.INF
+
+
+## The 3D world the match is being played in, or null when there is not one.
+##
+## `tools/match_rules.gd` registers a plain `Node` as its players root on
+## purpose — it is about the bookkeeping and never spawns a Gub — so there is no
+## space to cast a ray in, and asking for one would be a `SCRIPT ERROR` on every
+## kill it scores. A null here means "no world", and the only caller treats that
+## as "no drop" rather than as a failure.
+func _world() -> World3D:
+	var root := _players_root as Node3D
+	if root == null or not root.is_inside_tree():
+		return null
+	return root.get_world_3d()
+
+
+## Everything a match spawns goes into one container so the arena can sweep it
+## between rounds. The same group `GubCombat._spawn_root` looks for, and the
+## same fallback.
+func _spawn_root() -> Node:
+	var root := get_tree().get_first_node_in_group("spawned_items")
+	return root if root != null else get_tree().current_scene
+
+
+## Drop the index rows for items that have already been taken or have rotted.
+## They are harmless — every reader guards with `is_instance_valid` — but there
+## is one per death for the length of a match, and the same broom `GubCombat`
+## sweeps its mushroom list with costs nothing here.
+##
+## Written as a rebuild rather than `Dictionary.filter`, which Godot 4.7 does
+## not have: it exists on Array and not on Dictionary, and reaching for it cost
+## an afternoon because the parse error takes the whole `MatchState` autoload
+## down with it. Every scenario in `tools/match_rules.gd` then ran against a
+## `Nil` singleton, and the harness still printed PASS, because a check that
+## never runs is not a check that failed.
+func _prune_pickups() -> void:
+	var live := {}
+	for id: int in _pickups:
+		var item: Pickup = _pickups[id]
+		if is_instance_valid(item) and not item.is_taken():
+			live[id] = item
+	_pickups = live
+
+
+## Build one drop, on every peer, from the values the host rolled.
+@rpc("authority", "call_remote", "reliable")
+func _spawn_pickup(id: int, kind: int, letter: int, spot: Vector3) -> void:
+	var root := _spawn_root()
+	if root == null:
+		return
+	_prune_pickups()
+
+	var pickup := PICKUP_SCENE.instantiate() as Pickup
+	root.add_child(pickup)
+	pickup.drop(id, kind as Pickup.Kind, letter, spot)
+	_pickups[id] = pickup
+
+
+## A living Gub has walked into a drop. Called by the **host's** copy of the
+## pickup, directly — the overlap already happened on the host, so there is
+## nothing to request.
+##
+## This is the one place a drop is awarded, which is what makes "collected once"
+## true: two Gubs entering on the same physics frame both arrive here, and the
+## second finds the item already taken.
+func claim_pickup(pickup_id: int, peer_id: int) -> void:
+	if not Net.is_host or phase != Phase.PLAYING:
+		return
+	var pickup: Pickup = _pickups.get(pickup_id)
+	if not is_instance_valid(pickup) or pickup.is_taken():
+		return
+	if not is_alive(peer_id):
+		return
+
+	match pickup.kind:
+		Pickup.Kind.LETTER:
+			# **One hold at a time** (D-035). A card walked over while a hold is
+			# already running is left exactly where it is — not consumed, not
+			# queued — for this Gub to come back to or for somebody else to
+			# reach first. Returning here rather than falling through is what
+			# leaves it on the ground.
+			if is_holding_letter(peer_id):
+				return
+			# Otherwise the card is spent whatever happens next: a duplicate
+			# grants nothing and vanishes anyway (D-033), and anything else
+			# starts the hold that now stands between a card and a letter.
+			_begin_letter_hold(peer_id, pickup.letter)
+		Pickup.Kind.MUSHROOM:
+			_grant_ability(peer_id, "grant_mushroom")
+		Pickup.Kind.LURE:
+			_grant_ability(peer_id, "grant_lure")
+		Pickup.Kind.ELDER_ROBE:
+			# No guard for "already the Elder". The robe cannot be picked up by
+			# somebody already wearing one, because `_make_elder` is idempotent
+			# and the item is spent either way — the same rule a duplicate
+			# letter obeys (D-033), and for the same reason: a drop that refuses
+			# to be collected is a drop three players take turns walking over.
+			_make_elder(peer_id)
+
+	_take_pickup.rpc(pickup_id, peer_id)
+	_take_pickup(pickup_id, peer_id)
+
+
+## Hand one item to a Gub's combat node. Host side only: `GubCombat` owns the
+## stock and broadcasts the new count itself, because it is the host's node on
+## every machine (D-024) and is therefore the only thing whose word on it the
+## other peers will accept.
+func _grant_ability(peer_id: int, method: String) -> void:
+	var gub: Gub = gubs.get(peer_id)
+	if not is_instance_valid(gub):
+		return
+	var combat := gub.get_node_or_null("Combat") as GubCombat
+	if combat != null:
+		combat.call(method, 1)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _take_pickup(pickup_id: int, peer_id: int) -> void:
+	var pickup: Pickup = _pickups.get(pickup_id)
+	_pickups.erase(pickup_id)
+	if is_instance_valid(pickup):
+		pickup.take(peer_id)
+
+
+# ----------------------------------------------------------------- letters ---
+
+## Give `peer_id` one letter. Host only. Returns whether it was one they did not
+## already hold — false means the card was wasted, which is the rule (D-033) and
+## not a failure.
+##
+## Reached from the end of a hold rather than from the card itself (D-035):
+## touching a card starts a countdown and only finishing it arrives here. The
+## exception is a `letter_hold_time` of zero, which calls this straight from
+## `_begin_letter_hold` because that setting is exactly "no countdown".
+func award_letter(peer_id: int, letter: int) -> bool:
+	if not Net.is_host or phase != Phase.PLAYING:
+		return false
+	var entry: Dictionary = stats.get(peer_id, {})
+	if entry.is_empty():
+		return false
+	var held := int(entry.get("letters", 0))
+	if held & letter != 0:
+		return false
+	var next := held | letter
+	_sync_letters.rpc(peer_id, next)
+	_sync_letters(peer_id, next)
+	# `stats` rides along with the score push anyway; pushing here keeps the two
+	# from disagreeing for the frame in between.
+	_push_scores()
+	_check_win()
+	return true
+
+
+## Written on every peer rather than left to ride along on the next
+## `_sync_scores`, because a letter is the one score change that has to be
+## *felt* the instant it happens — the HUD lamp and the sound hang off this
+## signal, and the next score push may be a whole kill away.
+@rpc("authority", "call_remote", "reliable")
+func _sync_letters(peer_id: int, mask: int) -> void:
+	var entry: Dictionary = stats.get(peer_id, {})
+	if entry.is_empty():
+		return
+	entry["letters"] = mask
+	letters_changed.emit(peer_id)
+	scores_changed.emit()
+
+
+## The three-bit mask of letters this player holds. Safe to ask for a peer with
+## no row — a spectator, or somebody who left mid-frame — which is what the HUD
+## and the scoreboard both do.
+func letters_for(peer_id: int) -> int:
+	return int(stats.get(peer_id, {}).get("letters", 0))
+
+
+func has_all_letters(peer_id: int) -> bool:
+	return letters_for(peer_id) & LETTER_ALL == LETTER_ALL
+
+
+## How many distinct letters a player holds. The scoreboard sorts on this, and
+## "2 of 3" is the only number worth printing beside three lamps.
+func letter_count(peer_id: int) -> int:
+	var mask := letters_for(peer_id)
+	var count := 0
+	for bit: int in LETTERS:
+		if mask & bit != 0:
+			count += 1
+	return count
+
+
+## The character one letter bit stands for. One table, here, so the card lying
+## in the world and the lamp on the HUD can never disagree about which bit is
+## which.
+static func letter_name(letter: int) -> String:
+	match letter:
+		LETTER_G:
+			return "G"
+		LETTER_U:
+			return "U"
+		LETTER_B:
+			return "B"
+		_:
+			return "?"
+
+
+# -------------------------------------------------------------- the hold ---
+
+## Picking up a card does not give you the letter. It starts a hold: the Gub
+## holds the card up for `letter_hold_time` seconds, cannot throw a spear for
+## any of them, and only then is the letter actually theirs (D-035).
+##
+## **It lives here rather than on the Gub** because it is match state. It has to
+## survive being watched by seven peers who collected nothing, it ends in
+## `award_letter` which is already here, and — the part that matters — the host
+## has to be the only machine that can finish one. A hold on `GubCombat` would
+## be a countdown running on the client that stands to gain from it.
+
+
+## Begin the hold a letter card now buys. Host only, and only from
+## `claim_pickup`, which has already established that this player is alive, in a
+## running match, and not already holding something.
+func _begin_letter_hold(peer_id: int, letter: int) -> void:
+	var entry: Dictionary = stats.get(peer_id, {})
+	if entry.is_empty():
+		return
+	# A letter you already hold is worth exactly nothing whether you stand still
+	# for it or not, so there is nothing to stand still for: the card is
+	# consumed on touch, instantly, the way it always was (D-033). Starting a
+	# ten-second hold whose reward is "no change" would be the single most
+	# miserable thing in the mode.
+	if int(entry.get("letters", 0)) & letter != 0:
+		return
+	var seconds := config().letter_hold_time
+	# Zero means grant on touch, which is a legal setting and a supported one.
+	# Taken here rather than by starting a hold that expires on the next tick,
+	# because that hold would still be one frame long — one frame of the spear
+	# leaving the hand and coming back, for a setting chosen precisely so that
+	# there is nothing to watch.
+	if seconds <= 0.0:
+		award_letter(peer_id, letter)
+		return
+	_do_begin_hold.rpc(peer_id, letter, seconds)
+	_do_begin_hold(peer_id, letter, seconds)
+
+
+## Host only. Finish the holds whose time is up.
+##
+## The award is made *after* the row is cleared, in that order and not the other
+## way round, so that by the time `letters_changed` reaches the HUD and
+## `_check_win` reaches the results screen the player is no longer holding
+## anything: the lamp lights and the spear comes back on the same frame.
+func _tick_letter_holds() -> void:
+	# `.keys()` copies, because completing a hold erases its own row.
+	for peer_id: int in _letter_holds.keys():
+		var hold: Dictionary = _letter_holds[peer_id]
+		if _now() < float(hold["ends_at"]):
+			continue
+		var letter := int(hold["letter"])
+		_end_letter_hold(peer_id)
+		award_letter(peer_id, letter)
+
+
+## A hold that ended without paying out: a death, or a disconnect, which is
+## treated identically. Host only.
+##
+## **The card is not destroyed.** It lands at `at` as a fresh pickup carrying
+## the same letter, free for anyone including the Gub that just lost it. At an
+## 8% drop rate a letter can be a hundred deaths from being replaced, so a card
+## that evaporates every time its carrier is killed is a mode that stops being
+## winnable — and "kill the carrier and take the card" is the fight this whole
+## mechanic exists to create. Deleting it would leave only the first half.
+##
+## `Vector3.INF` means there is nowhere to put it — a peer whose Gub was already
+## gone by the time the disconnect was noticed — and then, and only then, the
+## card is discarded.
+func _interrupt_letter_hold(peer_id: int, at: Vector3) -> void:
+	if not _letter_holds.has(peer_id):
+		return
+	var letter := int(_letter_holds[peer_id]["letter"])
+	_end_letter_hold(peer_id)
+	if at == Vector3.INF:
+		return
+	# The ground under the corpse, or — when there is none — a spawn pad.
+	#
+	# `_drop_loot` simply skips a drop it cannot settle, and for a mushroom that
+	# is right: one more mushroom exists after the next death. A letter does
+	# not. So a card that would otherwise be lost over a gorge, or to the void a
+	# lured carrier was just knocked into, is put back on a pad instead: the
+	# pads are the one set of points on any map that are guaranteed to be
+	# standable and reachable, and a card that turns up somewhere slightly
+	# arbitrary is a far smaller problem than a letter that leaves the match.
+	var spot := _drop_spot(at)
+	if spot == Vector3.INF:
+		spot = _next_spawn().origin
+	_spawn_drop(Pickup.Kind.LETTER, letter, spot)
+
+
+## Host only. Stop a hold and tell everyone, without deciding why.
+func _end_letter_hold(peer_id: int) -> void:
+	if not _letter_holds.has(peer_id):
+		return
+	_do_end_hold.rpc(peer_id)
+	_do_end_hold(peer_id)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _do_begin_hold(peer_id: int, letter: int, seconds: float) -> void:
+	_letter_holds[peer_id] = {"letter": letter, "ends_at": _now() + seconds}
+	letter_hold_changed.emit(peer_id)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _do_end_hold(peer_id: int) -> void:
+	if not _letter_holds.erase(peer_id):
+		return
+	letter_hold_changed.emit(peer_id)
+
+
+## Drop every hold locally, granting nothing. Used when the match ends and when
+## the whole match is torn down — neither is a moment anybody is owed a letter.
+func _clear_letter_holds() -> void:
+	if _letter_holds.is_empty():
+		return
+	var were_holding := _letter_holds.keys()
+	_letter_holds.clear()
+	for peer_id: int in were_holding:
+		letter_hold_changed.emit(peer_id)
+
+
+## Is this Gub holding a card up right now?
+##
+## The presence of the row, deliberately, and never `remaining > 0`: a client's
+## countdown can reach zero a round trip before the host's does, and a hand that
+## takes its spear back on that frame would be a hand the host still refuses to
+## throw with.
+func is_holding_letter(peer_id: int) -> bool:
+	return _letter_holds.has(peer_id)
+
+
+## Seconds left on this Gub's hold, or 0.0 if it is not holding one. Never
+## negative, so a HUD can divide by `Net.config.letter_hold_time` and get a
+## fraction it can sweep a ring with.
+func letter_hold_remaining(peer_id: int) -> float:
+	if not _letter_holds.has(peer_id):
+		return 0.0
+	return maxf(0.0, float(_letter_holds[peer_id]["ends_at"]) - _now())
+
+
+## Which letter bit is being held up, or 0 if none — one of `LETTER_G/U/B`, so
+## `letter_name` turns it straight into the glyph on the card.
+func letter_hold_letter(peer_id: int) -> int:
+	if not _letter_holds.has(peer_id):
+		return 0
+	return int(_letter_holds[peer_id]["letter"])
+
+
+# ---------------------------------------------------------------- the elder ---
+
+## Picking the robe up makes that Gub the Elder **for `elder_duration` seconds**
+## (D-040), during which it cannot be killed by anything but the void.
+##
+## **This supersedes D-038's "until it dies"**, and the two halves are one
+## change rather than two: invincibility takes death away as the exit, so
+## something else has to be it, and the something else is a clock. What that
+## buys is a weapon whose cost is known in advance by everybody in the fight —
+## the counter-play to an Elder is no longer killing it, it is surviving it, and
+## twenty seconds is a length of time you can decide to spend behind a rock.
+##
+## It lives here rather than on the Gub for the reasons the letter hold does: it
+## is match state, it has to survive being watched by seven peers who picked up
+## nothing, and the host has to be the only machine that can grant or end one.
+## A flag on `GubCombat` would be a weapon the client that benefits from it gets
+## to declare it has — and a *clock* on `GubCombat` would be a countdown running
+## on the machine that wants it to run slowly.
+##
+## Three things end one and they all run the same teardown: the clock
+## (`_tick_elders`), a void death (`report_kill`), and a disconnect
+## (`_on_player_left`). Nothing else does — not a respawn, not a mushroom, not
+## finishing a letter hold.
+##
+## **Expiry is not a death.** Letters live on the `stats` row and are untouched;
+## the mushrooms and lures in `GubCombat` are untouched too, because nothing
+## calls `reset()`. A Gub that has just spent twenty seconds as the Elder walks
+## away with everything it walked in with, plus its spear back.
+
+
+## Host only, from `claim_pickup`, which has already established that this
+## player is alive and in a running match.
+func _make_elder(peer_id: int) -> void:
+	if not stats.has(peer_id) or _elders.has(peer_id):
+		return
+	_do_set_elder.rpc(peer_id, true, config().elder_duration)
+	_do_set_elder(peer_id, true, config().elder_duration)
+
+
+## Host only. The robe is consumed — there is nothing to give back and nothing
+## to put on the ground.
+func _end_elder(peer_id: int) -> void:
+	if not _elders.has(peer_id):
+		return
+	_do_set_elder.rpc(peer_id, false, 0.0)
+	_do_set_elder(peer_id, false, 0.0)
+
+
+## Host only. Burn out the robes whose time is up.
+##
+## The same shape as `_tick_letter_holds` and deliberately so: `.keys()` copies,
+## because ending a robe erases its own row. There is no award at the end of
+## this one — the robe simply stops, which is the whole of what expiry is.
+func _tick_elders() -> void:
+	for peer_id: int in _elders.keys():
+		if _now() >= float(_elders[peer_id]["ends_at"]):
+			_end_elder(peer_id)
+
+
+## The host's word on who is wearing the robe, applied on every peer.
+##
+## This is both halves at once: the row that the rules read and the cloth that
+## the players see. Keeping them in one call is what stops a Gub being the Elder
+## in the bookkeeping and a plain Gub on somebody's screen — which would be the
+## worst available bug here, because the robe is the only warning anybody gets.
+##
+## `seconds` is ignored when taking one off, and is deliberately still a
+## parameter rather than two RPCs: one message, one decision, one place where
+## the robe and the clock behind it are written together.
+@rpc("authority", "call_remote", "reliable")
+func _do_set_elder(peer_id: int, wearing: bool, seconds: float) -> void:
+	if wearing:
+		_elders[peer_id] = {"ends_at": _now() + seconds}
+	elif not _elders.erase(peer_id):
+		return
+	var gub: Gub = gubs.get(peer_id)
+	if is_instance_valid(gub):
+		gub.set_elder(wearing)
+	elder_changed.emit(peer_id)
+
+
+## The robe turning a blow aside, on every peer.
+##
+## Sent from `report_kill` and only from there, because that is the one place
+## that knows a death was refused *and* why. Putting it on the spear instead
+## would have covered the spear and left the other Elder's bolt silent, and
+## putting it on both would have been two copies of one rule waiting to
+## disagree about which hits count.
+##
+## The point rather than the Gub's position: a spear turned aside at the shin
+## and one turned aside at the head should not flash in the same place, and the
+## whole job of this is to say *where* the thing that did not kill you hit.
+@rpc("authority", "call_remote", "reliable")
+func _do_ward(peer_id: int, point: Vector3) -> void:
+	var gub: Gub = gubs.get(peer_id)
+	WardFlash.burst(_spawn_root(), point)
+	# A kick for the Elder only, and a small one. Being shot at and surviving it
+	# is information the player wants — an Elder with its back to a fight has no
+	# other way to learn there is one — and it is deliberately far below the 1.4
+	# a death is worth: this is a nudge, not an event.
+	_shake(gub, WardFlash.SHAKE)
+
+
+## Drop every robe locally. Used when the whole match is torn down — a Gub
+## wearing one into the next match would be an Elder nobody earned.
+func _clear_elders() -> void:
+	if _elders.is_empty():
+		return
+	var were := _elders.keys()
+	_elders.clear()
+	for peer_id: int in were:
+		var gub: Gub = gubs.get(peer_id)
+		if is_instance_valid(gub):
+			gub.set_elder(false)
+		elder_changed.emit(peer_id)
+
+
+## Is this Gub the Elder right now? Safe to ask about a peer with no row, which
+## is what `GubCombat` does three times a frame for every Gub in the match.
+##
+## The presence of the row, deliberately, and never `elder_remaining() > 0`: a
+## client's countdown can reach zero a round trip before the host's does, and a
+## Gub that took its own robe off on that frame would be a Gub the host still
+## refuses to let throw a spear.
+func is_elder(peer_id: int) -> bool:
+	return _elders.has(peer_id)
+
+
+## Seconds left on this Gub's robe, or 0.0 if it is not wearing one. Never
+## negative, so the HUD can divide by `MatchConfig.elder_duration` and get a
+## fraction to fill a bar with — the same contract `letter_hold_remaining` has,
+## because it is read by the same kind of control for the same reason.
+func elder_remaining(peer_id: int) -> float:
+	if not _elders.has(peer_id):
+		return 0.0
+	return maxf(0.0, float(_elders[peer_id]["ends_at"]) - _now())
+
+
 # ------------------------------------------------------------------ scores ---
 
 func _push_scores() -> void:
@@ -577,9 +1221,18 @@ func team_score(team: int) -> int:
 
 
 ## Peers sorted best-first, for the scoreboard and the results screen.
+##
+## "Best" is whatever the match is actually about. Under LETTERS that is the
+## letter count, because the winner is the player holding three of them and a
+## board that ranks the match by kills would put somebody else at the top of the
+## results screen the moment the match they won ends. Kills stay the tiebreak
+## under letters, and deaths stay the tiebreak under everything.
 func ranking() -> Array:
 	var ids := stats.keys()
+	var by_letters := config().win_condition == MatchConfig.WinCondition.LETTERS
 	ids.sort_custom(func(a, b):
+		if by_letters and letter_count(a) != letter_count(b):
+			return letter_count(a) > letter_count(b)
 		if kills(a) != kills(b):
 			return kills(a) > kills(b)
 		return deaths(a) < deaths(b))
@@ -601,6 +1254,17 @@ func _check_win() -> void:
 				_finish("elimination")
 		MatchConfig.WinCondition.TIME_ONLY:
 			pass
+		MatchConfig.WinCondition.LETTERS:
+			# Letters are tracked per player even in Teams, so this is a scan of
+			# players either way and the team simply inherits the win. A team
+			# whose three members hold G, U and B between them has not won
+			# anything: the card game's ending is one hand with all three in it,
+			# and pooling them would make a four-player team a near-certainty
+			# against a two-player one.
+			for peer_id: int in stats:
+				if has_all_letters(peer_id):
+					_finish("letters")
+					return
 
 
 ## In teams, a kill counts toward the team's total, so the limit is a team limit.
@@ -627,6 +1291,12 @@ func _finish(reason: String) -> void:
 		"ranking": ranking(),
 		"stats": stats,
 		"mode": config().mode,
+		# Carried for the same reason `mode` is, and it is a read for the
+		# results screen and nothing else: that screen is driven entirely from
+		# this snapshot rather than from live state (its header says why), and
+		# without the condition in here it cannot tell a letters match from any
+		# other one and would have to guess from the rows.
+		"win_condition": config().win_condition,
 	}
 	if config().mode == MatchConfig.Mode.TEAMS:
 		var scores := {}

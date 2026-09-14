@@ -241,6 +241,426 @@ func _run_lives_elimination() -> void:
 	_check("eliminated players stay out", MatchState.is_alive(901), false)
 
 
+func _run_letters() -> void:
+	_scenario("free-for-all, collect G·U·B")
+	var finished := {}
+	_begin(3, func(c: MatchConfig) -> void:
+		c.mode = MatchConfig.Mode.FREE_FOR_ALL
+		c.win_condition = MatchConfig.WinCondition.LETTERS
+		c.kill_limit = 50
+		c.time_limit = 0)
+	MatchState.match_finished.connect(func(s: Dictionary) -> void:
+		finished.merge(s, true), CONNECT_ONE_SHOT)
+
+	_check("everyone starts empty-handed", MatchState.letters_for(901), 0)
+	_check("a card is taken", MatchState.award_letter(901, MatchState.LETTER_G), true)
+	_check("and is held", MatchState.letter_count(901), 1)
+
+	# Duplicates are wasted, deliberately (D-033). The award *fails* and the
+	# caller throws the card away anyway — `MatchState.claim_pickup` ignores this
+	# answer on purpose, so the check is that it is false and that nothing moved.
+	_check("a duplicate grants nothing",
+		MatchState.award_letter(901, MatchState.LETTER_G), false)
+	_check("and leaves the set alone", MatchState.letter_count(901), 1)
+	_check("and does not turn into a letter they needed",
+		MatchState.letters_for(901), MatchState.LETTER_G)
+
+	# The one thing on a stats row a death does not touch. Everything a Gub was
+	# carrying goes; the letters stay.
+	_kill(901, 902)
+	_check("letters survive a death", MatchState.letter_count(901), 1)
+	_revive(901)
+
+	MatchState.award_letter(901, MatchState.LETTER_U)
+	_check("two of three is not a win", MatchState.phase, MatchState.Phase.PLAYING)
+	MatchState.award_letter(901, MatchState.LETTER_B)
+	_check("three of three ends it", MatchState.phase, MatchState.Phase.POST_MATCH)
+	_check("reason", finished.get("reason"), "letters")
+	# The ranking is sorted by letters under this condition, not by kills — 902
+	# has the only kill in this scenario and must not be top of the results.
+	_check("the collector leads", _leader(finished), 901)
+
+	# Nothing is awarded after the whistle, the same rule kills obey.
+	_check("no letters after the match ends",
+		MatchState.award_letter(902, MatchState.LETTER_G), false)
+
+
+func _run_team_letters() -> void:
+	_scenario("teams, letters do not pool")
+	var finished := {}
+	# `_begin` assigns teams round-robin over PEERS, so 1 and 902 are team 0.
+	_begin(4, func(c: MatchConfig) -> void:
+		c.mode = MatchConfig.Mode.TEAMS
+		c.team_count = 2
+		c.win_condition = MatchConfig.WinCondition.LETTERS
+		c.kill_limit = 50
+		c.time_limit = 0)
+	MatchState.match_finished.connect(func(s: Dictionary) -> void:
+		finished.merge(s, true), CONNECT_ONE_SHOT)
+
+	# G in one team-mate's hand, U and B in the other's. Between them team 0
+	# holds all three and has won nothing: the card game's ending is one hand
+	# with the whole word in it, and pooling would make a four-player team a
+	# near-certainty against a two-player one.
+	MatchState.award_letter(1, MatchState.LETTER_G)
+	MatchState.award_letter(902, MatchState.LETTER_U)
+	MatchState.award_letter(902, MatchState.LETTER_B)
+	_check("a team holding all three between them has not won",
+		MatchState.phase, MatchState.Phase.PLAYING)
+
+	MatchState.award_letter(902, MatchState.LETTER_G)
+	_check("one hand with all three ends it",
+		MatchState.phase, MatchState.Phase.POST_MATCH)
+	_check("reason", finished.get("reason"), "letters")
+	_check("the collector leads", _leader(finished), 902)
+	_check("their team-mate kept their own letter",
+		MatchState.letters_for(1), MatchState.LETTER_G)
+
+
+func _run_letter_hold() -> void:
+	_scenario("holding a letter up for it")
+	var finished := {}
+	_begin(3, func(c: MatchConfig) -> void:
+		c.mode = MatchConfig.Mode.FREE_FOR_ALL
+		c.win_condition = MatchConfig.WinCondition.LETTERS
+		c.kill_limit = 50
+		c.time_limit = 0
+		c.letter_hold_time = 10.0)
+	MatchState.match_finished.connect(func(s: Dictionary) -> void:
+		finished.merge(s, true), CONNECT_ONE_SHOT)
+
+	# Touching a card buys a countdown, not a letter (D-035).
+	var first := _drop_card(MatchState.LETTER_G)
+	MatchState.claim_pickup(first, 901)
+	_check("the card is taken off the ground", _card_live(first), false)
+	_check("but the letter is not granted", MatchState.letters_for(901), 0)
+	_check("the Gub is holding it up", MatchState.is_holding_letter(901), true)
+	_check("and it is the letter that was on the card",
+		MatchState.letter_hold_letter(901), MatchState.LETTER_G)
+	_check("with the clock running",
+		MatchState.letter_hold_remaining(901) > 9.0, true)
+
+	# The hand and the gate, which are not allowed to disagree. Both read
+	# `has_spear()`, so a Gub that looks armed is armed and one holding a card
+	# is not — that is the whole tell the mechanic is built on.
+	var combat := _combat(901)
+	var hand := _hand(901)
+	_check("the Gub has a combat node", combat != null, true)
+	_check("and a hand to put the card in", hand != null, true)
+	if combat != null and hand != null:
+		_check("no spear while holding", combat.has_spear(), false)
+		_check("the shaft leaves the hand", hand.is_carried(), false)
+		_check("and the card is in it", hand.has_letter(), true)
+
+	# One hold at a time. A second card is not consumed, not queued, and not
+	# refused to anybody else — it is simply still there.
+	var second := _drop_card(MatchState.LETTER_U)
+	MatchState.claim_pickup(second, 901)
+	_check("a second card is left where it lies", _card_live(second), true)
+	_check("and does not replace the hold in progress",
+		MatchState.letter_hold_letter(901), MatchState.LETTER_G)
+	MatchState.claim_pickup(second, 902)
+	_check("somebody else can walk over it", _card_live(second), false)
+	_check("and start their own hold", MatchState.is_holding_letter(902), true)
+
+	# The payout, which is the only thing that scores.
+	_expire_hold(901)
+	_check("a finished hold grants the letter",
+		MatchState.letters_for(901), MatchState.LETTER_G)
+	_check("and hands the spear back", MatchState.is_holding_letter(901), false)
+	_check("and leaves nothing counting down",
+		MatchState.letter_hold_remaining(901), 0.0)
+	if combat != null and hand != null:
+		_check("the spear comes back", combat.has_spear(), true)
+		_check("into the hand", hand.is_carried(), true)
+		_check("and the card is gone from it", hand.has_letter(), false)
+
+	# Dying nine seconds in is the whole point of the mechanic, from the other
+	# side. 902 is still holding U.
+	var before := MatchState._pickups.size()
+	_kill(902, 901)
+	_check("dying mid-hold grants nothing", MatchState.letters_for(902), 0)
+	_check("and ends the hold", MatchState.is_holding_letter(902), false)
+	# Not destroyed. At an 8% drop rate a deleted letter can be a hundred deaths
+	# from being replaced, and "kill the carrier and take the card" is the fight
+	# the hold exists to create.
+	_check("and puts the card back in circulation",
+		MatchState._pickups.size(), before + 1)
+	_check("carrying the letter that was being held",
+		_newest_card_letter(), MatchState.LETTER_U)
+	_revive(902)
+
+	# A letter you already hold is worth nothing whether you stand still for it
+	# or not, so there is nothing to stand still for (D-033).
+	var dupe := _drop_card(MatchState.LETTER_G)
+	MatchState.claim_pickup(dupe, 901)
+	_check("a duplicate is consumed on touch", _card_live(dupe), false)
+	_check("and starts no hold", MatchState.is_holding_letter(901), false)
+	_check("and grants nothing", MatchState.letter_count(901), 1)
+
+	# Zero is a real setting — the mode without the hold — and it must not go
+	# through a hold that lasts one frame.
+	Net.config.letter_hold_time = 0.0
+	var instant := _drop_card(MatchState.LETTER_U)
+	MatchState.claim_pickup(instant, 901)
+	_check("a zero hold grants on touch", MatchState.letter_count(901), 2)
+	_check("without ever starting one", MatchState.is_holding_letter(901), false)
+
+	# The whistle beats the clock. Nobody is owed the last two seconds of a
+	# match somebody else has already won.
+	Net.config.letter_hold_time = 10.0
+	var last := _drop_card(MatchState.LETTER_B)
+	MatchState.claim_pickup(last, 901)
+	_check("one letter short and holding the third",
+		MatchState.is_holding_letter(901), true)
+	MatchState.award_letter(1, MatchState.LETTER_G)
+	MatchState.award_letter(1, MatchState.LETTER_U)
+	MatchState.award_letter(1, MatchState.LETTER_B)
+	_check("somebody else completes the word first",
+		MatchState.phase, MatchState.Phase.POST_MATCH)
+	_check("reason", finished.get("reason"), "letters")
+	_check("the hold ends with the match", MatchState.is_holding_letter(901), false)
+	_check("granting nothing",
+		MatchState.letters_for(901) & MatchState.LETTER_B, 0)
+
+
+func _run_letter_hold_disconnect() -> void:
+	_scenario("a hold ended by a disconnect")
+	_begin(3, func(c: MatchConfig) -> void:
+		c.mode = MatchConfig.Mode.FREE_FOR_ALL
+		c.win_condition = MatchConfig.WinCondition.LETTERS
+		c.kill_limit = 50
+		c.time_limit = 0
+		c.letter_hold_time = 10.0)
+
+	var card := _drop_card(MatchState.LETTER_B)
+	MatchState.claim_pickup(card, 902)
+	_check("the leaver was holding one", MatchState.is_holding_letter(902), true)
+
+	# Closing the game mid-hold is a death, exactly. The alternative — a hold
+	# that survives its owner — is a card that never comes back.
+	var before := MatchState._pickups.size()
+	MatchState._on_player_left(902)
+	_check("the hold goes with them", MatchState.is_holding_letter(902), false)
+	_check("and the card does not", MatchState._pickups.size(), before + 1)
+	_check("it is the same letter", _newest_card_letter(), MatchState.LETTER_B)
+
+
+func _run_elder() -> void:
+	_scenario("the Elder: a robe, a bolt, a clock and no way to be killed")
+	_begin(3, func(c: MatchConfig) -> void:
+		c.mode = MatchConfig.Mode.FREE_FOR_ALL
+		c.win_condition = MatchConfig.WinCondition.KILL_LIMIT
+		c.kill_limit = 50
+		c.time_limit = 0
+		c.letter_hold_time = 10.0
+		c.lightning_cooldown = 5.0
+		# Set rather than left at their defaults, and all four deliberately
+		# *unlike* them: a check against a multiplier that happens to be 1.0
+		# passes whether or not anything applies it, and a duration read off the
+		# same dial the code reads would agree with a clock that was never
+		# started. These are the numbers this scenario asserts against, and they
+		# are not the numbers that ship.
+		c.elder_duration = 45.0
+		c.elder_speed_multiplier = 1.5
+		c.elder_jump_multiplier = 1.4
+		c.lightning_delay = 0.3)
+
+	# The robe is a drop like any other: it lies there and the first living Gub
+	# to walk over it takes it.
+	var robe := _drop_robe()
+	_check("nobody starts as the Elder", MatchState.is_elder(901), false)
+	MatchState.claim_pickup(robe, 901)
+	_check("the robe is taken off the ground", _card_live(robe), false)
+	_check("and its finder is the Elder", MatchState.is_elder(901), true)
+	# The rules and the cloth, which are not allowed to disagree.
+	_check("who is actually wearing it", _wearing_robe(901), true)
+	_check("and nobody else became one", MatchState.is_elder(902), false)
+
+	# The hand. An Elder has no spear at all — not a spear on cooldown, not a
+	# spear it is not allowed to throw: `has_spear()` is false for as long as it
+	# is the Elder, and the fist is empty of shaft and full of energy instead.
+	var combat := _combat(901)
+	var hand := _hand(901)
+	_check("the Elder has a combat node", combat != null, true)
+	if combat != null and hand != null:
+		_check("an Elder has no spear", combat.has_spear(), false)
+		_check("and no shaft in its hand", hand.is_carried(), false)
+		_check("it has lightning instead", combat.has_lightning(), true)
+		_check("and the hand crackles to say so", hand.is_charged(), true)
+
+	# It still collects everything else. The robe replaces the spear and
+	# nothing else (D-038).
+	MatchState.claim_pickup(MatchState._spawn_drop(
+		Pickup.Kind.MUSHROOM, 0, Vector3.ZERO), 901)
+	if combat != null:
+		_check("an Elder still picks up mushrooms", combat.mushroom_count(), 1)
+
+	# The cooldown gates a second cast, and it is the host's copy that does it —
+	# `_cast` goes straight at `_host_cast_lightning`, which is the only thing
+	# in the game that can actually fire one.
+	_cast(901)
+	if combat != null:
+		_check("firing spends the shot", combat.has_lightning(), false)
+		_check("and the hand goes dark", hand.is_charged(), false)
+		var before := combat._server_lightning_ready_at
+		_cast(901)
+		_check("a second cast inside the cooldown is refused",
+			combat._server_lightning_ready_at, before)
+		# Wind both clocks back rather than sitting through five real seconds of
+		# a config dial, exactly as `_expire_hold` does for the letter.
+		combat._server_lightning_ready_at = 0.0
+		combat._lightning_ready_at = 0.0
+		_check("and it comes back when the cooldown ends",
+			combat.has_lightning(), true)
+
+	# A letter hold takes the bolt away exactly as it takes the spear away
+	# (D-035). Without this the hold stops being a vulnerability for precisely
+	# the player who most needs to have one.
+	Net.config.win_condition = MatchConfig.WinCondition.LETTERS
+	var card := _drop_card(MatchState.LETTER_G)
+	MatchState.claim_pickup(card, 901)
+	_check("an Elder can pick up a letter", MatchState.is_holding_letter(901), true)
+	if combat != null and hand != null:
+		_check("and cannot fire while holding it", combat.has_lightning(), false)
+		_check("the crackle goes with it", hand.is_charged(), false)
+		_check("and the card is in the hand instead", hand.has_letter(), true)
+		var held_at := combat._server_lightning_ready_at
+		_cast(901)
+		_check("the host refuses a cast mid-hold",
+			combat._server_lightning_ready_at, held_at)
+	_expire_hold(901)
+	_check("finishing the hold still scores", MatchState.letters_for(901),
+		MatchState.LETTER_G)
+	if combat != null and hand != null:
+		_check("and hands the bolt back, not a spear", combat.has_lightning(), true)
+		_check("with the spear still gone", combat.has_spear(), false)
+		_check("and the crackle back in the fist", hand.is_charged(), true)
+	Net.config.win_condition = MatchConfig.WinCondition.KILL_LIMIT
+
+	# **The boosts** (D-040). Read off `Gub` rather than off the config, because
+	# the thing worth checking is that the multiplier reached the one point every
+	# stance comes out of — a boost applied to `RUN_SPEED` alone is a walking
+	# Elder that moves at exactly everybody else's pace, and the difference
+	# between those two bugs and no bug at all is invisible from the dial.
+	var body: Gub = MatchState.gubs.get(901)
+	if body != null:
+		_near("the Elder walks faster", body.target_speed(),
+			Gub.WALK_SPEED * Net.config.elder_speed_multiplier)
+		body.wants_sprint = true
+		_near("and sprints faster by the same factor", body.target_speed(),
+			Gub.RUN_SPEED * Net.config.elder_speed_multiplier)
+		body.wants_sprint = false
+		_near("and jumps harder", body.jump_velocity(),
+			Gub.JUMP_VELOCITY * Net.config.elder_jump_multiplier)
+	# The apex, which is the number that actually decides whether a boost puts a
+	# player somewhere a map did not plan for — and it is not the number on the
+	# slider, because height goes as the square of launch velocity. Pinned here
+	# rather than left in a comment: the shipping 1.25 is +56% of height, and
+	# that is the fact anybody retuning this dial has to be handed.
+	_near("a plain jump tops out at 1.69 m",
+		snappedf(Gub.apex_for(Gub.JUMP_VELOCITY), 0.01), 1.69)
+	_near("the shipping 1.25x boost tops out at 2.64",
+		snappedf(Gub.apex_for(Gub.JUMP_VELOCITY * 1.25), 0.01), 2.64)
+
+	# **An Elder cannot be killed.** This supersedes D-038's "dying consumes the
+	# robe": with nothing able to kill one, death is no longer the exit and the
+	# clock below is (D-040).
+	#
+	# Checked here *and* against a real spear in `tools/combat_range.tscn
+	# lightning`, which is the one that matters. This asserts the rule where the
+	# rule lives; that one asserts it where a player meets it, with a real shaft
+	# in the air and a real `report_kill` at the end of it. D-039 is the standing
+	# lesson about why the second is not optional.
+	var deaths := MatchState.deaths(901)
+	var killer_kills := MatchState.kills(902)
+	_kill(901, 902)
+	_check("a spear does not kill the Elder", MatchState.is_alive(901), true)
+	_check("it is still the Elder", MatchState.is_elder(901), true)
+	_check("and the robe is still on", _wearing_robe(901), true)
+	_check("nobody is credited with the kill", MatchState.kills(902), killer_kills)
+	_check("and it costs no death", MatchState.deaths(901), deaths)
+	# The one thing a refused hit does leave behind, and it is not cosmetic: an
+	# Elder shoved off a ledge by a bolt that did not kill it is a void death
+	# somebody earned.
+	_check("but the attacker is remembered for the void",
+		MatchState.stats[901]["last_attacker"], 902)
+
+	# **The clock is the exit.** The host owns it, exactly as it owns a letter
+	# hold, and every peer counts the same row down.
+	_check("the robe is on a clock", MatchState.elder_remaining(901) > 0.0, true)
+	_check("and it is not longer than the dial",
+		MatchState.elder_remaining(901) <= Net.config.elder_duration, true)
+
+	# **Expiry is not a death.** Everything the Gub had before the robe is still
+	# there after it: the letter it earned mid-scenario and the mushroom it
+	# picked up. That is the half of this most likely to rot, because the
+	# obvious way to write the teardown is to reuse the death path.
+	var pickups := MatchState._pickups.size()
+	var letters_before := MatchState.letters_for(901)
+	var stock_before := combat.mushroom_count() if combat != null else -1
+	_expire_elder(901)
+	_check("the robe burns out on its own", MatchState.is_elder(901), false)
+	_check("and comes off the body", _wearing_robe(901), false)
+	_check("and puts nothing back on the ground",
+		MatchState._pickups.size(), pickups)
+	_check("expiry is not a death", MatchState.is_alive(901), true)
+	_check("it keeps its letters", MatchState.letters_for(901), letters_before)
+	if combat != null and hand != null:
+		_check("and its carried stock", combat.mushroom_count(), stock_before)
+		_check("the spear comes back", combat.has_spear(), true)
+		_check("and the bolt is gone", combat.has_lightning(), false)
+		_check("with the shaft back in the fist", hand.is_carried(), true)
+	if body != null:
+		_near("and it moves like a Gub again", body.target_speed(), Gub.WALK_SPEED)
+		_near("and jumps like one", body.jump_velocity(), Gub.JUMP_VELOCITY)
+
+	# **The void still kills, and it is the only thing that does.** Spawn
+	# protection carves the same hole for the same reason: a Gub that cannot die
+	# to the void falls past the bottom of the island for ever, alive and
+	# unreachable. Without this the invincibility above is a soft-lock waiting
+	# for somebody to walk off a ledge.
+	MatchState.claim_pickup(_drop_robe(), 901)
+	_check("a second robe is claimable", MatchState.is_elder(901), true)
+	MatchState.report_kill(901, 901, Gub.Cause.VOID, Vector3.ZERO, Vector3.DOWN, "")
+	_check("the void kills an Elder", MatchState.is_alive(901), false)
+	_check("and takes the robe with it", MatchState.is_elder(901), false)
+	_check("and off the body", _wearing_robe(901), false)
+
+	_revive(901)
+	MatchState._do_respawn(901, Transform3D.IDENTITY)
+	_check("respawning does not give it back", MatchState.is_elder(901), false)
+	if combat != null:
+		_check("and the spear is back", combat.has_spear(), true)
+		_check("with no lightning", combat.has_lightning(), false)
+
+	# Two robes, two Elders. There is deliberately no "only one" rule: a robe
+	# that refused to be picked up would be the most conspicuous object on the
+	# map, permanently.
+	MatchState.claim_pickup(_drop_robe(), 901)
+	MatchState.claim_pickup(_drop_robe(), 902)
+	_check("two Elders can exist at once",
+		MatchState.is_elder(901) and MatchState.is_elder(902), true)
+	_check("both wearing one",
+		_wearing_robe(901) and _wearing_robe(902), true)
+	# And two clocks, not one. `_tick_elders` walks a copy of the keys and ends
+	# only the rows that are up, so one robe burning out must leave the other
+	# alone — the bug here would be a loop that erased while iterating, which in
+	# GDScript skips a row rather than erroring.
+	_expire_elder(901)
+	_check("one robe burning out leaves the other", MatchState.is_elder(902), true)
+	_check("and only the expired one came off", MatchState.is_elder(901), false)
+
+	# A disconnect is the third and last way one ends — and unlike a letter card
+	# there is nothing to put back, so the world gains nothing.
+	pickups = MatchState._pickups.size()
+	MatchState._on_player_left(902)
+	_check("a leaver stops being the Elder", MatchState.is_elder(902), false)
+	_check("and leaves no robe behind", MatchState._pickups.size(), pickups)
+
+	_sweep_effects()
+
+
 func _run_time_limit() -> void:
 	_scenario("the clock")
 	var finished := {}

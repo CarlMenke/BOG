@@ -18,15 +18,54 @@ extends Node
 ##
 ## Cooldowns are therefore tracked twice on purpose. The local copy exists so the
 ## HUD can show a sweeping timer without waiting for a round trip; the host's
-## copy is the one that counts.
+## copy is the one that counts. **Carried stock is tracked the same way and for
+## the same reason** — the count under the mushroom glyph has to move on the
+## click, not a round trip later, and the host's count is the one that decides
+## whether a mushroom actually appears.
+##
+## The mushroom and the lure are **inventory now, not abilities** (D-032). There
+## is no cooldown that refills them: a Gub spawns with neither, picks them up off
+## corpses, spends them one at a time and loses whatever is left when it dies.
+## `mushroom_use_delay` and `lure_use_delay` are all that is left of the old
+## timers, and they are a floor on how fast a stack can be emptied rather than a
+## refill rate.
+##
+## **A letter hold takes the spear away and nothing else** (D-035). While
+## `MatchState` says this Gub is holding a card up, `has_spear()` is false, the
+## card is in the fist where the shaft would be, and the throw is refused on the
+## client and again on the host. The mushroom and the lure are untouched, and so
+## is movement — a Gub running a hold out runs exactly as fast as one that is
+## not, which is deliberate and is the user's call.
 ##
 ## The spear is the one ability that does *not* happen on the click. A click
 ## starts the windup animation; the spear leaves the hand
 ## `GubAnimator.THROW_RELEASE_TIME` later, and the aim is read at that moment
 ## rather than at the click, so a target that moves while you wind up has to be
 ## led. See D-025.
+##
+## **The Elder replaces the spear rather than adding to it** (D-038). For as long
+## as `MatchState` says this Gub is the Elder — twenty seconds, since D-040 —
+## `has_spear()` is false, the fist holds no shaft, and the same click runs the
+## same `Throw` clip through the
+## same windup — the branch is taken at the *release*, next to where the aim is
+## read, and what comes out is a hitscan bolt instead of a projectile. One
+## windup, one release tick, two outcomes: a parallel windup for the Elder would
+## be a second copy of the one piece of timing D-025 exists to keep honest.
+##
+## **The Elder's release is not the spear's** (D-040). The user, having played
+## one: *"there should be basically no delay for the lightning."* The bolt leaves
+## `MatchConfig.lightning_delay` after the click — 0.2 s by default against the
+## spear's 0.71 — and the *same clip* is played fast enough to have got there, at
+## a rate derived from the delay by `GubAnimator.throw_rate_for_release`. The
+## windup is still one piece of code with one set of edge cases; the only thing
+## that branches is how fast it runs and when its release lands.
 
 signal cooldowns_changed()
+## Carried stock changed: spent, picked up, or wiped by a death. Separate from
+## `cooldowns_changed` because they move for different reasons and at wildly
+## different rates — the counts change a handful of times a match and the
+## cooldowns change every frame the HUD asks.
+signal inventory_changed()
 
 const SPEAR := preload("res://scripts/items/spear_projectile.gd")
 const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
@@ -397,43 +436,129 @@ func _on_spear_struck_gub(victim: Gub, point: Vector3, bone: String,
 		point, spear.impact_velocity(), bone)
 
 
+# --------------------------------------------------------------- inventory ---
+
+## Host only. Called by `MatchState.claim_pickup` when this Gub walks over a
+## drop, and by the testbeds, which are the only other thing in the build that
+## can put an item in a hand (see the note in `tools/combat_range.gd`).
+##
+## The host counts and the host says so. A client cannot reach this: the whole
+## point of `Combat` belonging to peer 1 on every machine (D-024) is that the
+## `_do_*` broadcast below is refused unless it came from the host.
+func grant_mushroom(count: int = 1) -> void:
+	if not Net.is_host or count <= 0:
+		return
+	_server_mushrooms += count
+	_broadcast_inventory()
+
+
+func grant_lure(count: int = 1) -> void:
+	if not Net.is_host or count <= 0:
+		return
+	_server_lures += count
+	_broadcast_inventory()
+
+
+func _broadcast_inventory() -> void:
+	_do_set_inventory.rpc(_server_mushrooms, _server_lures)
+	_do_set_inventory(_server_mushrooms, _server_lures)
+
+
+## The host's word on what this Gub is holding, on every peer. Also what
+## corrects a predictive decrement that the host refused — a client that spent a
+## mushroom it did not have gets its count put back here rather than being left
+## one short for the rest of its life.
+@rpc("authority", "call_remote", "reliable")
+func _do_set_inventory(mushrooms: int, lures: int) -> void:
+	if _mushrooms == mushrooms and _lures == lures:
+		return
+	_mushrooms = mushrooms
+	_lures = lures
+	inventory_changed.emit()
+
+
 # ---------------------------------------------------------------- mushroom ---
 
+## Spend one mushroom, if there is one to spend.
+##
+## The *direction* travels with the request, which is new and is the whole
+## reason this signature changed. A mushroom now goes where the camera is
+## looking rather than where the body happens to be pointed, and the camera is
+## the one thing about a Gub the host does not have: `GubCamera` shuts itself
+## down on every copy but the owner's, so the host's copy of a remote Gub's rig
+## has never moved. Asking it would plant every client's mushroom due north.
+##
+## So the client sends the look, exactly as `_request_throw_spear` sends the aim,
+## and the host still runs both validation rays on it. What a modified client can
+## do with this is choose a direction — which it could already do by turning —
+## and no more: it cannot plant through a wall, over a cliff, or further than
+## MUSHROOM_DISTANCE away.
 func try_place_mushroom() -> void:
-	if mushroom_cooldown() > 0.0:
+	if _mushrooms <= 0 or mushroom_use_cooldown() > 0.0:
 		return
-	_mushroom_ready_at = _now() + _config.mushroom_cooldown
+	var look := _look_direction()
+	_mushroom_ready_at = _now() + _config.mushroom_use_delay
+	# Spent on the click. If the host refuses it, `_do_set_inventory` puts it
+	# back; leaving the count up until the round trip lands is what lets a held
+	# key spend the same mushroom twice.
+	_mushrooms -= 1
+	inventory_changed.emit()
 	cooldowns_changed.emit()
 	if Net.is_host:
-		_host_place_mushroom()
+		_host_place_mushroom(look)
 	else:
-		_request_mushroom.rpc_id(1)
+		_request_mushroom.rpc_id(1, look)
 
 
 @rpc("any_peer", "call_remote", "reliable")
-func _request_mushroom() -> void:
+func _request_mushroom(look: Vector3) -> void:
 	if not Net.is_host or multiplayer.get_remote_sender_id() != _gub.peer_id:
 		return
-	_host_place_mushroom()
+	_host_place_mushroom(look)
 
 
-func _host_place_mushroom() -> void:
-	if not _gub.alive or _now() < _server_mushroom_ready_at:
+func _host_place_mushroom(look: Vector3) -> void:
+	if not _gub.alive:
 		return
-	var spot := _mushroom_spot()
+	if _server_mushrooms <= 0 or _now() < _server_mushroom_ready_at:
+		# The asker has already decremented its own count, so tell it what the
+		# truth is. Without this a refused placement is a mushroom that quietly
+		# disappears out of the stack and never comes back.
+		_broadcast_inventory()
+		return
+	# Flattened and normalised here rather than trusted: a client is free to
+	# send a zero, a NaN, or a vector pointing at the sky.
+	var flat := Vector3(look.x, 0.0, look.z)
+	if flat.length_squared() < 0.0001:
+		flat = _gub.facing()
+	flat = flat.normalized()
+
+	var spot := _mushroom_spot(flat)
 	if spot == Vector3.INF:
+		# Nowhere to put it — a wall, or a ledge. Refused, and refunded: the
+		# alternative is losing a mushroom to a cliff edge you could not see.
+		_broadcast_inventory()
 		return
-	_server_mushroom_ready_at = _now() + _config.mushroom_cooldown
-	_do_place_mushroom.rpc(spot, _gub.body_yaw)
-	_do_place_mushroom(spot, _gub.body_yaw)
+	_server_mushrooms -= 1
+	_server_mushroom_ready_at = _now() + _config.mushroom_use_delay
+	# The camera's yaw, not the body's, so the cap faces the way you were
+	# looking. Planting one while strafing used to turn it side-on to you.
+	var yaw := Gub.yaw_towards(flat)
+	_do_place_mushroom.rpc(spot, yaw, _server_mushrooms)
+	_do_place_mushroom(spot, yaw, _server_mushrooms)
 
 
-## Find the ground just in front of the Gub. Returns `Vector3.INF` when there is
-## nowhere sensible — at a cliff edge, or with a wall in the way — so that a
-## mushroom is never planted in mid-air over the void.
-func _mushroom_spot() -> Vector3:
+## Find the ground just in front of the Gub, along `forward`. Returns
+## `Vector3.INF` when there is nowhere sensible — at a cliff edge, or with a wall
+## in the way — so that a mushroom is never planted in mid-air over the void.
+##
+## Both rays are unchanged from when this placed along the body's facing. They
+## are what keeps a mushroom off a ledge and out of a wall, they never depended
+## on which direction was handed in, and they are the half of this the host is
+## really here for.
+func _mushroom_spot(forward: Vector3) -> Vector3:
 	var space := _gub.get_world_3d().direct_space_state
-	var ahead := _gub.global_position + _gub.facing() * MUSHROOM_DISTANCE \
+	var ahead := _gub.global_position + forward * MUSHROOM_DISTANCE \
 		+ Vector3.UP * 0.9
 
 	var blocked := PhysicsRayQueryParameters3D.create(
@@ -452,9 +577,14 @@ func _mushroom_spot() -> Vector3:
 
 
 @rpc("authority", "call_remote", "reliable")
-func _do_place_mushroom(spot: Vector3, yaw: float) -> void:
-	_mushroom_ready_at = _now() + _config.mushroom_cooldown
+func _do_place_mushroom(spot: Vector3, yaw: float, remaining: int) -> void:
+	_mushroom_ready_at = _now() + _config.mushroom_use_delay
 	cooldowns_changed.emit()
+	# The host's remainder, which is what makes the predictive decrement above
+	# safe: whatever the client guessed, this is the number.
+	if _mushrooms != remaining:
+		_mushrooms = remaining
+		inventory_changed.emit()
 
 	_prune_mushrooms()
 	# Planting past the cap retires your oldest, rather than refusing — a
@@ -482,11 +612,13 @@ func _prune_mushrooms() -> void:
 ## impossible to place. The host solves the arc that actually lands on the aim
 ## point — see `_lob_velocity`.
 func try_throw_lure() -> void:
-	if lure_cooldown() > 0.0:
+	if _lures <= 0 or lure_use_cooldown() > 0.0:
 		return
 	var origin := _throw_origin()
 	var target := _aim_point()
-	_lure_ready_at = _now() + _config.lure_cooldown
+	_lure_ready_at = _now() + _config.lure_use_delay
+	_lures -= 1
+	inventory_changed.emit()
 	cooldowns_changed.emit()
 	if Net.is_host:
 		_host_throw_lure(origin, target)
@@ -502,17 +634,22 @@ func _request_lure(origin: Vector3, target: Vector3) -> void:
 
 
 func _host_throw_lure(origin: Vector3, target: Vector3) -> void:
-	if not _gub.alive or _now() < _server_lure_ready_at:
+	if not _gub.alive:
+		return
+	if _server_lures <= 0 or _now() < _server_lure_ready_at:
+		# Same as the mushroom: a refusal has to put the asker's count back.
+		_broadcast_inventory()
 		return
 	if origin.distance_to(_gub.global_position) > 3.0:
 		origin = _throw_origin()
-	_server_lure_ready_at = _now() + _config.lure_cooldown
+	_server_lures -= 1
+	_server_lure_ready_at = _now() + _config.lure_use_delay
 	# The client chooses a point; the host chooses the velocity. Sending a
 	# velocity over the wire instead would let a modified client fling a lure at
 	# any speed it liked.
 	var velocity := _lob_velocity(origin, target)
-	_do_throw_lure.rpc(origin, velocity)
-	_do_throw_lure(origin, velocity)
+	_do_throw_lure.rpc(origin, velocity, _server_lures)
+	_do_throw_lure(origin, velocity, _server_lures)
 
 
 ## Launch velocity that carries a projectile of speed `LURE_SPEED` from `from`
@@ -545,9 +682,12 @@ func _lob_velocity(from: Vector3, to: Vector3) -> Vector3:
 
 
 @rpc("authority", "call_remote", "reliable")
-func _do_throw_lure(origin: Vector3, velocity: Vector3) -> void:
-	_lure_ready_at = _now() + _config.lure_cooldown
+func _do_throw_lure(origin: Vector3, velocity: Vector3, remaining: int) -> void:
+	_lure_ready_at = _now() + _config.lure_use_delay
 	cooldowns_changed.emit()
+	if _lures != remaining:
+		_lures = remaining
+		inventory_changed.emit()
 
 	var animator := _gub.get_node_or_null("AnimationTree") as GubAnimator
 	if animator != null:
@@ -585,18 +725,46 @@ func _spawn_root() -> Node:
 	return root if root != null else get_tree().current_scene
 
 
-## Called when a round restarts: wipe cooldowns so nobody starts a round unarmed.
-## A throw that was still winding up when the round ended is dropped with them —
+## Called when a round restarts: wipe cooldowns so nobody starts a round unarmed,
+## and wipe the carried stock so nobody starts one armed with anything else. A
+## throw that was still winding up when the round ended is dropped with them —
 ## respawning with a spear already half thrown is nobody's idea of a fresh start.
+##
+## **Everything you were carrying is lost on death** (D-032). Letters are not —
+## those live on `MatchState.stats` and are permanent progress for the match —
+## but mushrooms and lures go back to zero, which is what makes a life worth
+## keeping once you have gathered a few and what stops the leader compounding.
+##
+## Runs on every peer, from `MatchState._do_respawn`, so the host's copies are
+## zeroed by the same call that zeroes everyone's. No broadcast needed, and
+## sending one would race the respawn that caused it.
 func reset() -> void:
 	_windup_release_at = 0.0
 	_spear_ready_at = 0.0
+	# Zeroed with the rest, and it costs nothing: a respawning Gub is never the
+	# Elder. The reason changed under this line with D-040 and the conclusion did
+	# not — it used to be that dying took the robe away, and now it is that the
+	# only death an Elder can have is the void, which ends the robe on the way
+	# down. A stale deadline here would only matter on the day *that* stops being
+	# true, which is exactly when nobody would think to look.
+	_lightning_ready_at = 0.0
 	_mushroom_ready_at = 0.0
 	_lure_ready_at = 0.0
 	_server_spear_ready_at = 0.0
+	_server_lightning_ready_at = 0.0
 	_server_mushroom_ready_at = 0.0
 	_server_lure_ready_at = 0.0
+	_mushrooms = 0
+	_lures = 0
+	_server_mushrooms = 0
+	_server_lures = 0
 	_prune_mushrooms()
-	if _gub != null and _gub.held_spear != null:
-		_gub.held_spear.set_carried(true)
+	# Through `_refresh_hand` rather than straight at the spear, so a respawn
+	# cannot hand back a shaft to a Gub the host still has a letter hold open
+	# for. In practice a death ends the hold first (D-035) — but a respawn that
+	# quietly disagreed with the gate would be the hardest kind of bug to see,
+	# because everything about it looks right except that the throw does
+	# nothing.
+	_refresh_hand()
 	cooldowns_changed.emit()
+	inventory_changed.emit()

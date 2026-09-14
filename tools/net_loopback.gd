@@ -487,6 +487,27 @@ func _stage_abilities() -> bool:
 	if not _require("the host found the item container", _watch_spawned_items()):
 		return false
 
+	# Stock the client's Gub, from the host, because a Gub spawns with nothing
+	# now (D-032) and `try_place_mushroom`/`try_throw_lure` refuse on an empty
+	# hand. This is the harness supplying what a `Pickup` supplies in a real
+	# match, and it is worth naming what that skips: the whole drop path — a
+	# death, `MatchState._drop_loot`, the item on the ground, somebody walking
+	# over it — is out of reach of a two-process harness whose client is a
+	# script, and `tools/playthrough.gd` is what walks it instead (D-018).
+	#
+	# It happens on the host rather than in the client's own stage because
+	# grants are host-only: `GubCombat.grant_*` refuses anywhere else, which is
+	# precisely the property this whole file exists to check.
+	var client_gub: Gub = MatchState.gubs.get(_client_id)
+	if not _require("the host has the client's Gub to stock", client_gub != null):
+		return false
+	var client_combat := client_gub.get_node_or_null("Combat") as GubCombat
+	if not _require("the client's Gub carries a Combat on the host",
+			client_combat != null):
+		return false
+	client_combat.grant_mushroom(1)
+	client_combat.grant_lure(1)
+
 	var acted := await _request("abilities", {}, ARENA_TIMEOUT)
 	if acted.is_empty():
 		return false

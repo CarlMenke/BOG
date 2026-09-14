@@ -264,7 +264,7 @@ tools/           dev tools and testbeds — none of this ships
 | `scripts/net/net.gd` | the socket, the roster, chat. The transport seam |
 | `scripts/net/invite_code.gd` | endpoint ⇄ ten characters, and back |
 | `scripts/game/match_state.gd` | the authoritative match |
-| `scripts/game/match_config.gd` | mode, limits, timers, cooldowns, friendly fire |
+| `scripts/game/match_config.gd` | mode, limits, timers, use delays, friendly fire |
 | `scripts/util/scene_flow.gd` | transitions, the fade, cursor policy |
 | `scripts/world/arena.gd` | the map scene, and `register_arena` |
 | `scripts/world/map_catalog.gd` | the list of maps; ids in, entries out |

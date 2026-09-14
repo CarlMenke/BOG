@@ -47,8 +47,11 @@ func _build() -> void:
 	_section("Mode")
 	_choice("mode", "Match type", ["Free-for-all", "Teams"])
 	_choice("team_count", "Teams", ["2", "3", "4", "5", "6", "7", "8"], 2)
+	# In `MatchConfig.WinCondition` order, because `_choice` converts by index.
+	# Appending here is the other half of never reordering that enum.
 	_choice("win_condition", "Ends on",
-		["First to the kill limit", "Last Gub standing", "The clock"])
+		["First to the kill limit", "Last Gub standing", "The clock",
+			"First to collect G·U·B"])
 
 	_section("Limits")
 	_slider("kill_limit", "Kill limit", 1, 50, 1, func(v: float) -> String:
@@ -57,6 +60,25 @@ func _build() -> void:
 		return "%d" % int(v))
 	_slider("time_limit", "Time limit", 0, 1800, 30, func(v: float) -> String:
 		return "No limit" if v <= 0.0 else UIPalette.clock(v))
+	# Shown only under the letters condition, like the kill limit and the lives
+	# count above it. It is also the dial most likely to be wrong out of the box
+	# — see the note on `MatchConfig.letter_drop_chance` — so it is deliberately
+	# in front of the host rather than buried under "Feel".
+	_slider("letter_drop_chance", "Letter drop chance", 0.0, 1.0, 0.01,
+		func(v: float) -> String: return "%d%% of deaths" % roundi(v * 100.0))
+	# Beside the drop chance and under the same condition, because the two are
+	# one balance question: how many cards there are, and what it costs to keep
+	# one. Zero reads as "Instant" rather than as "0.0 s" — it is a real setting
+	# (the mode without the hold), not a slider someone has dragged off the end.
+	_slider("letter_hold_time", "Letter hold", 0.0, 30.0, 0.5,
+		func(v: float) -> String:
+			return "Instant" if v <= 0.0 else "%.1f s" % v)
+	# Not under the letters condition, and that is the point of where it sits:
+	# the Elder rolls out of the same corpse in every mode (D-038), so its dial
+	# is above the `friendly_fire` toggle with the other rules that always
+	# apply, rather than in the pair of rows `_apply_visibility` hides.
+	_slider("elder_drop_chance", "Elder robe chance", 0.0, 1.0, 0.01,
+		func(v: float) -> String: return "%d%% of deaths" % roundi(v * 100.0))
 	_toggle("friendly_fire", "Friendly fire")
 
 	_section("Feel")
@@ -140,6 +162,10 @@ func _apply_visibility(config: MatchConfig) -> void:
 		config.win_condition == MatchConfig.WinCondition.KILL_LIMIT
 	_fields["lives"]["row"].visible = \
 		config.win_condition == MatchConfig.WinCondition.LIVES
+	_fields["letter_drop_chance"]["row"].visible = \
+		config.win_condition == MatchConfig.WinCondition.LETTERS
+	_fields["letter_hold_time"]["row"].visible = \
+		config.win_condition == MatchConfig.WinCondition.LETTERS
 	# A seed only means something to a map that is grown from one. On a static
 	# map the row would offer to reroll an island nobody is going to see.
 	_fields["map_seed"]["row"].visible = MapCatalog.is_procedural(config.map)
@@ -162,7 +188,7 @@ func _apply_editability() -> void:
 
 ## Copy the current config, change one field, and push the whole thing. Sending
 ## the whole config rather than a delta is what `Net.update_config` expects, and
-## with twenty-two primitives it is a few hundred bytes.
+## with thirty primitives it is a few hundred bytes.
 func _push(field: String, value: Variant) -> void:
 	if _applying or not Net.is_host:
 		return
