@@ -86,6 +86,12 @@ func _build() -> void:
 	# apply, rather than in the pair of rows `_apply_visibility` hides.
 	_slider("elder_drop_chance", "Elder robe chance", 0.0, 1.0, 0.01,
 		func(v: float) -> String: return "%d%% of deaths" % roundi(v * 100.0))
+	# Beside the robe's chance and in the same words, because they are the same
+	# kind of row: both are named shares taken off the top of one drop table, and
+	# reading them together is the only way to see what is left for the mushroom
+	# and the lure (D-067).
+	_slider("potion_drop_chance", "Heal potion chance", 0.0, 1.0, 0.01,
+		func(v: float) -> String: return "%d%% of deaths" % roundi(v * 100.0))
 	_toggle("friendly_fire", "Friendly fire")
 
 	# Capture G·U·B's own rules (D-051), a section of their own rather than rows
@@ -210,6 +216,20 @@ func _build() -> void:
 		func(v: float) -> String: return "%.1f s" % v)
 	_slider("lure_use_delay", "Lure delay", 0.1, 10.0, 0.1,
 		func(v: float) -> String: return "%.1f s" % v)
+	# The potion's two, under the other carried stock. It has no use-delay row to
+	# sit beside them, and that is deliberate: the channel *is* the floor on how
+	# fast a stack can be emptied, and a second dial that also gated it would be
+	# two answers to one question (D-067).
+	#
+	# The heal is said as a fraction of a Gub rather than as "40", because what
+	# a player wants to know is how much of one this is worth and `Gub.MAX_HEALTH`
+	# is the unit everything in this game is written in (D-062).
+	_slider("heal_amount", "Potion heals", 5.0, 100.0, 5.0,
+		func(v: float) -> String:
+			return "%d (%d%% of a Gub)" % [roundi(v),
+				roundi(100.0 * v / Gub.MAX_HEALTH)])
+	_slider("heal_channel", "Drinking takes", 0.5, 6.0, 0.1,
+		func(v: float) -> String: return "%.1f s standing still" % v)
 	_slider("max_players", "Lobby size", MatchConfig.MIN_PLAYERS, MatchConfig.MAX_PLAYERS,
 		1, func(v: float) -> String: return "%d Gubs" % int(v))
 

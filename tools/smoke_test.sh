@@ -371,6 +371,44 @@ also "damage leaves a Gub standing" "lethal PASS"
 also "damage leaves a Gub standing" "elder PASS"
 also "damage leaves a Gub standing" "respawn PASS"
 also "damage leaves a Gub standing" "spear PASS"
+# The heal potion, end to end (D-067). Six verdicts out of one run, and the
+# order is the usual one of each being the control for the last.
+#
+# `drop` is the fifth `Pickup.Kind` coming out of a real death and being
+# collected by a real `Area3D` overlap — a dummy standing on the corpse, which
+# is the only way a Gub with no client behind it ever picks anything up.
+#
+# `channel` is the thing the feature *is*, and it is three readings of one
+# drink: no health at all on the frame of the click, some of it half way
+# through, all forty at the end. The first and the second are each other's
+# control — "none yet" catches a heal that fired on the keypress, "some but not
+# all" catches one that waited for the end — and between them they are the whole
+# reason healing is not instant on pickup.
+#
+# `interrupt` is the recorded rule (see D-067's own section on it): a hit through
+# `report_damage` half way in ends the drink, the potion is **spent anyway**, and
+# what is kept is the half that had actually arrived. The last of those is the
+# line that would fail if the heal ever went back to landing in one lump.
+#
+# `moved` is the other rule and the edge case it was written for. A Gub that runs
+# loses the drink at `GubCombat.CHANNEL_MOVE_SPEED`; a Gub *lured* at four and a
+# half metres a second keeps it. Without the second half, the rule could be
+# written about displacement instead of about intent and nothing would notice —
+# and a lure that silently cancelled a drink would be the best answer to one.
+#
+# `death` is D-032 restated for a fifth carried thing, and `config` is the three
+# new lobby dials through `to_dict`/`apply_dict` and out the far side of both
+# clamps: a field missing from `MatchConfig._FIELDS` is a setting the host
+# changes and nobody else ever sees.
+#
+# The channel is shortened to 1.5 s for the run; every assertion is written as a
+# fraction of it. Headless, and it quits itself in about four seconds.
+check "a potion heals over two seconds" "drop PASS"     "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- potion
+also "a potion heals over two seconds" "channel PASS"
+also "a potion heals over two seconds" "interrupt PASS"
+also "a potion heals over two seconds" "moved PASS"
+also "a potion heals over two seconds" "death PASS"
+also "a potion heals over two seconds" "config PASS"
 # A shaft standing in a Gub who is still alive, and then in the corpse that Gub
 # becomes (D-062). This is the half of the damage model that is not a number:
 # until now a projectile that hit somebody who lived had nowhere to go, because

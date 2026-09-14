@@ -887,6 +887,24 @@ func apply_lure(centre: Vector3, strength: float, duration: float) -> void:
 		_end_slide()
 
 
+## Mark this copy of a Gub as being dragged about, without dragging it (D-067).
+##
+## `apply_lure` is delivered to the caught Gub's *own* client, because movement
+## is client-authoritative and the host must not move a body it does not own.
+## That left the host unable to answer one question it now has to: "is that Gub
+## moving because it chose to?" — which is the whole of the rule that ends a
+## heal channel. A Gub yanked out of cover mid-drink keeps drinking, and one
+## that pressed W does not, and only the host can be trusted to decide which.
+##
+## So `Lure` calls this on the host's own copy of every victim as well. It moves
+## nothing: `_lure_centre` and `_lure_strength` are untouched, so `_handle_lure`
+## has no pull to apply even if this copy ever ran it. `maxf` because the caught
+## Gub may also be the host's own, where `apply_lure` has already set a longer
+## one from the same catch.
+func note_lured(duration: float) -> void:
+	_lure_until = maxf(_lure_until, Time.get_ticks_msec() * 0.001 + duration)
+
+
 func is_lured() -> bool:
 	return Time.get_ticks_msec() * 0.001 < _lure_until
 

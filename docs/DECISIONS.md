@@ -6712,3 +6712,292 @@ is a movement decision rather than an animation one: the lever is
 crouch space is still a line and a crouching Gub still strafes on a forward clip
 — which is what makes it this step's control. Fixing it is four more downloads
 and it is the least visible case in the game: a crouching Gub moves at 1.6 m/s.
+
+## D-067 — The heal potion: carried stock, spent over two seconds of standing still
+
+There is health in this game now (D-062) and until this step there was nothing
+that put any of it back except dying. The heal potion is the fifth thing that
+falls out of a corpse and the first that makes a wound recoverable — and the
+whole of its design is in one word from the plan's decisions table: it is
+**channelled**.
+
+### Why not instant on pickup, which is what a health drop usually is
+
+Because it would make standing on a fresh corpse the strongest play in the game.
+Every drop in this project is collected by walking over it (D-032), so an
+instant heal is a heal with no decision attached to it at either end: you do not
+choose when to take it, you do not choose where to be when you take it, and the
+correct play is always "run at the body". There is nothing to get right and
+nothing to punish.
+
+Two seconds of standing still turns one drop into three decisions — whether to
+pick it up now or leave it for later, whether to spend it now or run, and where
+to be standing while you do. That is the mechanic. The health is the cost of
+admission.
+
+### The health arrives *over* the channel, and that settles the interrupt question
+
+The plan asked for one answer and there turned out to be a better one than
+either of the two it offered.
+
+`MatchConfig.heal_amount` is not handed over at the end of the drink and not at
+the start of it. What a drinking Gub is owed at any instant is `heal_amount`
+times how far through the channel it is, and `GubCombat._deliver_channel` hands
+over whatever of that has not been sent yet. So:
+
+* **the potion is spent on the keypress and never refunded**, and
+* **an interrupted drink keeps exactly the fraction that had arrived.**
+
+Those are not a compromise between "spent anyway" and "refunded" — they are what
+makes both of their arguments true at once. The case for spending it is that
+commitment has to be real: if an interrupted channel handed the potion back,
+nothing would cost anything to *try*, and the correct play would collapse back
+to "start drinking the instant nobody is looking, and if somebody shoots you, you
+have lost nothing" — which is the same absence of a decision that instant-on-
+pickup has. The case for refunding is that losing forty health to one arrow you
+could not see coming feels arbitrary. Continuous delivery answers that without
+giving the commitment back: you got shot a third of the way in, you got a third
+of a potion, and the thing you actually lost was the two seconds.
+
+It also follows the rule the rest of this file already keeps. A refusal and an
+interruption are different events and are treated differently everywhere here: a
+mushroom the host refuses to plant is **refunded** (`_host_place_mushroom` has
+nowhere legal to put it, so it never happened), and a letter hold broken by a
+death **drops the card on the ground** rather than handing it back (D-035). A
+drink broken by an arrow is the second kind. What is there to drop is nothing —
+you drank it.
+
+**Rejected: a `MatchConfig` field for it.** The plan explicitly offered one and
+it is the wrong kind of thing to put in a lobby. Whether commitment is real is
+not a balance number, it is what the feature *is*, and a lobby where an
+interrupted drink refunds is a lobby where healing has no decision in it — the
+thing the decisions table rejected before a line of this was written. It is the
+same call D-062 made about a `starting_health` slider: 100 is the unit and not a
+setting, and this is the mechanic and not a setting. The balance dial is
+`heal_amount`, it is right there, and it is the one that should move.
+
+### What ends a channel, and the one-sentence rule behind it
+
+**Your own movement input ends it. Being moved does not.**
+
+* **Being hit** ends it, at the one door every hit comes through
+  (`report_damage` → `_break_channel`). Refusals never reach that line, which is
+  the right way round: a shot stopped by spawn protection or by friendly fire did
+  not happen, and a drink is not broken by a hit that was not a hit. Damage to an
+  Elder is zero, so an Elder cannot be interrupted — a sentence with nothing
+  behind it, since an Elder is unkillable and has no reason to drink.
+* **Moving** ends it, above `GubCombat.CHANNEL_MOVE_SPEED` = 1.0 m/s. A third
+  under `Gub.CROUCH_SPEED`'s 1.6, which is the slowest a Gub can deliberately
+  travel, and far over the centimetres a second a body settling on a slope
+  carries — so there is nothing near the threshold in either direction.
+* **Jumping** ends it, off `Gub.sync_jump_serial` moving. A jump is the one way
+  of leaving the ground that is a decision, and pressing jump barely moves a Gub
+  horizontally, so the speed rule alone would not catch it.
+* **Picking up a letter card** ends it, because the hand the bottle is in has a
+  card in it — the same sentence D-035 already makes about the spear.
+* **Crouching does not.** It is standing still, lower. The drink layers over it
+  untouched, and a player who crouches behind cover to drink is doing exactly
+  what the mechanic wants.
+* **Being airborne does not**, and you may *start* a drink in the air. The drink
+  is a layer filtered to `Spine1` and up, so it works there by construction —
+  the plan's "every attack works in the air", for the one thing here that is not
+  an attack — and there is no grounded check anywhere in `gub_combat.gd` for this
+  to become the first of. Walking off a ledge mid-drink keeps the drink; pushing
+  off the ground does not.
+* **Being lured does not**, and this is the edge case the whole rule was written
+  to get right. `Lure` drags a Gub without its owner pressing anything. A rule
+  written about *displacement* would have the lure silently cancel a drink — and
+  a lure that cancels drinks is quietly the best counter to healing in the game,
+  by accident, with nothing anywhere saying so. Written about intent, the far
+  more interesting thing happens: a Gub hauled out of cover goes on drinking, in
+  the open, which is the lure doing precisely what it is for. The same sentence
+  also survives everything else that moves a body nobody asked to move — a bolt's
+  shove, a slope, anything that ever moves under somebody's feet.
+
+**The rule is a speed and not an input**, and that is architectural rather than
+cosmetic. The host has to be able to decide this about a Gub it does not own, and
+what it has of a remote Gub is `sync_velocity` — the same replicated field the
+locomotion plane is laid out from (D-066). An input would have to be put on the
+wire to be asked at all, and a rule only the drinker can evaluate is a rule a
+modified client simply never reports. Everything `_channel_broken` reads is
+replicated, so the host and the drinker reach the same answer from the same
+state, which is the property `damage_refusal` is written for (D-062).
+
+That cost one line elsewhere. `Gub.apply_lure` is delivered to the caught Gub's
+*own* client, because movement is client-authoritative (D-004) and the host must
+not move a body it does not own — so the host did not know a Gub was being
+dragged. `Gub.note_lured` marks the host's copy of every victim without pulling
+it, and `Lure._catch` calls it on all of them. It moves nothing; it is the host
+being told what it is looking at.
+
+### The clip: 2.933 s of `Drinking.fbx`, played over whatever the channel is
+
+`6_Utility` is in `PACKS` now, with one clip. `Drinking.fbx` is 6.117 s and is
+the most nearly motionless file in the tree — it travels 0.000 m and the hips
+never get 12 mm from where they started — so `lock_root_motion` has nothing to
+clamp. What it has instead is stillness at both ends: 1.35 s of idle before the
+bottle comes up and 2.2 s after the arm goes down.
+
+Both ends of the window are **measured, and printed by the build**, the way every
+other window in `gub_animator.gd` is. `measure_clip` tracks the *drinking* hand —
+the **left** one; the right hangs at the side for the whole clip and never moves
+12 cm — and reports the longest run of frames in which it is doing more than
+`HAND_MOVING`:
+
+    Drink  length 6.117  drinking hand moves 1.367..3.933, highest 0.600 m at 2.633
+
+2.633 is the bottle at the lips, 0.600 m above the hips with the head thrown
+back. `tools/hand_track.gd` reads 2.633 off the *built* asset and
+`tools/preview_clips.py`'s own detector independently finds the left hand peaking
+at 2.633 — three tools, one answer, which is what makes the constant checkable
+rather than believed (the property D-063 wanted for the throw's release).
+
+Two things about that measurement are worth keeping. It is the **longest run and
+not the first-to-last**, because the idle tail twitches over the threshold on the
+very last frame of the clip and reported a gesture running to 6.117. And runs
+closer together than `GESTURE_GAP` are **one** gesture, because a drink *pauses
+at the lips* — the hand does 0.05 m/s for four frames at 3.000 s with the head
+back, which is the swallow and is the middle of the thing rather than the end of
+it. Requiring an unbroken run cut the window in half at 2.967.
+
+    DRINK_CLIP_START := 1.267     0.100 s of stillness before the arm starts up
+    DRINK_CLIP_END   := 4.200     0.267 s of stillness after it stops
+    DRINK_WINDOW     := 2.933
+
+**Each margin is its own fade.** At the default channel the rate is 1.47x, so
+`DRINK_FADE_IN`'s 0.07 s is 0.103 s of clip — the stillness the window opens with
+— and `DRINK_FADE_OUT`'s 0.18 s is 0.264 s of it, near enough the stillness it
+closes with. The blend out of whatever the body was doing finishes on the frame
+the arm starts up, and the blend back into it begins on the frame the arm has
+stopped: nothing the eye follows is ever at partial weight.
+
+**The channel is the constant and the rate follows it.** `heal_channel` is a
+lobby dial and `drink_rate_for_channel(seconds)` is `DRINK_WINDOW / seconds`, so
+a host who drags the slider moves the animation with it and cannot leave a Gub
+standing there with its arms down after the bottle is empty. That is the shape
+D-063 and D-064 gave the throw and the cast — the clip fitted to the number the
+mechanic is built on, never the other way round.
+
+**There is no rate ceiling, unlike the cast's, and that is a statement.**
+`CAST_RATE_MAX` exists because `lightning_delay` may legally be zero and a rate
+derived from zero is a division by it. A channel of zero is not legal and never
+will be: `heal_channel` floors at 0.5 s, because an instant heal is exactly the
+thing this record's first section refuses. The dial's own floor is the ceiling,
+and it buys 5.9x, which is a gulp.
+
+Contact sheets: `out/potion_drink_window.png` is the window as Blender builds it,
+`out/potion_drink_ingame.png` is the same two seconds in the running game.
+
+### The drink empties both fists
+
+The first in-game sheet of this feature showed a Gub raising a bottle with a
+spear still in one fist and a longbow in the other, and the second one showed the
+fix: `has_spear()` and `has_bow()` each take a `not is_channelling()` clause, next
+to the letter-hold clause that is the same sentence (D-035). Put in the **gate**
+rather than only in `try_throw_spear`, so the *hand* obeys it — `_wants_shaft`,
+`_wants_bow` and `_wants_arrow` all read those two functions, and the refusal to
+throw comes free with the empty fist rather than being a second rule that can
+disagree with it. The drinking hand *is* the bow hand (`HeldGear.BOW_HAND_BONE`),
+so this is not tidiness: a bow that stayed put through a channel would be a
+longbow held at the lips.
+
+**Rejected for now: a potion model in the fist.** It is the right end state and it
+is a step of its own — the bow's grip took a dedicated `preview_bow -- measure`
+to solve (D-065) and the drinking hand would need the same. What is shipping is a
+mime with empty hands, which reads: the sheet is the proof.
+
+### The rest of it, briefly
+
+**`Pickup.Kind.POTION` is appended**, as that enum's header demands: the ordinal
+is what goes on the wire, and a kind inserted in the middle turns every drop
+already in flight into a different object at the far end. The model stays
+**purple** — the decisions table's call, and there is no mana in this game for it
+to be confused with. `POTION_COLOUR` is `#8040A0`, the most common colour in its
+own texture taken to full value, the same construction `ROBE_COLOUR` used on the
+cloth. It lands within a tenth of the robe's violet and that is not a mistake to
+be corrected: what separates the two on the ground is the **tier**, not the hue —
+a robe burns at 3.4 over 8.5 m and is visible across a clearing, a potion at 1.5
+over 4.0 m and is not visible until you are nearly standing on it, by which point
+one is a bottle and the other is a robe with a hat on it.
+
+**The potion is a named share of the drop table and not a third of the
+remainder.** The roll order is letter, robe, potion, then what is left split
+evenly between mushroom and lure. Splitting the remainder three ways would have
+taken the mushroom and the lure from ~49% of drops each to ~30% each and no dial
+in the lobby would have moved to say so. Named, `potion_drop_chance`'s default of
+**0.30** produces exactly that same three-way split — so the economy is the one
+the even split would have given, and it is a slider rather than an arithmetic
+accident. It is also what makes the smoke check deterministic, which is the trick
+`elder_drop_chance = 1.0` already plays.
+
+30% and not the robe's 2% because a potion is not a robe. It is the most ordinary
+thing that can fall out of a corpse, and a match where you see one every twenty
+deaths is a match in which nobody learns that healing exists.
+
+**`heal_amount` is 40**, picked off the two bands the nameplate draws (D-062): a
+potion takes a Gub from anywhere in the red below 25 to well inside the green
+above 50, so drinking one is always the difference between "the next arrow kills
+me" and "it does not" — and it is never a reset, because 40 cannot refill a Gub
+that has been properly hurt. All three fields are in `MatchConfig._FIELDS` and
+the smoke check round-trips them through `to_dict`/`apply_dict` and both clamps,
+because a field missing from `_FIELDS` is a setting the host changes and nobody
+else ever sees.
+
+**There is no `potion_use_delay`**, unlike the mushroom's and the lure's. The
+channel *is* the floor on how fast a stack can be emptied, and a second dial that
+also gated it would be two answers to one question. The HUD tile's `busy` is the
+channel instead, so the fourth slot is dark for exactly as long as the Gub is
+standing there drinking.
+
+**Health is still host-authoritative, and a heal is not a negative hit.**
+`MatchState.report_heal` is its own door beside `report_damage`, as that
+function's own comment has said since D-062. The two are not opposites:
+`report_damage` asks whether an *attacker* may hurt a victim — friendly fire,
+spawn protection, the robe — and none of those questions mean anything about a
+Gub topping itself up; and it *is* the hit feedback, so a heal through it would
+shake the drinker's camera and put a hitmarker in somebody's ears. What the two
+share is the shape that matters: the host decides, one float of what is **left**
+goes on the wire, and a peer that missed a packet is corrected by the next rather
+than being permanently out by a subtraction.
+
+Health travels every `CHANNEL_HEAL_TICK` = 0.2 s, not every frame. Every frame
+would be 120 reliable RPCs per drink for a bar moving 0.67 of a point at a time;
+ten packets of four health each is a bar that climbs visibly and a wire that does
+not notice. It is **not** a quantum of healing: a channel broken between two
+slices pays out the difference on its way out, so what an interruption keeps is
+the fraction that actually happened and not the last slice that happened to have
+been posted.
+
+**The client predicts the stock and the arm, and not the number.** The potion
+leaves the local count on the keypress and the drink starts on the same frame —
+a channel is two seconds long on every machine and the drinker should not spend a
+round trip of it with its arms down — but `Gub.health` has one writer and the
+host's packets are it. At a 0.2 s cadence against a two-second channel there is
+nothing a prediction would smooth that a correction would not then fight.
+
+**The clock runs on every peer**, which is the one way a channel is unlike a
+windup. A windup is half a second the attacker's own machine can time alone; a
+channel is two seconds during which everybody watching has to see an arm holding a
+bottle up, and the arm has to come down at the right moment on all eight screens.
+So `_do_drink_potion` starts it everywhere and each peer's copy runs out on its
+own — a drink that simply finished costs no packet at all — while `_do_stop_drink`
+is the host's word for one that did not.
+
+**`F` is the key, and `interact` is gone.** `F` is where a use key belongs and
+the only thing in its way was an action bound in `project.godot` that **nothing
+in the repo ever read** — while `pickup.gd`'s header said, and has said since
+D-032, "there is no interact action bound in this project". That sentence is true
+again. `G`, `X`, `Z` and the number row were the alternatives and none of them is
+`F`.
+
+**Everything carried is lost on death** (D-032). The potion follows that rule and
+is not a letter: `GubCombat.reset` zeroes the stock and ends the channel on every
+peer, so a Gub cannot come back onto a spawn pad still holding a bottle up.
+
+### What this leaves open
+
+The bottle itself, above. And one balance question that only a playtest can
+answer: 40 health for two seconds of standing still, at 30% of drops, in a game
+where the spear and the great sword are one-shots that no amount of healing
+survives. If potions turn out to matter only against the bow, the lever is
+`heal_amount` and the dial is in the lobby.

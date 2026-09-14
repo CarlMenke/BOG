@@ -7,10 +7,10 @@ extends Area3D
 ## one of these per death and spawns it at the death point; this is the thing
 ## that then sits there, glows, and eventually rots.
 ##
-## Four kinds, and only two of them are stock. A mushroom or a lure goes into
-## `GubCombat`'s stock, a letter goes into `MatchState.stats` and is never lost
-## again (D-033), and the Elder's robe buys the Gub that walked over it twenty
-## seconds of being unkillable (D-038, D-040).
+## Five kinds, and three of them are stock. A mushroom, a lure or a heal potion
+## goes into `GubCombat`'s stock, a letter goes into `MatchState.stats` and is
+## never lost again (D-033), and the Elder's robe buys the Gub that walked over
+## it twenty seconds of being unkillable (D-038, D-040).
 ##
 ## **Collection is walk-over, not a keypress.** There is no interact action
 ## bound in this project and adding one to pick up a thing you are standing on
@@ -30,10 +30,11 @@ extends Area3D
 ## gives: the ordinal is what `_spawn_pickup` puts on the wire, and inserting a
 ## kind in the middle would turn every drop already in flight into a different
 ## object on the far end.
-enum Kind { MUSHROOM, LURE, LETTER, ELDER_ROBE }
+enum Kind { MUSHROOM, LURE, LETTER, ELDER_ROBE, POTION }
 
 const MUSHROOM_MODEL := preload("res://art/generated/mushroom.glb")
 const LURE_MODEL := preload("res://art/generated/lure.glb")
+const POTION_MODEL := preload("res://art/generated/heal_potion.glb")
 ## The robe itself, instanced in its rest pose. It carries a copy of the Gub's
 ## skeleton (D-037) and no animation, so what stands on the grass is a robe and
 ## hat with nobody in them — which is exactly the right picture for a garment
@@ -108,6 +109,20 @@ const LETTER_SELF_LIGHT := 0.7
 const LETTER_COLOUR := Color(1.00, 0.84, 0.26)
 const MUSHROOM_COLOUR := Color(0.92, 0.52, 0.44)
 const LURE_COLOUR := Color(0.55, 0.85, 1.00)
+## The potion's own purple, taken up out of the glass the way ROBE_COLOUR was
+## taken up out of the cloth: `#8040A0` is the single most common colour in
+## `heal_potion_basecolor.png`, and this is that hue at full value.
+##
+## **It lands within a tenth of the robe's violet, and that is not a mistake to
+## be corrected.** The potion stays purple — that is the decision behind this
+## feature, and there is no mana in this game for it to be confused with — so a
+## light invented in some other hue would be a glow that does not belong to the
+## thing casting it. What separates the two on the ground is the **tier** rather
+## than the colour: a robe burns at 3.4 over 8.5 m and is visible across a
+## clearing, a potion at 1.5 over 4.0 m and is not visible until you are nearly
+## standing on it. By the time the two are confusable you can see that one is a
+## bottle and the other is a robe with a hat on it.
+const POTION_COLOUR := Color(0.80, 0.40, 1.00)
 ## The robe's own violet, taken up out of the cloth rather than matched to it.
 ## `#2F1D45` is the albedo (D-037) and is far too dark to be a light; this is the
 ## same hue at full value, so the glow on the grass reads as *that* robe and not
@@ -199,6 +214,14 @@ func _build_visual() -> void:
 		Kind.ELDER_ROBE:
 			_model = ROBE_MODEL.instantiate() as Node3D
 			_model.scale = Vector3.ONE * ROBE_SCALE
+		Kind.POTION:
+			_model = POTION_MODEL.instantiate() as Node3D
+			# The source bottle is exactly a metre tall. Half of it puts a
+			# potion at 0.50 m, which is the band everything else that falls out
+			# of a corpse already stands in — the lure 0.49, the letters 0.60,
+			# the robe 0.70 — so it reads as one of the drops rather than as a
+			# prop somebody left in the grass.
+			_model.scale = Vector3.ONE * 0.50
 	add_child(_model)
 
 	# Lit as well as coloured. The island is a night map and half of it is under
@@ -320,6 +343,8 @@ func _tint() -> Color:
 			return LURE_COLOUR
 		Kind.ELDER_ROBE:
 			return ROBE_COLOUR
+		Kind.POTION:
+			return POTION_COLOUR
 		_:
 			return MUSHROOM_COLOUR
 

@@ -25,9 +25,12 @@ extends Control
 ##   weapon is genuinely growing back, a fill that climbs clockwise from twelve
 ##   o'clock and the seconds left printed over the glyph. The caller decides
 ##   when that is; this file only draws what it is handed.
-## * `set_stock` — the mushroom and the lure. They are carried stock now
-##   (D-032), so the count is the readout, and an empty slot is the ordinary
-##   state at the start of every life rather than a fault to be alarmed by.
+## * `set_stock` — the mushroom, the lure and the heal potion. They are carried
+##   stock (D-032, D-067), so the count is the readout, and an empty slot is the
+##   ordinary state at the start of every life rather than a fault to be alarmed
+##   by. The potion's `busy` is its channel rather than a use-delay, which is
+##   the same news said about a different clock: the tile is dark for the two
+##   seconds the drink is running and the count has already come down.
 ##
 ## **The first slot changes what it is.** An Elder has no spear — it throws
 ## lightning instead (D-038) — so the same tile swaps its glyph and its label
@@ -35,7 +38,10 @@ extends Control
 ## on the bar that timed one weapon and not the other would be two rules for one
 ## square.
 
-enum Kind { SPEAR, MUSHROOM, LURE, LIGHTNING }
+## Appended to, never reordered: the ordinal is what `hud.tscn` stores in each
+## slot's exported `kind`, and inserting one in the middle would silently turn
+## every tile in the scene into a different tile.
+enum Kind { SPEAR, MUSHROOM, LURE, LIGHTNING, POTION }
 
 const SIZE := 62.0
 const RADIUS := 5.0
@@ -256,6 +262,24 @@ func _draw_glyph(tint: Color) -> void:
 				var dir := Vector2(cos(angle), sin(angle))
 				draw_line(c + Vector2(0, 2) + dir * 8.0,
 					c + Vector2(0, 2) + dir * 13.0, tint, 2.0)
+		Kind.POTION:
+			# A round-bottomed flask with a short neck and a stopper: two
+			# straight sides down from the shoulders, a fan for the belly, and a
+			# cap across the top. Drawn as an outline with a filled stopper
+			# rather than as a solid, so it reads as *glass* beside three solid
+			# glyphs — the one thing on this bar that is a container.
+			var neck := 5.0
+			var belly := PackedVector2Array([c + Vector2(-neck, -7)])
+			for i in 17:
+				var t := float(i) / 16.0
+				var angle := PI * (1.0 - t)
+				belly.append(c + Vector2(-cos(angle) * 11.0, sin(angle) * 10.0 + 1.0))
+			belly.append(c + Vector2(neck, -7))
+			draw_polyline(belly, tint, 2.0)
+			draw_line(c + Vector2(-neck, -7), c + Vector2(-neck, -12), tint, 2.0)
+			draw_line(c + Vector2(neck, -7), c + Vector2(neck, -12), tint, 2.0)
+			draw_rect(Rect2(c + Vector2(-neck - 2, -16), Vector2(neck * 2 + 4, 4)),
+				tint, true)
 		Kind.LIGHTNING:
 			# The classic jagged bolt, as one filled polygon rather than a
 			# polyline, so it keeps its weight at the same size the spear's

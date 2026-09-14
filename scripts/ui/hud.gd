@@ -50,6 +50,7 @@ const HEALTH_BAR := Vector2(224.0, 22.0)
 @onready var _spear_slot: AbilitySlot = %SpearSlot
 @onready var _mushroom_slot: AbilitySlot = %MushroomSlot
 @onready var _lure_slot: AbilitySlot = %LureSlot
+@onready var _potion_slot: AbilitySlot = %PotionSlot
 @onready var _banner: Control = %Banner
 @onready var _banner_title: Label = %BannerTitle
 @onready var _banner_sub: Label = %BannerSub
@@ -371,6 +372,13 @@ func _refresh_abilities() -> void:
 	# tile is the only thing on this bar that divides (D-054).
 	_mushroom_slot.set_stock(combat.mushroom_count(), combat.mushroom_use_cooldown() > 0.0)
 	_lure_slot.set_stock(combat.lure_count(), combat.lure_use_cooldown() > 0.0)
+	# The potion's `busy` is its own channel and not a use-delay (D-067): there
+	# is no second clock on this one, because the two seconds a drink takes are
+	# already the floor on how fast a stack can be emptied. So the tile is dark
+	# for exactly as long as the Gub is standing there drinking, which is the
+	# other half of the tell — the animation is what your opponent sees and this
+	# is what you see.
+	_potion_slot.set_stock(combat.potion_count(), combat.is_channelling())
 
 
 ## The G/U/B lamps and the hold, for the local player only.

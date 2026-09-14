@@ -740,8 +740,10 @@ func report_damage(victim_id: int, attacker_id: int, amount: float,
 	if not Net.is_host:
 		return 0.0
 	# A heal is not a negative hit. Whatever wants to put health back asks for
-	# it by name (the potion, D-032's stock, step 7 of the combat plan) rather
-	# than by sending a negative through the door that checks friendly fire.
+	# it by name — `report_heal` below, which is what the potion drinks through
+	# (D-067) — rather than by sending a negative through the door that checks
+	# friendly fire, spawn protection and the robe, none of which mean anything
+	# about a Gub topping itself up.
 	if amount <= 0.0:
 		return 0.0
 
@@ -766,6 +768,20 @@ func report_damage(victim_id: int, attacker_id: int, amount: float,
 	# a refusal added later behaves until somebody gives it a consequence.
 	if refusal != Refusal.NONE:
 		return 0.0
+
+	# A landed hit ends whatever the victim was drinking (D-067). Asked here, at
+	# the one door every hit comes through, rather than in each weapon — which is
+	# the whole argument for this function existing (D-062) — and asked *before*
+	# the health is worked out, so the fraction of the potion that had arrived by
+	# this tick is the fraction that is kept.
+	#
+	# Refusals never reach this line, which is the right way round: a shot
+	# stopped by spawn protection or by friendly fire did not happen, and a
+	# drink is not broken by a hit that was not a hit. An Elder is the same case
+	# — damage to an Elder is zero — so an Elder cannot be interrupted, which is
+	# a sentence with nothing behind it: an Elder is unkillable for twenty
+	# seconds and has no reason to be drinking.
+	_break_channel(victim_id)
 
 	# Past here the hit landed, so the attacker is on the hook for the victim's
 	# next thirty seconds whether or not this was the blow that finished them.
@@ -792,6 +808,71 @@ func report_damage(victim_id: int, attacker_id: int, amount: float,
 
 	_kill(victim_id, attacker_id, cause, point, blow, bone)
 	return amount
+
+
+## Host only. **The single place health is put back** (D-067), and the other
+## half of the door `report_damage` is.
+##
+## It is a separate function and not a `report_damage` with a negative in it,
+## which the comment at the top of that function has said since D-062. The two
+## are not opposites: `report_damage` asks whether the *attacker* is allowed to
+## hurt this victim — friendly fire, spawn protection, the robe — and every one
+## of those questions is meaningless about a Gub topping itself up. It also
+## *is* the hit feedback, and a heal that ran through it would shake the
+## drinker's camera and put a hitmarker in somebody's ears.
+##
+## What the two do share is the shape that matters: the host decides, one float
+## of what is *left* goes on the wire, and a peer that missed a packet is
+## corrected by the next one rather than being permanently out by a subtraction.
+##
+## Returns how much health was actually restored, which is not always what was
+## asked for: a Gub 10 from full that drinks 40 is healed 10. The caller needs
+## that number, because the potion is spent over the channel and what has been
+## delivered so far is what an interruption keeps.
+func report_heal(peer_id: int, amount: float) -> float:
+	if not Net.is_host or amount <= 0.0:
+		return 0.0
+	if phase != Phase.PLAYING or not is_alive(peer_id):
+		return 0.0
+	var gub: Gub = gubs.get(peer_id)
+	# No body, nothing to heal — the same answer `report_damage` gives a row
+	# with nobody standing in the world, and for the same reason: health lives
+	# on the Gub and a bookkeeping row has nowhere to write it down.
+	if not is_instance_valid(gub):
+		return 0.0
+	var before := gub.health
+	var after := minf(Gub.MAX_HEALTH, before + amount)
+	if is_equal_approx(after, before):
+		return 0.0
+	_do_heal.rpc(peer_id, after)
+	_do_heal(peer_id, after)
+	return after - before
+
+
+## Health put back, told to everyone. Deliberately without a shake, a hitmarker
+## or a `note_attack`: nobody attacked anybody.
+@rpc("authority", "call_remote", "reliable")
+func _do_heal(peer_id: int, health: float) -> void:
+	var gub: Gub = gubs.get(peer_id)
+	if is_instance_valid(gub):
+		gub.set_health(health)
+
+
+## Stop `peer_id` drinking, wherever that is being decided from. Host only, and
+## a no-op for a Gub that is not.
+##
+## Here rather than in `GubCombat` because the two things that break a channel
+## from outside it — a landed hit and a letter hold — are both decided in this
+## file, and neither of them should have to know how a combat node is reached.
+func _break_channel(peer_id: int) -> void:
+	if not Net.is_host:
+		return
+	var gub: Gub = gubs.get(peer_id)
+	if not is_instance_valid(gub):
+		return
+	var combat := gub.get_node_or_null("Combat") as GubCombat
+	if combat != null:
+		combat.host_break_channel()
 
 
 ## Why a hit did nothing. `NONE` means it landed.
@@ -1080,13 +1161,21 @@ func _drop_loot(cause: Gub.Cause, point: Vector3) -> void:
 	if spot == Vector3.INF:
 		return
 
-	# **The roll order is letter, then robe, then the remainder split evenly
-	# between mushroom and lure**, and it is written down here because it is
-	# exactly the kind of thing that silently changes the balance of the game
-	# when somebody reorders it for tidiness. The two named chances are taken off
-	# the top in that order and what is left is halved; move the robe in front of
-	# the letter and a letters match quietly drops fewer cards than the dial in
-	# the lobby says it does.
+	# **The roll order is letter, then robe, then potion, then the remainder
+	# split evenly between mushroom and lure**, and it is written down here
+	# because it is exactly the kind of thing that silently changes the balance
+	# of the game when somebody reorders it for tidiness. The three named chances
+	# are taken off the top in that order and what is left is halved; move the
+	# robe in front of the letter and a letters match quietly drops fewer cards
+	# than the dial in the lobby says it does.
+	#
+	# **The potion is a named chance and not a third share of the remainder**
+	# (D-067). Splitting what is left three ways would have taken the mushroom
+	# and the lure from ~49% of drops each to ~30% each, and no dial in the lobby
+	# would have moved to say so. Named, `potion_drop_chance`'s default of 0.30
+	# produces exactly that same three-way split — so the economy is the one the
+	# even split would have given, and it is now a slider rather than an
+	# arithmetic accident.
 	#
 	# Letters only exist as a drop in the mode that scores them; in every other
 	# mode that chance is zero. **The robe is not gated on anything** — the Elder
@@ -1099,7 +1188,9 @@ func _drop_loot(cause: Gub.Cause, point: Vector3) -> void:
 	var letters_on := config().win_condition == MatchConfig.WinCondition.LETTERS
 	var letter_chance := config().letter_drop_chance if letters_on else 0.0
 	var robe_chance := config().elder_drop_chance
-	var remainder := maxf(0.0, 1.0 - letter_chance - robe_chance)
+	var potion_chance := config().potion_drop_chance
+	var named := letter_chance + robe_chance + potion_chance
+	var remainder := maxf(0.0, 1.0 - named)
 	var roll := randf()
 	var kind := Pickup.Kind.LURE
 	var letter := 0
@@ -1110,7 +1201,9 @@ func _drop_loot(cause: Gub.Cause, point: Vector3) -> void:
 		letter = LETTERS[randi() % LETTERS.size()]
 	elif roll < letter_chance + robe_chance:
 		kind = Pickup.Kind.ELDER_ROBE
-	elif roll < letter_chance + robe_chance + remainder * 0.5:
+	elif roll < named:
+		kind = Pickup.Kind.POTION
+	elif roll < named + remainder * 0.5:
 		kind = Pickup.Kind.MUSHROOM
 
 	_spawn_drop(kind, letter, spot)
@@ -1245,6 +1338,13 @@ func claim_pickup(pickup_id: int, peer_id: int) -> void:
 			_grant_ability(peer_id, "grant_mushroom")
 		Pickup.Kind.LURE:
 			_grant_ability(peer_id, "grant_lure")
+		Pickup.Kind.POTION:
+			# Stock, like the other two, and pointedly **not** a heal on touch
+			# (D-067). Granting the health here would make standing on a fresh
+			# corpse the strongest play in the game and would take every decision
+			# out of healing; what a potion buys is the *option* to spend two
+			# seconds standing still, later, somewhere of your choosing.
+			_grant_ability(peer_id, "grant_potion")
 		Pickup.Kind.ELDER_ROBE:
 			# No guard for "already the Elder". The robe cannot be picked up by
 			# somebody already wearing one, because `_make_elder` is idempotent
@@ -1466,6 +1566,12 @@ func _begin_letter_hold(peer_id: int, letter: int) -> void:
 	if seconds <= 0.0:
 		award_letter(peer_id, letter)
 		return
+	# The card goes in the hand the bottle was in (D-067). A hold already takes
+	# the spear and the bow away for the same reason (D-035), and the drink is
+	# the third thing that comes out of that fist — so a Gub that walks over a
+	# card mid-channel puts the potion down, spent, keeping whatever had arrived.
+	# Asked on the host, which is the only machine that can start a hold at all.
+	_break_channel(peer_id)
 	_do_begin_hold.rpc(peer_id, letter, seconds)
 	_do_begin_hold(peer_id, letter, seconds)
 

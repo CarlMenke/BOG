@@ -78,7 +78,7 @@ const REQUIRED_CLIPS: Array[String] = [
 	"Idle", "Walk", "Run", "CrouchIdle", "CrouchWalk",
 	"JumpOne", "JumpTwo", "Slide", "Throw", "Cast", "Draw", "Loose",
 	"StrafeLeft", "StrafeRight", "StrafeWalkLeft", "StrafeWalkRight",
-	"RunBack", "WalkBack",
+	"RunBack", "WalkBack", "Drink",
 ]
 
 # -------------------------------------------------------- the airborne arc ---
@@ -492,6 +492,72 @@ static func cast_rate_for_release(seconds: float) -> float:
 static func cast_release_for_rate(rate: float) -> float:
 	return CAST_WINDOW / maxf(rate, 0.01)
 
+# --------------------------------------------------------------- the drink ---
+
+## The window of `Drink` the channel is played over, in the clip's own seconds.
+##
+## `Drink` is `6_Utility/Drinking.fbx`, 6.117 s, and most of it is a Gub
+## standing still: 1.35 s of idle before the bottle comes up and 2.2 s of it
+## after the arm goes down. What is left is the gesture, and **both ends of it
+## are measured**. `tools/build_gub.py` tracks the *drinking* hand — the left
+## one; the right hangs at the side for the whole clip and never moves 12 cm —
+## and prints where it starts and where it stops:
+##
+##     Drink  length 6.117  drinking hand moves 1.367..3.933, highest 0.600 m at 2.633
+##
+## 2.633 is the bottle at the lips, 0.600 m above the hips with the head thrown
+## back. `tools/hand_track.gd` reads the same three numbers off the built asset,
+## which is what makes them checkable rather than believed — the same property
+## D-063 wanted for the throw's release.
+##
+## The window is those two moments plus a margin at each end, and **each margin
+## is its own fade**. At the default channel the rate is 1.47x (below), so
+## DRINK_FADE_IN's 0.07 s is 0.103 s of clip — the 0.100 s of stillness the
+## window opens with — and DRINK_FADE_OUT's 0.18 s is 0.264 s of clip, near
+## enough the 0.267 s of stillness it closes with. So the blend out of whatever
+## the body was doing is finished on the frame the arm starts up, and the blend
+## back into it begins on the frame the arm has stopped. Nothing the eye follows
+## is ever at partial weight.
+##
+## A host who drags the channel shorter plays this faster and the two fades eat
+## into the gesture by the difference; longer, and a little stillness is held at
+## each end. Both are the right way round, and neither can move the *length* of
+## the drink, which is the whole point of the next constant.
+const DRINK_CLIP_START := 1.267
+const DRINK_CLIP_END := 4.20
+
+## The part of the clip the channel is spread over. 2.933 s of arm.
+##
+## Named rather than left inline for the reason THROW_WINDOW is: it is asked
+## for by the rate below, and a window that moves has to move the rate with it
+## or the drink stops taking the time it is supposed to take.
+const DRINK_WINDOW := DRINK_CLIP_END - DRINK_CLIP_START
+
+## The playback rate that makes the drink take exactly `seconds` — the length of
+## the channel.
+##
+## **The channel is the constant and the rate follows it**, which is the same
+## shape D-063 and D-064 gave the throw and the cast: the clip is fitted to the
+## number the mechanic is built on rather than the number being fitted to the
+## clip. `MatchConfig.heal_channel` is 2.0 s by default, so this is
+## 2.933 / 2.0 = **1.47x** — a drink that is a little brisker than it was
+## animated and reads as one. Derived every time it is asked, off the dial, so a
+## host who drags the channel mid-match does not leave one Gub drinking at the
+## old speed for the rest of its life.
+##
+## **There is no ceiling on it, unlike the cast's**, and that is a statement
+## rather than an omission. `CAST_RATE_MAX` exists because
+## `MatchConfig.lightning_delay` may legally be zero and a rate derived from
+## zero is a division by it. A channel of zero is not legal and never will be:
+## `heal_channel` floors at 0.5 s, and an instant heal is precisely the thing
+## the decision behind this feature rejected (D-067) — standing on a fresh
+## corpse would be the strongest play in the game. The dial's own floor is
+## therefore the ceiling, and it buys 5.9x, which is a gulp. The `maxf` below is
+## against a caller passing nonsense, not against a setting.
+static func drink_rate_for_channel(seconds: float) -> float:
+	return DRINK_WINDOW / maxf(seconds, 0.01)
+
+
 ## Fade times, in and out, for the four one-shots. The slide comes in fast and
 ## leaves slowly because its exit *is* the stand-up; the landings come in almost
 ## instantly because a touchdown is an impact.
@@ -511,6 +577,13 @@ const THROW_FADE_OUT := 0.22
 ## of the whip. The fade-out is 0.14 for the arithmetic under CAST_CLIP_END.
 const CAST_FADE_IN := 0.06
 const CAST_FADE_OUT := 0.14
+## The drink's two, and each one is a margin in DRINK_CLIP_START/END rather than
+## a number picked for feel — see the block above for the arithmetic. It comes
+## in faster than the throw and leaves slower, which is the shape of the thing:
+## a bottle going up is a decision and wants to be seen starting, and an arm
+## coming down out of a drink has nowhere in particular to be.
+const DRINK_FADE_IN := 0.07
+const DRINK_FADE_OUT := 0.18
 
 # ------------------------------------------------------------------ blends ---
 
@@ -587,6 +660,9 @@ const P_LOOSE_ACTIVE := "parameters/loose/active"
 const P_CAST := "parameters/cast/request"
 const P_CAST_ACTIVE := "parameters/cast/active"
 const P_CAST_RATE := "parameters/cast_rate/scale"
+const P_DRINK := "parameters/drink/request"
+const P_DRINK_ACTIVE := "parameters/drink/active"
+const P_DRINK_RATE := "parameters/drink_rate/scale"
 
 var _body: Gub
 var _skeleton_path: String = ""
@@ -757,6 +833,11 @@ func _build_graph(player: AnimationPlayer) -> AnimationNodeBlendTree:
 	tree.add_node("roll_clip", _window("JumpTwo", ROLL_CLIP_START, ROLL_CLIP_END),
 		Vector2(960, 700))
 	tree.add_node("roll", _shot(ROLL_FADE_IN, ROLL_FADE_OUT), Vector2(1160, 400))
+	tree.add_node("drink_clip", _window("Drink", DRINK_CLIP_START, DRINK_CLIP_END),
+		Vector2(560, 1000))
+	tree.add_node("drink_rate", AnimationNodeTimeScale.new(), Vector2(740, 1000))
+	tree.add_node("drink", _upper_body_shot(DRINK_FADE_IN, DRINK_FADE_OUT),
+		Vector2(960, 460))
 	tree.add_node("draw_clip", _scrubbed("Draw"), Vector2(760, 860))
 	tree.add_node("draw_seek", AnimationNodeTimeSeek.new(), Vector2(940, 860))
 	tree.add_node("draw", _upper_body_blend(), Vector2(1160, 460))
@@ -789,8 +870,19 @@ func _build_graph(player: AnimationPlayer) -> AnimationNodeBlendTree:
 	tree.connect_node("land", 1, "land_clip")
 	tree.connect_node("roll", 0, "land")
 	tree.connect_node("roll", 1, "roll_clip")
+	tree.connect_node("drink_rate", 0, "drink_clip")
+	# The drink is the **bottom** of the four layered one-shots, and that is the
+	# one place its order is decided (D-067). Nothing can start a drink while an
+	# attack is running and nothing can start an attack while a drink is running
+	# — `GubCombat` gates both ways — so the only overlap there can be is the
+	# drink's own 0.18 s fade-out, which a cancelled channel leaves running while
+	# the Gub is free to act again on the same frame. In that window what the
+	# player has just done has to win over what they have just stopped doing, and
+	# every weapon above this line is what they have just done.
+	tree.connect_node("drink", 0, "roll")
+	tree.connect_node("drink", 1, "drink_rate")
 	tree.connect_node("draw_seek", 0, "draw_clip")
-	tree.connect_node("draw", 0, "roll")
+	tree.connect_node("draw", 0, "drink")
 	tree.connect_node("draw", 1, "draw_seek")
 	tree.connect_node("loose", 0, "draw")
 	tree.connect_node("loose", 1, "loose_clip")
@@ -1034,9 +1126,11 @@ func _upper_body_blend() -> AnimationNodeBlend2:
 	return blend
 
 
-## The throw and the cast are layers, not states, and the filter is what makes
-## them so: only `UPPER_BODY_BONES` take the clip, and the legs stay in whatever
-## the blend below is producing. Which is most of why the Elder can be given a
+## The throw, the cast and the drink are layers, not states, and the filter is
+## what makes them so: only `UPPER_BODY_BONES` take the clip, and the legs stay
+## in whatever the blend below is producing. Which is also the whole of "you can
+## drink in the air" (D-067): the legs keep the air-arc pose under a Gub raising
+## a bottle, and it cost nothing to arrange. Which is most of why the Elder can be given a
 ## clip that turns its whole body through 106 deg without the legs going
 ## anywhere — Hips and Spine are outside the filter (D-029), so the pelvis keeps
 ## facing the crosshair and what arrives is the cast from the middle spine up.
@@ -1359,6 +1453,38 @@ func play_loose() -> void:
 	set(P_LOOSE, AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
 
 
+## Start the drink, at whatever rate makes it take the channel's own length
+## (D-067). Called on every peer by `GubCombat._do_drink_potion`, the same way
+## `_play_windup` is, so the rate is worked out on each machine from the same
+## replicated dial rather than being sent.
+##
+## No default rate, for `play_cast`'s reason: the channel is a lobby dial and a
+## default here would be a number waiting to be played the day somebody forgets
+## to ask it.
+func play_drink(rate: float) -> void:
+	if tree_root == null:
+		return
+	set(P_DRINK_RATE, maxf(rate, 0.01))
+	set(P_DRINK, AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
+
+
+## Put the bottle down early. The one one-shot in this file that is ever
+## *stopped* rather than left to run out, because it is the one whose length is
+## a promise the player can break: a channel interrupted at 0.4 s has to look
+## interrupted, and an arm that went on lifting a bottle to a mouth nobody was
+## drinking from any more would be the clearest possible lie.
+##
+## FADE_OUT and not ABORT: abort cuts the layer's weight on the frame, which is
+## an arm teleporting back to the Gub's side. The fade is DRINK_FADE_OUT, the
+## same 0.18 s a finished drink leaves over, so a cancelled drink and a
+## completed one hand back to the body the same way and only the pose they hand
+## back from differs.
+func stop_drink() -> void:
+	if tree_root == null:
+		return
+	set(P_DRINK, AnimationNodeOneShot.ONE_SHOT_REQUEST_FADE_OUT)
+
+
 ## True from the moment a windup is fired until its fade-out has finished, or
 ## while a bow is being drawn — the throw's, the Elder's cast, or the draw,
 ## because what asks is the camera and what the camera wants to know is whether
@@ -1370,6 +1496,13 @@ func play_loose() -> void:
 ## `Blend2` has no "is it running", only a weight, and a weight that is on its
 ## way down is a Gub whose shot has already gone. So it asks the body, which is
 ## the same thing `_process` scrubs the pose from.
+##
+## **The drink is deliberately not one of the answers** (D-067). It is the one
+## layered thing here that is not an attack, so there is nothing for the camera
+## to keep pointed at a crosshair: a Gub drinking is not aiming at anybody, and
+## turning its body onto the reticle for two seconds would make the one action
+## in the game that means "I am not fighting" look exactly like the three that
+## mean the opposite.
 func is_throwing() -> bool:
 	if tree_root == null:
 		return false

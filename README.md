@@ -94,10 +94,12 @@ plain one detaches from the terminal and prints nowhere.
 | move / sprint / crouch | `WASD`, `Shift`, `Ctrl` or `C` |
 | jump, slide | `Space`, crouch while sprinting |
 | dive | `Space` again in mid-air — once per jump, and you commit to it |
-| throw spear | left mouse — winds up, leaves the hand 0.71 s later |
+| throw spear | left mouse — winds up, leaves the hand 0.50 s later |
 | the Elder's bolt | the same left mouse, while wearing the robe — 0.2 s |
+| draw the bow | hold `V` or mouse 5 — longer draw, faster and harder arrow |
 | aim (zooms in) | right mouse |
 | mushroom, lure | `Q`, `E` |
+| drink a heal potion | `F` — two seconds, standing still; moving or being hit ends it and the potion is gone |
 | scoreboard, pause, chat | `Tab`, `Esc`, `T` |
 
 ---

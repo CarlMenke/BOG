@@ -308,6 +308,11 @@ func _stock_the_bar() -> void:
 		return
 	combat.grant_mushroom(2)
 	combat.grant_lure(1)
+	# And a potion, so the fourth tile is photographed carrying something too
+	# (D-067). One rather than two: the stock numbers on the bar should differ
+	# from each other, or a reference shot cannot show that each tile reads its
+	# own count.
+	combat.grant_potion(1)
 
 
 ## Collect a letter card for real, and then stand there holding it.

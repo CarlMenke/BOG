@@ -22,11 +22,11 @@ island and out to a results screen, and two automated checks now walk that path:
 one in a single process, one across two processes over a real socket.
 
 ```
-bash tools/smoke_test.sh        # 86 checks, ~4 minutes, finds Godot by itself
+bash tools/smoke_test.sh        # 92 checks, ~4 minutes, finds Godot by itself
 bash tools/net_test.sh          # two processes, one socket; ~45 s, run by hand
 ```
 
-`smoke_test.sh` is the gate and it passes, 86 of 86. `net_test.sh` is kept out
+`smoke_test.sh` is the gate and it passes, 92 of 92. `net_test.sh` is kept out
 of it to keep the gate fast; run it by hand after touching networking, the lobby
 or the results screen. It passes all eleven stages (186 + 33 assertions), ten of
 which end in a rematch, with the engine quiet in both processes — the error it
@@ -284,7 +284,7 @@ Three tiers, because three different kinds of claim need three different proofs
 
 | tool | proves |
 |---|---|
-| `tools/smoke_test.sh` | **the gate** — import, and eighty-six checks |
+| `tools/smoke_test.sh` | **the gate** — import, and ninety-two checks |
 | `tools/cursor_flow.tscn` | entering a match takes the mouse, and leaving gives it back |
 | `tools/playthrough.tscn` | the whole path, menu to results; 50 assertions on the island, 58 on Rust. Takes a map id after a `--` |
 | `tools/match_rules.tscn` | 195 assertions across 14 scoring scenarios |
@@ -298,6 +298,7 @@ Three tiers, because three different kinds of claim need three different proofs
 | `tools/combat_range.tscn strafe` | the feet, round the compass (D-066): eight bearings at walking and running speed on a Gub held facing one way, with the slower of its two toes measured every tick. Forward and backward plant at 0.28 of body speed or better and no leg passes 1.25, against 1.36 for the one-dimensional space this replaced — and the crouch, which is still one clip behind a line, is the control that spreads 0.21 to 1.41. **In the gate**, headless with `--fixed-fps 60`; `-- strafing` is the picture |
 | `tools/combat_range.tscn spine` | the torso that aims (D-066), swept round the whole horizon and through the camera's whole pitch range at a full draw: the bow holds within 3° of bearing and 5° in space of the crosshair (against D-065's **91°**), tracks 123° of elevation, and two arrows fired from one spot at the two ends of that range leave from the *same point* 122° apart — D-025 and D-045 asserted against the thing most likely to break them. **In the gate**, headless; `-- aiming` is the picture |
 | `tools/combat_range.tscn cast` | the Elder's half of the same question, and a different question (D-064): the bolt appears `MatchConfig.lightning_delay` after the click, the composed arm is 83% of the way out when it does, and the tick it appears on is the tick that arm stops going forward — which on `Cast` is a third of a second before it is furthest forward |
+| `tools/combat_range.tscn potion` | the heal potion, end to end (D-067): a real death rolls the fifth `Pickup.Kind` and a dummy standing on the corpse collects it through its own `Area3D`; drinking it delivers **no** health on the frame of the click, some of it half way through and all forty at the end; a hit half way in ends the channel, spends the potion and keeps the half that had arrived; running ends a channel and a *lure* dragging the same Gub at 4.5 m/s does not; two potions are lost on death; and the three lobby dials survive `to_dict`/`apply_dict` and both clamps. **In the gate**, headless, with the channel shortened to 1.5 s |
 | `tools/combat_range.tscn ward` | a real spear cannot kill an Elder, the robe burns out on its own, and the same throw kills once it has (D-040) |
 | `tools/combat_range.tscn bhop` | timed hops climb to 1.3x run speed and no further, as a Gub, an Elder and a capture carrier; running, one jump, a late hop and a hop out of a dive roll do not beat run speed (D-052). **In the gate**, headless with `--fixed-fps 60` |
 | `tools/combat_range.tscn respawn` | a Gub that dies holding a mushroom and an Elder that dies in its robe both come back empty-handed, including a remote Gub whose client is 200 ms behind the host (D-043) |

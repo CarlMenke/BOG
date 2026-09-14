@@ -223,6 +223,13 @@ kind = 2
 action = "throw_lure"
 label_text = "Lure"
 
+[node name="PotionSlot" parent="Root/BottomCentre/Abilities" instance=ExtResource("5_slot")]
+unique_name_in_owner = true
+layout_mode = 2
+kind = 4
+action = "drink_potion"
+label_text = "Potion"
+
 [node name="Chat" parent="Root" instance=ExtResource("6_chat")]
 unique_name_in_owner = true
 layout_mode = 1

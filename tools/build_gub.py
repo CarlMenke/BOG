@@ -552,8 +552,43 @@ PACKS = (
              Clip("WalkingBackward.fbx",    "WalkBack",        True, LOOP_MEAN,
                   authored_as="AUTHORED_WALK_BACK"),
          )),
+    # The heal potion's drink, and the fourth pack with something in it (D-067).
+    #
+    # `Drinking.fbx` is 6.117 s and is the most nearly motionless clip in the
+    # tree: it travels 0.000 m and the hips never get 12 mm from where they
+    # started, so `lock_root_motion` has nothing to clamp. What it has instead
+    # is **stillness at both ends** — 1.35 s of idle before the bottle comes up
+    # and 2.2 s of it after the arm goes down — and a channel is two seconds, so
+    # the window is most of this step.
+    #
+    # The window `gub_animator.gd` plays is **1.267-4.200**, and both ends are
+    # measured rather than scrubbed to. The drinking hand is the **left** one
+    # (the right hangs at the side for the whole clip, never moving 12 cm), and
+    # the build prints where it starts and stops: it crosses HAND_MOVING at
+    # 1.383 and last crosses it at 3.933, peaking 0.600 m above the hips at
+    # 2.617 with the head thrown back — the bottle at the lips. So the window
+    # opens a tenth of a second of clip before the arm starts up, which is what
+    # DRINK_FADE_IN has to blend out of, and closes a quarter of a second after
+    # it has stopped, which is what DRINK_FADE_OUT runs out over. Same
+    # construction as the throw's window and the cast's, on a clip whose
+    # interesting moment is neither a peak speed nor a furthest extension.
+    #
+    # `align` is 1.267 for the reason every one-shot's is: the alignment
+    # reference is the first frame of the window, so the pose that appears when
+    # the OneShot fires is the aligned one.
+    #
+    # **`face` is left at the hips**, unlike the four strafes (D-066). The chest
+    # reference exists because a sidestep turns the pelvis into the step and the
+    # chest does not, and `align_facing` reading the wrong one drags the clip's
+    # *travel* round with it. This clip has no travel to drag: a Gub standing
+    # still drinking has its hips and its chest pointing the same way through
+    # all 6.117 s of it, and taking the chest here would be swapping a steadier
+    # reference for a noisier one to fix a problem that is not present.
     Pack("6_Utility",
-         "a drink or a quaff, for the heal potion"),
+         "a drink or a quaff, for the heal potion",
+         (
+             Clip("Drinking.fbx", "Drink", False, 1.267),
+         )),
 )
 
 # A palm flat on the floor leaves the wrist joint about this far above it (the
@@ -563,6 +598,24 @@ PACKS = (
 # from, so the number belongs in the build log rather than in somebody's notes.
 HAND_PLANT_CLEARANCE = 0.12
 HAND_JOINTS = ("LeftHand", "RightHand")
+
+# How fast a hand has to be going, in m/s, before the clip is said to be doing
+# something with it. Used to find the two ends of a gesture in a clip that is
+# mostly stillness — `Drink` opens with 1.35 s of idle and closes with 2.2 s of
+# it — so that a window is cut from a measurement rather than from somebody
+# scrubbing a timeline. A tenth of a metre a second is an order of magnitude
+# over the 0.01-0.05 m/s an idle breathes at and an order under the 0.5-0.9 m/s
+# the drink's own raise and lower reach, which is what makes it a threshold with
+# nothing near it rather than a number that has to be tuned.
+HAND_MOVING = 0.10
+
+# How long a hand may pause, in frames, without the gesture being over. A drink
+# stops at the lips — 0.05 m/s for four frames at 3.000 s with the head back,
+# which is the swallow — and a rule that ended the gesture there would cut the
+# window before the arm ever came down. A quarter of a second is long enough to
+# bridge that pause and far shorter than the 1.35 s and 2.2 s of idle either
+# side of the whole thing.
+GESTURE_GAP = int(round(0.25 * FPS))
 
 # How a looping clip tells Godot it loops.
 #
@@ -1123,7 +1176,8 @@ def measure_clip(arm, action, clip, reference=LOOP_MEAN, joints=HIP_JOINTS):
     line `align_facing` is about to turn square — which is what makes the number
     the animator lays a blend point out from the same number the build produces.
     """
-    bones = ((HIPS, "LeftToeBase", "RightToeBase", "RightHand", "Head", "Neck")
+    bones = ((HIPS, "LeftToeBase", "RightToeBase", "RightHand", "LeftHand",
+              "Head", "Neck")
              + HIP_JOINTS + tuple(j for j in joints if j not in HIP_JOINTS))
     frames, tracks = sample_bones(arm, action, bones)
     hips = tracks[HIPS]
@@ -1268,6 +1322,48 @@ def measure_clip(arm, action, clip, reference=LOOP_MEAN, joints=HIP_JOINTS):
         return (rel[i].x * -side.y + rel[i].y * side.x) / span
 
     info["hand_reach_at"] = seconds[max(range(n), key=reach)]
+
+    # The **drinking** hand, which is the other one and is measured by height
+    # rather than by reach.
+    #
+    # `Drink` is the one clip here whose interesting moments are neither a peak
+    # speed nor a furthest extension: what it is, is 1.35 s of standing still, a
+    # bottle raised to the mouth, a swallow with the head back, and an arm put
+    # down again — with 2.2 s of idle tail after it. The window
+    # `gub_animator.gd` plays is cut from **where the gesture starts and where
+    # it stops**, and those are the two numbers here: the first and last frames
+    # at which the hand is doing more than HAND_MOVING. Printed for every clip
+    # rather than only for that one, because "when does this hand actually move"
+    # is the question anybody cutting a window out of a new utility clip will
+    # ask next.
+    #
+    # Height is `rel.z` and not the `reach()` above: an arm on its way to a
+    # mouth goes up, and its forward component barely changes. The peak is the
+    # bottle at the lips, which is the pose a contact sheet is built around.
+    lefts = [tracks["LeftHand"][i] - hips[i] for i in range(n)]
+    moving = [i for i in range(1, n)
+              if (lefts[i] - lefts[i - 1]).length * FPS > HAND_MOVING]
+    # The **longest run** of those frames rather than the first and last of them,
+    # and a run may have short holes in it. Both halves of that were found the
+    # hard way on this one clip. Taking `moving[-1]` reported a gesture running
+    # to the end of a clip that had been still for two seconds, because the idle
+    # tail twitches over the threshold on its very last frame. Then requiring an
+    # unbroken run cut the gesture in half at 2.967, because **a drink pauses at
+    # the lips** — the hand is doing 0.05 m/s at 3.000 with the head back, which
+    # is the swallow and is the middle of the thing, not the end of it. So runs
+    # closer together than GESTURE_GAP are one gesture.
+    runs = []
+    for i in moving:
+        if runs and i - runs[-1][-1] <= GESTURE_GAP:
+            runs[-1].append(i)
+        else:
+            runs.append([i])
+    best = max(runs, key=len) if runs else []
+    info["off_hand_from"] = seconds[best[0] - 1] if best else None
+    info["off_hand_to"] = seconds[best[-1]] if best else None
+    highest = max(range(n), key=lambda i: lefts[i].z)
+    info["off_hand_high"] = lefts[highest].z
+    info["off_hand_high_at"] = seconds[highest]
     return info
 
 
@@ -2079,6 +2175,23 @@ def main():
             "furthest forward %.3f"
             % (name, row["duration"], row["hand_peak_at"], row["hand_peak"],
                row["hand_reach_at"]))
+    # The drink, whose window is cut from neither of those columns (D-067).
+    # What this clip is, is a gesture with a long idle either side of it, so
+    # the two numbers the window is built on are where the drinking hand
+    # starts moving and where it stops — and the third is the bottle at the
+    # lips, which is the pose the contact sheet is centred on.
+    row = rows.get("Drink")
+    if row is None:
+        log("    %-11s not in this build" % "Drink")
+    elif row["off_hand_from"] is None:
+        log("    %-11s length %.3f  the drinking hand never moves"
+            % ("Drink", row["duration"]))
+    else:
+        log("    %-11s length %.3f  drinking hand moves %.3f..%.3f, "
+            "highest %.3f m at %.3f"
+            % ("Drink", row["duration"], row["off_hand_from"],
+               row["off_hand_to"], row["off_hand_high"],
+               row["off_hand_high_at"]))
     log("\ndone.")
 
 

@@ -275,11 +275,24 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##   aiming   — the picture `spine` measures. Five Gubs side-on at a full draw,
 ##              at five pitches from `PITCH_MIN` to `PITCH_MAX`, posed the same
 ##              way — two replicated floats apiece and nothing else.
+##   potion   — the heal potion, end to end (D-067). Six verdicts out of one run,
+##              and the order is the usual one of each being the control for the
+##              last. `drop` is a real death rolling a real potion and a dummy
+##              walking onto it through its own `Area3D`; `channel` is the
+##              health arriving **over** the two seconds and not at either end
+##              of them — none on the frame of the click, some half way, all of
+##              it at the finish; `interrupt` is the recorded rule, a hit
+##              through `report_damage` half way in, with the potion spent and
+##              the half that had arrived kept; `moved` is the other rule and
+##              its edge case, a Gub that runs losing the drink and a Gub
+##              *lured* at the same speed keeping it; `death` is D-032, two
+##              potions going into the ground; and `config` is the three lobby
+##              dials through `to_dict`/`apply_dict` and the clamps.
 ##   free     — no script; play it yourself
 const MODES := ["flight", "hit", "arc", "miss", "aim", "mushroom", "cover",
 	"lure", "lure_self", "letter", "cards", "lightning", "blast", "ward", "recharge",
 	"release", "cast", "bow", "draw", "strafe", "spine", "strafing", "aiming",
-	"respawn", "health", "embed", "hurt", "walk", "bhop", "leave", "free"]
+	"respawn", "health", "potion", "embed", "hurt", "walk", "bhop", "leave", "free"]
 
 ## How long after the cast the verdict is taken, in physics ticks. The click
 ## only starts the windup — the bolt leaves at `MatchConfig.lightning_delay`,
@@ -583,6 +596,52 @@ const HEALTH_RESPAWN := 0.8
 ## comes has to end the run with a verdict rather than hang the gate.
 const HEALTH_RESPAWN_LIMIT := 240
 
+## `potion`'s numbers (D-067).
+##
+## The channel is shortened to 1.5 s from the shipped 2.0. What this mode is
+## about is the *shape* of the heal and not its length — every assertion below
+## is written as a fraction of `heal_channel` — and four drinks at the real
+## length would put six seconds of a headless gate on a clock nothing is
+## measuring.
+const POTION_CHANNEL := 1.5
+## How much health is taken off the player before each drink. 60 of a hundred
+## leaves 40, which is exactly `heal_amount`, so a full drink lands on 80 with
+## nothing clipped by the ceiling — a potion that overflowed would make "all of
+## it arrived" and "some of it arrived" the same measurement.
+const POTION_WOUND := 60.0
+## How far into the channel the interrupting hit lands, as a fraction of it.
+## Half, because both halves of the recorded rule have to be visible in the
+## answer: a quarter would be hard to tell from the rounding and three quarters
+## hard to tell from a completed drink.
+const POTION_INTERRUPT_AT := 0.5
+## What that hit is worth. Small on purpose — it is there to *interrupt*, and a
+## hit big enough to matter would leave the arithmetic underneath arguing about
+## damage rather than about how much of a potion survived.
+const POTION_INTERRUPT_HIT := 5.0
+## How far the health the interrupted drink kept may be from the fraction that
+## had arrived. Two points of a forty-point potion, which is three frames of
+## channel: the harness reads the fraction off the channel's own clock and the
+## host pays out against the same one, so the only slack needed is the tick
+## between them.
+const POTION_KEPT_TOLERANCE := 2.0
+## How far from a boundary a reading has to be before it counts as either side
+## of it. Half a point of health.
+const POTION_EPSILON := 0.5
+## How long the mode lets a body settle into or out of a state, in physics
+## ticks. A quarter of a second — long enough for a standing start to pass
+## `GubCombat.CHANNEL_MOVE_SPEED` and short enough to be a small fraction of the
+## channel it is being measured inside.
+const POTION_SETTLE := 15
+## Where the lure that must *not* cancel the drink is placed, relative to the
+## Gub, and how long it holds. Six metres is well past `Gub.LURE_GRIP`, so the
+## pull runs for the whole of it rather than parking the body at the crystal.
+const POTION_LURE_FROM := Vector3(0.0, 0.0, -6.0)
+const POTION_LURE_HOLD := 1.5
+## How long the mode waits for a drop to be collected or a body to come back
+## before calling it a failure, in physics ticks. Same argument as
+## `HEALTH_RESPAWN_LIMIT`.
+const POTION_PATIENCE := 240
+
 ## How far the `embed` mode teleports the dummy to prove the shaft rides it, and
 ## how far the shaft is allowed to be from that move when it gets there.
 ##
@@ -702,6 +761,15 @@ const VIEWS := {
 		"fov": 55.0},
 	"cast": {"eye": Vector3(3.8, 1.8, 9.4), "look": Vector3(0.0, 1.15, 9.0),
 		"fov": 50.0},
+	# In *front* of the drinker and off to one side, which is the one place the
+	# three views above are not. A drink is a hand coming up to a face and a head
+	# going back over it, and side-on the arm crosses the body and disappears
+	# into a silhouette that is mostly Gub. Three quarters from the front is
+	# where the bottle, the hand and the tipped head are all separately visible
+	# — measured the same way, by putting the contact sheet's camera through
+	# every angle and keeping the one the gesture reads at (D-067).
+	"potion": {"eye": Vector3(2.3, 1.62, 6.9), "look": Vector3(0.0, 1.22, 9.0),
+		"fov": 32.0},
 }
 
 ## The two picture rows (D-066). Both run along +X with the camera in front of
@@ -1048,6 +1116,21 @@ var _wards: int = 0
 ## killer and cause off `MatchState.player_killed`, which is the signal the kill
 ## feed is built on. Empty until something dies.
 var _health_kill: Array = []
+
+## `potion`'s state. `_potion_seen` is set on the one frame range in which a
+## dropped potion is lying in the world, because "the dummy has one" would also
+## be true of a grant that never went through an item; `_potion_owed` is what
+## the interrupted drink had earned at the instant it was broken, read off the
+## channel's own clock so it can be compared with what the Gub actually kept.
+var _potion_step: int = 0
+var _potion_at: int = 0
+var _potion_seen: bool = false
+var _potion_health: float = 0.0
+var _potion_mid: float = 0.0
+var _potion_owed: float = 0.0
+var _potion_stock: int = 0
+var _potion_problems: Array[String] = []
+var _potion_failures: int = 0
 ## Ward flashes counted before the Elder was hit, so the verdict is about the
 ## flash that hit caused and not about any that came before it.
 var _wards_before: int = 0
@@ -1171,6 +1254,16 @@ func _start_session() -> void:
 		config.respawn_delay = HEALTH_RESPAWN
 		config.elder_drop_chance = 1.0
 		config.letter_drop_chance = 0.0
+	# Every death in `potion` has to roll a potion and nothing else, which is
+	# what the drop table being **named shares off the top** buys: one slider at
+	# 1.0 and the roll has one outcome (D-067). The channel is shortened for the
+	# reason POTION_CHANNEL gives, and the respawn has to happen inside the run.
+	if _mode == "potion":
+		config.respawn_delay = HEALTH_RESPAWN
+		config.potion_drop_chance = 1.0
+		config.elder_drop_chance = 0.0
+		config.letter_drop_chance = 0.0
+		config.heal_channel = POTION_CHANNEL
 	# The `draw` mode watches a charge *creep*, because what it is comparing is
 	# two skeletons at the same instant and a draw that is over in a second is a
 	# draw the blends are still settling into. Two seconds is slow enough that
@@ -1370,6 +1463,9 @@ func _physics_process(_delta: float) -> void:
 		return
 	if _mode == "health":
 		_drive_health(combat)
+		return
+	if _mode == "potion":
+		_drive_potion(player, combat)
 		return
 	if _mode == "embed":
 		_drive_embed(player)
@@ -2152,6 +2248,313 @@ func _health_verdict(label: String, detail: String) -> void:
 
 func _health_finish() -> void:
 	print("combat_range: %d health verdict(s) failed" % _health_failures)
+	get_tree().quit()
+
+
+# ------------------------------------------------------------------ potion ---
+
+## The heal potion, end to end (D-067). See the `potion` entry in MODES' notes
+## for the six verdicts and why each is there.
+##
+## Every number here comes off the real path: the potion is rolled by
+## `MatchState._drop_loot` out of a real death, collected by a real `Area3D`
+## overlap, drunk through `GubCombat.try_drink_potion` and healed through
+## `MatchState.report_heal`. Nothing in this mode writes a health field, a stock
+## count or a channel clock by hand.
+func _drive_potion(player: Gub, combat: GubCombat) -> void:
+	var near := MatchState.gubs.get(DUMMY_BASE) as Gub
+	var far := MatchState.gubs.get(DUMMY_BASE + 1) as Gub
+	if near == null or far == null:
+		return
+	var far_combat := far.get_node_or_null("Combat") as GubCombat
+	if far_combat == null:
+		return
+
+	match _potion_step:
+		0:
+			if _frames < 12:
+				return
+			# The death point is the *far* dummy's feet, so what rolls out of the
+			# near one's corpse lands under a Gub that can walk into it — the
+			# trick `_robe_at_the_dummys_feet` uses, and the only way a dummy
+			# with no client behind it ever collects anything.
+			MatchState.report_kill(DUMMY_BASE, 1, Gub.Cause.SPEAR,
+				far.global_position, Vector3.FORWARD * 18.0, "Spine1")
+			_potion_at = _frames
+			_potion_step = 1
+		1:
+			if far_combat.potion_count() <= 0:
+				if _frames - _potion_at > POTION_PATIENCE:
+					_potion_expect(false,
+						"no potion ever reached %s" % far.display_name)
+					_potion_verdict("drop", "waited %d frames" % POTION_PATIENCE)
+					_potion_finish()
+				return
+			_potion_expect(_potion_seen, "nothing was ever lying on the ground")
+			_potion_verdict("drop", "%s's corpse left a potion and %s walked onto it"
+				% [near.display_name, far.display_name])
+
+			# On to the drink. The player is hurt first, because a Gub at full
+			# health heals nothing and every number below would be zero.
+			_hit(player, POTION_WOUND)
+			combat.grant_potion(2)
+			_potion_step = 2
+		2:
+			if not combat.has_potion():
+				return
+			_potion_health = player.health
+			_potion_stock = combat.potion_count()
+			combat.try_drink_potion()
+			_potion_at = _frames
+			_potion_step = 3
+		3:
+			# One frame after the keypress. **The whole point of the feature is
+			# what is asserted here**: the potion has been spent and no health
+			# has arrived.
+			_potion_expect(combat.is_channelling(), "the drink never started")
+			_potion_expect(combat.potion_count() == _potion_stock - 1,
+				"the stock went from %d to %d" % [_potion_stock, combat.potion_count()])
+			_potion_expect(is_equal_approx(player.health, _potion_health),
+				"health jumped to %.1f on the frame of the click" % player.health)
+			_potion_step = 4
+		4:
+			if combat.channel_fraction() < 0.5:
+				return
+			# Half way: some of it has arrived and not all of it. Two
+			# assertions, and each is the other's control — "more than none"
+			# catches a heal that only lands at the end, "less than all" catches
+			# one that landed at the start.
+			_potion_mid = player.health
+			_potion_expect(_potion_mid > _potion_health + POTION_EPSILON,
+				"half way through, health was still %.1f" % _potion_mid)
+			_potion_expect(_potion_mid < _potion_health + Net.config.heal_amount
+					- POTION_EPSILON,
+				"half way through, the whole potion had already arrived (%.1f)"
+					% _potion_mid)
+			_potion_step = 5
+		5:
+			if combat.is_channelling():
+				return
+			# And the far end: all of it, once, and the arm down.
+			var want := _potion_health + Net.config.heal_amount
+			_potion_expect(is_equal_approx(player.health, want),
+				"the finished drink left %.1f and not %.1f" % [player.health, want])
+			_potion_verdict("channel",
+				"%.0f health over %.1f s: %.0f at the click, %.0f half way, %.0f at the end"
+				% [Net.config.heal_amount, Net.config.heal_channel, _potion_health,
+					_potion_mid, player.health])
+
+			# The interrupt. Hurt back down, and drink the second potion.
+			_hit(player, POTION_WOUND)
+			_potion_health = player.health
+			_potion_stock = combat.potion_count()
+			combat.try_drink_potion()
+			_potion_at = _frames
+			_potion_step = 6
+		6:
+			if combat.channel_fraction() < POTION_INTERRUPT_AT:
+				return
+			# What the drink is owed at the instant it is broken, read off the
+			# *channel's own* clock rather than off a frame count — the host
+			# pays out to exactly this fraction on its way out, so a frame
+			# counter running beside a millisecond clock would put the tolerance
+			# below in the wrong place for a reason that has nothing to do with
+			# the mechanic.
+			_potion_owed = Net.config.heal_amount * combat.channel_fraction()
+			_potion_mid = player.health
+			# The recorded rule, through the real door.
+			_hit(player, POTION_INTERRUPT_HIT)
+			_potion_step = 7
+		7:
+			var kept := player.health - _potion_health + POTION_INTERRUPT_HIT
+			_potion_expect(not combat.is_channelling(),
+				"the hit did not end the channel")
+			_potion_expect(combat.potion_count() == _potion_stock - 1,
+				"the interrupted potion came back: stock is %d of %d"
+					% [combat.potion_count(), _potion_stock])
+			_potion_expect(kept > POTION_EPSILON,
+				"the interrupted drink healed nothing at all")
+			_potion_expect(kept < Net.config.heal_amount - POTION_EPSILON,
+				"the interrupted drink healed the whole %.1f" % kept)
+			_potion_expect(absf(kept - _potion_owed) < POTION_KEPT_TOLERANCE,
+				"kept %.1f of the potion where %.1f had arrived" % [kept, _potion_owed])
+			_potion_verdict("interrupt",
+				"a hit %.0f%% in spent the potion and kept %.1f of %.0f (owed %.1f)"
+				% [POTION_INTERRUPT_AT * 100.0, kept, Net.config.heal_amount,
+					_potion_owed])
+
+			# Moving. The harness drives the body itself from here, so the Gub
+			# stops reading a keyboard that is not there.
+			player.reads_local_input = false
+			player.input_direction = Vector2.ZERO
+			combat.grant_potion(2)
+			_potion_step = 8
+		8:
+			if not combat.has_potion():
+				return
+			_potion_stock = combat.potion_count()
+			combat.try_drink_potion()
+			_potion_at = _frames
+			_potion_step = 9
+		9:
+			# Settled into the channel before anything is asked of it, so that
+			# "it stopped" cannot be "it never started".
+			if _frames - _potion_at < POTION_SETTLE:
+				return
+			_potion_expect(combat.is_channelling(),
+				"the drink was over before the Gub moved")
+			player.input_direction = Vector2(0.0, -1.0)
+			player.wants_sprint = true
+			_potion_at = _frames
+			_potion_step = 10
+		10:
+			if _frames - _potion_at < POTION_SETTLE:
+				return
+			_potion_expect(not combat.is_channelling(),
+				"running at %.1f m/s did not end the channel"
+					% _flat_speed(player))
+			_potion_expect(_flat_speed(player) > GubCombat.CHANNEL_MOVE_SPEED,
+				"the Gub never got moving: %.2f m/s" % _flat_speed(player))
+			_potion_expect(combat.potion_count() == _potion_stock - 1,
+				"the abandoned potion came back")
+			player.input_direction = Vector2.ZERO
+			player.wants_sprint = false
+			_potion_at = _frames
+			_potion_step = 11
+		11:
+			# Stopped, and standing still again, before the lure control.
+			if _flat_speed(player) > GubCombat.CHANNEL_MOVE_SPEED * 0.5:
+				return
+			_potion_stock = combat.potion_count()
+			combat.try_drink_potion()
+			_potion_at = _frames
+			_potion_step = 12
+		12:
+			if _frames - _potion_at < POTION_SETTLE:
+				return
+			_potion_expect(combat.is_channelling(), "the second drink never started")
+			# **The control, and the edge case the rule was written for.** A
+			# lure drags a Gub without its owner pressing anything, and a rule
+			# about displacement rather than about intent would cancel here —
+			# which would quietly make the lure the best answer to a drink.
+			# `apply_lure` is what a caught Gub's own client receives.
+			player.apply_lure(player.global_position + POTION_LURE_FROM,
+				Net.config.lure_pull_strength, POTION_LURE_HOLD)
+			_potion_at = _frames
+			_potion_step = 13
+		13:
+			if _frames - _potion_at < POTION_SETTLE:
+				return
+			_potion_expect(combat.is_channelling(),
+				"a lure cancelled the drink; it was doing %.2f m/s"
+					% _flat_speed(player))
+			_potion_expect(_flat_speed(player) > GubCombat.CHANNEL_MOVE_SPEED,
+				"the lure never actually moved it: %.2f m/s" % _flat_speed(player))
+			_potion_verdict("moved",
+				"running ended the channel at %.2f m/s and a lure dragging it at %.2f did not"
+				% [GubCombat.CHANNEL_MOVE_SPEED, _flat_speed(player)])
+			_potion_step = 14
+		14:
+			# Everything carried is lost on death (D-032). Two potions on a Gub
+			# that is about to die, and a fresh life that has none.
+			combat.grant_potion(2)
+			_potion_stock = combat.potion_count()
+			MatchState.report_kill(1, DUMMY_BASE + 1, Gub.Cause.SPEAR,
+				player.body_centre(), Vector3.FORWARD * 6.0, "Spine1")
+			_potion_at = _frames
+			_potion_step = 15
+		15:
+			if not MatchState.is_alive(1):
+				if _frames - _potion_at > POTION_PATIENCE:
+					_potion_expect(false, "%s never came back" % player.display_name)
+					_potion_verdict("death", "waited %d frames" % POTION_PATIENCE)
+					_potion_finish()
+				return
+			_potion_expect(_potion_stock >= 2,
+				"it only had %d potion(s) to lose" % _potion_stock)
+			_potion_expect(combat.potion_count() == 0,
+				"it came back carrying %d potion(s)" % combat.potion_count())
+			_potion_expect(not combat.is_channelling(),
+				"it came back still drinking")
+			_potion_verdict("death", "%d potion(s) went into the ground with %s"
+				% [_potion_stock, player.display_name])
+			_potion_verdict("config", _potion_config_round_trips())
+			_potion_finish()
+
+
+## One drop, one frame after it was built, with its kind filled in.
+##
+## `potion`'s only use for it is the assertion that a *potion* was lying there:
+## "the dummy ended up with one" would be satisfied just as well by a grant that
+## never went through an item at all.
+func _note_pickup(item: Pickup) -> void:
+	if is_instance_valid(item) and item.kind == Pickup.Kind.POTION:
+		_potion_seen = true
+
+
+func _flat_speed(gub: Gub) -> float:
+	return Vector3(gub.velocity.x, 0.0, gub.velocity.z).length()
+
+
+## The three dials this step added, through `to_dict`/`apply_dict` and out the
+## far side of the clamps — the round trip a host's slider actually makes. A
+## field missing from `MatchConfig._FIELDS` is a setting the host changes and
+## nobody else ever sees, which is what this line exists to catch.
+func _potion_config_round_trips() -> String:
+	var sent := MatchConfig.new()
+	sent.heal_amount = 55.0
+	sent.heal_channel = 3.5
+	sent.potion_drop_chance = 0.42
+	var got := MatchConfig.new()
+	got.apply_dict(sent.to_dict())
+	var problems: Array[String] = []
+	if not is_equal_approx(got.heal_amount, 55.0):
+		problems.append("heal_amount arrived as %.1f" % got.heal_amount)
+	if not is_equal_approx(got.heal_channel, 3.5):
+		problems.append("heal_channel arrived as %.2f" % got.heal_channel)
+	if not is_equal_approx(got.potion_drop_chance, 0.42):
+		problems.append("potion_drop_chance arrived as %.2f" % got.potion_drop_chance)
+	# The clamps, at both ends of each, because a dial that survives the trip
+	# and then accepts anything is a dial a modified peer can use to turn the
+	# channel off — which is the one setting D-067 refuses to have.
+	got.apply_dict({"heal_amount": 900.0, "heal_channel": 0.0,
+		"potion_drop_chance": 7.0})
+	if not is_equal_approx(got.heal_amount, 100.0):
+		problems.append("heal_amount clamped to %.1f" % got.heal_amount)
+	if not is_equal_approx(got.heal_channel, 0.5):
+		problems.append("an instant channel survived as %.2f" % got.heal_channel)
+	if not is_equal_approx(got.potion_drop_chance, 1.0):
+		problems.append("potion_drop_chance clamped to %.2f" % got.potion_drop_chance)
+	got.apply_dict({"heal_amount": -4.0, "heal_channel": -1.0,
+		"potion_drop_chance": -1.0})
+	if not is_equal_approx(got.heal_amount, 5.0):
+		problems.append("heal_amount floored at %.1f" % got.heal_amount)
+	if not is_equal_approx(got.heal_channel, 0.5):
+		problems.append("heal_channel floored at %.2f" % got.heal_channel)
+	if not is_equal_approx(got.potion_drop_chance, 0.0):
+		problems.append("potion_drop_chance floored at %.2f" % got.potion_drop_chance)
+	_potion_problems.append_array(problems)
+	return "heal_amount, heal_channel and potion_drop_chance survive " \
+		+ "to_dict/apply_dict and clamp at both ends"
+
+
+func _potion_expect(ok: bool, wrong: String) -> void:
+	if not ok:
+		_potion_problems.append(wrong)
+
+
+func _potion_verdict(label: String, detail: String) -> void:
+	if _potion_problems.is_empty():
+		print("combat_range: %s — %s PASS" % [detail, label])
+	else:
+		_potion_failures += 1
+		print("combat_range: %s — %s FAIL (%s)"
+			% [detail, label, "; ".join(_potion_problems)])
+	_potion_problems.clear()
+
+
+func _potion_finish() -> void:
+	print("combat_range: %d potion verdict(s) failed" % _potion_failures)
 	get_tree().quit()
 
 
@@ -3822,6 +4225,15 @@ func _watch_spawned(node: Node) -> void:
 	# world for a third of a second (`MatchState._do_ward`).
 	if node is WardFlash:
 		_wards += 1
+		return
+	var item := node as Pickup
+	if item != null:
+		# What kind of drop this is cannot be read here: `MatchState._spawn_pickup`
+		# adds the node and *then* calls `Pickup.drop`, which is what sets `kind`.
+		# Deferring to the next idle frame is enough, and being collected in the
+		# meantime does not change what it was — which matters, because a drop
+		# under a dummy's feet is taken by the very next physics step (D-067).
+		_note_pickup.call_deferred(item)
 		return
 	if node.has_signal("caught"):
 		node.connect("caught", func(victim_ids: Array) -> void:

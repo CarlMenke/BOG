@@ -170,6 +170,12 @@ func _catch() -> void:
 		if target.peer_id != owner_peer_id:
 			MatchState.note_attack(target.peer_id, owner_peer_id)
 		victims.append(target.peer_id)
+		# The host's own copy of this Gub is told it is being dragged, whoever
+		# owns it and whether or not the pull below is sent anywhere (D-067).
+		# It moves nothing — see `Gub.note_lured` — and it is what lets the host
+		# tell a Gub that walked out of a heal channel from one that was pulled
+		# out of it.
+		target.note_lured(_hold)
 		# Exactly one of these, never both. Sending to yourself is refused
 		# outright by a `call_remote` RPC, and sending to a peer that is not
 		# connected — a fake roster entry in a testbed, or anyone who dropped

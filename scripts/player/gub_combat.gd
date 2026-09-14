@@ -78,6 +78,17 @@ extends Node
 ## weapon here whose tell is continuous, and a float that replicates is the
 ## cheapest honest way to make a continuous thing visible.
 ##
+## **The heal potion is the one thing in this file that is not an attack**
+## (D-067). It is stock like the mushroom and the lure, spent with a key like
+## both of them — and then, unlike either, it takes two seconds to happen. A
+## channel is a windup whose *point* is that it can be taken away: the health
+## arrives over it rather than at the end of it, being hit ends it, moving under
+## your own power ends it, and the potion is gone either way. What it has in
+## common with everything above is the split this whole file is built on — the
+## owning client decides it wants to drink and plays its own arm immediately,
+## and the host is the only machine that spends the potion or puts back a single
+## point of health.
+##
 ## **The clip stopped being shared, and the windup did not** (D-064). Until step
 ## 5 of `docs/PLAN_COMBAT.md` the Elder played the spear's own `Throw` at
 ## whatever rate met the delay, which worked while the throw was a baseball
@@ -243,6 +254,23 @@ const LURE_SPEED := 22.0
 ## than where the thrower aimed.
 const LURE_GRAVITY := 22.0
 
+## How fast a drinking Gub may be going, in m/s, before its channel is over
+## (D-067).
+##
+## **A speed and not an input**, and that is the whole architecture of the rule.
+## The host has to be able to decide this about a Gub it does not own, and what
+## it has of a remote Gub is `sync_velocity` — the same replicated field the
+## animator lays its locomotion plane out from. An input would have to be put on
+## the wire to be asked at all, and a rule only the drinker can evaluate is a
+## rule a modified client simply never reports.
+##
+## 1.0 is a third under `Gub.CROUCH_SPEED`'s 1.6, which is the slowest a Gub can
+## deliberately travel, and far over the few centimetres a second a body settling
+## on a slope carries. So there is nothing near it in either direction: every way
+## of moving on purpose is over it and nothing that happens to a Gub standing
+## still comes close.
+const CHANNEL_MOVE_SPEED := 1.0
+
 const LAYER_WORLD := 1
 const LAYER_PLAYER := 2
 const LAYER_DEPLOYABLE := 8
@@ -275,10 +303,12 @@ var _server_lure_ready_at: float = 0.0
 ## two ints and means a spectator's HUD is right about the Gub it is watching.
 var _mushrooms: int = 0
 var _lures: int = 0
+var _potions: int = 0
 
 ## Host-side, authoritative. The only counts that can actually spend anything.
 var _server_mushrooms: int = 0
 var _server_lures: int = 0
+var _server_potions: int = 0
 
 var _active_mushrooms: Array[Node] = []
 
@@ -316,6 +346,38 @@ var _loose_charge: float = -1.0
 var _server_draw_peak: float = 0.0
 var _server_drawing: bool = false
 
+## When this Gub started drinking, or 0 for "not drinking" (D-067).
+##
+## **Kept on every peer**, unlike `_windup_release_at` and `_draw_started_at`,
+## and that is the difference between a windup and a channel. A windup is half a
+## second the attacker's own machine can time on its own; a channel is two
+## seconds during which everybody watching has to see an arm holding a bottle
+## up, and the arm has to come down at the right moment on all eight screens.
+## So the clock runs everywhere, off `_do_drink_potion`, and the animation is
+## driven from it rather than from a packet per frame.
+var _channel_at: float = 0.0
+## How long the channel that is running now is, latched when it started.
+##
+## Read from `MatchConfig.heal_channel` once rather than every tick, because the
+## *animation* was fired at a rate derived from it and a clip already playing
+## cannot be re-timed. A host who drags the slider mid-match moves the next
+## drink, not the one in somebody's hand.
+var _channel_seconds: float = 0.0
+## `Gub.sync_jump_serial` at the moment the channel started. A serial that has
+## moved is a jump, which is the one way of leaving the ground that is a
+## decision — and it is replicated, so the host can see it on a Gub it does not
+## own (D-052's field, asked a new question).
+var _channel_jump: int = 0
+
+## Host-side. The only clock that heals anybody.
+var _server_channel_at: float = 0.0
+var _server_channel_seconds: float = 0.0
+## How much of `heal_amount` this channel has actually delivered. The whole of
+## "an interrupted drink keeps what had arrived" is this float: the heal is
+## handed over in slices, and a channel that ends early simply stops asking for
+## more (D-067).
+var _server_channel_healed: float = 0.0
+
 
 func _ready() -> void:
 	_gub = get_parent() as Gub
@@ -351,6 +413,10 @@ func _process(_delta: float) -> void:
 	# puts the charge on the body, and on every peer it is what hands the same
 	# number to the bowstring's blend shape.
 	_tick_draw()
+	# Before the guards below and on every peer, like `_tick_windup`: a drink is
+	# the one thing here that is *running* on seven machines that did not start
+	# it, and the arm has to come down on all of them.
+	_tick_channel()
 	_tick_hand()
 	_tick_charge()
 	if not _gub.is_local() or not _gub.alive:
@@ -374,6 +440,8 @@ func _process(_delta: float) -> void:
 		try_place_mushroom()
 	if Input.is_action_just_pressed("throw_lure"):
 		try_throw_lure()
+	if Input.is_action_just_pressed("drink_potion"):
+		try_drink_potion()
 
 
 func spear_cooldown() -> float:
@@ -408,6 +476,47 @@ func lure_count() -> int:
 	return _lures
 
 
+func potion_count() -> int:
+	return _potions
+
+
+## Is this Gub in the middle of a drink? True on every peer for every Gub, which
+## is the point of the clock living on all of them (D-067).
+##
+## Asked by four things and they want it for four reasons: the drinker, to
+## refuse a second drink; every weapon's gate, to refuse an attack out of one;
+## the HUD, to dim the tile; and the host, to decide whether there is anything
+## to interrupt.
+func is_channelling() -> bool:
+	return _channel_at > 0.0
+
+
+## How far through the drink is, 0 to 1. Zero when there is no drink.
+##
+## Computed from a clock rather than accumulated, for `draw_fraction`'s reason:
+## a dropped frame must not leave a channel short.
+func channel_fraction() -> float:
+	if _channel_at <= 0.0 or _channel_seconds <= 0.0:
+		return 0.0
+	return clampf((_now() - _channel_at) / _channel_seconds, 0.0, 1.0)
+
+
+## Whether there is a potion that can be drunk right now.
+##
+## The mirror of `has_spear()` and `has_bow()`, and it shares both of their
+## clauses for both of their reasons — an Elder has no need of one and a hand
+## holding a letter card has nothing to raise a bottle with (D-035). It adds the
+## two a channel brings with it: you must have one, and you must not be moving
+## when you start.
+##
+## It does **not** ask whether you are already at full health. A Gub that drinks
+## at 100 wastes a potion, which is its own business — and a gate there would be
+## a key that silently does nothing at the exact moment a player is panicking
+## about a fight they think they are losing.
+func has_potion() -> bool:
+	return _potions > 0 and not is_elder() and not is_holding_letter() 		and not _channel_broken()
+
+
 ## Whether there is a spear to throw. **The one gate**: the throw asks it, the
 ## host asks it before it will honour a request, the aim marker asks it, and the
 ## hand is drawn from it. Anything that wants to take a Gub's spear away adds a
@@ -416,8 +525,16 @@ func lure_count() -> int:
 ## A letter hold is the second such clause (D-035). A Gub holding a card up
 ## cannot throw, and the reason is not a rule bolted on next to this one — it is
 ## that the hand the spear would come out of has a letter in it.
+##
+## A drink is the **third**, and it is the same sentence again (D-067): a Gub
+## with a bottle at its mouth has a fist round the bottle. Put here rather than
+## only in `try_throw_spear` precisely so that the *hand* obeys it — a Gub
+## raising a drink with a spear still in its fist and a bow still in the other
+## one was what the first contact sheet of this feature showed, and the fix is
+## the rule this function already is rather than a fourth place that has to
+## remember.
 func has_spear() -> bool:
-	return not is_elder() and spear_cooldown() <= 0.0 and not is_holding_letter()
+	return not is_elder() and spear_cooldown() <= 0.0 		and not is_holding_letter() and not is_channelling()
 
 
 ## Whether there is a bow to draw, and the exact mirror of `has_spear()`
@@ -425,7 +542,10 @@ func has_spear() -> bool:
 ## and the left hand is drawn from it. Anything that wants to take a Gub's bow
 ## away adds a clause here and gets all three for free.
 ##
-## It shares both of the spear's clauses and for both of the spear's reasons. An
+## It shares all three of the spear's clauses and for all three of the spear's
+## reasons — the drink included, and most obviously of the three: the drinking
+## hand *is* the bow hand (`HeldGear.BOW_HAND_BONE`), so a bow that stayed put
+## through a channel would be a longbow held at the lips. An
 ## Elder has lightning *instead of* its weapons, not as well as them (D-038) —
 ## two hands full of bow would be the tell for the most dangerous Gub in the
 ## match saying the wrong thing. And a letter hold disarms the bow exactly as it
@@ -437,7 +557,7 @@ func has_spear() -> bool:
 ## is much shorter than the spear's, because a spear is a guaranteed kill and an
 ## arrow is not.
 func has_bow() -> bool:
-	return not is_elder() and bow_cooldown() <= 0.0 and not is_holding_letter()
+	return not is_elder() and bow_cooldown() <= 0.0 		and not is_holding_letter() and not is_channelling()
 
 
 ## Is this Gub the Elder? Asked of `MatchState` every time rather than mirrored
@@ -544,6 +664,19 @@ func release_delay() -> float:
 ## is "may a second attack start", and the answer through all of it is no.
 func is_winding_up() -> bool:
 	return _windup_release_at > 0.0 or _draw_started_at > 0.0
+
+
+## May this Gub start anything at all? One expression, asked by the three `try_`
+## functions, for the reason `_wants_shaft` is one expression: three copies of
+## "am I already doing something" that differ by a clause is a Gub that can
+## throw a spear half way through a drink.
+##
+## It is separate from `is_winding_up()` rather than folded into it because that
+## function has a second caller with a different question — `_tick_windup` asks
+## it as "is there a release on its way", and a channel has no release for it to
+## find (D-067).
+func is_busy() -> bool:
+	return is_winding_up() or is_channelling()
 
 
 ## True while a *throw* is between its click and its release — the spear's or
@@ -706,7 +839,7 @@ func try_throw_spear() -> void:
 	if is_elder():
 		try_cast_lightning()
 		return
-	if not has_spear() or is_winding_up():
+	if not has_spear() or is_busy():
 		return
 
 	_windup_release_at = _now() + GubAnimator.THROW_RELEASE_TIME
@@ -1033,7 +1166,7 @@ const DRAW_CLAIM_GRACE := 0.1
 ## (`release_draw`) and what the draw costs is the only currency this weapon
 ## actually trades in, which is standing still in the open with a tell on you.
 func try_draw_bow() -> void:
-	if not has_bow() or is_winding_up():
+	if not has_bow() or is_busy():
 		return
 	_draw_started_at = _now()
 	# The arrow appears in the fist on this frame rather than the next, which is
@@ -1238,7 +1371,7 @@ func _wants_arrow() -> bool:
 ## the one thing that would read as broken rather than as fast. Since D-064 it
 ## is the Elder's own `Cast` being sped up rather than the spear's `Throw`.
 func try_cast_lightning() -> void:
-	if not has_lightning() or is_winding_up():
+	if not has_lightning() or is_busy():
 		return
 
 	# The dial, not the clip. `_tick_windup` compares against this, and the clip
@@ -1587,9 +1720,16 @@ func grant_lure(count: int = 1) -> void:
 	_broadcast_inventory()
 
 
+func grant_potion(count: int = 1) -> void:
+	if not Net.is_host or count <= 0:
+		return
+	_server_potions += count
+	_broadcast_inventory()
+
+
 func _broadcast_inventory() -> void:
-	_do_set_inventory.rpc(_server_mushrooms, _server_lures)
-	_do_set_inventory(_server_mushrooms, _server_lures)
+	_do_set_inventory.rpc(_server_mushrooms, _server_lures, _server_potions)
+	_do_set_inventory(_server_mushrooms, _server_lures, _server_potions)
 
 
 ## The host's word on what this Gub is holding, on every peer. Also what
@@ -1597,11 +1737,12 @@ func _broadcast_inventory() -> void:
 ## mushroom it did not have gets its count put back here rather than being left
 ## one short for the rest of its life.
 @rpc("authority", "call_remote", "reliable")
-func _do_set_inventory(mushrooms: int, lures: int) -> void:
-	if _mushrooms == mushrooms and _lures == lures:
+func _do_set_inventory(mushrooms: int, lures: int, potions: int) -> void:
+	if _mushrooms == mushrooms and _lures == lures and _potions == potions:
 		return
 	_mushrooms = mushrooms
 	_lures = lures
+	_potions = potions
 	inventory_changed.emit()
 
 
@@ -1827,6 +1968,279 @@ func _do_throw_lure(origin: Vector3, velocity: Vector3, remaining: int) -> void:
 	lure.call("launch_from", origin, velocity, _gub.peer_id, _config)
 
 
+# ------------------------------------------------------------------ potion ---
+
+## How often health actually travels during a channel, in seconds.
+##
+## The heal is **continuous** — what you are owed at any instant is
+## `heal_amount` times how far through the drink you are — and this is only how
+## often that number is *sent*. Every frame would be 120 reliable RPCs per
+## two-second drink for a bar that moves 0.67 of a point at a time; a fifth of a
+## second is ten, each worth four health at the defaults, which is a bar that
+## climbs visibly and a wire that does not notice.
+##
+## It is not a quantum of healing. A channel that ends between two slices pays
+## out the difference on its way out (`_deliver_channel`), so what an
+## interruption keeps is the fraction of the drink that had actually happened
+## and not the last slice that happened to have been posted.
+const CHANNEL_HEAL_TICK := 0.2
+
+
+## Drink one, if there is one to drink and this is a moment to drink it in.
+##
+## The same predictive shape every other spend in this file has: the potion goes
+## out of the local count on the keypress and the arm starts on the same frame,
+## and the host's `_do_drink_potion` carries the real remainder. What is new is
+## that the *clock* starts here too — a channel is two seconds long on every
+## machine and the drinker should not spend a round trip of it with its arms
+## down.
+##
+## A drink the host refuses is cancelled by `_do_stop_drink`, which its refusal
+## path broadcasts. Without that, a client whose request was thrown away would
+## stand there holding a bottle for two seconds and heal nothing.
+func try_drink_potion() -> void:
+	if not has_potion() or is_busy():
+		return
+	_potions -= 1
+	inventory_changed.emit()
+	_begin_channel()
+	if Net.is_host:
+		_host_drink_potion()
+	else:
+		_request_drink_potion.rpc_id(1)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_drink_potion() -> void:
+	if not Net.is_host or multiplayer.get_remote_sender_id() != _gub.peer_id:
+		return
+	_host_drink_potion()
+
+
+## The authoritative half. Every clause the client checked is checked again
+## here, plus the one only the host can check — that this Gub is not already
+## drinking, which is what stops a modified client spamming the request into a
+## continuous heal.
+func _host_drink_potion() -> void:
+	if not _gub.alive:
+		return
+	if _server_potions <= 0 or _server_channel_at > 0.0 \
+			or is_elder() or is_holding_letter() or _channel_moving():
+		# The asker has already spent its own potion and started its own arm, so
+		# it is told that both of those were wrong.
+		_broadcast_inventory()
+		_stop_channel_everywhere()
+		return
+	_server_potions -= 1
+	_server_channel_at = _now()
+	_server_channel_seconds = maxf(_config.heal_channel, 0.01)
+	_server_channel_healed = 0.0
+	_do_drink_potion.rpc(_server_potions)
+	_do_drink_potion(_server_potions)
+
+
+## The drink, on every peer. Carries the host's remainder, which is what makes
+## the predictive spend above safe.
+@rpc("authority", "call_remote", "reliable")
+func _do_drink_potion(remaining: int) -> void:
+	if _potions != remaining:
+		_potions = remaining
+		inventory_changed.emit()
+	# The drinker started its own clock and its own arm on the keypress.
+	# Starting them again when the relay lands would restart the drink half a
+	# round trip in and leave the bottle up after the health had finished
+	# arriving — the same thing `_do_throw_windup` refuses to do to an arm.
+	if _gub == null or _gub.is_local():
+		return
+	_begin_channel()
+
+
+## Stop drinking, on every peer. The host's word, and the only thing that can
+## end a channel early on somebody else's screen.
+@rpc("authority", "call_remote", "reliable")
+func _do_stop_drink() -> void:
+	_end_channel()
+
+
+## The owning client telling the host it has stopped — it moved, or jumped, and
+## it knew before the host's next snapshot of its velocity did.
+##
+## An optimisation and not the rule. The host reaches the same conclusion off
+## `sync_velocity` a tick or two later on its own, which is what makes this safe
+## to accept from a client at all: the only thing a modified one can do with it
+## is stop its own drink early, and the potion is already spent.
+@rpc("any_peer", "call_remote", "reliable")
+func _request_stop_drink() -> void:
+	if not Net.is_host or multiplayer.get_remote_sender_id() != _gub.peer_id:
+		return
+	host_break_channel()
+
+
+## Host only. End whatever channel is running and pay out what it had earned.
+##
+## Public because two of the three things that break a drink are decided in
+## `MatchState` and not here — a landed hit, and a letter card picked up
+## mid-drink — and neither of them should have to know how a channel is stopped.
+## The third, moving, is noticed by `_tick_channel` below.
+func host_break_channel() -> void:
+	if not Net.is_host or _server_channel_at <= 0.0:
+		return
+	_deliver_channel(_channel_progress())
+	_server_channel_at = 0.0
+	_stop_channel_everywhere()
+
+
+func _stop_channel_everywhere() -> void:
+	_do_stop_drink.rpc()
+	_do_stop_drink()
+
+
+## Start the arm and the clock on this machine.
+func _begin_channel() -> void:
+	if _gub == null:
+		return
+	_channel_at = _now()
+	_channel_seconds = maxf(_config.heal_channel, 0.01)
+	# Latched, not polled: a jump is the one way of leaving the ground that is a
+	# decision, and the serial is replicated so the host can see it on a Gub it
+	# does not own. Comparing against where it was when the drink started is
+	# what makes "did this Gub jump *during* the channel" a question with an
+	# answer on every machine.
+	_channel_jump = _gub.sync_jump_serial
+	var animator := _gub.get_node_or_null("AnimationTree") as GubAnimator
+	if animator != null:
+		animator.play_drink(GubAnimator.drink_rate_for_channel(_channel_seconds))
+	cooldowns_changed.emit()
+
+
+## Put the bottle down on this machine. Idempotent — the host broadcasts a stop
+## for a channel that several peers may already have run out on their own.
+func _end_channel() -> void:
+	if _channel_at <= 0.0:
+		return
+	_channel_at = 0.0
+	_channel_seconds = 0.0
+	if _gub != null:
+		var animator := _gub.get_node_or_null("AnimationTree") as GubAnimator
+		if animator != null:
+			animator.stop_drink()
+	cooldowns_changed.emit()
+
+
+## Is this Gub moving under its own power? The rule that says "standing still".
+##
+## **Speed, not input**, because the host has to be able to ask it about a Gub
+## it does not own, and what it has of one is `sync_velocity` — the same
+## replicated field the locomotion plane is laid out from. An input would have
+## to be put on the wire to be asked at all, and a rule only the drinker can
+## evaluate is a rule a modified client never reports.
+##
+## **Being lured is not moving** (D-067), and this is the line that says so.
+## `Lure` drags a Gub without its owner pressing anything, so a rule written
+## about *displacement* would have the lure silently cancel the drink — and the
+## far more interesting outcome is a Gub hauled out of cover still drinking, in
+## the open, which is the lure doing exactly what it is for. Stated as "your own
+## movement input", the rule also survives everything else that moves a body
+## nobody asked to move: a shove, a slope, something moving to stand on. What
+## makes it askable on the host is `Gub.note_lured`, which marks the host's copy
+## of every victim without pulling it.
+func _channel_moving() -> bool:
+	if _gub == null:
+		return true
+	if _gub.is_lured():
+		return false
+	var flat := Vector3(_gub.velocity.x, 0.0, _gub.velocity.z)
+	return flat.length() > CHANNEL_MOVE_SPEED
+
+
+## Is there any reason the channel that is running should not still be?
+##
+## Everything here is replicated, so the host and the drinker reach the same
+## answer from the same state — the property `MatchState.damage_refusal` is
+## written for, and for the same reason. Being hit is not in it: that is decided
+## at the one door every hit comes through and arrives as `host_break_channel`.
+##
+## **Airborne is deliberately absent.** The drink is a layer filtered to Spine1
+## and up, so it works in the air by construction, and there is no grounded
+## check anywhere in this file for this to become the first of. What is here is
+## the *jump*, which is a decision and is caught by the serial; walking off a
+## ledge mid-drink is not, and a Gub that falls two metres while drinking keeps
+## drinking. Crouching is absent for the same reason in reverse: it is standing
+## still, lower, and the drink layers over it untouched.
+func _channel_broken() -> bool:
+	if _gub == null or not _gub.alive:
+		return true
+	if is_holding_letter():
+		return true
+	if _gub.sync_jump_serial != _channel_jump:
+		return true
+	return _channel_moving()
+
+
+## How far through the *host's* channel we are, 0 to 1.
+func _channel_progress() -> float:
+	if _server_channel_at <= 0.0:
+		return 0.0
+	return clampf((_now() - _server_channel_at) / _server_channel_seconds, 0.0, 1.0)
+
+
+## Hand over however much of the potion has been earned by `progress` and not
+## yet sent. Host only.
+##
+## `_server_channel_healed` counts what was **asked for**, not what landed: a
+## Gub eight from full that drinks forty is healed eight, and the other
+## thirty-two are still spent. Counting what landed instead would leave a
+## potion's remainder waiting to be delivered to a Gub that is already full,
+## which is a heal arriving the moment somebody hits it.
+func _deliver_channel(progress: float) -> void:
+	var wanted := _config.heal_amount * progress
+	if wanted <= _server_channel_healed:
+		return
+	var slice := wanted - _server_channel_healed
+	_server_channel_healed = wanted
+	MatchState.report_heal(_gub.peer_id, slice)
+
+
+## The channel, every frame, on every peer (D-067).
+##
+## Three layers, in this order and for these reasons. The **host's** clock is
+## first, because it is the only one that heals anybody and this tick's slice
+## has to have been paid before anything below can end the drink. Then **every**
+## peer's own clock, which runs out on its own so that a drink that simply
+## finished costs no packet at all. Then the **drinker's** prediction of its own
+## cancel, so the arm comes down on the frame the key went down rather than a
+## round trip later.
+func _tick_channel() -> void:
+	if Net.is_host and _server_channel_at > 0.0:
+		_tick_host_channel()
+	if _channel_at <= 0.0:
+		return
+	if _gub == null or not _gub.alive or _now() - _channel_at >= _channel_seconds:
+		_end_channel()
+		return
+	if _gub.is_local() and _channel_broken():
+		_end_channel()
+		# The host is told, unless this *is* the host, whose own
+		# `_tick_host_channel` above reached the same conclusion this frame.
+		if not Net.is_host:
+			_request_stop_drink.rpc_id(1)
+
+
+func _tick_host_channel() -> void:
+	var progress := _channel_progress()
+	if progress >= 1.0:
+		_deliver_channel(1.0)
+		_server_channel_at = 0.0
+		return
+	if _channel_broken():
+		host_break_channel()
+		return
+	# Between the ends, health travels on the slice boundary rather than every
+	# frame — see CHANNEL_HEAL_TICK.
+	var steps := floorf((_now() - _server_channel_at) / CHANNEL_HEAL_TICK)
+	_deliver_channel(minf(1.0, steps * CHANNEL_HEAL_TICK / _server_channel_seconds))
+
+
 ## The host telling this Gub's own client that a lure has caught it.
 ##
 ## The pull has to be applied by the victim's client because movement is
@@ -1860,7 +2274,7 @@ func _spawn_root() -> Node:
 ##
 ## **Everything you were carrying is lost on death** (D-032). Letters are not —
 ## those live on `MatchState.stats` and are permanent progress for the match —
-## but mushrooms and lures go back to zero, which is what makes a life worth
+## but mushrooms, lures and potions go back to zero, which is what makes a life worth
 ## keeping once you have gathered a few and what stops the leader compounding.
 ##
 ## Runs on every peer, from `MatchState._do_respawn`, so the host's copies are
@@ -1899,6 +2313,18 @@ func reset() -> void:
 	_lures = 0
 	_server_mushrooms = 0
 	_server_lures = 0
+	# The potion goes back to zero with the other two: it is carried stock, so
+	# it is lost on death like everything else that is (D-032, D-067). The
+	# channel goes with it, on every peer, because `reset` runs everywhere from
+	# `_do_respawn` — a Gub coming back onto a spawn pad still holding a bottle
+	# up would be the clearest possible way to show that a clock survived a
+	# death it should not have.
+	_potions = 0
+	_server_potions = 0
+	_end_channel()
+	_server_channel_at = 0.0
+	_server_channel_seconds = 0.0
+	_server_channel_healed = 0.0
 	_prune_mushrooms()
 	# Through `_refresh_hand` rather than straight at the spear, so a respawn
 	# cannot hand back a shaft to a Gub the host still has a letter hold open

@@ -219,6 +219,60 @@ const TEAM_NONE := -1
 ## is right here if they want it back.
 @export_range(0.0, 1.0) var elder_drop_chance: float = 0.02
 
+## How often a death drops a heal potion (D-067).
+##
+## **Taken off the top of the drop table like the letter and the robe**, rather
+## than the remainder being split three ways instead of two. That is the whole
+## reason this field exists: with the potion as a third share of what is left,
+## the mushroom and the lure would have gone from ~49% of drops each to ~30%
+## each, and nothing in the lobby would have said so. Off the top, the default
+## below reproduces exactly that three-way split — and a host who wants the old
+## economy back drags one slider instead of editing a table.
+##
+## 30% and not 2% because a potion is not a robe. It is the most ordinary thing
+## that can fall out of a corpse: it is worth `heal_amount` and two seconds of
+## standing still, and a match where you see one every twenty deaths is a match
+## in which nobody ever learns that healing exists. The three common drops are
+## deliberately near enough equal — 30/30/30 against the letter's 8 and the
+## robe's 2 — because which of the three you get should be the interesting part
+## and not whether you got anything.
+@export_range(0.0, 1.0) var potion_drop_chance: float = 0.30
+
+## What one heal potion is worth, in the units of `Gub.MAX_HEALTH`.
+##
+## 40 of a body's 100, which is two snap arrows or half a full draw. The number
+## is picked off the two bands the nameplate draws (D-062): a potion takes a Gub
+## from anywhere in the red below 25 to well inside the green above 50, so
+## drinking one is always the difference between "the next arrow kills me" and
+## "it does not" — and it is never a reset, because 40 cannot refill a Gub that
+## has been properly hurt.
+##
+## **This is the balance dial for healing and the only one.** Whether an
+## interrupted channel refunds the potion is not a setting and deliberately so
+## (D-067): it is what the mechanic *is*, in the same way `Gub.MAX_HEALTH` is
+## the unit rather than a slider (D-062).
+@export_range(5.0, 100.0) var heal_amount: float = 40.0
+
+## How long drinking one takes, in seconds.
+##
+## **Channelled, not instant, and this is the number that makes it so** (D-067).
+## An instant heal on pickup makes standing on a fresh corpse the strongest play
+## in the game and removes every decision from healing; two seconds of standing
+## still creates the "drink now or run" question that is the whole point. The
+## health arrives *over* it rather than at the end of it, so a channel broken
+## half way through is worth half a potion.
+##
+## `GubAnimator.drink_rate_for_channel` plays the drink clip at whatever rate
+## makes it take exactly this long, so a host who drags this slider moves the
+## animation with it and cannot leave a Gub standing still with its arms down
+## for a second after the bottle is empty.
+##
+## The floor is 0.5 and not 0.0. Zero is the setting this whole feature exists
+## to refuse, and unlike `lightning_delay` — where zero means something real and
+## is guarded by a rate ceiling — there is nothing on the other side of it
+## except the mechanic the decision rejected.
+@export_range(0.5, 6.0) var heal_channel: float = 2.0
+
 ## How long after the click the Elder's bolt actually leaves the hand.
 ##
 ## The user, having played it: *"There should be basically no delay for the
@@ -328,6 +382,7 @@ const _FIELDS := [
 	"letter_drop_chance", "letter_hold_time",
 	"capture_return_time", "capture_carrier_speed",
 	"elder_drop_chance", "lightning_delay", "lightning_cooldown", "lightning_radius",
+	"potion_drop_chance", "heal_amount", "heal_channel",
 	"elder_duration", "elder_speed_multiplier", "elder_jump_multiplier",
 	"max_players", "map", "map_seed",
 ]
@@ -405,6 +460,12 @@ func _clamp_all() -> void:
 	capture_return_time = clampf(capture_return_time, 3.0, 60.0)
 	capture_carrier_speed = clampf(capture_carrier_speed, 0.5, 1.2)
 	elder_drop_chance = clampf(elder_drop_chance, 0.0, 1.0)
+	potion_drop_chance = clampf(potion_drop_chance, 0.0, 1.0)
+	heal_amount = clampf(heal_amount, 5.0, 100.0)
+	# The floor is 0.5 and means it: a channel of zero is an instant heal, which
+	# is the thing D-067 exists to refuse. Unlike `lightning_delay` below there
+	# is no "on the frame of the click" setting here to be preserved.
+	heal_channel = clampf(heal_channel, 0.5, 6.0)
 	# Zero survives this on purpose, like `letter_hold_time` above: it is the
 	# "fires on the frame of the click" setting, not a slider dragged off the
 	# end of its range.

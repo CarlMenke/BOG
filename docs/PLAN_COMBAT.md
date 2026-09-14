@@ -8,7 +8,7 @@ which reads the code, writes its own plan, implements it, and comes back. The
 orchestrator reviews, runs the gate, and decides.*
 
 *Decision records D-001..D-061 existed on `main` when this was written; the
-steps below have since added D-062..D-066. Gate was 63 checks then and is 86
+steps below have since added D-062..D-067. Gate was 63 checks then and is 92
 now, green.*
 
 ---
@@ -48,7 +48,7 @@ after it is sequential, because it all lands in `gub_combat.gd`,
 `gub_animator.gd`, `match_state.gd` and `docs/DECISIONS.md` — the exact overlap
 that produced three agents all claiming D-040 in one day.
 
-**The gate is the definition of done.** `bash tools/smoke_test.sh` — 86 checks
+**The gate is the definition of done.** `bash tools/smoke_test.sh` — 92 checks
 today. Run it after every step, before starting the next. A step that adds
 behaviour worth asserting adds a check, and the count in `docs/STATUS.md` moves
 with it (two places: the command comment near line 25 and the "passes, N of N"
@@ -57,7 +57,7 @@ sentence near line 29). Never start a step on a red tree.
 **Decision numbers are claimed at commit time, never reserved.** Immediately
 before writing a record, run
 `grep -oE '^## D-0[0-9]+' docs/DECISIONS.md | tail -1`, take the next number,
-and commit it with the code. Next free at the time of writing is **D-067**.
+and commit it with the code. Next free at the time of writing is **D-068**.
 
 **Commit style.** Read the last few `git log` entries first. Titles are a
 sentence with a clause; bodies explain the *why* and what was rejected, at
@@ -550,10 +550,12 @@ Wave 1, one by one:         +--> [4] spear <-+            |
                                                          +--> [9] great sword
 ```
 
-Wave 0 and **steps 4, 5, 6 and 8 are done, and the gate is at 86 checks.**
+Wave 0 and **steps 4, 5, 6, 7 and 8 are done, and the gate is at 92 checks.**
 Step 8 was run **before step 7**, deliberately: two of step 6's visible defects
-were its to fix and both are (D-066). Step 7's clips have arrived and are
-audited; step 9 additionally needs a sword mesh that does not exist yet.
+were its to fix and both are (D-066). Step 7 is closed out as D-067 — the potion
+is carried stock, the heal arrives *over* the channel so an interrupted drink
+keeps the fraction that had landed, and being lured is pointedly not moving.
+**Only step 9 is left**, and it now has the sword mesh it was waiting for.
 
 Step 6's handover is closed. The composed bow pointed **91° off the Gub's own
 facing** — an archer stands side-on, and the whole of that angle lives above a
