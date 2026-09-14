@@ -22,11 +22,11 @@ island and out to a results screen, and two automated checks now walk that path:
 one in a single process, one across two processes over a real socket.
 
 ```
-bash tools/smoke_test.sh        # 50 checks, ~2 minutes, finds Godot by itself
+bash tools/smoke_test.sh        # 51 checks, ~2 minutes, finds Godot by itself
 bash tools/net_test.sh          # two processes, one socket; ~45 s, run by hand
 ```
 
-`smoke_test.sh` is the gate and it passes, 50 of 50. `net_test.sh` is kept out
+`smoke_test.sh` is the gate and it passes, 51 of 51. `net_test.sh` is kept out
 of it to keep the gate fast; run it by hand after touching networking, the lobby
 or the results screen. It passes all eleven stages (177 + 32 assertions), ten of
 which end in a rematch, with the engine quiet in both processes — the error it
@@ -111,8 +111,9 @@ of what that means:
 - **The whole loop works.** Menu → host → lobby → start → island → warmup →
   match → results → rematch or back to the lobby.
 - **The island** (Whisperbloom Hollow) is generated from `Net.config.map_seed`:
-  ~1400 props in MultiMeshes, a shrine on the high ground, a mushroom grove, a
-  rock arch, log bridges to two satellite islets, stone paths, 15 torches,
+  a 23 m main island with a dozen trees standing about 15 m tall (D-055), ~2200
+  props in all, a shrine on the high ground, a mushroom grove, a
+  rock arch, log bridges to two satellite islets, stone paths, 17 torches,
   fireflies, spores, falling leaves, and two ambient beds. It takes 2-6 seconds
   to build, which is why `SceneFlow` shows a loading card.
 - **The second map** (Rust) is hand-made rather than generated: an industrial
@@ -254,7 +255,7 @@ Three tiers, because three different kinds of claim need three different proofs
 
 | tool | proves |
 |---|---|
-| `tools/smoke_test.sh` | **the gate** — import, and thirty-three checks |
+| `tools/smoke_test.sh` | **the gate** — import, and fifty-one checks |
 | `tools/cursor_flow.tscn` | entering a match takes the mouse, and leaving gives it back |
 | `tools/playthrough.tscn` | the whole path, menu to results; 50 assertions on the island, 58 on Rust. Takes a map id after a `--` |
 | `tools/match_rules.tscn` | 195 assertions across 14 scoring scenarios |
@@ -272,6 +273,7 @@ Three tiers, because three different kinds of claim need three different proofs
 | `tools/combat_range.tscn` | the real match path: a spear, a mushroom, a lure, a letter, the Elder's bolt |
 | `tools/net_loopback.tscn` | two processes, one socket, including a *client* using all three abilities, dying and respawning, and ten rematches with the client in the lobby for half of them (D-044). **In the gate** through `net_test.sh`, bound to 127.0.0.1 on a random port |
 | `tools/preview_map.tscn` | Rust and Kopje Crossing: renders one, and checks every spawn pad with the physics. **In the gate** for both |
+| `tools/island_report.tscn` | Whisperbloom Hollow as numbers: footprint, slope, every scatter layer's placed count, tree heights, spawn spacing and the capture bases (D-055). **In the gate** on four seeds |
 | `tools/parkour_report.tscn` | every Kopje Crossing platform has its rock, fits a Gub, and is reachable from the ground (D-042). **In the gate** |
 | `tools/preview_*.tscn` | it *looks* right. Needs a person, always will |
 
@@ -291,7 +293,8 @@ screen to the flow.
     res://tools/preview_island.tscn out.png 150 wide match hud
 ```
 
-`preview_island` views: `wide under eye shrine grove arch bridge spawns hollow`,
+`preview_island` views: `wide under eye eye0..eye7 shrine grove arch bridge
+spawns hollow top canopy tree`,
 plus `match` for real Gubs and the diagnostic flags in its `FLAGS` dictionary.
 `ui_range` modes: `menu menu_join menu_notice settings lobby lobby_full
 lobby_teams lobby_client lobby_map`. `lobby_map` scrolls the Match panel down to

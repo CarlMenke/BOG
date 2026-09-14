@@ -61,6 +61,10 @@ const SPAWN_RING := 0.66
 ## A pad must be flatter than this and at least this far inside the rim.
 const SPAWN_MAX_SLOPE := 0.32
 const SPAWN_RIM_MARGIN := 4.0
+## And at least this far from every pad solved before it. Two bearings that both
+## have to swing clear of the knoll used to come to rest on the same patch of
+## flat ground, 3-5 m apart — one pad in all but name (D-055).
+const SPAWN_MIN_APART := 6.0
 ## Gubs are spawned a few centimetres up so the capsule settles onto the ground
 ## rather than starting the match intersecting it.
 const SPAWN_LIFT := 0.12
@@ -132,7 +136,7 @@ func _build_procedural(entry: Dictionary, started: int) -> void:
 	scatter.scatter(props)
 
 	_build_torches()
-	Ambience.build(self, island, scatter.canopy_points, map_seed)
+	Ambience.build(self, island, scatter.canopy_points, map_seed, scatter.canopy_radii)
 
 	print("arena: %s built from seed %d in %d ms" % [
 		entry["display_name"], map_seed, Time.get_ticks_msec() - started])
@@ -293,7 +297,13 @@ func _solve_spawn(mass: IslandGenerator.Landmass, bearing: float) -> Vector2:
 		# 0, +0.16, -0.16, +0.32, -0.32 ... out to about 37 degrees either way.
 		var swing := 0.16 * float((swing_step + 1) / 2) 			* (1.0 if swing_step % 2 == 0 else -1.0)
 		for ring_step in 7:
-			var fraction := SPAWN_RING + 0.055 * float(ring_step - 3)
+			# 0, -0.055, +0.055, -0.11 ... — the ideal ring first and alternates
+			# either side of it after, as the header says. This used to count
+			# 0..6 from the *innermost* ring, which won on nearly every bearing and
+			# pulled the whole ring in to 0.5 of the rim: bases 18.8 m apart and
+			# two pads 4 m from each other (D-055).
+			var offset := (ring_step + 1) / 2 * (1 if ring_step % 2 == 0 else -1)
+			var fraction := SPAWN_RING + 0.055 * float(offset)
 			var spot := _spawn_candidate(mass, bearing + swing, fraction)
 			if not _spawn_is_clear(mass, spot):
 				continue
@@ -330,6 +340,9 @@ func _spawn_is_clear(mass: IslandGenerator.Landmass, spot: Vector2) -> bool:
 		# Only the hard keepouts matter: a spawn is allowed to be on the grassy
 		# skirt of a landmark, just not inside the landmark.
 		if keepout.blocks_dense and spot.distance_to(keepout.centre) < keepout.radius + 1.5:
+			return false
+	for pad: Transform3D in spawn_points:
+		if spot.distance_to(Vector2(pad.origin.x, pad.origin.z)) < SPAWN_MIN_APART:
 			return false
 	# And never on top of a torch. Torches are placed before the spawn ring is
 	# solved, and a pad that lands on one puts a player in the brightest circle

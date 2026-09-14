@@ -81,6 +81,18 @@ const RIM_EARTH := Color(0.180, 0.148, 0.108)
 const ROCK_HIGH := Color(0.088, 0.085, 0.080)
 const ROCK_LOW := Color(0.046, 0.046, 0.053)
 
+## The main island's mean rim radius (D-055). It was 19 m; the user asked for
+## the forest to be "a little bigger", and 23 m is as far as it goes before the
+## footprint passes the 60 m the fog is tuned for (D-009) — the islets hang off
+## the rim, so every metre here is a metre on both axes of the map.
+const MAIN_RADIUS := 23.0
+## Every hand-placed coordinate on the main island — the hollow, the knoll, the
+## shoulder, the grove, the path hub, the firefly swarms — was laid out on the
+## 19 m island and is multiplied by this, so the landmarks keep their places
+## *relative to the rim* instead of bunching up in the middle of a larger one.
+## Heights are not scaled: the knoll is as tall to climb as it ever was.
+const LAYOUT_SCALE := MAIN_RADIUS / 19.0
+
 
 ## One floating chunk of ground: a top surface and the rocky root beneath it.
 ##
@@ -209,7 +221,7 @@ func _setup_landmasses() -> void:
 
 	var main := Landmass.new()
 	main.name = "MainIsland"
-	main.base_radius = 19.0
+	main.base_radius = MAIN_RADIUS
 	main.rim_amp = 2.2
 	main.rim_phase = rng.randf_range(0.0, TAU)
 	# About half the island's width. Shallower than this and the underside reads
@@ -253,17 +265,17 @@ func _setup_features() -> void:
 	# The hollow the place is named after. A shallow bowl in the middle means
 	# the centre of the map is overlooked from every side, which is what makes
 	# holding the rim worth something.
-	features.append(Feature.new(Vector2.ZERO, 10.5, -2.1))
+	features.append(Feature.new(Vector2.ZERO, 10.5 * LAYOUT_SCALE, -2.1))
 
 	# The high ground (4.10). Deliberately off-centre and on one flank, so it
 	# commands the hollow without commanding the whole island.
-	knoll_centre = Vector2(-7.4, -8.6)
+	knoll_centre = Vector2(-7.4, -8.6) * LAYOUT_SCALE
 	knoll_height = 4.1
-	features.append(Feature.new(knoll_centre, 9.5, knoll_height))
+	features.append(Feature.new(knoll_centre, 9.5 * LAYOUT_SCALE, knoll_height))
 
 	# A second, gentler shoulder on the far side, so the knoll is not the only
 	# elevated ground and a spawn there is not automatically the worst one.
-	features.append(Feature.new(Vector2(9.8, 6.2), 7.5, 1.9))
+	features.append(Feature.new(Vector2(9.8, 6.2) * LAYOUT_SCALE, 7.5 * LAYOUT_SCALE, 1.9))
 
 
 func _setup_materials() -> void:

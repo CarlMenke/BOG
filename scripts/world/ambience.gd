@@ -41,7 +41,8 @@ const LOOPS := {
 ## from, and the honest answer to "where are the trees" is "wherever the scatter
 ## put them", not a radius guessed after the fact.
 static func build(parent: Node3D, island: IslandGenerator,
-		canopy_points: PackedVector3Array, map_seed: int) -> void:
+		canopy_points: PackedVector3Array, map_seed: int,
+		canopy_radii: PackedFloat32Array = PackedFloat32Array()) -> void:
 	var root := Node3D.new()
 	root.name = "Ambience"
 	parent.add_child(root)
@@ -51,7 +52,7 @@ static func build(parent: Node3D, island: IslandGenerator,
 
 	_build_fireflies(root, island, rng)
 	_build_spores(root, island)
-	_build_leaves(root, island, canopy_points)
+	_build_leaves(root, canopy_points, canopy_radii, rng)
 	_build_audio(root, island)
 
 
@@ -72,7 +73,9 @@ static func _build_fireflies(parent: Node3D, island: IslandGenerator,
 		Vector2(-9.0, 6.5),
 	]
 	for i in swarms.size():
-		var spot: Vector2 = swarms[i]
+		# Laid out on the 19 m island, and moved out with the landmarks they
+		# hang over when it grew (D-055).
+		var spot: Vector2 = swarms[i] * IslandGenerator.LAYOUT_SCALE
 		var ground := island.height_at(spot.x, spot.y)
 		if ground <= IslandGenerator.NO_LAND:
 			continue
@@ -131,7 +134,10 @@ static func _build_spores(parent: Node3D, island: IslandGenerator) -> void:
 
 	var mat := ParticleProcessMaterial.new()
 	mat.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
-	mat.emission_box_extents = Vector3(reach * 0.8, 5.0, reach * 0.8)
+	# Up to the crowns, which since D-055 stand around ten metres rather than
+	# five: motes that stop at head height leave the trunks rising out of the
+	# field into empty black.
+	mat.emission_box_extents = Vector3(reach * 0.8, 7.0, reach * 0.8)
 	mat.direction = Vector3(0.4, 1.0, 0.15)
 	mat.spread = 55.0
 	mat.initial_velocity_min = 0.08
@@ -155,11 +161,13 @@ static func _build_spores(parent: Node3D, island: IslandGenerator) -> void:
 	spores.name = "Spores"
 	spores.draw_pass_1 = quad
 	spores.process_material = mat
-	spores.amount = 260
+	# Scaled with the box, which grew with the island and with the canopy
+	# height, so the field is as thick as it was.
+	spores.amount = 420
 	spores.lifetime = 22.0
 	spores.randomness = 0.9
 	spores.preprocess = 22.0
-	spores.position = Vector3(0.0, 4.5, 0.0)
+	spores.position = Vector3(0.0, 6.0, 0.0)
 	spores.visibility_aabb = AABB(Vector3(-reach, -12, -reach),
 		Vector3(reach * 2.0, 34, reach * 2.0))
 	parent.add_child(spores)
@@ -169,32 +177,51 @@ static func _build_spores(parent: Node3D, island: IslandGenerator) -> void:
 
 ## Leaves falling out of the canopy.
 ##
-## Emitted from a **ring** rather than a box, sized and positioned from where the
-## scatter actually put its trees. The trees sit toward the rim (`radial_power`
-## in `PropScatter`), so a box emitter would drop most of its leaves over the
-## open middle of the map, where there is nothing overhead for them to have come
-## from — which the eye notices immediately even when it cannot say why.
-static func _build_leaves(parent: Node3D, island: IslandGenerator,
-		canopy_points: PackedVector3Array) -> void:
+## Emitted from **points inside the crowns** the scatter actually planted: a
+## few dozen per tree, spread through a disc the width of that crown and a few
+## metres deep. It was a ring round the map sized from the trees' radii, which
+## was honest enough over twenty-nine trees ringing the rim; over a dozen tall
+## ones (D-055) most of that ring is open sky, and leaves dropping out of
+## nothing is exactly the thing the eye catches without being able to say why.
+##
+## The canopies are also twice as high as they were, around ten metres, so the
+## lifetime is long enough for a leaf at the damped fall speed below — well
+## under a metre a second — to reach the grass before it fades.
+static func _build_leaves(parent: Node3D, canopy_points: PackedVector3Array,
+		canopy_radii: PackedFloat32Array, rng: RandomNumberGenerator) -> void:
 	if canopy_points.is_empty():
 		return
 
-	var inner := INF
-	var outer := 0.0
-	var height := 0.0
-	for point: Vector3 in canopy_points:
-		var radius := Vector2(point.x, point.z).length()
-		inner = minf(inner, radius)
-		outer = maxf(outer, radius)
-		height += point.y
-	height /= float(canopy_points.size())
+	# Every point is relative to the emitter, which sits at the map origin.
+	var per_tree := 32
+	var points := PackedVector3Array()
+	var top := 0.0
+	var reach := 0.0
+	for i in canopy_points.size():
+		var crown: Vector3 = canopy_points[i]
+		var radius: float = canopy_radii[i] if i < canopy_radii.size() else 3.0
+		top = maxf(top, crown.y)
+		for n in per_tree:
+			var angle := rng.randf_range(0.0, TAU)
+			# Toward the outside of the crown: a leaf shed from the middle of a
+			# tree falls straight back into it.
+			var out := sqrt(rng.randf_range(0.15, 1.0)) * radius * 0.8
+			var point := crown + Vector3(cos(angle) * out, rng.randf_range(-2.5, 1.5),
+				sin(angle) * out)
+			points.append(point)
+			reach = maxf(reach, Vector2(point.x, point.z).length())
+
+	# One texel per point, positions in the float channels, as the POINTS
+	# emission shape reads them.
+	var image := Image.create_empty(points.size(), 1, false, Image.FORMAT_RGBF)
+	for i in points.size():
+		var p := points[i]
+		image.set_pixel(i, 0, Color(p.x, p.y, p.z))
 
 	var mat := ParticleProcessMaterial.new()
-	mat.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_RING
-	mat.emission_ring_axis = Vector3.UP
-	mat.emission_ring_radius = outer
-	mat.emission_ring_inner_radius = maxf(inner, 4.0)
-	mat.emission_ring_height = 4.0
+	mat.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_POINTS
+	mat.emission_point_texture = ImageTexture.create_from_image(image)
+	mat.emission_point_count = points.size()
 	mat.direction = Vector3(0.6, -0.2, 0.2)
 	mat.spread = 40.0
 	mat.initial_velocity_min = 0.1
@@ -228,13 +255,15 @@ static func _build_leaves(parent: Node3D, island: IslandGenerator,
 	leaves.name = "FallingLeaves"
 	leaves.draw_pass_1 = petal
 	leaves.process_material = mat
-	leaves.amount = 48
-	leaves.lifetime = 11.0
+	# About five in the air under each tree at any moment. The old ring spread
+	# forty-eight over the whole rim; per tree this is more, and it has to be,
+	# because a crown you can see leaves falling out of is the point.
+	leaves.amount = canopy_points.size() * 5
+	leaves.lifetime = 16.0
 	leaves.randomness = 0.9
-	leaves.preprocess = 11.0
-	leaves.position = Vector3(0.0, height, 0.0)
-	leaves.visibility_aabb = AABB(Vector3(-outer - 4.0, -height - 6.0, -outer - 4.0),
-		Vector3(outer * 2.0 + 8.0, height + 12.0, outer * 2.0 + 8.0))
+	leaves.preprocess = 16.0
+	leaves.visibility_aabb = AABB(Vector3(-reach - 6.0, -8.0, -reach - 6.0),
+		Vector3(reach * 2.0 + 12.0, top + 14.0, reach * 2.0 + 12.0))
 	parent.add_child(leaves)
 
 

@@ -121,6 +121,15 @@ check "invite codes" "invite_codes: PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/invite_codes.tscn
 check "match rules" "match_rules: PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/match_rules.tscn
+# Whisperbloom Hollow's forest and spawn ring, measured (D-055). The user asked
+# for the island "a little bigger" with 60% fewer trees at twice the height, and
+# the scatter's dart throw places fewer than it is asked for, so what is held
+# here is what landed: on four seeds, 10-14 trees at a mean height of 12-18 m
+# (29 at 7.4 m before), the main island at its stated radius, the capture bases
+# more than 25 m apart (18.8 before) and no two pads within 5.5 m (3.8 before).
+# Headless, the whole procedural layout without a scene tree, about ten seconds.
+check "the hollow's forest and pads" "island_report: PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" tools/island_report.tscn -- 20260904 4
 # The mushroom as cover, which is the only thing about it that matters and the
 # one thing nothing checked until D-039. Three assertions out of one run, and
 # the order of them is the point: a spear thrown at a Gub standing behind a

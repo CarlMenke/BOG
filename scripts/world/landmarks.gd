@@ -30,6 +30,11 @@ const BRIDGE_RISE := 0.35
 const BRIDGE_WIDTH := 1.9
 const LOG_RADIUS := 0.42
 
+## The mushroom grove's centre and the hub every stone path starts from, laid
+## out on the 19 m island and scaled with it (`IslandGenerator.LAYOUT_SCALE`).
+const GROVE_CENTRE := Vector2(6.4, -6.1) * IslandGenerator.LAYOUT_SCALE
+const PATH_HUB := Vector2(1.5, 1.0) * IslandGenerator.LAYOUT_SCALE
+
 ## Path stones are laid this far apart along the spine routes.
 const PATH_SPACING := 1.15
 
@@ -186,7 +191,7 @@ func _build_shrine(parent: Node3D) -> void:
 ## with pale fungus and hid the shrine behind it. At 1.5-2.9x the tallest caps
 ## are around head height on a Gub and you can still see the map past them.
 func _build_grove(parent: Node3D) -> void:
-	var centre := Vector2(6.4, -6.1)
+	var centre := GROVE_CENTRE
 	var grove := Node3D.new()
 	grove.name = "MushroomGrove"
 	parent.add_child(grove)
@@ -394,11 +399,11 @@ func _build_bridge(parent: Node3D, label: String, from: Vector2, to: Vector2) ->
 ## exists and tells a player at a glance where they can get to.
 func _build_paths(parent: Node3D) -> void:
 	var routes := [
-		[Vector2(1.5, 1.0), island.knoll_centre],
-		[Vector2(1.5, 1.0), Vector2(6.4, -6.1)],
-		[Vector2(1.5, 1.0), Vector2(cos(EAST_BEARING), sin(EAST_BEARING))
+		[PATH_HUB, island.knoll_centre],
+		[PATH_HUB, GROVE_CENTRE],
+		[PATH_HUB, Vector2(cos(EAST_BEARING), sin(EAST_BEARING))
 			* (island.landmasses[0].rim_radius(EAST_BEARING) - 2.0)],
-		[Vector2(1.5, 1.0), Vector2(cos(NORTH_BEARING), sin(NORTH_BEARING))
+		[PATH_HUB, Vector2(cos(NORTH_BEARING), sin(NORTH_BEARING))
 			* (island.landmasses[0].rim_radius(NORTH_BEARING) - 2.0)],
 	]
 

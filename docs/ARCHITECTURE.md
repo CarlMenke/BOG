@@ -263,6 +263,14 @@ generator touches the global RNG — every random number comes from a local
 `RandomNumberGenerator` or a seeded `FastNoiseLite`, both pure functions of the
 seed. Break that and clients silently get different islands.
 
+The main island is 23 m in radius (`IslandGenerator.MAIN_RADIUS`, **D-055**),
+and every hand-placed coordinate on it — the hollow, the knoll, the shoulder,
+the grove, the path hub, the firefly swarms — is written for the original 19 m
+island and multiplied by `LAYOUT_SCALE`, so a change of size moves the
+landmarks with the rim. The forest is a dozen trees about 15 m tall, and the
+falling leaves are emitted from points inside those crowns rather than from a
+ring over the map. `tools/island_report.tscn` measures all of it.
+
 The surface mesh is built in **polar** coordinates, not on a square grid,
 because the rim is the most-looked-at line on a floating island and a grid
 leaves a staircase edge there. A polar ring lands on the outline by

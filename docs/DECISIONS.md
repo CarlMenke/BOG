@@ -4214,3 +4214,112 @@ With the windup gate removed from the HUD, the check fails on windup frame 0
 - **A draining fill.** D-036 settled that nothing on this HUD drains. The
   letter hold fills, and so does this.
 - **Timing the recharge under a letter hold.** See above.
+
+## D-055 — Whisperbloom Hollow is a 23 m island with a dozen trees twice as tall, and its spawn ring searches from the ideal pad outward
+*Amends D-007's layout and D-051's measured base distance for this map.*
+
+The user: *"The existing enchanted forest map should be a little bigger and
+reduce the amount of trees by 60% and make them all on average way taller,
+double the height"*.
+
+**Measured before and after** by `tools/island_report.tscn` on the default seed
+(20260904). The report is now a scene rather than a `--script` main loop, so it
+can solve the spawn ring through `Arena` (which names `Net`), and it builds the
+whole procedural layout without a scene tree.
+
+| | before | after |
+|---|---|---|
+| main island radius | 19 m | 23 m |
+| footprint | 51 x 50.5 m | 57.5 x 58 m |
+| living trees placed | 29 (of 42 asked) | 12 (of 12) |
+| dead trees placed | 5 (of 7) | 2 (of 2) |
+| mean living-tree height | 7.4 m (5.4-10.3) | 15.0 m (11.0-20.7) |
+| mean canopy point height | 5.0 m | 10.8 m |
+| capture bases apart | 18.8 m | 30.4 m |
+| closest pair of spawn pads | 3.8 m | 6.3 m |
+| props, all layers | 1399 (~716k tris) | 2199 (~1008k tris) |
+| torches | 15 | 17 |
+
+**Bigger.** `IslandGenerator.MAIN_RADIUS` is 23. That is as far as "a little"
+goes before the footprint passes the 60 m the fog is tuned for (D-009). The
+islets hang off the rim at a fixed gap, so they and their bridges move out on
+their own. Every hand-typed coordinate on the main island (the hollow, knoll
+and shoulder features, the grove centre, the path hub, the firefly swarms) is
+multiplied by `LAYOUT_SCALE` = 23/19. Without that, the landmarks bunch up in
+the middle of a larger island. Heights are not scaled. The arch, bridges and
+spawn ring were already solved against the rim.
+
+**Fewer trees, measured by what landed.** The dart throw under-places, so
+`count` is not the number. 34 trees landed before (29 living, 5 dead) and 14
+land now (12 and 2), which is 41%. On the bigger island, with fewer trunks in
+the way, every tree asked for lands, on every seed swept.
+
+**Twice as tall, not twice as big.** `scale` is still the footprint (width,
+trunk radius, reserve). A new `stretch` multiplies only the height. The
+footprint went up 1.41x and the stretch is 1.37, which comes out at 2.0x the
+mean height on the default seed. Across four seeds the mean is 13.8-15.0 m. The trunk cylinder
+is stretched with the drawn tree: height from the stretched mesh, radius from
+the footprint. The minimum gap grew with the crowns (3.7 m to 5.2 m).
+
+**The spawn ring was fixed, not just widened.** `_solve_spawn`'s comment said
+the ideal ring was tried first. The loop actually counted from the innermost
+alternate (0.66 - 0.165 of the rim) and took the first pad that passed, so
+nearly every pad sat at about half the rim radius. That is why D-051 measured
+bases only 18.8 m apart. It now tries the ideal fraction, then alternates
+either side. Pads also have to be 6 m from every pad solved before them.
+Bearings that both swing clear of the knoll used to land 3-5 m apart. With the
+search fixed and `SPAWN_RING` unchanged at 0.66, the bases are 29-34 m apart
+across the seeds swept. One seed in twelve (20263835) now takes a 0.48 slope
+for one pad rather than doubling up. That is walkable, and it warns.
+
+**Ambience.** Leaves came from a ring sized to where the trees were. Twelve
+trees make most of that ring open sky, so leaves now emit from 32 points
+scattered through each crown. `PropScatter.canopy_radii` gives the crown's
+reach, and the vertical spread is 4 m. There are five leaves per tree, and
+the lifetime went from 11 s to 16 s so a leaf from a 10 m crown reaches the
+ground before it fades. Spores rise to about 13 m instead of 9.5 m, with 420
+motes instead of 260 to keep the density in a bigger box. Fireflies stay at
+head height and move with the layout scale.
+
+**Sightlines and camera.** Cover on the island is now mostly trunks: 0.5-0.7 m
+radius columns about 9 m tall, instead of three times as many 0.35-0.5 m ones.
+The hollow is more open from the pads. The camera (D-045) sweeps against
+collision, and only the trunks collide, so taller crowns change nothing for it.
+`out/hollow_after_canopy.png` is a camera at boom height beside a trunk,
+looking at the middle of the map, and it reads clearly.
+
+**Triangles.** The dense layers are per square metre, so 47% more land is
+about 45% more grass. That is most of the ~300k extra triangles. It is left
+alone because thinning the grass would change the look the user did not ask
+to change.
+
+**Checked.**
+- `tools/island_report.tscn -- 20260904 4`, in the gate as "the hollow's
+  forest and pads". On four seeds: the main radius equals `MAIN_RADIUS`, 10-14
+  living trees are placed, the mean height is 12-18 m, the capture bases are
+  more than 25 m apart, and no two pads are within 5.5 m. With the old tree
+  table, the old search order and no pad spacing, all four seeds fail (12
+  verdicts).
+- "full playthrough" and its capture layout still pass on the island (bases
+  30.3 m apart). `capture_preview -- hollow` passes by hand.
+- `tools/preview_map`'s pad physics check is for static maps only. The island's
+  pads are solved against the height oracle, and `preview_island ... match`
+  shows every Gub settling on its pad.
+- `preview_island` gains `top` (orthographic plan, lit plainly), `eye0`-`eye7`,
+  `canopy` and `tree`, and `hollow` is scaled with the layout. The before and
+  after renders are `out/hollow_before_*.png` and `out/hollow_after_*.png`.
+- 50 checks to 51.
+
+### Rejected
+- **Doubling `scale`.** It doubles the crowns' width with their height, and a
+  twelve-metre crown roofs a quarter of the hollow.
+- **A radius of 24 m or more.** The footprint passes 60 m and the far edge goes
+  into the fog.
+- **Moving the landmarks by hand.** `LAYOUT_SCALE` keeps them where they were
+  relative to the rim, and the next resize is one number.
+- **Pushing `SPAWN_RING` out to widen the bases.** The ring was never being
+  used. At 0.70 and 0.74 on the old search, the bases only reached 22.7 m and
+  24.4 m.
+- **Keeping the leaf ring.** Over twelve trees it drops leaves out of empty sky.
+- **Thinning the grass to hold the triangle count.** Not asked for, and it
+  changes the look.

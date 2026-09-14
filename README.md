@@ -232,7 +232,8 @@ and `tools/` is full of scenes for it:
 | `preview_assets`, `preview_anim`, `preview_grip` | the art, the clips, the spear in the hand |
 | `preview_ragdoll`, `ragdoll_stability` | how a corpse falls, and whether it survives |
 | `preview_sky` | the sky and environment |
-| `preview_island` | **the island** — nine framings, `match` for real Gubs, `hud` to keep the HUD |
+| `preview_island` | **the island** — a dozen framings (plan view, eye height on any pad, under a tree), `match` for real Gubs, `hud` to keep the HUD |
+| `island_report` | **the island as numbers** — footprint, slope, placed props per layer, tree heights, spawn spacing, capture bases. In the gate |
 | `preview_map` | **a static map** — top-down, side, or eye height on any spawn pad; `probe` prints the floor as ASCII. Rust by default, `map=res://scenes/world/maps/safari.tscn` for the savanna. Checks every pad with the physics, and is in the gate for both |
 | `parkour_report` | **Kopje Crossing** — rebuilds the Gub's jump arc and proves every platform can be reached from the ground. In the gate |
 | `playthrough.tscn` | the whole flow, menu to results, headless. Add `-- rust` or `-- safari` to play it on a static map |

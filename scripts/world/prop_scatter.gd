@@ -55,29 +55,39 @@ class Keepout extends RefCounted:
 ## inward, and the trees sit slightly outward on purpose: a forest ringing an
 ## arena frames the fight, while a forest standing in the middle of it turns an
 ## instant-kill weapon into a coin toss.
+##
+## `scale` is the footprint — width, trunk radius, reserve — and `stretch`
+## multiplies only the height on top of it (D-055). The user asked for the
+## forest to be "a little bigger", with 60% fewer trees, "on average way
+## taller, double the height". Doubling `scale` alone doubles the crowns'
+## *width* as well, and a crown twelve metres across is a roof over a quarter of
+## the hollow; so the footprint is 1.41x and the stretch makes up the rest.
+## `count` is what is asked for, not what lands — the dart throw under-places —
+## so it was set against the placed number `tools/island_report.tscn` prints.
 const SPARSE_LAYERS := [
 	{
 		"name": "Trees",
 		"models": ["CommonTree_1", "CommonTree_2", "CommonTree_3", "CommonTree_4",
 			"CommonTree_5", "Pine_1", "Pine_2", "Pine_3", "Pine_4", "Pine_5"],
-		"count": 42, "gap": 3.7, "reserve": 2.6,
-		"scale": [0.78, 1.16], "slope_max": 0.5, "rim_margin": 2.2, "sink": 0.22,
-		"radial_power": 1.35, "clump": 0.55, "clump_frequency": 0.055,
+		"count": 12, "gap": 5.2, "reserve": 2.6,
+		"scale": [1.10, 1.64], "stretch": 1.37, "slope_max": 0.5, "rim_margin": 2.2,
+		"sink": 0.22, "radial_power": 1.35, "clump": 0.55, "clump_frequency": 0.055,
 		"trunk_radius": 0.44, "trunk_fraction": 0.62,
 	},
 	{
 		"name": "DeadTrees",
 		"models": ["DeadTree_1", "DeadTree_2", "DeadTree_3", "DeadTree_4", "DeadTree_5"],
-		"count": 7, "gap": 5.5, "reserve": 3.0,
-		"scale": [0.42, 0.62], "slope_max": 0.45, "rim_margin": 2.6, "sink": 0.25,
-		"radial_power": 1.6, "clump": 0.0, "clump_frequency": 0.05,
+		"count": 2, "gap": 7.8, "reserve": 3.0,
+		"scale": [0.59, 0.87], "stretch": 1.37, "slope_max": 0.45, "rim_margin": 2.6,
+		"sink": 0.25, "radial_power": 1.6, "clump": 0.0, "clump_frequency": 0.05,
 		"trunk_radius": 0.36, "trunk_fraction": 0.55,
 	},
 	{
 		"name": "Boulders",
 		"models": ["Rock_Medium_1", "Rock_Medium_2", "Rock_Medium_3"],
 		"count": 16, "gap": 4.2, "reserve": 2.2,
-		"scale": [0.42, 0.95], "slope_max": 0.8, "rim_margin": 1.4, "sink": 0.42,
+		"scale": [0.42, 0.95], "stretch": 1.0, "slope_max": 0.8, "rim_margin": 1.4,
+		"sink": 0.42,
 		"radial_power": 0.9, "clump": 0.35, "clump_frequency": 0.07,
 		"trunk_radius": 0.0, "trunk_fraction": 0.0,
 	},
@@ -180,12 +190,18 @@ var _area_weights: Array[float] = []
 ## canopies to fall out of, and re-deriving them from the scene tree afterwards
 ## would mean trusting node names.
 var canopy_points: PackedVector3Array = PackedVector3Array()
+## How far each of those crowns reaches from its trunk, in the same order.
+var canopy_radii: PackedFloat32Array = PackedFloat32Array()
 ## Rough triangle cost of everything placed, for `tools/island_report.gd`.
 var triangles: int = 0
 var instances: int = 0
 ## layer name -> how many were placed. "The island looks bare" is a judgement;
 ## "the grass layer placed 41" is a number, and only one of them is debuggable.
 var counts: Dictionary = {}
+## Standing height of every tree placed, in metres, for the same report. The
+## scale range in the table is a factor on eleven different models, so "how tall
+## are the trees" has no answer short of measuring what was planted.
+var tree_heights: PackedFloat32Array = PackedFloat32Array()
 
 
 func _init(island: IslandGenerator, map_seed: int, keepouts: Array[Keepout]) -> void:
@@ -241,23 +257,26 @@ func _scatter_sparse(parent: Node3D, layer: Dictionary) -> void:
 			continue
 
 		var uniform := _rng.randf_range(layer["scale"][0], layer["scale"][1])
+		var tall := uniform * float(layer["stretch"])
 		var node := MeshInstance3D.new()
 		node.mesh = mesh
 		node.position = _island.surface_point(spot.x, spot.y) \
-			- Vector3.UP * float(layer["sink"]) * uniform
+			- Vector3.UP * float(layer["sink"]) * tall
 		node.rotation.y = _rng.randf_range(0.0, TAU)
 		# A little non-uniform squash, so ten copies of one tree do not read as
 		# ten copies of one tree.
-		node.scale = Vector3(uniform * _rng.randf_range(0.94, 1.06), uniform,
+		node.scale = Vector3(uniform * _rng.randf_range(0.94, 1.06), tall,
 			uniform * _rng.randf_range(0.94, 1.06))
 		group.add_child(node)
 
-		_add_collider(group, node, layer, mesh, uniform)
+		_add_collider(group, node, layer, mesh, uniform, tall)
 		_occupied.append(Vector3(spot.x, spot.y, reserve * uniform))
 		mine.append(spot)
 		if layer["name"] == "Trees":
-			canopy_points.append(node.position + Vector3.UP * mesh.get_aabb().size.y
-				* uniform * 0.72)
+			var box := mesh.get_aabb()
+			tree_heights.append(box.end.y * tall)
+			canopy_points.append(node.position + Vector3.UP * box.size.y * tall * 0.72)
+			canopy_radii.append(maxf(box.size.x, box.size.z) * 0.5 * uniform)
 		triangles += _triangles_of(model)
 		instances += 1
 		placed += 1
@@ -270,7 +289,7 @@ func _scatter_sparse(parent: Node3D, layer: Dictionary) -> void:
 ## needs cover to be *reliable*, and a tree you can shoot through but not walk
 ## through — or vice versa — is worse than a tree that is not there.
 func _add_collider(group: Node3D, node: MeshInstance3D, layer: Dictionary,
-		mesh: Mesh, uniform: float) -> void:
+		mesh: Mesh, uniform: float, tall: float) -> void:
 	var body := StaticBody3D.new()
 	body.collision_layer = LAYER_WORLD
 	body.collision_mask = 0
@@ -279,7 +298,9 @@ func _add_collider(group: Node3D, node: MeshInstance3D, layer: Dictionary,
 
 	var shape := CollisionShape3D.new()
 	if float(layer["trunk_radius"]) > 0.0:
-		var height := mesh.get_aabb().size.y * uniform * float(layer["trunk_fraction"])
+		# Up the trunk by the stretched height, around it by the footprint: the
+		# collider is scaled like the drawn tree.
+		var height := mesh.get_aabb().size.y * tall * float(layer["trunk_fraction"])
 		var cylinder := CylinderShape3D.new()
 		cylinder.radius = float(layer["trunk_radius"]) * uniform
 		cylinder.height = height
@@ -443,7 +464,7 @@ func _usable(spot: Vector2, layer: Dictionary) -> bool:
 	# rim is also the one place a Gub most needs to see their own feet.
 	#
 	# Capped at a quarter of the landmass radius, because a flat 2.2 m margin is
-	# a sensible skirt on a nineteen-metre island and the *entire surface* of a
+	# a sensible skirt on the main island and the *entire surface* of a
 	# four-metre islet. Uncapped, both islets came out bald.
 	var margin := minf(float(layer["rim_margin"]), mass.base_radius * 0.25)
 	if _island.inset_at(spot.x, spot.y) < margin:

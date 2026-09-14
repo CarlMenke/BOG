@@ -19,7 +19,14 @@ extends Node3D
 ##   Godot --path . --resolution 1280x720 --script tools/snapshot.gd -- \
 ##       res://tools/preview_island.tscn out.png <ticks> <view> [match]
 ##
-##   views: wide  under  eye  shrine  grove  arch  bridge  spawns  hollow
+##   views: wide  under  eye  eye0..eye7  shrine  grove  arch  bridge  spawns
+##          hollow  top  canopy  tree
+##
+## `top` is straight down and orthographic, with the fog off — it is a plan of
+## the map, not a picture of it. `canopy` is a third-person camera's height
+## under the tree nearest pad 0, looking at the middle; `tree` is that same tree
+## from nine metres, to judge its proportions against the Gub-sized things
+## around it.
 
 const ARENA := preload("res://scenes/world/arena.tscn")
 
@@ -29,7 +36,8 @@ const DUMMY_BASE := 900
 const DUMMY_COUNT := 5
 
 const VIEWS := ["wide", "under", "eye", "shrine", "grove", "arch", "bridge",
-	"spawns", "hollow"]
+	"spawns", "hollow", "top", "canopy", "tree",
+	"eye0", "eye1", "eye2", "eye3", "eye4", "eye5", "eye6", "eye7"]
 
 ## Lighting diagnostics. The map is lit almost entirely by ambient and torches,
 ## which makes "this surface is black" ambiguous between four different causes —
@@ -65,6 +73,11 @@ func _ready() -> void:
 	# where `register_arena` is called and where the host starts the warmup.
 	if _run_match:
 		_start_session()
+	# A plan view through forty metres of volumetric fog, lit by a moon at a
+	# tenth of daylight, is a dark blot. It is a plan, so it is lit like one.
+	if _view == "top":
+		_flags["nofog"] = true
+		_flags["noon"] = true
 
 	_arena = ARENA.instantiate() as Arena
 	# This tool exists to judge the island, and a crosshair and a kill feed over
@@ -141,6 +154,9 @@ func _build_camera() -> void:
 	add_child(camera)
 	camera.fov = framing["fov"]
 	camera.far = 500.0
+	if framing.has("ortho"):
+		camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+		camera.size = framing["ortho"]
 	camera.look_at_from_position(framing["eye"], framing["look"], Vector3.UP)
 	# Claimed after the arena — and after any Gub — so it wins the viewport over
 	# a `GubCamera` that has made itself current.
@@ -151,10 +167,31 @@ func _framing() -> Dictionary:
 	var island := _arena.island
 	var reach := island.extent()
 	var shrine := _ground(island.knoll_centre)
-	var grove := _ground(Vector2(6.4, -6.1))
+	var grove := _ground(Landmarks.GROVE_CENTRE)
 	var centre := _ground(Vector2.ZERO)
 
+	if _view.begins_with("eye") and _view.length() == 4:
+		var index := int(_view.substr(3)) % _arena.spawn_points.size()
+		var from := _arena.spawn_points[index].origin + Vector3.UP * 1.55
+		return {"eye": from, "look": centre + Vector3.UP * 1.2, "fov": 75.0}
+
 	match _view:
+		"top":
+			# Up is -Z on screen. `look_at` cannot aim straight down with Y as
+			# up, so the eye is nudged a millimetre south of the centre.
+			return {"eye": Vector3(0.0, 80.0, 0.001), "look": Vector3.ZERO,
+				"fov": 60.0, "ortho": reach * 2.1}
+		"canopy", "tree":
+			var trunk := _tree_near_pad()
+			var inward := Vector3(-trunk.x, 0.0, -trunk.z).normalized()
+			if _view == "canopy":
+				# Where a third-person camera hangs: about two metres up and a
+				# couple back from a Gub standing at the trunk.
+				return {"eye": trunk + inward * 2.0 + Vector3.UP * 2.2,
+					"look": centre + Vector3.UP * 1.2, "fov": 75.0}
+			var side := inward.cross(Vector3.UP)
+			return {"eye": trunk + (inward + side * 0.6).normalized() * 9.0 + Vector3.UP * 1.6,
+				"look": trunk + Vector3.UP * 4.0, "fov": 70.0}
 		"under":
 			# From below and outside: the only view that shows the rocky root,
 			# which is half of what makes this read as a *floating* island.
@@ -195,7 +232,10 @@ func _framing() -> Dictionary:
 			return {"eye": Vector3(0.0, reach * 0.72, reach * 0.34),
 				"look": centre, "fov": 72.0}
 		"hollow":
-			return {"eye": centre + Vector3(13.0, 3.0, 13.0),
+			# Scaled with the layout, or the camera on the 23 m island is buried
+			# in the far shoulder, which moved out on to where it used to stand.
+			var back := 13.0 * IslandGenerator.LAYOUT_SCALE
+			return {"eye": centre + Vector3(back, 3.0, back),
 				"look": centre + Vector3.UP * 1.0, "fov": 70.0}
 		_:
 			# `wide`: the establishing shot. Low enough that the horizon and the
@@ -204,6 +244,20 @@ func _framing() -> Dictionary:
 			# fog can see through, for the reason given under `spawns`.
 			return {"eye": Vector3(-reach * 0.52, 9.0, reach * 0.78),
 				"look": Vector3(0.0, -2.5, 0.0), "fov": 62.0}
+
+
+## The foot of the scattered tree nearest spawn pad 0. The canopy point sits
+## straight above the trunk, so its x and z are the trunk's.
+func _tree_near_pad() -> Vector3:
+	var pad := _arena.spawn_points[0].origin
+	var best := Vector3.ZERO
+	var best_distance := INF
+	for point: Vector3 in _arena.scatter.canopy_points:
+		var distance := Vector2(point.x, point.z).distance_to(Vector2(pad.x, pad.z))
+		if distance < best_distance:
+			best_distance = distance
+			best = point
+	return _ground(Vector2(best.x, best.z))
 
 
 func _ground(at: Vector2) -> Vector3:

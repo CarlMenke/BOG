@@ -1,4 +1,4 @@
-extends SceneTree
+extends Node
 ## Numbers about the generated island that a screenshot cannot give you.
 ## Development tool, not shipped.
 ##
@@ -10,19 +10,38 @@ extends SceneTree
 ## is not the same claim as "it works".
 ##
 ## Usage:
-##   Godot --headless --path . --script tools/island_report.gd -- [seed] [count]
+##   Godot --headless --path . tools/island_report.tscn -- [seed] [count]
+##
+## A scene rather than a `--script` main loop, for the reason `match_rules.gd`
+## gives: the spawn ring is solved by `Arena`, and `Arena` names `Net`, which a
+## script main loop cannot resolve at compile time.
 
 const DEFAULT_SEED := 20260904
 
+## The forest D-055 asked for, as bands every reported seed has to land in, so
+## `tools/smoke_test.sh` can hold the map to it. The user's words were "reduce the
+## amount of trees by 60% and make them all on average way taller, double the
+## height": before, 29 living trees placed at a mean of 7.4 m. Bands rather than
+## exact numbers because both are functions of the seed.
+const TREES_PLACED := Vector2i(10, 14)
+const TREE_HEIGHT := Vector2(12.0, 18.0)
+## The capture bases were 18.8 m apart on the old ring (D-051), and two pads
+## could come to rest 3.8 m from each other.
+const BASES_APART := 25.0
+const PADS_APART := 5.5
 
-func _initialize() -> void:
+var _failures: int = 0
+
+
+func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
 	var first: int = int(args[0]) if args.size() >= 1 else DEFAULT_SEED
 	var count: int = maxi(1, int(args[1])) if args.size() >= 2 else 1
 
 	for i in count:
 		_report(first + i * 977)
-	quit()
+	print("island_report: %s" % ("PASS" if _failures == 0 else "FAIL (%d)" % _failures))
+	get_tree().quit()
 
 
 func _report(map_seed: int) -> void:
@@ -37,6 +56,78 @@ func _report(map_seed: int) -> void:
 
 	_sample_surface(island)
 	_mesh_stats(island)
+	_layout(island, map_seed)
+
+
+## Everything `arena.gd` stands on the terrain, in its order: landmarks, the
+## spawn ring, the scatter. Built here without a scene tree, so the numbers a
+## change to the forest is judged by — how many trees actually went down, how
+## tall they are, how far apart the capture bases came out — are a headless
+## second rather than a render and a squint.
+func _layout(island: IslandGenerator, map_seed: int) -> void:
+	# The spawn ring is solved off the match config's seed, not an argument.
+	Net.config.map_seed = map_seed
+	var holder := Node3D.new()
+	var landmarks := Landmarks.new(island, map_seed)
+	landmarks.build(holder)
+
+	var arena := Arena.new()
+	arena.island = island
+	arena.landmarks = landmarks
+	arena._build_spawn_points()
+
+	var scatter := PropScatter.new(island, map_seed, landmarks.keepouts)
+	scatter.scatter(holder)
+
+	var heights := scatter.tree_heights
+	var total := 0.0
+	var tallest := 0.0
+	var shortest := INF
+	for h: float in heights:
+		total += h
+		tallest = maxf(tallest, h)
+		shortest = minf(shortest, h)
+	var mean := total / maxf(1.0, float(heights.size()))
+	var canopy := 0.0
+	for point: Vector3 in scatter.canopy_points:
+		canopy += point.y
+	canopy /= maxf(1.0, float(scatter.canopy_points.size()))
+
+	var closest := INF
+	var spawns := arena.spawn_points
+	for i in spawns.size():
+		for j in range(i + 1, spawns.size()):
+			closest = minf(closest, spawns[i].origin.distance_to(spawns[j].origin))
+	var layout := CaptureLayout.plan(spawns, 2)
+	var apart := Vector2(layout.bases[0].x, layout.bases[0].z).distance_to(
+		Vector2(layout.bases[1].x, layout.bases[1].z))
+
+	print("  props    %d instances (~%dk triangles), %d torch spots" % [
+		scatter.instances, scatter.triangles / 1000, landmarks.torch_spots.size()])
+	print("  scatter  %s" % scatter.counts)
+	print("  trees    %d placed of %d asked, height mean %.1f m (%.1f to %.1f), canopy y %.1f" % [
+		heights.size(), int(PropScatter.SPARSE_LAYERS[0]["count"]), mean,
+		shortest if heights.size() > 0 else 0.0, tallest, canopy])
+	print("  spawns   %d pads, closest pair %.1f m; capture bases %.1f m apart" % [
+		spawns.size(), closest, apart])
+
+	_verdict("main island radius %.1f m" % island.landmasses[0].base_radius,
+		is_equal_approx(island.landmasses[0].base_radius, IslandGenerator.MAIN_RADIUS))
+	_verdict("%d trees placed, in %d-%d" % [heights.size(), TREES_PLACED.x, TREES_PLACED.y],
+		heights.size() >= TREES_PLACED.x and heights.size() <= TREES_PLACED.y)
+	_verdict("mean tree height %.1f m, in %.0f-%.0f" % [mean, TREE_HEIGHT.x, TREE_HEIGHT.y],
+		mean >= TREE_HEIGHT.x and mean <= TREE_HEIGHT.y)
+	_verdict("capture bases %.1f m apart, over %.0f" % [apart, BASES_APART], apart > BASES_APART)
+	_verdict("no two pads within %.1f m" % PADS_APART, closest >= PADS_APART)
+
+	arena.free()
+	holder.free()
+
+
+func _verdict(label: String, ok: bool) -> void:
+	print("  %s %s" % ["ok  " if ok else "FAIL", label])
+	if not ok:
+		_failures += 1
 
 
 ## Walk a grid over the whole map and describe the ground: how high it goes, how
