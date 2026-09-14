@@ -3454,3 +3454,66 @@ whose team changed. With the old ragdoll `corpse` fails, and with the old backdr
   is exercised.
 - The hue window is fitted to this texture. A re-bake of `gub_basecolor.jpg` in a
   different base colour needs the window in the shader moved with it.
+
+## D-047 — A teammate's name is drawn through walls and never fades, an enemy's is not, and the HUD says which team you are on
+The user: *"it should be obvious what team you are on and who your teammates are,
+teammates names should be clearer and always there".* D-046 painted the body; this
+is the other two reads.
+
+**Through walls is teammates only, by design.** `Nameplate`'s own header says a
+plate visible through a boulder is a wallhack, and for an enemy that is still
+true and still enforced: an enemy's plate is depth-tested and fades out between
+20 and 28 m exactly as before. A teammate's plate is the deliberate exception.
+Where your own side is carries no information an opponent could be denied, it
+does not change during a match, and a teammate you cannot find is one you cannot
+help. So `Nameplate.set_ally(true)` turns off the depth test, skips the fade, and
+holds the plate's on-screen height from 11 m out (the pixel size grows with
+distance past that), so a teammate across the island is still a readable name
+rather than a four-pixel smear. Nothing about it can reach a plate on another
+team, and nothing in free-for-all is ever an ally.
+
+**Distinct from an enemy's plate, not only by colour.** 20% larger up close, a
+thicker outline, and a thin bar in the team colour under the name (also drawn
+through the scenery). Colour already differs from every enemy's, but two team
+colours can sit close and not every player separates them; size and the bar do
+not depend on hue.
+
+**Per viewer.** "Teammate" means the same team as the player on *this* machine.
+`MatchState.is_teammate(peer_id)` answers it from the roster (`Net.player_team`
+of both), not from the local Gub, so a teammate who spawns before this player's
+own body exists is recognised. `_create_gub` calls it beside `set_team`. Teams do
+not change during a match (a pick only moves in the lobby, and the next match
+spawns every Gub again), so the answer at spawn holds. Your own plate stays
+hidden as before. The lobby backdrop never calls `set_ally`, so lobby plates are
+unchanged. The Elder and a letter carrier get nothing new: the plate knows
+nothing about either, and a teammate wearing the robe is still a teammate.
+
+**The HUD.** A `TEAM n` chip under the score line, in the team's colour with a
+border of it, shown in Teams only. The score line already shows every team's
+colour, which is why it cannot answer the question: two coloured numbers do not
+say which one is yours. "Team n" is the name the lobby buttons and the results
+headline already use.
+
+**Checked.** `tools/team_plates.tscn`, headless, in the gate as "teammate names
+through walls" and "free-for-all names unchanged". The real spawn path, with a
+wall between the local Gub's camera and a teammate and an enemy about 43 m out,
+and one of each 9 m out in the open. `wall` proves by ray that the wall is in the
+line of sight; `ally` wants the far teammate's plate not depth-tested, visible,
+at full alpha and in its colour, with its bar up; `enemy` wants both enemies
+depth-tested, barless, and faded exactly when past `FADE_END`; `hud` wants the
+chip up saying `TEAM 1` in team 1's colour. The `ffa` run wants no allies, the
+old fade, the neutral colour, the old pixel size and no chip. With
+`set_ally(false)` in `_create_gub`, `ally` fails; with `set_ally(true)`, `enemy`
+and `ffa` fail. Through `snapshot.gd` the same scene renders the Gub's own view:
+the far teammate's name over the wall, the far enemy's absent. 33 checks to 38.
+
+### Rejected
+- **A wider fade for teammates instead of none.** Still "sometimes there", which
+  is what the user asked to be rid of.
+- **`fixed_size` for teammates.** The header explains why a constant screen size
+  broke the crowd up close. Holding the size only past 11 m keeps perspective
+  where it does the most work.
+- **A symbol glyph (a diamond, an arrow) before the name.** The Label3D font is
+  not guaranteed to carry one; a quad cannot go missing.
+- **Showing enemy names through walls "briefly" or at short range.** That is the
+  wallhack with a timer on it.

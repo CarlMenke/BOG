@@ -33,6 +33,8 @@ const FLASH_TIME := 1.4
 @onready var _crosshair: Crosshair = %Crosshair
 @onready var _clock: Label = %Clock
 @onready var _score_line: RichTextLabel = %ScoreLine
+@onready var _team_chip: PanelContainer = %TeamChip
+@onready var _team_label: Label = %TeamLabel
 @onready var _kill_feed: KillFeed = %KillFeed
 @onready var _lives: HBoxContainer = %Lives
 @onready var _letters: LetterTrack = %Letters
@@ -323,7 +325,33 @@ func _refresh_score() -> void:
 		_score_line.text = "[center][color=#%s]%d%s[/color]  [color=#4a545f]·[/color]  %s[/center]" % [
 			UIPalette.GUB.to_html(false), mine, target, tail]
 
+	_refresh_team_chip()
 	_refresh_lives()
+
+
+## Which team you are on, said in words and in its colour under the score (D-047).
+## The score line already shows every team's colour, and that is exactly why it
+## cannot answer this on its own: two coloured numbers do not say which is yours.
+## Hidden in free-for-all, where there is no side to be on.
+func _refresh_team_chip() -> void:
+	var team := Net.player_team(Net.local_id())
+	var show := Net.config.mode == MatchConfig.Mode.TEAMS and team >= 0
+	_team_chip.visible = show
+	if not show:
+		return
+	var colour := UIPalette.team_colour(team)
+	_team_label.text = "TEAM %d" % (team + 1)
+	_team_label.add_theme_color_override("font_color", colour)
+	var box := StyleBoxFlat.new()
+	box.bg_color = UIPalette.PANEL
+	box.border_color = UIPalette.faded(colour, 0.7)
+	box.set_border_width_all(2)
+	box.set_corner_radius_all(UIPalette.RADIUS)
+	box.content_margin_left = 14
+	box.content_margin_right = 14
+	box.content_margin_top = 2
+	box.content_margin_bottom = 3
+	_team_chip.add_theme_stylebox_override("panel", box)
 
 
 ## Lives are pips rather than a number: at three or five, a row of shapes is

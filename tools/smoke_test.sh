@@ -216,6 +216,24 @@ check "team colours on the body" "team_tint: teams PASS" \
 also "team colours on the body" "team_tint: robe PASS"
 also "team colours on the body" "team_tint: corpse PASS"
 also "team colours on the body" "team_tint: PASS"
+# Which side you are on, said plainly (D-047). A player: "it should be obvious
+# what team you are on and who your teammates are". Through the real spawn path,
+# with a wall between the local Gub's camera and a teammate and an enemy forty
+# metres behind it — the ray that proves the wall is in the way is a verdict of
+# its own, so this cannot pass on open air. The teammate's plate has to ignore
+# the depth test, be up and at full alpha out there; the enemy's, beside it, has
+# to be depth-tested and faded exactly as before, because a plate through a wall
+# is a wallhack and only a teammate's is allowed to be one. The HUD's chip has to
+# say TEAM 1 in team 1's colour. Against `set_ally(false)` the ally half fails;
+# against `set_ally(true)` the enemy half does, and so does the free-for-all run,
+# which also wants the chip hidden and every plate at its old size. Headless,
+# both quit on tick 30. The picture, from the Gub's own camera:
+#     ... --resolution 1600x900 --script tools/snapshot.gd -- #         res://tools/team_plates.tscn out/team_plates.png 40
+check "teammate names through walls" "team_plates: ally PASS"     "$GODOT" --headless --path "$GODOT_ROOT" tools/team_plates.tscn
+also "teammate names through walls" "team_plates: enemy PASS"
+also "teammate names through walls" "team_plates: hud PASS"
+also "teammate names through walls" "team_plates: PASS"
+check "free-for-all names unchanged" "team_plates: ffa PASS"     "$GODOT" --headless --path "$GODOT_ROOT" tools/team_plates.tscn -- ffa
 # The camera, kept out of the scenery (D-045). A player: "too frequently the
 # camera is inside meshes and stuff when there are meshes behind the character".
 # Seven legs — a wall on each shoulder walked along, a corner, under a canopy and

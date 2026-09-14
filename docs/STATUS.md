@@ -22,11 +22,11 @@ island and out to a results screen, and two automated checks now walk that path:
 one in a single process, one across two processes over a real socket.
 
 ```
-bash tools/smoke_test.sh        # 33 checks, ~2 minutes, finds Godot by itself
+bash tools/smoke_test.sh        # 38 checks, ~2 minutes, finds Godot by itself
 bash tools/net_test.sh          # two processes, one socket; ~45 s, run by hand
 ```
 
-`smoke_test.sh` is the gate and it passes, 33 of 33. `net_test.sh` is kept out
+`smoke_test.sh` is the gate and it passes, 38 of 38. `net_test.sh` is kept out
 of it to keep the gate fast; run it by hand after touching networking, the lobby
 or the results screen. It passes all eleven stages (177 + 32 assertions), ten of
 which end in a rematch, with the engine quiet in both processes — the error it
@@ -264,6 +264,7 @@ Three tiers, because three different kinds of claim need three different proofs
 | `tools/combat_range.tscn ward` | a real spear cannot kill an Elder, the robe burns out on its own, and the same throw kills once it has (D-040) |
 | `tools/combat_range.tscn respawn` | a Gub that dies holding a mushroom and an Elder that dies in its robe both come back empty-handed, including a remote Gub whose client is 200 ms behind the host (D-043) |
 | `tools/team_tint.tscn` | every Gub's body is in its team's nameplate colour, free-for-all is the imported yellow, the Elder's robe stays purple, a corpse keeps its colour, and a lobby team switch repaints the Gub (D-046). **In the gate**, headless; through `snapshot.gd` it renders the lineup |
+| `tools/team_plates.tscn` | a teammate's nameplate is drawn through a wall and never fades, an enemy's beside it is occluded and faded as before, the HUD chip says which team you are on, and free-for-all plates are unchanged (`-- ffa`) (D-047). **In the gate**, headless; through `snapshot.gd` it renders the Gub's own view |
 | `tools/ragdoll_stability.tscn` | a corpse is still a corpse 150 ticks later |
 | `tools/combat_range.tscn` | the real match path: a spear, a mushroom, a lure, a letter, the Elder's bolt |
 | `tools/net_loopback.tscn` | two processes, one socket, including a *client* using all three abilities, dying and respawning, and ten rematches with the client in the lobby for half of them (D-044). **In the gate** through `net_test.sh`, bound to 127.0.0.1 on a random port |

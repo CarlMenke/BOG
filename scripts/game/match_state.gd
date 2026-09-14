@@ -568,6 +568,7 @@ func _create_gub(peer_id: int, spawn: Transform3D, life: int) -> void:
 	if plate != null:
 		plate.set_display_name(gub.display_name)
 		plate.set_team(shown_team)
+		plate.set_ally(is_teammate(peer_id))
 		# You do not need a label telling you your own name.
 		plate.visible = peer_id != Net.local_id()
 
@@ -1526,6 +1527,22 @@ func living_gubs(exclude_id: int = 0) -> Array[Gub]:
 		if is_instance_valid(gub) and gub.alive:
 			out.append(gub)
 	return out
+
+
+## Whether `peer_id` is on the same team as the player on *this* machine, which
+## is what lets a teammate's nameplate through the scenery (D-047). Never true in
+## free-for-all, and never true of yourself.
+##
+## Read off the roster rather than off the local Gub, so a teammate who spawns
+## before this player's own body exists is still recognised as one. Teams are
+## fixed for the length of a match — a pick only moves in the lobby — so the
+## answer given at spawn holds until the next spawn asks again.
+func is_teammate(peer_id: int) -> bool:
+	var me := Net.local_id()
+	if config().mode != MatchConfig.Mode.TEAMS or peer_id == me:
+		return false
+	var mine := Net.player_team(me)
+	return mine >= 0 and Net.player_team(peer_id) == mine
 
 
 ## The Gub this client is driving, or null while dead or spectating.
