@@ -623,9 +623,11 @@ func _do_throw_spear(origin: Vector3, direction: Vector3) -> void:
 	_spear_ready_at = _now() + _config.spear_recharge
 	cooldowns_changed.emit()
 
-	if _gub.held_spear != null:
-		_gub.held_spear.set_carried(false)
-		_regrow_spear()
+	# The fist empties on the frame the spear leaves it rather than on the next
+	# one, which is what `_tick_hand` would otherwise do — a single frame, but
+	# the single frame in which everybody watching would see a spear in a hand
+	# that has just thrown one.
+	_refresh_hand()
 
 	AudioDirector.play_3d_varied(AudioDirector.SPEAR_THROW, origin)
 	var spear := SPEAR.launch(_spawn_root(), _gub, origin, direction, Net.is_host)
@@ -633,18 +635,325 @@ func _do_throw_spear(origin: Vector3, direction: Vector3) -> void:
 	_gub.threw_spear.emit(origin, direction)
 
 
-## The spear grows back in the hand when the cooldown ends. An empty hand is how
-## other players read that you are harmless, so the timing has to be honest.
-func _regrow_spear() -> void:
-	await get_tree().create_timer(_config.spear_recharge).timeout
-	if is_instance_valid(_gub) and _gub.held_spear != null:
-		_gub.held_spear.set_carried(true)
-		cooldowns_changed.emit()
-		# Only the Gub whose hand it is needs to hear this — it is a readiness
-		# cue for the player, not an event in the world that gives your
-		# position away to everyone nearby.
-		if _gub.is_local():
-			AudioDirector.play_2d(AudioDirector.SPEAR_READY)
+## Put the spear back in the hand when the recharge ends — and take it away if
+## something else did.
+##
+## **A poll rather than a timer, and this is the second one in this file** — see
+## `_tick_charge`, which is the same shape for the Elder's crackle and carries
+## the same argument. What used to be here was a `SceneTreeTimer` started at the
+## moment the throw was made, awaiting `spear_recharge` and then calling
+## `_refresh_hand` once:
+##
+##     await get_tree().create_timer(_config.spear_recharge).timeout
+##     _refresh_hand()
+##
+## which is two clocks measuring one interval. `_spear_ready_at` is a
+## `Time.get_ticks_msec()` deadline and a `SceneTreeTimer` is a sum of frame
+## deltas; they agree to about a millisecond, and a millisecond the wrong way
+## means `has_spear()` is still false on the frame the timer fires. The hand is
+## then correctly left empty, by a callback that has already been spent —
+## **nothing ever asks again**, and the spear does not come back until the next
+## death. That is exactly the "the spear model is not reliably reappearing"
+## that was reported, and it is why a race lost by a millisecond reads as a
+## whole feature being flaky.
+##
+## Making the timer *report* rather than *decide* was right and is kept: this
+## still asks `_refresh_hand`, which asks `has_spear()`, which is the one gate
+## the throw is refused by (D-035, D-036). A letter hold may have started during
+## the recharge, and a shaft that put itself back would sit in a fist that is
+## supposed to be holding a card. **The bug was the missing retry, not the
+## delegation.** So the retry is every frame, off the only clock that decides
+## anything, and the `await` is gone rather than kept beside it — two clocks
+## measuring one interval is the fault, and leaving one of them in place as an
+## optimisation would leave it there to be believed.
+##
+## Cheap by construction, the same way `_tick_charge` is: one boolean
+## comparison, doing nothing at all unless the hand and the gate have come
+## apart. That is a handful of times a second across every Gub in the match.
+func _tick_hand() -> void:
+	if _gub.held_spear == null:
+		return
+	var want := _wants_shaft()
+	if _gub.held_spear.is_carried() == want:
+		return
+	_refresh_hand()
+	cooldowns_changed.emit()
+	# Only on the transition into "armed", and only for the Gub whose hand it
+	# is: it is a readiness cue for the player, not an event in the world that
+	# gives your position away to everyone nearby. The `is_carried() == want`
+	# check above is what makes "once" true — the poll runs every frame and this
+	# line is only reached on the frame the answer changed.
+	#
+	# `has_spear()` and not `want`, because `want` is also true through a
+	# windup: a chime at the moment the arm goes back would be announcing a
+	# spear that is on its way out of the hand rather than back into it. And a
+	# Gub mid-letter-hold never reaches here at all, which is the point D-035
+	# makes about a cue that lies.
+	if want and _gub.alive and _gub.is_local() and has_spear():
+		AudioDirector.play_2d(AudioDirector.SPEAR_READY)
+
+
+## Should this fist be holding a shaft right now?
+##
+## One expression, asked by the two places that could disagree about it — the
+## hand refresh that acts on it and the per-frame poll that notices it has gone
+## stale — for exactly the reason `_wants_crackle` is written this way. Two
+## copies that drift by one clause is a Gub whose hand is repainted on every
+## frame for ever.
+##
+## The `is_winding_up()` clause is D-025's carve-out: between the click and the
+## release the spear has been paid for but has not left, and a hand that emptied
+## on the click would be an arm going back with nothing in it. `has_spear()`
+## already answers no for an Elder, so the extra `is_elder()` is only about that
+## window — an Elder winding a bolt up must not be handed a shaft by it.
+func _wants_shaft() -> bool:
+	return not is_elder() and not is_holding_letter() \
+		and (has_spear() or is_winding_up())
+
+
+# --------------------------------------------------------------- lightning ---
+
+## The Elder's click. Reached from `try_throw_spear` and shaped exactly like it,
+## because it *is* it: the same clip, the same aim read at the same moment
+## (D-038).
+##
+## What is deliberately not here is a charge-up, a beam, a channel or a warning
+## ring on the ground.
+##
+## **The window the target gets is now a fifth of a second, not two thirds of
+## one** (D-040). D-038's argument for reusing the release time was that the
+## animation is the warning — and it still is, it is just a much shorter one:
+## the user played it and asked for "basically no delay", and a weapon that
+## announces itself for two thirds of a second is not the weapon they were
+## asking for. The clip is sped up to match rather than cut short
+## (`windup_rate`), because an arm still on its way back when the bolt leaves is
+## the one thing that would read as broken rather than as fast.
+func try_cast_lightning() -> void:
+	if not has_lightning() or is_winding_up():
+		return
+
+	# The dial, not the clip. `_tick_windup` compares against this, and the clip
+	# is then sped up to arrive at the same moment — the number leads and the
+	# animation follows, which is the opposite way round from the spear and is
+	# the whole of what D-040 changed here.
+	_windup_release_at = _now() + release_delay()
+	# Spent on the click, like the spear's, so a second click during the windup
+	# is refused by the gate rather than by nothing.
+	_lightning_ready_at = _now() + lightning_cycle()
+	cooldowns_changed.emit()
+
+	# The hand is deliberately *not* refreshed here. The crackle stays through
+	# the windup exactly as the shaft does — `_refresh_hand` allows both while
+	# `is_winding_up()` — because an arm going back with nothing in it is the
+	# bug that carve-out exists to prevent, and it would look identical here.
+	_play_windup()
+	if Net.is_host:
+		_host_throw_windup()
+	else:
+		_request_throw_windup.rpc_id(1)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_cast_lightning(origin: Vector3, direction: Vector3) -> void:
+	if not Net.is_host or multiplayer.get_remote_sender_id() != _gub.peer_id:
+		return
+	_host_cast_lightning(origin, direction)
+
+
+## The shot, decided on the host and nowhere else.
+##
+## Hitscan: a ray, no projectile, no travel time, nothing to lead. Which is also
+## why the cooldown is longer than the spear's — see `MatchConfig`.
+##
+## **Cover works, and that is the reason the bolt comes out of a hand rather
+## than out of the sky.** The ray collides with the world and with deployables,
+## so a shield mushroom stops it exactly as it stops a spear. A strike from
+## above would have been easier to aim and easier to draw, and it would have
+## silently broken the one object in this game whose entire definition is "cover
+## you cannot be hit through" (D-038).
+func _host_cast_lightning(origin: Vector3, direction: Vector3) -> void:
+	if not _gub.alive or not is_elder():
+		return
+	if _now() < _server_lightning_ready_at:
+		return
+	# The authoritative half of the hold gate, the same one the throw has
+	# (D-035): the client refuses to ask while it is holding a card, and this is
+	# what makes that true of a client that has been modified not to.
+	if is_holding_letter():
+		return
+	# The client picks the aim, never the spawn point — clamping the origin to
+	# somewhere near the Gub is what stops a modified client casting from across
+	# the map, and it is the same clamp the spear uses.
+	if origin.distance_to(_gub.global_position) > 3.0:
+		origin = _throw_origin()
+	# A client is free to send a zero, a NaN, or a vector pointing nowhere.
+	var aim := direction
+	if not aim.is_finite() or aim.length_squared() < 0.0001:
+		aim = _gub.facing()
+	aim = aim.normalized()
+	_server_lightning_ready_at = _now() + _config.lightning_cooldown
+
+	var hit := _lightning_hit(origin, aim)
+	var point: Vector3 = hit.get("position", origin + aim * LIGHTNING_RANGE)
+	var victim := hit.get("collider") as Gub
+	# A surface normal, or nothing when the bolt stopped on a body or on thin
+	# air. It decides only whether there is a scorch to draw and which way the
+	# sparks come off, and a body is neither scorched nor a wall to bounce from.
+	var normal: Vector3 = Vector3.ZERO
+	if victim == null and hit.has("normal"):
+		normal = hit["normal"]
+
+	# The bolt is broadcast before the kill is reported, so that on every peer
+	# the light arrives with the body rather than after it. `report_kill` sends
+	# its own death message and both are reliable, so the order they are sent in
+	# is the order they land in.
+	_do_cast_lightning.rpc(origin, point, normal)
+	_do_cast_lightning(origin, point, normal)
+
+	if victim == null:
+		return
+	# Everything about *whether* this is a kill — spawn protection, friendly
+	# fire, a victim who is already dead — belongs to `report_kill` and is not
+	# second-guessed here. The bolt landed on them either way, which is the
+	# truthful picture: a protected Gub was struck and was not hurt.
+	MatchState.report_kill(victim.peer_id, _gub.peer_id, Gub.Cause.LIGHTNING,
+		point, aim * LIGHTNING_IMPULSE,
+		SpearProjectile.nearest_bone(victim, point))
+
+
+## What the bolt hit, or an empty dictionary for thin air.
+##
+## Dead Gubs are excluded along with the caster. A Gub that has been killed keeps
+## its collision until it respawns — only the body is hidden — so without this a
+## corpse's invisible capsule would eat bolts for the length of a respawn delay,
+## which is three seconds of a weapon that visibly stops in mid-air.
+func _lightning_hit(origin: Vector3, direction: Vector3) -> Dictionary:
+	var space := _gub.get_world_3d().direct_space_state
+	var query := PhysicsRayQueryParameters3D.create(
+		origin, origin + direction * LIGHTNING_RANGE)
+	query.collision_mask = LAYER_WORLD | LAYER_PLAYER | LAYER_DEPLOYABLE
+	query.collide_with_areas = false
+	query.collide_with_bodies = true
+	var skip: Array[RID] = [_gub.get_rid()]
+	for other: Gub in MatchState.gubs.values():
+		if is_instance_valid(other) and not other.alive:
+			skip.append(other.get_rid())
+	query.exclude = skip
+	return space.intersect_ray(query)
+
+
+## The bolt, on every machine. Everything visible about this weapon happens
+## here; the host's copy of this call is not special in any way except that it
+## is the one that already knew the answer.
+@rpc("authority", "call_remote", "reliable")
+func _do_cast_lightning(origin: Vector3, point: Vector3, normal: Vector3) -> void:
+	_lightning_ready_at = _now() + _config.lightning_cooldown
+	cooldowns_changed.emit()
+	# The fist goes dark on every peer's copy, which is the whole point of the
+	# tell: everyone watching an Elder can see that it has just spent its shot.
+	_refresh_hand()
+	LightningBolt.strike(_spawn_root(), origin, point, normal, _gub)
+
+
+## Put the crackle back when the cooldown ends — and take it away if something
+## else did.
+##
+## A **poll rather than a timer**, and that is the whole of why it exists. The
+## shaft used to be put back by a `SceneTreeTimer` started at the moment
+## `_spear_ready_at` was set, which is two clocks measuring one interval: a
+## `Time.get_ticks_msec()` deadline and a sum of frame deltas. They agree to
+## within a millisecond, and a millisecond the wrong way means `has_spear()` is
+## still false on the frame the timer fires and nothing ever asks again. This
+## asks the only clock that decides anything, every frame, and cannot drift from
+## it.
+##
+## That argument was written here first and was right, and the spear went on
+## losing the race it describes for a whole session anyway, because it was made
+## about the crackle rather than about both. `_tick_hand` is now its twin — the
+## same six lines for the shaft — and the two of them are the only things in
+## this file that decide what is in a Gub's hand.
+##
+## Cheap by construction: one boolean comparison, only on Gubs that are the
+## Elder, doing nothing at all unless the hand and the gate have come apart.
+func _tick_charge() -> void:
+	if _gub.held_spear == null or not is_elder():
+		return
+	var want := _wants_crackle()
+	if _gub.held_spear.is_charged() == want:
+		return
+	_refresh_hand()
+	cooldowns_changed.emit()
+	# Only the Gub whose hand it is needs to hear this, and only when the hand
+	# genuinely lit up: it is a readiness cue for the player, not an event in
+	# the world that gives an Elder's position away to everyone nearby. Borrowed
+	# rather than invented, like the pickup's — there is no second chime in
+	# `audio/sfx/` and SPEAR_READY already means "you can act again".
+	if want and _gub.is_local() and has_lightning():
+		AudioDirector.play_2d(AudioDirector.SPEAR_READY)
+
+
+## Should this fist be crackling right now?
+##
+## One expression, asked by the two places that could disagree about it — the
+## hand refresh that acts on it and the per-frame poll that notices it has gone
+## stale. They were two copies of the same condition for about ten minutes, and
+## two copies that drift by one clause is a Gub whose hand is repainted on every
+## frame for ever.
+##
+## The `is_winding_up()` clause is the same carve-out the shaft gets (D-025):
+## between the click and the release the shot has been paid for but has not left,
+## and a hand that emptied on the click would be an arm going back with nothing
+## in it.
+func _wants_crackle() -> bool:
+	return is_elder() and not is_holding_letter() 		and (has_lightning() or is_winding_up())
+
+
+func _on_elder_changed(peer_id: int) -> void:
+	if _gub == null or peer_id != _gub.peer_id:
+		return
+	_refresh_hand()
+	cooldowns_changed.emit()
+
+
+# -------------------------------------------------------------- the hand ---
+
+## Put the right thing in the Gub's right hand.
+##
+## Every path that can change what is in it ends here — a recharge finishing, a
+## respawn, a hold starting or ending — and this asks `has_spear()`, which is
+## the same question the throw is gated on. That is the single source of truth
+## the spear's own header insists on, now with a second reason in it: the hand
+## cannot show a spear the throw would refuse, or a card while the throw is
+## allowed, because there is nowhere for a second opinion to live.
+##
+## The windup is the one carve-out and it is not an exception to the rule: from
+## the click to the release the spear is still in the fist and `has_spear()` is
+## already false, because the cooldown starts on the click (D-025). The arm
+## going back with an empty hand is the bug that clause prevents. It lives in
+## `_wants_shaft` beside the rest of the condition rather than inline here, so
+## that the poll which notices this has gone stale is asking the same question.
+##
+## Idempotent and cheap, which is what lets `_tick_hand` call it as often as it
+## likes: every path that can change the answer ends here, and so does a frame
+## on which nothing changed except that a deadline passed.
+func _refresh_hand() -> void:
+	if _gub == null or _gub.held_spear == null:
+		return
+	var holding := is_holding_letter()
+	_gub.held_spear.set_carried(_wants_shaft())
+	# Runs on every peer's copy of every Gub, which is the point: a Gub ten
+	# seconds from a letter has to be readable from across the clearing by the
+	# people who might stop it, not only by the player holding the card. The
+	# Elder's crackle is the same argument with a shorter fuse.
+	_gub.held_spear.set_letter(
+		MatchState.letter_hold_letter(_gub.peer_id) if holding else 0)
+	_gub.held_spear.set_charged(_wants_crackle())
+
+
+func _on_letter_hold_changed(peer_id: int) -> void:
+	if _gub == null or peer_id != _gub.peer_id:
+		return
+	_refresh_hand()
 
 
 func _on_spear_struck_gub(victim: Gub, point: Vector3, bone: String,

@@ -121,6 +121,69 @@ check "invite codes" "invite_codes: PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/invite_codes.tscn
 check "match rules" "match_rules: PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/match_rules.tscn
+# The mushroom as cover, which is the only thing about it that matters and the
+# one thing nothing checked until D-039. Three assertions out of one run, and
+# the order of them is the point: a spear thrown at a Gub standing behind a
+# mushroom does not kill it, the *same* throw with the mushroom withered does,
+# and a Gub walking into one is held off at the edge of the cap.
+#
+# The middle one is not a nicety. "Did not die" passes for a spear that has
+# stopped killing anybody at all — a broken launch, a dummy already dead, a
+# `report_kill` that never arrived — so without a control on the same geometry
+# the first assertion would go green on a mushroom that stops nothing. Which is
+# what the check it supplements did for this whole session: `mushroom deploys`
+# asserts `snapshot: wrote`, proving a PNG exists, while the collision cap sat
+# 31 cm above the head of the tallest thing it was meant to be hiding.
+#
+# The mode plants the mushroom half a metre off the line of fire, and that is
+# the other half of why this is worth anything. Lined up perfectly, the 0.55 m
+# stem blocks the shot on its own, so a dead-centre throw is stopped by a
+# mushroom whose cap is a metre above the fight.
+#
+# Headless, and it quits itself around tick 350: it drives its own sequence and
+# waits on the throw gate between the two spears rather than on a frame count.
+# The picture of a spear stopping dead against a cap is a separate, earlier
+# frame:
+#     ... --script tools/snapshot.gd -- res://tools/combat_range.tscn \
+#         out/mushroom_cover.png 100 cover
+check "mushroom stops a spear" "cover PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- cover
+also "mushroom stops a spear" "control PASS"
+also "mushroom stops a spear" "solid PASS"
+# Twelve throws, with the shaft required to be back in the fist at the end of
+# every one of them — and then the fist is emptied by hand while the throw gate
+# still says armed, and has to refill itself. The first half is the bug as the
+# player met it ("the spear model is not reliably reappearing"); the second is
+# the property that stops it coming back, and it is the half that cannot pass
+# by luck. Against the one-shot `SceneTreeTimer` this replaced, all twelve
+# cycles fail here and the emptied fist never refills.
+check "the spear grows back" "recharge PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- recharge
+# The Elder's invincibility, asserted against a real spear rather than in logic
+# (D-040). `match_rules` can prove that `report_kill` refuses the kill; only this
+# can prove that a shaft launched at a body fourteen metres away arrives, is
+# turned aside, and leaves the Gub standing — and that is the assertion it would
+# hurt most to have wrong, because an Elder that quietly dies to the first spear
+# is a twenty-second power-up that does not exist.
+#
+# Three verdicts out of one run, and the same reasoning the mushroom's have.
+# `ward` is the rule; `expiry` is the robe burning out **on its own clock**, in
+# a real match loop rather than by a harness winding the row back; and `control`
+# is the same throw at the same Gub with the robe gone, which is what stops
+# "did not die" being satisfied by a spear that never left the hand.
+#
+# Both halves were run against the code without them first (D-015): with the
+# invincibility check removed, `ward` fails; with `_tick_elders` removed,
+# `expiry` fails.
+#
+# Headless, and it quits itself around tick 260. A picture of a spear stopping
+# dead in a violet flash with the Elder untouched behind it is a separate frame:
+#     ... --script tools/snapshot.gd -- res://tools/combat_range.tscn \
+#         out/elder_ward.png 90 ward
+check "a spear cannot kill the Elder" "ward PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- ward
+also "a spear cannot kill the Elder" "expiry PASS"
+also "a spear cannot kill the Elder" "control PASS"
 # Menu to results screen, through the real scenes and the real autoloads. The
 # only check here that can notice a *join* coming apart — a lobby that never
 # hands off to the arena, an arena that never registers, a results screen that

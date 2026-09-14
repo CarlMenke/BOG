@@ -2417,3 +2417,215 @@ The runtime attach is `tools/preview_elder.gd`'s, line for line, in
 against a live Gub and prints the verdict, so it is the thing that says the robe
 binds at all — and a second, subtly different attach path in the game would have
 meant the thing that is checked and the thing that ships were not the same thing.
+
+## D-039 — Two bugs a player found, and the same shape under both: a number nobody ever measured, and a clock nobody ever re-read
+Both came out of a real match, in one sentence each — *"the mushroom is not
+reliably blocking spears / you can run through it"* and *"the spear model is not
+reliably reappearing in the gubs hand after the delay after throwing"*. They are
+unrelated in the code and identical in shape: in each one something was worked
+out once, correctly, written down, and then never asked again.
+
+### The mushroom's cap was a metre above the fight
+
+`shield_mushroom.gd` had a cap cylinder spanning **1.86 → 2.44 m**. A standing
+Gub's collision capsule is **0 → 1.55 m**. So the only thing anywhere in the band
+a Gub occupies was the stem: a post **0.55 m wide**, with a 5 cm gap above it
+where the stem stopped and the cap had not started.
+
+Measured by `tools/combat_range.tscn cover`, which stands a real mushroom up and
+fires a comb of rays through it on the deployable layer. Before:
+
+    y 0.15 … 1.80 m   0.54 m wide
+    y 1.95 … 2.40 m   2.06 m wide
+    a standing Gub squarely behind it, from 14 m:  87% hidden
+    the same Gub half a metre out of line:         13% hidden
+
+**Those two numbers together are the bug.** Standing exactly behind the post you
+were covered, so the mushroom "worked" every time anybody checked it deliberately
+— and one step to either side, which is what a fight does to you inside a second,
+and you were a target with a decoration in front of you. There was no cap
+anywhere near the fight; 87% was a 0.55 m post doing all of it. Walking was the
+same story with no ambiguity in it: a Gub closed to **0.66 m** of the middle of a
+mushroom whose cap is 2.06 m across, which is exactly what "you can run through
+it" means.
+
+**D-034 caused it, and the mechanism is a trap the next asset will have too.**
+`mushroom.glb.import` carries `nodes/root_scale = 1.25`, so the scene Godot hands
+back is *already* a quarter bigger than the file. D-034 then set
+`MODEL_SCALE = 1.25` in the script on top of it. The two multiply: a planted
+mushroom was **1.5625**, standing 2.54 m tall. And this asset's canopy begins 54%
+of the way up it, so scaling the mushroom to make the cap wider is also scaling it
+to lift the cap — at 1.5625 the canopy ran 1.38–2.54 m over a stalk 0.4 m thick,
+hanging clean over the head of the thing it was meant to be hiding. **Cover you
+stand under is not cover.**
+
+The five collision constants were moved by the same 1.25 by hand, and the comment
+above them said they *were* that 1.25 and had to "move together" with the model.
+Both halves were false. They had never been fitted to the mesh in the first
+place, and a uniform scale is precisely the operation that cannot preserve a fit
+between a cylinder and a mushroom.
+
+### What the model actually is, since nobody had looked
+
+Sliced horizontally, `mushroom.glb` is not one mushroom. It is a **cluster** —
+one large one with a couple of small ones round its foot — and the large one
+**leans**. In raw model units, with the file 1.6235 tall:
+
+    0.04-0.22   the foot and the small mushrooms, 0.66-1.34 across
+    0.22-0.52   the stalk, 0.53-0.77 across
+    0.58-0.82   the neck, 0.25-0.58 across — the thinnest part of it
+    0.88-1.60   the canopy, an ellipse 1.19 by 0.81 at its widest
+
+and the canopy's centre is at **(0.035, -0.40)**, not the origin. That off-centre
+axis was its own bug and had been there all along: planted, the mushroom you
+could see stood **0.63 m to one side** of the point the ability had checked the
+ground at, and every collision cylinder stood beside the mushroom rather than
+inside it.
+
+### The fix: wide and tall are separate
+
+`MODEL_SCALE` is gone; there are two now.
+
+* **`MODEL_SCALE_WIDE` stays at 1.25.** The quarter the user asked for is kept,
+  in the axis it was asked about: the cap is 1.86 m across, a quarter wider than
+  before D-034.
+* **`MODEL_SCALE_TALL` is 0.86**, putting the canopy's underside at **0.95 m** —
+  low enough that a standing Gub is behind it from the chest up and a crouching
+  one is behind it entirely, high enough that its top edge at 1.75 m leaves the
+  antennae of the 1.80 m Gub model showing over it. The mushroom is 1.75 m tall
+  rather than 2.54, which is *shorter than it was before D-034* and *wider*.
+* **`MODEL_AXIS`** slides the model back onto its own axis, so the mushroom
+  stands where it was planted — which is also what lets both cylinders stay on
+  the node's origin and still be inside the mushroom.
+* The cylinders are a **measurement** of the mesh at those scales rather than an
+  arithmetic scaling of anything: stem 0 → 0.95, cap 0.95 → 1.75, meeting with no
+  gap. `CAP_RADIUS` 1.03 and `STEM_RADIUS` 0.275 are untouched.
+
+After, from the same rays:
+
+    y 0.15 … 0.90 m   0.54 m wide
+    y 1.05 … 1.65 m   2.06 m wide     <- a standing Gub tops out at 1.55
+    squarely behind it:        93% hidden   (was 87)
+    half a metre out of line:  58% hidden   (was 13)
+    walked into it and held 1.41 m off the middle   (was 0.66)
+
+**`CAP_RADIUS` 1.03 circumscribes the canopy rather than fitting it** — 10 cm
+proud across the ellipse's wide axis and 32 cm across its narrow one — and that
+is a choice rather than a leftover. A cylinder cannot be an ellipse, and of the
+two ways to be wrong, a spear that stops a handspan short of a cap reads as a
+spear hitting a mushroom, while one that passes through a cap you are looking at
+reads as the game being broken. The stem stays thin on the other half of the same
+argument: 0.275 m is inside the stalk everywhere except the neck directly under
+the cap, and the cap already covers anything aimed there.
+
+**The missing 7% is the legs, and it is meant to be there.** Below 0.95 m the
+only cover is the stem, so a thrower who aims low and from the side gets a shin.
+That is what a mushroom is, it is what this file has always claimed ("a thin stem
+so a Gub can stand close and still peek round it"), and it is a better
+counterplay than the lure alone. What is gone is being shot in the chest through
+a cap.
+
+### The spear was waiting on a clock nothing ever re-read
+
+`_do_throw_spear` set `_spear_ready_at = _now() + spear_recharge`, off
+`Time.get_ticks_msec()`. `_regrow_spear` then awaited
+`get_tree().create_timer(spear_recharge)` — a sum of frame deltas — and called
+`_refresh_hand()` once when it fired. `_refresh_hand` asks `has_spear()`, which
+requires `spear_cooldown() <= 0.0`.
+
+**Two clocks measuring one interval, and one callback between them.** When the
+`SceneTreeTimer` got there first — by a millisecond, or by rather more — the
+shaft was correctly not restored, and **nothing ever asked again**. The hand
+stayed empty until the Gub died. That is the whole of "not reliably": an outcome
+that depends on how the frame deltas happened to land.
+
+It is not even rare. Driven headless, where `_process` runs unbounded and the
+delta sum arrives well ahead of the wall clock, the old code lost **12 of 12**
+cycles.
+
+The fix is `GubCombat._tick_hand`: `_tick_charge` for the shaft. Compare the hand
+against the gate every frame and repaint only on the frame the answer changes.
+The `await` is deleted rather than kept beside it — leaving one of two wrong
+clocks in place as an optimisation only leaves it there to be believed.
+
+Three properties are kept deliberately:
+
+* **The hand still reads `has_spear()`** and never a timer of its own. That is
+  what `held_spear.gd`'s header has insisted on since it was written, and what
+  D-035 and D-036 both lean on. **The bug was the missing retry, not the
+  delegation.**
+* **The chime fires once.** The poll acts only on the transition, and it asks
+  `has_spear()` rather than its own `want`, so it is silent through a windup —
+  when the arm is going back and the spear is on its way *out* — and never sounds
+  for a Gub mid-letter-hold, which D-035 is explicit about. It is also silent for
+  a corpse: a Gub killed mid-recharge used to be chimed at while dead.
+* **The condition lives in one place.** `_wants_shaft()` is the single
+  expression, asked by the refresh that acts on it and by the poll that notices
+  it has gone stale, exactly as `_wants_crackle()` already was. Two copies that
+  drift by one clause is a Gub whose hand is repainted every frame for ever.
+
+**D-038 already contained the correct argument for all of this**, written about
+the Elder's crackle, and ending: "`_regrow_spear` arranges the same thing with a
+`SceneTreeTimer` … and nothing ever asks again." It was right, it named the exact
+failure, and it was in this document — and the spear went on losing that race for
+the rest of the session, in front of a player. Writing down why the thing without
+the bug does not have it does nothing for the thing that does.
+
+### The checks, which are the real point
+
+`mushroom deploys` asserted **`snapshot: wrote`**. It proved a PNG existed. It
+passed on every run while the cap sat a metre above the fight, because a cover
+item whose only check is that it rendered is not checked at all — the README
+calls this "a thing wired into a testbed and into nothing else", and this is the
+third time.
+
+Two modes were added to `tools/combat_range.gd`; the gate goes from 14 checks
+to 18.
+
+**`cover`** stands a real `ShieldMushroom` up through `plant()`, prints the ray
+profile above, and asserts three things in one run:
+
+1. a spear thrown at a Gub standing behind a mushroom does not kill it;
+2. the **same** throw, after the mushroom has withered, does;
+3. a Gub walking into one is held off at `CAP_RADIUS + CAPSULE_RADIUS`.
+
+The second is not a nicety. "Did not die" is satisfied by a spear that has
+stopped killing anybody at all — a broken launch, a dummy already dead, a
+`report_kill` that never arrived — so **without a control on the same geometry
+the first assertion proves nothing**, which is the exact failure that let the
+real mushroom get here. The threshold in the third is derived from the two radii
+rather than typed in, so it follows the constants instead of having to be
+remembered beside them.
+
+And the mushroom is planted **half a metre off the line of fire**, which is the
+other half of why the mode is worth anything. Lined up perfectly the 0.55 m stem
+blocks the shot on its own — the mode was written that way first and it passed,
+against a mushroom that stopped nothing, which is the 87%-versus-13% above
+happening to a test instead of to a player. Half a metre is one step by either
+Gub and nowhere near the edge of a cap 2 m across, so anything that stops the
+spear there is stopping it with the cap.
+
+**`recharge`** throws twelve times and requires the shaft to be back in the fist
+at the end of every cycle, counting the *consecutive frames* the hand and the
+gate disagreed for rather than a boolean — "not reliably" is a duration, not a
+yes or no. Then it does the half that cannot pass by luck: it empties the fist by
+hand while the gate still says armed, and requires the hand to refill itself. A
+hand repainted by a one-shot timer has already had its chance and stays empty for
+ever; a polled hand notices on the next frame. Twelve real cycles catch the race
+if this machine happens to lose it and prove nothing at all if it happens to win
+twelve in a row, which is the trouble with checking a race by running it — so the
+fault is *stated* rather than waited for.
+
+Both were run against the old code first, because a regression guard that has
+never been seen to fail is not a guard (D-015). `cover` fails two of its three
+verdicts; `recharge` fails all twelve cycles and then reports that nothing ever
+put the spear back.
+
+One trap paid for on the way: a `StaticBody3D` added to the tree does not exist
+to the physics server until the next step, so rays fired on the frame a mushroom
+is planted report it **0.00 m wide at every height** — a thoroughly convincing
+picture of exactly the bug being measured, and wrong. The profile is taken a
+frame later.
+
+`out/mushroom_cover.png` is a spear stopped dead in the cap with the Gub standing
+untouched behind it.

@@ -24,6 +24,11 @@ extends Node3D
 ## real peer can never collide with one.
 const DUMMY_BASE := 900
 
+## The same packed scene `GubCombat` plants, so the `cover` mode stands up the
+## shipping mushroom rather than a hand-built stand-in that happens to share its
+## constants.
+const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
+
 ## What each mode does.
 ##
 ##   flight   — a spear caught in mid-air on its way to a dummy
@@ -40,6 +45,21 @@ const DUMMY_BASE := 900
 ##              `pov` is worth passing to check exactly that and is the wrong
 ##              default for a still frame.
 ##   mushroom — one planted, to check it lands on the ground the right size
+##   cover    — the mushroom as *cover*, which is the only thing about it that
+##              matters and the one thing nothing has ever checked. It stands a
+##              real one up in front of a dummy, prints how wide the collision
+##              actually is at every height a Gub occupies, throws a spear at the
+##              dummy behind it, withers the mushroom and throws the *same* throw
+##              again, and then walks the player into one. Three verdicts, and
+##              the second is the reason the first means anything: a spear that
+##              never kills anybody would sail through the blocked check.
+##   recharge — throws until the spear has grown back a dozen times and requires
+##              the shaft to be in the fist at the end of every one of them, then
+##              takes it out of the fist by hand while the throw gate still says
+##              armed and requires it to come back on its own. The first half is
+##              the bug as a player meets it; the second is the property that
+##              stops it coming back, checked without having to lose a race on
+##              purpose.
 ##   lure     — a lure lobbed at the middle dummy, held through the pull.
 ##              Note what this mode can and cannot show: the catch *decision* is
 ##              the host's and is reported here, but the pull itself is applied
@@ -231,8 +251,32 @@ const VIEWS := {
 	"arc": {"eye": Vector3(30.0, 10.0, -12.0), "look": Vector3(0.0, 2.5, -12.0), "fov": 62.0},
 	"miss": {"eye": Vector3(9.0, 3.0, -9.0), "look": Vector3(0.0, 0.6, -13.0), "fov": 50.0},
 	"mushroom": {"eye": Vector3(6.0, 2.6, 9.5), "look": Vector3(0.0, 1.1, 7.2), "fov": 50.0},
+	# Square on to the flight and level with the cap, because the whole subject
+	# of this one is a spear that stops in mid-air fourteen metres from where it
+	# was thrown. Down the throw it is a dot; from above, a stick lying on a
+	# mushroom. From the side the shaft is visibly buried in the cap with the
+	# dummy standing untouched two metres behind it, which is the picture.
+	"cover": {"eye": Vector3(7.6, 2.0, -1.2), "look": Vector3(0.2, 1.25, -4.0), "fov": 42.0},
 	"lure": {"eye": Vector3(12.0, 8.0, -3.0), "look": Vector3(-3.0, 1.0, -12.0), "fov": 60.0},
 	"lure_self": {"eye": Vector3(9.0, 3.2, 12.0), "look": Vector3(0.0, 1.0, 7.0), "fov": 55.0},
+	# Close, and level with the chest rather than looking down: the question
+	# this one answers is whether a card in a fist reads as a card in a fist,
+	# and from any distance that flatters it every glyph reads fine.
+	"letter": {"eye": Vector3(4.0, 1.9, 12.0), "look": Vector3(0.0, 1.5, 9.0), "fov": 45.0},
+	# Square on to the bolt and well back from it. The bolt runs the fourteen
+	# metres from the player at z=9 to the dummy at z=-5, so the one view that
+	# shows it is from the side: down the throw it is a bright dot, and from
+	# above it is a line with no target at the end of it. 15 m out at this
+	# field of view puts the whole stroke across the frame with the Elder at one
+	# end and the body leaving the ground at the other.
+	"lightning": {"eye": Vector3(13.0, 3.2, 6.0), "look": Vector3(-0.5, 1.3, 2.0),
+		"fov": 58.0},
+	# Close in on the Elder rather than on the flight, because the subject here
+	# is the *arrival*: a spear stopping at a robe and a violet flash where it
+	# stopped, with the Gub still on its feet. Down the throw the ward is behind
+	# the shaft; from the side it is the whole picture.
+	"ward": {"eye": Vector3(6.5, 2.2, -1.5), "look": Vector3(0.0, 1.2, -5.0),
+		"fov": 46.0},
 	# High and off to one side, because a ring lying on the ground is seen
 	# edge-on from the thrower's own eye and a still frame of that is a line one
 	# pixel tall. Pass `pov` after the mode to look down the throw anyway — that
@@ -256,6 +300,12 @@ const ARC_TARGET := Vector3(0.0, 1.2, -34.0)
 ## air all the way down and the ring lands on open dirt, where the gap between
 ## it and the point being aimed at is the whole picture.
 const AIM_TARGET := Vector3(2.5, 1.2, -34.0)
+## Where the `recharge` mode points: over the back wall and into the void, so a
+## dozen spears in a row leave the hand, expire at `SpearProjectile.MAX_LIFETIME`
+## and never once touch anybody. The mode is about the fist the spear comes back
+## into, and a dummy dying twelve times would bring a respawn, a corpse and a
+## loot roll into a check that has nothing to do with any of them.
+const RECHARGE_TARGET := Vector3(0.0, 14.0, -30.0)
 
 var _mode: String = "free"
 var _trace: bool = false
@@ -381,14 +431,31 @@ func _start_session() -> void:
 	config.time_limit = 0
 	config.kill_limit = 50
 	config.spear_recharge = 1.5
+	# Short, because this is the one mode whose subject *is* the recharge and it
+	# has to run through a dozen of them. The interval being small is also the
+	# harder case for the thing being checked: the two clocks that used to
+	# measure it have less room to agree by accident.
+	if _mode == "recharge":
+		config.spear_recharge = 0.15
+	# The `ward` mode has to watch a robe burn out inside one run, and twenty
+	# real seconds of a config dial is not a check anybody runs twice. The
+	# *duration* is shortened and nothing else is: what is being asserted is
+	# that the clock ends the robe, not how long the clock is.
+	if _mode == "ward":
+		config.elder_duration = WARD_DURATION
 
 
 func _dummy_count() -> int:
 	match _mode:
 		"lure":
 			return 3
-		"arc", "miss", "mushroom", "lure_self":
+		"arc", "miss", "mushroom", "cover", "lure_self", "letter":
 			return 1
+		# Nobody to shoot at. `recharge` throws a dozen spears over the back
+		# wall on purpose (see `RECHARGE_TARGET`) and a dummy in the roster
+		# would only be something for one of them to find.
+		"recharge":
+			return 0
 		_:
 			return 2
 
@@ -482,6 +549,32 @@ func _physics_process(_delta: float) -> void:
 		_report_aim(combat)
 		return
 
+	# Both of these run several actions in sequence rather than one, so they own
+	# their own frame counting and never reach the single-shot `_acted` block
+	# below. They keep re-aiming above for free, which is what the second half of
+	# each of them needs.
+	if _mode == "cover":
+		_drive_cover(player, combat)
+		return
+	if _mode == "recharge":
+		_drive_recharge(player, combat)
+		return
+	if _mode == "ward":
+		_drive_ward(combat)
+		return
+
+	# Not a `return`: the card has to be put down before there is anything to
+	# report, and the drop happens in the acted block below like every other
+	# mode's action.
+	if _mode == "letter":
+		_report_letter(combat)
+
+	# Two actions, not one — the robe has to be on the ground and picked up
+	# before there is anything to fire — so the cast lives outside the `_acted`
+	# block and waits on the Elder state rather than on a frame number.
+	if _mode == "lightning":
+		_drive_lightning(combat)
+
 	# Twenty frames is enough for the rig to settle onto the target and for the
 	# spawn-frame transforms to have been published.
 	#
@@ -532,6 +625,8 @@ func _target_point() -> Vector3:
 			return ARC_TARGET
 		"aim":
 			return AIM_TARGET
+		"recharge":
+			return RECHARGE_TARGET
 		"miss":
 			return Vector3(0.0, 0.05, -14.0)
 		"lure":
