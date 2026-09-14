@@ -7,8 +7,9 @@
 ; `_ready()` from its layout tables — the hull, four decks, the deckhouses, the
 ; stairs and hop steps between them, the rails and the furniture — then calls
 ; `super()`, which sweeps them into world-space trimesh collision on layer 1,
-; and then adds the dressing: the windows, the stair treads, the radar and the
-; sea, which is not collision. The sea is the void.
+; and then adds the dressing: the windows, the stair treads, the radar, the sea,
+; the anchorage the yacht is lying in, the ensign and the cable, and the gulls.
+; None of that is collision. The sea is the void.
 ;
 ; So this file is what `static_map.gd` asks for:
 ;
@@ -16,7 +17,15 @@
 ;   Sun          38 degrees up over the starboard bow, white-gold, shadowed, so
 ;                every deck casts a hard shadow on the one below it and the
 ;                stack reads as a stack. Serialised ROW-major, as every `.tscn`
-;                stores a `Transform3D`.
+;                stores a `Transform3D`. **That angle is a readability decision
+;                and not a mood one**, and nothing in the atmosphere pass moves
+;                it: `yacht_sky.tres` types the same direction for its sun disc
+;                and `yacht_map.gd` hands the same one to the sea's shader, so
+;                the disc, the shadows and the sun track on the water are one
+;                number in three places rather than three opinions.
+;   Lights       one more, and only one: `SeaBounce`, straight up, unshadowed,
+;                which can only touch downward-facing surfaces. See its own
+;                note below.
 ;   void_height  -3.5, half a metre under the sea's surface at -3.0. The lowest
 ;                floor on the map is the swim platform at -1.0.
 ;   Spawns       eight pads, four on the foredeck and four on the aft deck,
@@ -53,6 +62,28 @@ shadow_enabled = true
 directional_shadow_mode = 1
 directional_shadow_max_distance = 90.0
 directional_shadow_blend_splits = true
+
+[node name="Lights" type="Node3D" parent="."]
+
+; The sea, as a light. This is the cue the map was missing and the only one that
+; says "on the water" rather than "outdoors": on a real yacht the undersides of
+; every overhang — the upper deck over the main walkways, the sun deck over the
+; balcony, the flybridge over the sun deck — are washed pale blue-green from
+; below by a hundred square metres of sunlit sea, and nothing else in the world
+; looks like that.
+;
+; A `DirectionalLight3D` pointing straight up, which lights **only** downward-
+; facing surfaces: every top face on the map has a normal with no component
+; along -Y, so this cannot touch a single deck, a single stair tread or a single
+; Gub's hat, and the 38-degree sun's deck-on-deck shadow stack is untouched by
+; construction rather than by taste. Shadows off, specular off, 0.18 energy.
+; Cost is one more directional light and no shadow map.
+[node name="SeaBounce" type="DirectionalLight3D" parent="Lights"]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, -2, 0)
+light_color = Color(0.52, 0.78, 0.86, 1)
+light_energy = 0.18
+light_specular = 0.0
+shadow_enabled = false
 
 [node name="Spawns" type="Node3D" parent="."]
 

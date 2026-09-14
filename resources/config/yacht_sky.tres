@@ -1,0 +1,90 @@
+[gd_resource type="Sky" load_steps=3 format=3 uid="uid://cy8gubyachtsky"]
+
+; The sky for Halcyon Wake: a clear Mediterranean morning, an hour or two after
+; the sun cleared the land.
+;
+; It is `enchanted_sky.gdshader` — the island's sky shader, pointed at from here
+; with a completely different set of numbers, which is what that shader was
+; built to allow. Nothing in it is changed. The reading is:
+;
+;   the moon      is the sun. `moon_follow_light` is OFF and `moon_direction` is
+;                 typed, because this map has two directional lights now and
+;                 LIGHT0 is whichever one Godot registered first. The direction
+;                 here is the `Sun` node's own +Z, 38 degrees up over the
+;                 starboard bow — if the sun in `yacht.tscn` ever moves, this
+;                 moves with it or the disc and the shadows disagree.
+;   the forest    glow is marine haze: a pale band hugging the horizon in every
+;                 direction, which is what an anchorage looks like at nine in
+;                 the morning and what makes the far coastline a ghost of itself
+;                 rather than a cut-out.
+;   the clouds    are cirrus. The shader squashes its fbm on one axis to make
+;                 wisps, which is exactly the right shape, and at this scale and
+;                 speed one takes about two minutes to cross the dome.
+;   the stars     and the aurora are off — their energies are zero, so the
+;                 branches cost a few instructions and produce nothing.
+;
+; The ground half is the sea's far colour, so that where the sea plane ends 1.4
+; km out and the fog has taken it, the sky underneath is already the same
+; colour and there is no seam on the horizon. That is the single most important
+; number in this file: on three of this map's four decks the horizon runs
+; across the middle of the screen.
+;
+; INCREMENTAL process mode, as on the island: the cirrus crawls, so rebuilding
+; one radiance mip per frame is invisible and costs a fraction of REALTIME.
+
+[ext_resource type="Shader" path="res://resources/shaders/enchanted_sky.gdshader" id="1_sky_shader"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_yacht_sky"]
+shader = ExtResource("1_sky_shader")
+shader_parameter/zenith_color = Color(0.1, 0.29, 0.72, 1)
+shader_parameter/horizon_color = Color(0.6, 0.75, 0.88, 1)
+shader_parameter/void_color = Color(0.47, 0.63, 0.76, 1)
+shader_parameter/horizon_falloff = 0.4
+shader_parameter/void_falloff = 0.22
+shader_parameter/sky_energy = 1.0
+shader_parameter/forest_glow_color = Color(1.0, 0.95, 0.88, 1)
+shader_parameter/forest_glow_energy = 0.22
+shader_parameter/forest_glow_band = 0.065
+shader_parameter/star_color = Color(1.0, 1.0, 1.0, 1)
+shader_parameter/star_energy = 0.0
+shader_parameter/star_density = 96.0
+shader_parameter/star_coverage = 0.0
+shader_parameter/star_twinkle = 0.0
+shader_parameter/star_twinkle_speed = 0.0
+shader_parameter/star_band_axis = Vector3(0, 1, 0)
+shader_parameter/star_band_width = 0.34
+shader_parameter/star_haze_color = Color(0, 0, 0, 1)
+shader_parameter/star_haze_energy = 0.0
+shader_parameter/moon_direction = Vector3(0.62025, 0.62025, -0.48019)
+shader_parameter/moon_follow_light = false
+shader_parameter/moon_color = Color(1.0, 0.97, 0.9, 1)
+shader_parameter/moon_energy = 14.0
+shader_parameter/moon_angular_size = 0.011
+shader_parameter/moon_phase = 1.0
+shader_parameter/moon_mare = 0.0
+shader_parameter/moon_halo_color = Color(1.0, 0.94, 0.84, 1)
+shader_parameter/moon_halo_energy = 0.5
+shader_parameter/moon_halo_falloff = 45.0
+shader_parameter/aurora_low_color = Color(0, 0, 0, 1)
+shader_parameter/aurora_high_color = Color(0, 0, 0, 1)
+shader_parameter/aurora_energy = 0.0
+shader_parameter/aurora_height = 0.22
+shader_parameter/aurora_width = 0.085
+shader_parameter/aurora_speed = 0.0
+shader_parameter/aurora_azimuth = 0.0
+shader_parameter/aurora_spread = 3.2
+shader_parameter/aurora_curtain = 0.0
+shader_parameter/cloud_color = Color(0.74, 0.8, 0.88, 1)
+shader_parameter/cloud_lit_color = Color(1.0, 0.99, 0.96, 1)
+shader_parameter/cloud_opacity = 0.46
+shader_parameter/cloud_coverage = 0.58
+shader_parameter/cloud_scale = 1.7
+shader_parameter/cloud_speed = 0.008
+shader_parameter/cloud_horizon_fade = 0.04
+shader_parameter/cloud_parallax = 0.0008
+
+[resource]
+resource_name = "HalcyonSky"
+sky_material = SubResource("ShaderMaterial_yacht_sky")
+process_mode = 2
+radiance_size = 3
