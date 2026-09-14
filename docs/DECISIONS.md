@@ -4611,3 +4611,110 @@ stairs against the bow team's hop steps is fair, are for a person.
   falling Gub lands on is a Gub stuck against the hull waiting for nothing.
 - **A black window band.** It read as a row of doorways into rooms that are not
   there.
+
+## D-058 — Halcyon Wake gets a sea that moves, a coast to lie off, and a wind everything agrees with
+The user, on the five maps: *"one of them has the best details and lighting and
+background and theme, this is the wisperhollow map, by far my favorite. All the
+other maps have good structure but not the same good feel."* This is the first
+of four atmosphere passes, one per map, each with its own intentional direction
+rather than the island's night copied over the top of it.
+
+Gameplay is untouched. Spawns, collision, sightlines, the jump graph, bases and
+letters are exactly where D-057 left them, and the gate is 63 of 63.
+
+**The sea was the whole map.** It was a two-triangle `PlaneMesh` with a
+scrolling noise normal, and it is most of what a player can see from three of
+the four decks — a yacht on a still pane of colour reads as a model on a table,
+and normal-mapping does not fix that, because the eye reads silhouette before it
+reads shading. It is now a displaced 96x96 grid out to 120 m with a flat skirt
+to the horizon, 18,432 triangles in one draw call, running
+`resources/shaders/yacht_sea.gdshader`: three deep-water sines in the vertex
+shader at their real phase speeds `c = sqrt(g/k)`, four more per fragment, a
+Cox-Munk sun track (one `exp`) that runs to the horizon because the flatter the
+view angle the less slope a facet needs to put the sun in your eye, the hull's
+foam and the shadow of her underwater body as a 2D distance field rather than as
+geometry, and a body colour near-black looking straight down and Mediterranean
+toward the horizon. Over the side is a death, so the water has to look like it
+will kill you as well as look beautiful; the depth gradient is that.
+
+**No water normal map, deliberately**, though it was the first thing suggested.
+Neither CC0 library this project can reach ships an ocean normal set, and a
+tiling normal on a plane 2.8 km across announces its repeat somewhere between
+the rail and the horizon however it is scrolled. Seven analytic waves cost less
+than two texture fetches, never repeat, carry their own exact derivatives, and —
+the part that matters — can be faded by distance, with the lost slope variance
+handed to roughness. That trade is the entire mechanism behind the sun track.
+
+**The map ends somewhere.** Three headlands at 330, 560 and 880 m to port and
+across the stern, and three other boats at anchor at 160, 260 and 640 m; all in
+`BACKDROP_GROUP`, none of it collision, about 900 triangles in one draw call.
+Aerial perspective does the work — the near head a grey-violet solid, the far
+range a stain on the haze — and the ridge is the dark part with the foot washed
+out, not the other way round, which is the difference between a headland and a
+meringue. The sector the sun's track runs out through is left as empty water on
+purpose: the flybridge looking down-sun is the best view on the map.
+
+**Everything that moves in the wind agrees.** She lies head to her cable, so the
+swell runs bow to stern, the ensign at the transom and the burgee at the
+masthead stream aft (`yacht_cloth.gdshader`), and the cable leads forward off the
+stem into the water. The ensign is also the only saturated warm colour on a map
+made of white, blue and teak, and it flies over Team 2's base.
+
+**The sky is the island's shader with different numbers.** `yacht_sky.tres`
+points at `enchanted_sky.gdshader` for cirrus crossing the dome in about two
+minutes, a sun disc, and a marine haze band the sea's far edge dissolves into;
+stars and aurora are at zero energy. The disc does not follow LIGHT0 — it types
+the same 38-degree direction the `Sun` node carries and `yacht_map.gd` hands to
+the sea shader, so the disc, the shadows and the glitter are one number in three
+places rather than three opinions.
+
+**One new light, `SeaBounce`**: straight up, 0.18, unshadowed, no specular. It
+can only touch downward-facing surfaces, so it cannot reach a deck, a tread or a
+Gub's hat, and D-057's 38-degree deck-on-deck shadow stack — a readability
+decision, not a mood one — is preserved by construction rather than by taste.
+
+**Ambience**, in `scripts/world/maps/yacht_ambience.gd`: six gulls on six
+mutually-prime circles, banked into their turns, wings beating three times then
+gliding; steam off the hot tub; and audio wired exactly as `ambience.gd` does it
+— named paths, the `Ambience` bus, a missing file skipped in silence. Only
+`ambient_wind.wav` exists, so only it plays.
+
+**Exposure did not move**, and that is measured rather than felt:
+`background_energy_multiplier` is still 1.0, mean luminance across the eight
+pads is 146-155 against the old 141-154, the 1st percentile 25-34 against 23-42,
+nothing clips, and 0.07% is crushed at the worst pad. The deck is a CC0 Poly
+Haven teak (`assets/maps/yacht/`, 1.7 MB, sources recorded beside it) multiplied
+at load by the map's own 16-plank caulk layout, seams baked into the normal
+because that is what makes raking light read the planks.
+
+### What checks it
+No new gate lines: this pass changes how the map looks and nothing about what it
+promises, and the six lines D-057 added — the `yacht` playthrough, `preview_map`
+on its pads, `parkour_report` for the jump graph and the overboard test — are
+exactly the ones that would catch dressing that became collision or moved a pad.
+63 of 63, green. Renders are not committed.
+
+### Rejected
+- **An HDRI dome.** A 2k clear-Mediterranean-morning HDRI was downloaded and
+  rendered as this map's sky, and the render settled it. A photographic dome
+  brings its own baked coastline — which fights the authored one, and which the
+  sea plane cuts through at the trunks of its palm trees — and its own baked
+  sun, which cannot be moved to 38 degrees over the starboard bow without
+  canting the horizon. And it does not move, and motion is the whole thesis. One
+  lesson was kept from it: its ambient made the white paint read white rather
+  than blue.
+- **Spray at the waterline.** She is at anchor on a flat calm.
+- **A bimini over the aft terrace.** It would blind the flybridge to the sun deck.
+- **Dressing ship with signal flags.** Noise across the one clean sky on the map.
+- **Bobbing the hull.** Collision is built in world space at load and would not
+  bob with it.
+- **A transparent sea.** It would look better and would cost alpha sorting on the
+  largest mesh in the map. A bad trade for an eight-player networked game.
+
+### Left for later
+`ambient_sea.wav` and `ambient_gulls.wav` are named by the wiring and do not
+exist. Caustics on the white deckheads are a static up-facing fill here; the real
+version is two or three `Decal` nodes projecting a drifting caustic texture
+upward. The teak bake costs about 160 ms at load (build 46 -> 215 ms), behind a
+loading screen; if that ever matters, ship a pre-baked 512 instead of
+multiplying two textures at load.
