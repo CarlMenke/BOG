@@ -39,6 +39,17 @@ signal letters_changed(peer_id: int)
 ## open ten seconds from a letter is the whole tension of the mode and has to
 ## read from across the clearing (D-035).
 signal letter_hold_changed(peer_id: int)
+## Events, not state, which is why these two carry the letter where the signals
+## above refuse to: "Pipwick picked up G" is a thing that *happened*, once, and
+## by the next frame the row it came from may already be gone again (D-050).
+##
+## `letter_picked_up` fires when a card starts a hold — the moment the rest of
+## the lobby cares about. A duplicate wasted on touch (D-033, D-049) and a card
+## walked over mid-hold start nothing, so neither fires it. `letter_banked`
+## fires when a letter is actually awarded, which with a hold time of zero is
+## the only one of the two a card produces. Both fire on every peer.
+signal letter_picked_up(peer_id: int, letter: int)
+signal letter_banked(peer_id: int, letter: int)
 ## One player has become, or stopped being, the Elder. Carries the peer for the
 ## same reason the two above do: `_elders` already holds the answer by the time
 ## this fires, and a signal carrying a copy of it is a copy waiting to disagree.
@@ -1019,8 +1030,8 @@ func award_letter(peer_id: int, letter: int) -> bool:
 	var next := int(entry.get("letters", 0)) | letter
 	var team := _pooling_team(peer_id)
 	var team_mask := (team_letters(team) | letter) if team != MatchConfig.TEAM_NONE else 0
-	_sync_letters.rpc(peer_id, next, team, team_mask)
-	_sync_letters(peer_id, next, team, team_mask)
+	_sync_letters.rpc(peer_id, next, team, team_mask, letter)
+	_sync_letters(peer_id, next, team, team_mask, letter)
 	# A teammate standing still for the letter that was just banked is now
 	# standing still for nothing. Ended here, and the card spent rather than
 	# re-dropped, for the reason `_begin_letter_hold` refuses to start that hold
@@ -1047,7 +1058,10 @@ func award_letter(peer_id: int, letter: int) -> bool:
 ## so no peer can ever see a player's lamp lit and their team's not (D-049).
 ## `team` is `TEAM_NONE` outside Teams, and then `team_mask` means nothing.
 @rpc("authority", "call_remote", "reliable")
-func _sync_letters(peer_id: int, mask: int, team: int, team_mask: int) -> void:
+## `letter` is the one just banked, for `letter_banked` — carried rather than
+## worked out from the old mask, because a client's copy of the old mask is a
+## score push behind often enough to announce the wrong letter.
+func _sync_letters(peer_id: int, mask: int, team: int, team_mask: int, letter: int) -> void:
 	if team != MatchConfig.TEAM_NONE:
 		_team_letters[team] = team_mask
 	var entry: Dictionary = stats.get(peer_id, {})
@@ -1055,6 +1069,7 @@ func _sync_letters(peer_id: int, mask: int, team: int, team_mask: int) -> void:
 		entry["letters"] = mask
 	letters_changed.emit(peer_id)
 	scores_changed.emit()
+	letter_banked.emit(peer_id, letter)
 
 
 ## The three-bit mask of letters this player holds. Safe to ask for a peer with
@@ -1240,6 +1255,7 @@ func _end_letter_hold(peer_id: int) -> void:
 func _do_begin_hold(peer_id: int, letter: int, seconds: float) -> void:
 	_letter_holds[peer_id] = {"letter": letter, "ends_at": _now() + seconds}
 	letter_hold_changed.emit(peer_id)
+	letter_picked_up.emit(peer_id, letter)
 
 
 @rpc("authority", "call_remote", "reliable")

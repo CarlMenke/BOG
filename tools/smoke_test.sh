@@ -234,6 +234,25 @@ also "teammate names through walls" "team_plates: enemy PASS"
 also "teammate names through walls" "team_plates: hud PASS"
 also "teammate names through walls" "team_plates: PASS"
 check "free-for-all names unchanged" "team_plates: ffa PASS"     "$GODOT" --headless --path "$GODOT_ROOT" tools/team_plates.tscn -- ffa
+# A letter picked up is told to everyone (D-050). A player: "some kind of
+# notification when someone picks up a letter, maybe it should also show people
+# with letters through walls". Through the real spawn path, the real HUD and real
+# cards walked into through `claim_pickup`: a card that starts a hold has to put
+# "Nettle picked up G" at the top of the feed, and a duplicate wasted on touch has
+# to put nothing there. Two carriers forty metres behind a wall (proven by ray)
+# have to have their marker up, with their letter, undepth-tested and above the
+# nameplate — one of them an enemy, because the marker is for everyone — while
+# the local player's own hold marks nothing on their own screen. After a hold is
+# banked, and after a carrier is killed, the marker has to be gone. Without
+# `_refresh_carrier_marker` the marker verdict fails; without the
+# `letter_picked_up` emit both feed verdicts do. Free-for-all runs the same
+# sequence. Headless, it quits itself on tick 160. The picture:
+#     ... --resolution 1600x900 --script tools/snapshot.gd -- #         res://tools/letter_carriers.tscn out/letter_carriers.png 45
+check "letter pickups told to everyone" "letter_carriers: PASS"     "$GODOT" --headless --path "$GODOT_ROOT" tools/letter_carriers.tscn
+also "letter pickups told to everyone" "letter_carriers: feed picked up PASS"
+also "letter pickups told to everyone" "letter_carriers: duplicate PASS"
+also "letter pickups told to everyone" "letter_carriers: marker PASS"
+check "free-for-all letter carriers" "letter_carriers: ffa PASS"     "$GODOT" --headless --path "$GODOT_ROOT" tools/letter_carriers.tscn -- ffa
 # The camera, kept out of the scenery (D-045). A player: "too frequently the
 # camera is inside meshes and stuff when there are meshes behind the character".
 # Seven legs — a wall on each shoulder walked along, a corner, under a canopy and

@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://gubcarriers001"]
+
+[ext_resource type="Script" path="res://tools/letter_carriers.gd" id="1_script"]
+
+[node name="LetterCarriers" type="Node3D"]
+script = ExtResource("1_script")

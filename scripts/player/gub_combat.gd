@@ -957,6 +957,19 @@ func _on_letter_hold_changed(peer_id: int) -> void:
 	if _gub == null or peer_id != _gub.peer_id:
 		return
 	_refresh_hand()
+	_refresh_carrier_marker()
+
+
+## The card over the head says the same thing as the card in the fist, from the
+## same row and on the same signal, so the two cannot disagree about who is
+## holding (D-050). Every end of a hold — banked, killed, a teammate banking the
+## same letter, the match ending — arrives here as the row going away.
+func _refresh_carrier_marker() -> void:
+	if _gub.carrier_marker == null:
+		return
+	var letter := MatchState.letter_hold_letter(_gub.peer_id)
+	_gub.carrier_marker.set_carrying(
+		MatchState.letter_name(letter) if letter != 0 else "", Pickup.LETTER_COLOUR)
 
 
 func _on_spear_struck_gub(victim: Gub, point: Vector3, bone: String,

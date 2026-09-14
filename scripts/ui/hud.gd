@@ -94,6 +94,8 @@ func _ready() -> void:
 	MatchState.local_respawn.connect(_on_local_respawn)
 	MatchState.letters_changed.connect(_on_letters_changed)
 	MatchState.letter_hold_changed.connect(_on_letters_changed)
+	MatchState.letter_picked_up.connect(_on_letter_picked_up)
+	MatchState.letter_banked.connect(_on_letter_banked)
 	Net.chat_received.connect(_chat.add_message)
 	Net.left_lobby.connect(_on_left_lobby)
 	Net.return_to_lobby_requested.connect(_go_to_lobby)
@@ -416,9 +418,8 @@ func _on_player_killed(victim_id: int, killer_id: int, cause: int) -> void:
 
 
 ## Both letter signals carry a peer id and fire for everybody. Only your own
-## hold is on this HUD: somebody else's gets no treatment here at all, because
-## the lit card in their fist is the tell and it is meant to be an in-world one
-## (D-035).
+## hold is on the lamps: somebody else's is told in the feed and by the marker
+## over their head (D-050), not by lighting anything of yours.
 ##
 ## A teammate's letter does light your lamps in Teams, though, because the lamps
 ## are the team's pooled mask there (D-049) — so a letter banked by anybody on
@@ -427,6 +428,20 @@ func _on_player_killed(victim_id: int, killer_id: int, cause: int) -> void:
 ## drops a repaint when nothing moved, and the other team's letters move nothing.
 func _on_letters_changed(_peer_id: int) -> void:
 	_refresh_letters()
+
+
+## Somebody else's hold still gets nothing on the lamps, but since D-050 it gets
+## a line in the feed: the lit card in a fist is only a tell to whoever can see
+## the fist, and a letter is the rarest thing in the match. The Gub carrying it
+## gets a marker over its head on every screen as well (`CarrierMarker`).
+func _on_letter_picked_up(peer_id: int, letter: int) -> void:
+	_kill_feed.add_event([peer_id, "picked up",
+		[MatchState.letter_name(letter), Pickup.LETTER_COLOUR]])
+
+
+func _on_letter_banked(peer_id: int, letter: int) -> void:
+	_kill_feed.add_event([peer_id, "banked",
+		[MatchState.letter_name(letter), Pickup.LETTER_COLOUR]])
 
 
 func _on_local_death(respawn_in: float) -> void:

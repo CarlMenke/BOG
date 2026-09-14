@@ -1970,6 +1970,10 @@ compromise — the `Idle` guard reads as "boxer holding a letter" rather than
 "holding it aloft" — and it is worth revisiting only if the pose turns out to be
 what people miss, which the light makes unlikely.
 
+*(**Amended by D-050:** the lit card is no longer the only tell. A pickup is
+now announced in the kill feed, and a carrier gets a marker over its head that
+everyone sees through walls. The hold itself is unchanged.)*
+
 `letter_hold_time` is a lobby dial beside `letter_drop_chance`, and **zero is a
 legal value** meaning "grant on touch" — the mode as it was, for a host who
 finds the hold miserable. Zero is taken as a special case in
@@ -2038,7 +2042,9 @@ out — and nothing on this HUD drains any more.
 Two smaller decisions inside it. **Nobody else's hold gets a HUD element**: the
 lit card in their fist is the tell and it is meant to be an in-world one
 (D-035), so the announcement is made to the clearing rather than to a corner of
-your screen. And **the seconds never show zero while a hold is running**,
+your screen. *(**Amended by D-050:** somebody else's hold now gets a feed row
+when it starts and when it is banked, and a marker over their head; the lamps
+and the seconds are still yours alone.)* And **the seconds never show zero while a hold is running**,
 because `is_holding_letter` is the presence of the host's row rather than
 `remaining > 0` — a client whose copy of the clock expires a round trip early
 would otherwise print "0" over a Gub the host still refuses to throw with.
@@ -3667,3 +3673,97 @@ copy. It skips rows that are gone.
   consumed on touch (D-033); holding it is having touched it.
 - **Replacing per-player rows with the team mask.** It would erase who banked
   what, which is the one interesting thing on a teammate's row.
+
+## D-050 — A letter picked up is told to everyone: a line in the feed, and a gold card over the carrier that shows through walls
+The user: *"some kind of notification when someone picks up a letter, maybe it
+should also show people with letters through walls / on the map?"* Asked, the
+user chose both halves for everyone — both teams, and every player in a
+free-for-all — and a marker only, no minimap.
+
+**This amends D-035 and D-036.** D-035 made the lit card in a carrier's fist the
+tell, and D-036 said nobody else's hold gets anything on your screen, so that
+the announcement was made "to the clearing rather than to a corner of your
+screen". That only reaches the players standing in the clearing. At an 8% drop
+rate a letter is the rarest event in the match, and a hold that ended out of
+sight read as a letter appearing from nowhere. A ten-second hold is only a fight
+if the people who could contest it know it is happening, and the fist told the
+one or two players already looking. The card in the fist, its light, the hold
+itself, and the lamps and seconds being yours alone are all unchanged.
+
+**The feed.** `KillFeed.add_event(segments)` builds a non-kill row from
+segments: a peer id (their name, coloured the way a kill row colours it), a word
+in the verb colour, or `[text, colour]`. `add_kill` is now one call to it, so
+there is one row builder and one eviction loop, and the
+`remove_child`-before-`queue_free` fix that stopped the sixth row hanging the
+game still covers every row. Two rows use it: **"Name picked up G"** when a card
+starts a hold, and **"Name banked G"** when a letter is awarded. Banking is
+announced because it is the moment the lamps change for somebody. With a hold
+time of zero there is no hold, and "banked" is the only line a card produces.
+
+**Driven by events, not by diffing state.** `MatchState.letter_picked_up` fires
+from `_do_begin_hold` and `letter_banked` from `_sync_letters`. Both run on
+every peer from reliable RPCs, so clients announce exactly what the host did.
+They carry the letter, unlike `letter_hold_changed`, because they report things
+that happened rather than copying state. `_sync_letters` now carries the letter
+too, so no client has to work it out from its own old mask, which can be a score
+push behind. **A duplicate wasted on touch announces nothing**, because it never
+reaches `_do_begin_hold` (D-033, D-049). Neither does a card walked over
+mid-hold. A hold lost to death is not announced: the kill row already says the
+carrier died.
+
+**The marker.** `CarrierMarker` is built on every Gub at the nameplate's anchor:
+a gold card with a dark border and the letter in dark ink. It has no depth test,
+so it is drawn through scenery. Past 11 m it holds its on-screen size, the same
+distance a teammate's plate does, so the gap between the two stays constant as
+both grow. It sits above the plate, clear of even a teammate's enlarged one. It
+is deliberately unlike a nameplate (D-047): a filled shape with one glyph and no
+name, where a plate is outlined lettering. "Who is my teammate" and "who has a
+letter" are both drawn through walls, and they must not read as one thing.
+`GubCombat` drives it from `letter_hold_changed`, beside the hand and off the
+same row, so the card in the fist and the card over the head cannot disagree.
+Every end of a hold — banked, killed, disconnected, a teammate banking the same
+letter, the match ending — reaches it as that row going away.
+
+- **Hidden over your own Gub.** You know you are carrying: the lamps say so and
+  count the seconds, and a card above your head sits in the middle of your view.
+- **Hidden over a dead Gub** from the frame `alive` drops, not a round trip
+  later when the host's hold-end arrives.
+- **Reusable.** The marker knows nothing about letters: `set_carrying(glyph,
+  colour)`, with `""` to clear. Capture-the-flag carriers are meant to turn on
+  the same marker and announce through the same `add_event`.
+
+**Why through walls is allowed here when an enemy's name is not.** D-047 calls
+an enemy plate through a wall a wallhack, and it still is. A carrier is the
+exception because the carrier has already announced themselves: the hold is a
+ten-second commitment to stand without a spear, and the mode is built around
+somebody coming to stop it. A marker seen only by people who can already see
+the fist would add nothing. It reveals who is carrying and nobody else, and it
+is gone the moment the hold ends.
+
+**Checked.** `tools/letter_carriers.tscn`, headless, in the gate as "letter
+pickups told to everyone" and "free-for-all letter carriers". It uses the real
+spawn path, the real HUD, and cards claimed through `claim_pickup`. A bank puts
+"Thornbeak banked B" on top of the feed. Thornbeak's second B is consumed with
+no hold, no row and no marker. "Nettle picked up G" and then "Pipwick picked up
+U" go on top. Nettle (an enemy in Teams) and Pipwick stand forty metres out
+behind a wall proven by ray. Both markers are up with the right glyph, every
+part undepth-tested, and the card's bottom above the plate's top. The local
+player's own hold is carrying but not shown. After Pipwick's hold is banked on
+its own clock, and after Nettle is killed, each marker is gone. The feed never
+exceeds `MAX_ROWS`. Without `_refresh_carrier_marker` the marker verdict fails;
+without the `letter_picked_up` emit both pickup rows fail. Through `snapshot.gd`
+the same scene renders the Gub's own view with the feed: both cards over the
+wall, the enemy's with no name under it. 38 checks to 43.
+
+### Rejected
+- **Diffing `letter_hold_changed` in the HUD to find a start.** It fires for
+  starts and ends alike, so the HUD would need its own record of who was
+  holding: a second copy of `_letter_holds`.
+- **A minimap, or an arrow at the screen edge.** The user chose a marker only.
+- **Showing the marker to yourself.** It is in your way, and it tells you nothing
+  the lamps do not.
+- **Hanging the marker on the nameplate.** The plate is about names and whether
+  they are an ally's. Carrying is a different fact, and capture the flag needs a
+  marker that does not care what a plate is.
+- **Announcing a hold lost to death.** The kill row already says so, and a
+  second row for the same moment pushes older rows out of a five-row feed.

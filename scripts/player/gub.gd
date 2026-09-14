@@ -225,6 +225,9 @@ var held_spear: HeldSpear
 ## spear, because seven of every eight Gubs in a match will never wear one and a
 ## hidden second skinned mesh on every rig is 4,352 triangles of nothing.
 var elder_robe: ElderRobe
+## The gold card over this Gub's head while it carries a letter, for everyone
+## but its owner (D-050). Switched by whoever decides what is carried.
+var carrier_marker: CarrierMarker
 var team: int = MatchConfig.TEAM_NONE
 ## The body's own skinned mesh out of `gub.glb`, found once in `_ready` before
 ## anything else is hung off the skeleton — so never the spear, and never the
@@ -297,6 +300,7 @@ func _ready() -> void:
 	_apply_capsule(STAND_HEIGHT)
 	body_mesh = _find_body_mesh()
 	_equip_spear()
+	_build_carrier_marker()
 
 
 ## The mesh `build_gub.py` calls "Gub", under the skeleton. Looked for by name
@@ -372,6 +376,16 @@ static func tint_of(mesh: MeshInstance3D) -> Variant:
 	if active == null or active.shader != TINT_SHADER:
 		return null
 	return active.get_shader_parameter("team_colour")
+
+
+## At the nameplate's own anchor, because the marker places itself above the
+## plate by the plate's measurements and would drift off it from anywhere else.
+func _build_carrier_marker() -> void:
+	carrier_marker = CarrierMarker.new()
+	carrier_marker.name = "CarrierMarker"
+	var plate := get_node_or_null("Nameplate") as Node3D
+	carrier_marker.position = plate.position if plate != null else Vector3(0.0, 1.8, 0.0)
+	add_child(carrier_marker)
 
 
 func _equip_spear() -> void:

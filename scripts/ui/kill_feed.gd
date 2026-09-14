@@ -1,6 +1,6 @@
 class_name KillFeed
 extends VBoxContainer
-## Who just killed whom (PLAN 3.8, 6.3).
+## Who just killed whom (PLAN 3.8, 6.3), and who just picked up a letter (D-050).
 ##
 ## In a game where one hit kills, the feed is not trivia — it is the only way to
 ## know that the Gub you were about to fight is already dead, or that the person
@@ -29,27 +29,51 @@ func _ready() -> void:
 ## island under their own steam, which the feed says in words rather than
 ## drawing an arrow from someone to themselves.
 func add_kill(victim_id: int, killer_id: int, cause: int) -> void:
-	var involved := victim_id == Net.local_id() or killer_id == Net.local_id()
+	if killer_id == victim_id or killer_id == 0:
+		# Name first, so every row in the feed starts with a Gub and the eye can
+		# scan the left edge of the column for its own name.
+		add_event([victim_id, _self_death_text(cause)])
+	else:
+		add_event([killer_id, _cause_glyph(cause), victim_id])
+
+
+## Anything that is not a kill but belongs in the same corner of the eye: a
+## letter picked up or banked (D-050), and whatever the next mode needs to shout
+## about. A row is a list of segments, read left to right:
+##
+##   int              a peer, drawn as their name in the colour a kill row uses
+##   String           a word in the feed's verb colour
+##   [String, Color]  a word in a colour of its own (a letter in gold)
+##
+##   feed.add_event([peer_id, "picked up", ["G", Pickup.LETTER_COLOUR]])
+##
+## Segments rather than one formatted string because a name has to keep its own
+## colour — your name yellow, a teammate's in the team colour — and a Label
+## colours all of its text at once. The row counts as yours, and stays bright,
+## if any peer in it is you, exactly as a kill does.
+func add_event(segments: Array) -> void:
+	var involved := false
+	var line := HBoxContainer.new()
+	line.add_theme_constant_override("separation", 9)
+	for segment: Variant in segments:
+		if segment is int:
+			involved = involved or segment == Net.local_id()
+			line.add_child(_name_label(segment))
+		elif segment is Array and (segment as Array).size() == 2:
+			line.add_child(_word(str(segment[0]), segment[1]))
+		else:
+			line.add_child(_word(str(segment), UIPalette.AMBER))
+	_push_row(line, involved)
+
+
+func _push_row(line: HBoxContainer, involved: bool) -> void:
 	var row := PanelContainer.new()
 	row.theme_type_variation = "HudPanel"
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# Shrink to the text and hang off the right edge. Full-width rows turn the
 	# feed into a banner across the top of the screen.
 	row.size_flags_horizontal = Control.SIZE_SHRINK_END
-
-	var line := HBoxContainer.new()
-	line.add_theme_constant_override("separation", 9)
 	row.add_child(line)
-
-	if killer_id == victim_id or killer_id == 0:
-		# Name first, so every row in the feed starts with a Gub and the eye can
-		# scan the left edge of the column for its own name.
-		line.add_child(_name_label(victim_id))
-		line.add_child(_verb(_self_death_text(cause)))
-	else:
-		line.add_child(_name_label(killer_id))
-		line.add_child(_verb(_cause_glyph(cause)))
-		line.add_child(_name_label(victim_id))
 
 	add_child(row)
 	move_child(row, 0)  # newest at the top, nearest the eye
@@ -93,12 +117,12 @@ func _name_label(peer_id: int) -> Label:
 	return label
 
 
-func _verb(text: String) -> Label:
+func _word(text: String, colour: Color) -> Label:
 	var label := Label.new()
 	label.text = text
 	label.theme_type_variation = "SmallLabel"
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.add_theme_color_override("font_color", UIPalette.AMBER)
+	label.add_theme_color_override("font_color", colour)
 	return label
 
 
