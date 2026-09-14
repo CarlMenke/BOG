@@ -360,7 +360,8 @@ and short synthetic hits read as deliberate stylisation where a mismatched
 library sample reads as an accident. It is also the same argument already made
 for the meshes (D-003) and the ragdoll (D-006): generated means diffable,
 tunable from a single number, and reproducible on any machine. The complete set
-is 381 KB.
+is 830 KB — 381 KB when this was written, before the thunder pair (D-061) and
+the bow and sword (the sword's 1.867 s whoosh is 161 KB of it on its own).
 
 Placement carries as much meaning as the sounds. Impacts, throws, deaths and
 deployments are **3D and positional**, because they are events in the world that

@@ -16,6 +16,25 @@ const SPEAR_THROW := preload("res://audio/sfx/spear_throw.wav")
 const SPEAR_HIT_BODY := preload("res://audio/sfx/spear_hit_body.wav")
 const SPEAR_HIT_WORLD := preload("res://audio/sfx/spear_hit_world.wav")
 const SPEAR_READY := preload("res://audio/sfx/spear_ready.wav")
+## The bow's loose (D-065). Almost none of it is the string: the arrow takes the
+## energy and what is heard is the limbs arriving at brace, which is a block of
+## wood being hit from the inside. There is no draw sound and that is a decision
+## rather than a gap — see `bow_loose` in `tools/make_sfx.py`.
+const BOW_LOOSE := preload("res://audio/sfx/bow_loose.wav")
+## The great sword, in two halves (D-068).
+##
+## `SWORD_SWING` is the **one clip in this library that is locked to an
+## animation**. It is 1.867 s long because that is `GubAnimator.SWING_SECONDS`,
+## it is played on the frame the spin starts rather than on the frame the blade
+## lands, and its loudness peaks 1.067 s in because that is
+## `SWING_RELEASE_TIME` — where the build measures peak hand speed, which is
+## where a sword cuts. Two things follow for callers. It must be fired from
+## `_begin_swing`, the one function every peer runs at clip time zero; and it
+## must be played at **pitch 1.0**, never through `play_3d_varied`, because a
+## 12% pitch spread would slide the peak of the whoosh a tenth of a second off
+## the blade and the swing would read as a different swing.
+const SWORD_SWING := preload("res://audio/sfx/sword_swing.wav")
+const SWORD_HIT_BODY := preload("res://audio/sfx/sword_hit_body.wav")
 const MUSHROOM_DEPLOY := preload("res://audio/sfx/mushroom_deploy.wav")
 const LURE_THROW := preload("res://audio/sfx/lure_throw.wav")
 const LURE_ARM := preload("res://audio/sfx/lure_arm.wav")

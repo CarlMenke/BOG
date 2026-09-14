@@ -237,6 +237,150 @@ def lure_fire():
     return pull + wind
 
 
+## The great sword's swing, in seconds, and the frame the blade actually cuts on
+## (D-068). `GubAnimator.SWING_SECONDS` and `SWING_RELEASE_TIME` are the same two
+## numbers, and the release is not a feel number at either end: it is where the
+## build measures peak hand speed, 6.86 m/s, because a sword cuts where the blade
+## is fastest. If the clip or the window ever moves, these move with them, or the
+## whoosh will peak somewhere the blade is not.
+SWING_SECONDS = 1.867
+SWING_RELEASE = 1.067
+
+
+def bow_loose():
+    """A bowstring let go. Almost none of this is the string.
+
+    A drawn bow is a spring with the limbs in it, and the loose is that spring
+    unloading in about twenty milliseconds. The arrow takes most of the energy
+    and leaves; what is left is the limbs arriving at brace and stopping dead
+    against the riser, which is a block of wood being hit from the inside. So the
+    loudest layer here is `limb`, and it is low, dry and woody — higher and
+    deader than `spear_hit_body`'s flesh at 150 down to 62 Hz, because wood is
+    stiffer than a Gub.
+
+    On top of it, in the order the ear gets them:
+
+      click   the nock coming off the string and the shaft dragging over the
+              rest. Broadband, a few milliseconds, and the thing that makes this
+              read as *released* rather than as a knock on a door.
+      string  what is left in the string once the arrow is gone. It falls in
+              pitch because the tension it is vibrating under falls with it as
+              the limbs come home, and it dies first because the limbs and the
+              arrow have already taken what was in it.
+      air     the fletching clearing the rest, and deliberately no more than
+              that. The arrow is doing up to 60 m/s (D-065) and this clip is
+              played at a fixed point in the world, at the bow — by the time the
+              limbs have stopped ringing the shaft is metres away and receding,
+              so a whoosh of any length here would be a sound in the wrong place.
+              A flick of air is a shaft leaving; a whoosh would be a shaft
+              hovering in front of the archer.
+    """
+    n = seconds(0.22)
+    limb = sweep(n, 230.0, 96.0, 0.55) * envelope(n, 0.004, 0.92, 2.4)
+    click = lowpass(noise(n, 81), 6500.0) * envelope(n, 0.001, 0.98, 14.0) * 1.5
+    string = sweep(n, 1180.0, 430.0, 0.8) * envelope(n, 0.001, 0.97, 9.0) * 0.62
+    air = lowpass(noise(n, 82), 2600.0) * envelope(n, 0.06, 0.85, 3.0) * 0.55
+    return limb + click + string + air
+
+
+def sword_swing():
+    """A two-handed blade going round, built against the clip that swings it.
+
+    This is the one effect in the file whose length is not a choice. It is
+    `SWING_SECONDS` long because it is played on the frame the spin starts, on
+    every peer, and it has to still be going when the blade lands. Everything in
+    it is driven by one curve — `speed`, the blade's own speed across the clip,
+    normalised to 1.0 at the cut. It winds up from rest, is fastest at
+    `SWING_RELEASE`, and is still travelling at the end, because this clip's
+    recovery *is* its advance (D-068): the feet are covering ground through the
+    whole of the last third.
+
+    Why a whoosh is three layers of noise and not one. A blade in air is not
+    whistling, it is shedding vortices, and it sheds them at roughly the speed
+    divided by the width of what is moving — about 0.2*v/d. That one ratio is
+    the whole difference between this and `spear_throw`. The flat of a great
+    sword is 40-50 mm across and at 6.9 m/s sheds at a few tens of hertz; its
+    edge is a couple of millimetres and sheds at several hundred; a thrown shaft
+    is 30 mm of round dowel at half the speed and lands in the middle with
+    nothing either side of it. So a big blade goes *woom* and a stick goes
+    *swish*, and the way to build the first is to put real weight underneath it
+    and let the top arrive late.
+
+      wake  the flat's own low shedding, low-passed to almost nothing and
+            multiplied back up, which is `thunder_crack`'s trick for
+            `thunder_crack`'s reason: a one-pole filter at 90 Hz throws away most
+            of white noise's amplitude with its bandwidth. Weighted by the
+            gentlest power of the speed, so it is there from the first frames --
+            something this heavy is moving air before it is moving fast.
+      body  the middle, and the bulk of what is heard.
+      edge  the cut. Weighted by a steep power of the speed, so it is absent for
+            most of the wind-up and arrives almost entirely in the half second
+            around the release.
+
+    Loudness rising as a *power* of speed is not a curve anybody picked either:
+    edge noise off a moving body goes as something like the sixth power of it,
+    which is far too violent to leave a wind-up audible at all, so these are that
+    law flattened rather than invented. Crossfading two fixed cutoffs is also how
+    the brightness climbs and falls without a filter that sweeps — `spear_throw`
+    already does the one-layer version of the same trick.
+    """
+    n = seconds(SWING_SECONDS)
+    t = np.linspace(0.0, 1.0, n)
+    r = SWING_RELEASE / SWING_SECONDS
+    rise = np.clip(t / r, 0.0, 1.0) ** 1.35
+    fall = 1.0 - 0.85 * np.clip((t - r) / (1.0 - r), 0.0, 1.0) ** 1.1
+    speed = rise * fall
+    wake = lowpass(noise(n, 84), 90.0) * speed ** 2.0 * 8.0
+    body = lowpass(noise(n, 85), 620.0) * speed ** 3.0 * 2.6
+    edge = lowpass(noise(n, 86), 3200.0) * speed ** 6.0 * 0.95
+    # The speed curve does not reach zero — the blade is still moving when the
+    # clip ends — so the last 75 ms are faded rather than cut, or the buffer
+    # would end on a step and the step would be a click.
+    return (wake + body + edge) * envelope(n, 0.001, 0.04, 1.0)
+
+
+def sword_hit_body():
+    """A metre of steel arriving in a Gub at 6.9 m/s with a whole spinning body
+    behind it. Three things separate it from a spear burying itself, and all
+    three are the blade rather than the damage.
+
+      edge  the contact. A spear point is a cone that goes in; an edge is a line
+            that is already through, so the transient is brighter and shorter
+            than `spear_hit_body`'s muffled 900 Hz slap, and is not filtered down
+            to a slap at all.
+      thud  the momentum, and the reason this reads as *heavy*. Lower and longer
+            than the spear's 150 down to 62 Hz, because what is behind a thrown
+            stick is a stick and what is behind this is a Gub turning through a
+            whole revolution.
+      ring  the part a spear cannot do. A blade struck across its length rings in
+            the bending modes of a free bar, whose frequencies go as
+            1 : 2.76 : 5.40 : 8.93 — the squares of 4.730, 7.853, 10.996 and
+            14.137, and emphatically not whole numbers. `lure_throw` reaches for
+            inharmonic partials so that a chime does not sound like a musical
+            note; these are the same shape arrived at from the other end,
+            because they are simply what a bar does. The fundamental is about
+            190 Hz for this blade — 1.05 m of steel about 40 mm deep, bending
+            the stiff way, which is the way a cut loads it. It is damped hard,
+            and the upper modes hardest, because the blade
+            is in meat with two fists on the hilt, and that damping is the
+            difference between a sword in a body and a sword on a rock.
+
+    And a tail, which is the last difference: a spear stops in what it hits and
+    this does not. The swing goes on turning through the whole of its
+    follow-through (D-068), so the impact is followed out rather than ended.
+    """
+    n = seconds(0.40)
+    t = np.linspace(0.0, n / RATE, n)
+    edge = lowpass(noise(n, 87), 6500.0) * envelope(n, 0.001, 0.97, 11.0) * 1.25
+    thud = sweep(n, 120.0, 44.0, 0.45) * envelope(n, 0.004, 0.94, 2.0) * 1.2
+    ring = np.zeros(n)
+    for ratio, gain, decay in [(1.0, 1.0, 15.0), (2.756, 0.45, 27.0),
+                               (5.404, 0.22, 44.0), (8.933, 0.10, 62.0)]:
+        ring += gain * np.sin(2.0 * np.pi * 190.0 * ratio * t) * np.exp(-decay * t)
+    tear = lowpass(noise(n, 88), 1600.0) * envelope(n, 0.12, 0.7, 2.2) * 0.5
+    return edge + thud + ring * 0.75 + tear
+
+
 def death():
     """A Gub expiring. Falling, slightly comic, over quickly."""
     n = seconds(0.55)
@@ -327,6 +471,9 @@ EFFECTS = {
     "spear_hit_body": spear_hit_body,
     "spear_hit_world": spear_hit_world,
     "spear_ready": spear_ready,
+    "bow_loose": bow_loose,
+    "sword_swing": sword_swing,
+    "sword_hit_body": sword_hit_body,
     "mushroom_deploy": mushroom_deploy,
     "lure_throw": lure_throw,
     "lure_arm": lure_arm,

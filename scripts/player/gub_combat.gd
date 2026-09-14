@@ -1555,10 +1555,18 @@ func _do_loose_arrow(origin: Vector3, direction: Vector3, charge: float) -> void
 	# shaft does, so nobody ever sees two arrows.
 	_refresh_hand()
 
-	# Borrowed rather than invented, like the Elder's readiness chime: there is
-	# no bow release in `audio/sfx/` and a thrown-shaft sound is the closest
-	# thing in it to a string. Worth replacing the day somebody records one.
-	AudioDirector.play_3d_varied(AudioDirector.SPEAR_THROW, origin)
+	# The loose, and almost none of it is the string: the arrow takes the
+	# energy and what is heard is the limbs arriving at brace (`bow_loose` in
+	# `tools/make_sfx.py`).
+	#
+	# `play_3d` and not `play_3d_varied`, because **the charge is the
+	# variation**. A fuller draw is a tighter string, a harder limb return and
+	# a louder loose, and that is a number every peer already agrees on — it
+	# travelled with this RPC, for the same reason the damage did not — where
+	# `play_3d_varied` would have each machine pick its own random spread for
+	# the same shot. A snap shot is a dull knock and a full draw cracks.
+	AudioDirector.play_3d(AudioDirector.BOW_LOOSE, origin,
+		0.92 + 0.16 * charge, -5.0 + 5.0 * charge)
 	var arrow := ARROW.loose(_spawn_root(), _gub, origin, direction, charge,
 		_config, Net.is_host)
 	arrow.struck_gub.connect(_on_arrow_struck_gub.bind(arrow))
@@ -1692,6 +1700,18 @@ func _begin_swing() -> void:
 	var animator := _gub.get_node_or_null("AnimationTree") as GubAnimator
 	if animator != null:
 		animator.play_swing()
+	# The whoosh belongs to the swing and not to the hit, so it is fired here
+	# rather than in `_do_swing_sword` — for the same reason the clip is. This
+	# is the one function every peer runs at **clip time zero**, and
+	# `SWORD_SWING` is 1.867 s of blade built to be loudest 1.067 s in, which
+	# is `SWING_RELEASE_TIME`, which is where the build measures peak hand
+	# speed, which is where a sword cuts. Fired at the landing instead it
+	# would start where it was meant to peak.
+	#
+	# Pitch is deliberately left alone: `play_3d_varied`'s 12% spread would
+	# slide that peak up to a tenth of a second off the blade, and a whoosh
+	# that peaks somewhere the blade is not reads as a different swing.
+	AudioDirector.play_3d(AudioDirector.SWORD_SWING, _gub.global_position)
 	_refresh_hand()
 	cooldowns_changed.emit()
 
@@ -1875,20 +1895,20 @@ func _sword_victims(blade: Vector3) -> Array[Gub]:
 ##
 ## `connected` travels rather than being worked out per peer, because it is the
 ## host's answer and nobody else has one — the whole point of the geometry being
-## the host's. It decides one thing: whether this was a swing through air or
-## through a body, which are two different sounds and are the only feedback this
-## weapon has (D-036 and D-054 keep it off the crosshair).
+## the host's. It decides one thing: whether the blade went through a body,
+## which is the only feedback this weapon has (D-036 and D-054 keep it off the
+## crosshair).
+##
+## The whoosh is **not** decided here and is not sent. It belongs to the swing
+## rather than to the hit, so `_begin_swing` fires it on every peer at clip time
+## zero and a swing through air is simply that whoosh with nothing on the end of
+## it — which is also the only thing a miss should sound like.
 @rpc("authority", "call_remote", "reliable")
 func _do_swing_sword(point: Vector3, _blade: Vector3, connected: bool) -> void:
 	_sword_ready_at = _now() + _config.sword_recharge
 	cooldowns_changed.emit()
-	# Borrowed rather than invented, like the bow's loose and the Elder's
-	# readiness chime: there is no sword in `audio/sfx/` and a shaft leaving a
-	# hand is the closest thing in it to a blade going past. Worth replacing the
-	# day somebody records one.
-	AudioDirector.play_3d_varied(AudioDirector.SPEAR_THROW, point)
 	if connected:
-		AudioDirector.play_3d_varied(AudioDirector.SPEAR_HIT_BODY, point)
+		AudioDirector.play_3d_varied(AudioDirector.SWORD_HIT_BODY, point)
 
 
 # --------------------------------------------------------------- lightning ---
