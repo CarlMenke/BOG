@@ -1,4 +1,4 @@
-[gd_resource type="Environment" load_steps=3 format=3 uid="uid://bq2gubrustenv"]
+[gd_resource type="Environment" format=3 uid="uid://bq2gubrustenv"]
 
 ; Environment for Rust. Hot, dry, mid-afternoon — the opposite end of the day
 ; from `arena_env.tres`, which is Whisperbloom Hollow's torch-lit dusk (D-009).

@@ -1,0 +1,418 @@
+extends Node3D
+## The Elder: a Gub, plus `art/generated/elder.glb` bound onto its own skeleton.
+## Development tool, not shipped.
+##
+##   Godot --path . --resolution 1100x900 --script tools/snapshot.gd -- \
+##       res://tools/preview_elder.tscn out/elder.png <ticks> <view> <light> [clip] [time]
+##
+##   view:   mid | back | far | pair | sheet
+##   light:  studio | dusk | noon
+##
+## This scene is not only a camera. **It is the check that the robe binds**, and
+## it does the attach exactly the way a game would: load the Gub, find its
+## `Skeleton3D` (`gub.gd:_equip_spear` already does `find_child("Skeleton3D",
+## true, false)`, and `HeldSpear.attach_to` is the precedent for reaching into
+## it), take the `MeshInstance3D` out of the Elder scene and re-parent it under
+## that skeleton with its `Skin` intact. Nothing copies an animation and nothing
+## duplicates a bone. The bind names are printed and resolved against the target
+## skeleton on the way past, so a rename in `build_gub.py` fails here with a list
+## rather than in game with a robe lying on the floor.
+##
+## `light` is not decoration either. The brief is a material, and the two places
+## it has to survive are Whisperbloom Hollow's torch-lit night and Rust's noon.
+## Both are built from the *shipped* resources and constants — `arena_env.tres`
+## with `arena.gd`'s moon and `torch.gd`'s flame, `rust_env.tres` with the exact
+## `Sun` transform out of `rust.tscn` — so what this renders is the light the map
+## renders, not an approximation of it that could flatter the purple.
+##
+## `studio` is the third: a neutral grey room, for judging the cloth itself
+## without a map's colour cast on it.
+
+const GUB := "res://art/generated/gub.glb"
+const ELDER := "res://art/generated/elder.glb"
+const ELDER_MESH := "Elder"
+
+## Whisperbloom, from `scripts/world/arena.gd` and `scripts/world/torch.gd`.
+const ISLAND_ENV := "res://resources/config/arena_env.tres"
+const MOON_DIRECTION := Vector3(-0.42, 0.38, -0.82)
+const MOON_COLOR := Color(0.62, 0.72, 1.0)
+const MOON_ENERGY := 0.30
+const TORCH_COLOR := Color(1.0, 0.63, 0.30)
+const TORCH_ENERGY := 2.6
+const TORCH_RANGE := 10.5
+const TORCH_ATTENUATION := 1.7
+
+## Rust, from `scenes/world/maps/rust.tscn`. The basis is copied rather than
+## re-derived: it is row-major in the `.tscn` and `Transform3D` takes columns, so
+## re-typing it is how a sun ends up pointing at the sky.
+const RUST_ENV := "res://resources/config/rust_env.tres"
+const SUN_BASIS := Basis(
+	Vector3(0.62926, 0.0, -0.77722),
+	Vector3(-0.59535, 0.64285, -0.48201),
+	Vector3(0.4996, 0.766, 0.4045))
+const SUN_COLOR := Color(1.0, 0.94, 0.85)
+const SUN_ENERGY := 1.35
+
+const FAR_DISTANCE := 20.0
+## A long lens on the far shot. The *distance* is what the question is about —
+## 20 m is where a silhouette has to be recognised — and a 45-degree lens puts
+## a 2 m subject across a ninth of the frame, which is the right answer in game
+## and useless on a page somebody is judging a material from. 26 degrees is the
+## same 20 m, framed so it can be looked at.
+const FAR_FOV := 26.0
+const MID_DISTANCE := 4.4
+const SHEET_SAMPLES := 5
+const SHEET_SPACING := 1.6
+
+var _view: String = "mid"
+var _light: String = "studio"
+var _clip: String = "Idle"
+var _time: float = 0.0
+
+
+func _ready() -> void:
+	var args := OS.get_cmdline_user_args()
+	if args.size() >= 4:
+		_view = args[3]
+	if args.size() >= 5:
+		_light = args[4]
+	if args.size() >= 6:
+		_clip = args[5]
+	if args.size() >= 7:
+		_time = float(args[6])
+	print("preview_elder: view=%s light=%s clip=%s t=%.2f" % [_view, _light, _clip, _time])
+
+	_build_light()
+	match _view:
+		"sheet":
+			_build_sheet()
+		"far":
+			_build_far()
+		"pair":
+			_build_pair()
+		_:
+			_build_single()
+
+
+# --------------------------------------------------------------- the Elder ---
+
+## A Gub wearing the robe, posed, returned with its own facing worked out.
+func _make_elder(clip: String, time: float, verbose: bool) -> Node3D:
+	var gub := (load(GUB) as PackedScene).instantiate() as Node3D
+	add_child(gub)
+	var skeleton := gub.find_child("Skeleton3D", true, false) as Skeleton3D
+	if skeleton == null:
+		push_error("preview_elder: the Gub has no Skeleton3D")
+		return gub
+
+	var wardrobe := (load(ELDER) as PackedScene).instantiate() as Node3D
+	var robe := wardrobe.find_child(ELDER_MESH, true, false) as MeshInstance3D
+	if robe == null:
+		push_error("preview_elder: %s has no MeshInstance3D called '%s'" % [ELDER, ELDER_MESH])
+		wardrobe.free()
+		return gub
+
+	if verbose:
+		_report_bind(skeleton, robe)
+
+	# The attach itself. The mesh keeps its `skin`; `skeleton` is left at the
+	# default `NodePath("..")`, which now means the Gub's skeleton, and the
+	# transform is cleared because a skinned mesh is drawn in skeleton space and
+	# a leftover parent transform is a silent double-move waiting to happen.
+	# Godot warns about an owner from another scene the moment the node changes
+	# parent, and an owner is of no use to something being re-parented at runtime.
+	robe.owner = null
+	robe.get_parent().remove_child(robe)
+	skeleton.add_child(robe)
+	robe.transform = Transform3D.IDENTITY
+	robe.skeleton = NodePath("..")
+	wardrobe.free()
+
+	_pose(gub, clip, time)
+	return gub
+
+
+func _report_bind(skeleton: Skeleton3D, robe: MeshInstance3D) -> void:
+	print("preview_elder: target Skeleton3D has %d bones" % skeleton.get_bone_count())
+	var skin := robe.skin
+	if skin == null:
+		push_error("preview_elder: the robe has no Skin — it cannot bind to anything")
+		return
+	var names := []
+	var unresolved := []
+	for i in skin.get_bind_count():
+		var bind_name := skin.get_bind_name(i)
+		if bind_name == "":
+			unresolved.append("bind %d has no name (index %d)" % [i, skin.get_bind_bone(i)])
+			continue
+		names.append(bind_name)
+		if skeleton.find_bone(bind_name) < 0:
+			unresolved.append(bind_name)
+	print("preview_elder: robe skin has %d binds, by name: %s"
+		% [skin.get_bind_count(), ", ".join(names)])
+	if unresolved.is_empty():
+		print("preview_elder: BIND OK — every bind name resolves against the Gub's skeleton")
+	else:
+		push_error("preview_elder: BIND FAILED — %s" % ", ".join(unresolved))
+
+
+func _pose(model: Node3D, clip: String, time: float) -> void:
+	var player := model.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	if player == null or not player.has_animation(clip):
+		push_error("preview_elder: no clip '%s' (has %s)"
+			% [clip, ", ".join(player.get_animation_list()) if player else "no player"])
+		return
+	player.play(clip)
+	player.advance(time)
+	player.pause()
+
+
+func _make_gub(clip: String, time: float) -> Node3D:
+	var gub := (load(GUB) as PackedScene).instantiate() as Node3D
+	add_child(gub)
+	_pose(gub, clip, time)
+	return gub
+
+
+## Which way the body is actually pointing, asked of the rig rather than assumed.
+##
+## The model's own facing depends on how `build_gub.py` aligned the clips and on
+## the 180-degree turn `gub.tscn` puts on the instance, and a preview that
+## guessed wrong would frame the back of the head and call it a front view. The
+## line between the two hip joints is the one pair of joints that stays put while
+## the arms and torso animate — the same measurement `build_gub.py` aligns the
+## clips on — so the facing is derived from it: with up = +Y, a body's left is
+## up x forward, so forward is the hip line turned a quarter turn.
+func _facing(model: Node3D) -> Vector3:
+	var skeleton := model.find_child("Skeleton3D", true, false) as Skeleton3D
+	var left := skeleton.find_bone("LeftUpLeg")
+	var right := skeleton.find_bone("RightUpLeg")
+	if left < 0 or right < 0:
+		return Vector3.BACK
+	var a := skeleton.global_transform * skeleton.get_bone_global_pose(left).origin
+	var b := skeleton.global_transform * skeleton.get_bone_global_pose(right).origin
+	var across := (b - a)
+	across.y = 0.0
+	if across.length() < 0.01:
+		return Vector3.BACK
+	across = across.normalized()
+	return Vector3(across.z, 0.0, -across.x)
+
+
+# ------------------------------------------------------------------ views ---
+
+func _build_single() -> void:
+	var elder := _make_elder(_clip, _time, true)
+	var forward := _facing(elder)
+	var side := -forward if _view == "back" else forward
+	_ground(12.0)
+	_camera(side * MID_DISTANCE + Vector3(0.0, 1.15, 0.0), Vector3(0.0, 1.00, 0.0), 42.0)
+	_caption("%s  %s  %s %.2fs" % [_view, _light, _clip, _time], Vector3(0.0, 2.45, 0.0))
+
+
+func _build_pair() -> void:
+	var elder := _make_elder(_clip, _time, true)
+	elder.position = Vector3(0.75, 0.0, 0.0)
+	var gub := _make_gub(_clip, _time)
+	gub.position = Vector3(-0.75, 0.0, 0.0)
+	var forward := _facing(elder)
+	_ground(12.0)
+	_camera(forward * (MID_DISTANCE + 0.9) + Vector3(0.0, 1.2, 0.0),
+		Vector3(0.0, 1.0, 0.0), 42.0)
+	_caption("Gub / Elder  %s  %s" % [_light, _clip], Vector3(0.0, 2.5, 0.0))
+
+
+## Both, at the range a silhouette has to carry at. The plain Gub is in frame on
+## purpose: "can you see it" is not the question at 20 m, "can you tell which one
+## it is" is.
+func _build_far() -> void:
+	var elder := _make_elder(_clip, _time, true)
+	elder.position = Vector3(1.4, 0.0, 0.0)
+	var gub := _make_gub(_clip, _time)
+	gub.position = Vector3(-1.4, 0.0, 0.0)
+	var forward := _facing(elder)
+	_ground(70.0)
+	_camera(forward * FAR_DISTANCE + Vector3(0.0, 1.6, 0.0), Vector3(0.0, 1.1, 0.0), FAR_FOV)
+	_caption("Gub / Elder at %.0f m   (%.0f-degree lens)   %s"
+		% [FAR_DISTANCE, FAR_FOV, _light], Vector3(0.0, 2.75, 0.0))
+
+
+## A contact sheet of one clip, which is where the hem is judged: five Elders
+## across the cycle, orthographic so every one of them is seen from the same
+## angle, over a ground line the hem either clears or does not.
+func _build_sheet() -> void:
+	var probe := (load(GUB) as PackedScene).instantiate()
+	var player := probe.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	var length: float = player.get_animation(_clip).length if player.has_animation(_clip) else 1.0
+	probe.free()
+	var from: float = _time
+	var span: float = maxf(length - from, 0.01)
+
+	var x := -SHEET_SPACING * (SHEET_SAMPLES - 1) * 0.5
+	var forward := Vector3.BACK
+	for i in SHEET_SAMPLES:
+		var t: float = from + span * float(i) / float(SHEET_SAMPLES)
+		var elder := _make_elder(_clip, t, i == 0)
+		elder.position = Vector3(x, 0.0, 0.0)
+		x += SHEET_SPACING
+		if i == 0:
+			forward = _facing(elder)
+		var stamp := Label3D.new()
+		stamp.text = "%.2f" % t
+		stamp.font_size = 56
+		stamp.pixel_size = 0.0020
+		stamp.outline_size = 16
+		stamp.outline_modulate = Color(0.0, 0.0, 0.0, 0.85)
+		stamp.position = Vector3(0.0, 2.30, 0.0)
+		elder.add_child(stamp)
+
+	_ground_line()
+	_caption("%s   (%.2fs)   %s" % [_clip, length, _light], Vector3(0.0, 2.62, 0.0))
+
+	var view := get_viewport().get_visible_rect().size
+	var aspect: float = view.x / maxf(view.y, 1.0)
+	var cam := Camera3D.new()
+	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
+	cam.size = maxf(3.4, (SHEET_SPACING * float(SHEET_SAMPLES - 1) + 1.9) / aspect)
+	cam.near = 0.05
+	cam.far = 120.0
+	cam.position = Vector3(0.0, 1.30, 0.0) + forward * 30.0
+	add_child(cam)
+	cam.look_at(Vector3(0.0, 1.30, 0.0), Vector3.UP)
+	cam.make_current()
+
+
+# ------------------------------------------------------------- furnishings ---
+
+func _camera(from: Vector3, at: Vector3, fov: float) -> void:
+	var cam := Camera3D.new()
+	cam.fov = fov
+	cam.near = 0.05
+	cam.far = 400.0
+	cam.position = from
+	add_child(cam)
+	cam.look_at(at, Vector3.UP)
+	cam.make_current()
+
+
+func _caption(text: String, where: Vector3) -> void:
+	var label := Label3D.new()
+	label.text = text
+	label.font_size = 72
+	label.pixel_size = 0.0020
+	label.position = where
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	# Outlined, because the same white caption is read against Rust's pale noon
+	# sky in one shot and Whisperbloom's black undergrowth in the next.
+	label.outline_size = 20
+	label.outline_modulate = Color(0.0, 0.0, 0.0, 0.85)
+	add_child(label)
+
+
+func _ground(size: float) -> void:
+	var plane := MeshInstance3D.new()
+	var mesh := PlaneMesh.new()
+	mesh.size = Vector2(size, size)
+	plane.mesh = mesh
+	var mat := StandardMaterial3D.new()
+	# Deliberately neutral and mid-dark in all three lights: a ground that
+	# carried a colour of its own would bounce it into the robe and the material
+	# being judged would be partly the floor's.
+	mat.albedo_color = Color(0.20, 0.19, 0.19)
+	mat.roughness = 0.95
+	plane.material_override = mat
+	add_child(plane)
+
+
+func _ground_line() -> void:
+	# A bar rather than a plane: the sheet's camera is level and orthographic, so
+	# a floor at y = 0 would be exactly edge-on and invisible, and "are the feet
+	# planted, does the hem clear the floor" is what the sheet is for.
+	var bar := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = Vector3(140.0, 0.02, 0.02)
+	bar.mesh = box
+	bar.position = Vector3(0.0, 0.0, -0.9)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.42, 0.44, 0.48)
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	bar.material_override = mat
+	add_child(bar)
+
+
+func _build_light() -> void:
+	match _light:
+		"dusk":
+			_world(ISLAND_ENV)
+			# D-009: the sky shader draws the moon at the light's own direction,
+			# so this DirectionalLight3D *is* the moon, and it is placed and
+			# aimed rather than given a rotation, for the reason `arena.gd` says.
+			var moon := DirectionalLight3D.new()
+			add_child(moon)
+			moon.position = MOON_DIRECTION.normalized() * 80.0
+			moon.look_at(Vector3.ZERO, Vector3.UP)
+			moon.light_color = MOON_COLOR
+			moon.light_energy = MOON_ENERGY
+			moon.light_specular = 0.35
+			moon.shadow_enabled = true
+			moon.directional_shadow_max_distance = 90.0
+			# One torch, at the distance a torch actually stands from something
+			# you are looking at: `torch.gd`'s light, unflickered so two renders
+			# of the same frame agree.
+			var torch := OmniLight3D.new()
+			add_child(torch)
+			torch.position = Vector3(2.6, 1.5, 3.0)
+			torch.light_color = TORCH_COLOR
+			torch.light_energy = TORCH_ENERGY
+			torch.omni_range = TORCH_RANGE
+			torch.omni_attenuation = TORCH_ATTENUATION
+		"noon":
+			_world(RUST_ENV)
+			var sun := DirectionalLight3D.new()
+			add_child(sun)
+			sun.transform = Transform3D(SUN_BASIS, Vector3(-1.0, 24.0, -5.0))
+			sun.light_color = SUN_COLOR
+			sun.light_energy = SUN_ENERGY
+			sun.light_specular = 0.4
+			sun.shadow_enabled = true
+			sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+			sun.directional_shadow_max_distance = 90.0
+			sun.directional_shadow_blend_splits = true
+		_:
+			_studio()
+
+
+func _world(path: String) -> void:
+	var world := WorldEnvironment.new()
+	world.environment = load(path) as Environment
+	add_child(world)
+
+
+func _studio() -> void:
+	var world := WorldEnvironment.new()
+	var env := Environment.new()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color(0.13, 0.13, 0.15)
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.55, 0.57, 0.66)
+	env.ambient_light_energy = 0.32
+	env.tonemap_mode = Environment.TONE_MAPPER_ACES
+	env.tonemap_white = 6.0
+	world.environment = env
+	add_child(world)
+
+	var key := DirectionalLight3D.new()
+	key.rotation_degrees = Vector3(-34.0, -34.0, 0.0)
+	key.light_energy = 1.55
+	key.shadow_enabled = true
+	add_child(key)
+	var fill := DirectionalLight3D.new()
+	fill.rotation_degrees = Vector3(-12.0, 148.0, 0.0)
+	fill.light_energy = 0.7
+	fill.light_color = Color(0.62, 0.76, 1.0)
+	add_child(fill)
+	var rim := DirectionalLight3D.new()
+	rim.rotation_degrees = Vector3(-8.0, 40.0, 0.0)
+	rim.light_energy = 1.1
+	rim.light_color = Color(1.0, 0.92, 0.82)
+	add_child(rim)

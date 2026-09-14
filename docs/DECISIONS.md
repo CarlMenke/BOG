@@ -2050,3 +2050,144 @@ driven entirely from that snapshot rather than from live state — the host can 
 changing the next match's settings while people are still reading the table —
 and without it the screen cannot tell a letters match from any other one.
 Nothing else moved, and no rule moved into the UI.
+
+## D-037 — The Elder is a second skinned mesh on the Gub's own skeleton, not a second Gub
+`art/generated/elder.glb` is a purple robe and a wizard hat — 4,352 triangles, one
+material, a copy of the skeleton to bind against and **no animation data at all**.
+Its `MeshInstance3D` is re-parented onto a live Gub's `Skeleton3D` and keeps its
+`Skin`, which binds by bone *name*. `tools/build_elder.py` builds it from
+`art/generated/gub.glb`; `tools/preview_elder.gd` is the tool that does the
+attach and takes the renders. This entry is the asset only — there is no
+gameplay in it yet: no drop, no Elder state, no lightning.
+
+**The alternative was a whole `gub_elder.glb` variant**, mesh and skeleton and
+all nine clips, and it is worth saying what the shared skeleton buys and what it
+costs. It buys one copy of the clips in the project instead of two — about
+1.5 MB, but far more importantly one *place* they are defined, so the next round
+of animation work on D-029's pipeline reaches the Elder without anybody
+remembering to re-export it. It costs the guarantee: two files that were built
+separately have to agree about where every bone rests, or the robe deforms
+around a body that is not the one wearing it.
+
+So the guarantee is bought back as a check rather than assumed. `build_elder.py`
+finishes by reading both GLBs with `tools/gltf_io.py` and comparing, bone for
+bone, the joint rest transforms and the inverse bind matrices. They agree to
+2.2e-5 — round-trip float error through Blender's glTF importer and exporter,
+four orders of magnitude under the 1e-4 the build refuses at — and the joint
+names and their order come out identical, so Godot's name-based bind has nothing
+to fall back on and nothing to get wrong. `preview_elder.gd` then resolves all 49
+bind names against a real Gub's skeleton and prints the verdict, because a check
+that only runs inside Blender does not describe what Godot does with the file.
+
+**Nothing about the robe is a typed-in dimension.** The Gub's silhouette is
+measured — 48 directions by 41 slices, as a *support function* over the body's
+vertices with the arms left out — and the robe is the upper convex hull of that,
+per angle, with the hem and the collar added as the two points cloth is *put* at
+rather than measured from. The hull is the whole idea: cloth over a body rests on
+its widest points and bridges the hollows between them, so a hull is what holds
+the robe out at the belly at z = 0.75 and takes it straight down to the hem
+instead of pinching in at the thigh gap at z = 0.45. The first attempt ray-cast a
+mesh with the arm *faces* deleted, and it was wrong in a way worth recording:
+deleting those faces takes the shoulder caps with them, so the silhouette at
+collar height measured as nothing and the robe tapered to a funnel.
+
+**The hat is rigid-weighted 100% to `Head`, which makes it correct by
+construction** — it cannot clip a head it never moves relative to, in any clip,
+ever. Its crown base is sized by measuring the skull at the brim plane (0.418 m
+across, so 0.237 m of crown) and its axis leans 18 degrees back, which is the
+angle at which the brim's front edge rides above the Gub's eyes instead of across
+them. The Gub's two antennae leave the crown at z = 1.58 and arch forward to
+z = 1.80, which is exactly the space a hat wants, so **they come out through the
+front of the crown and that is deliberate**: the alternatives are a hat floating
+above a head it does not touch, or a crown fat enough to swallow two antennae,
+which is a bucket. The hat takes the Elder to 2.06 m against the Gub's 1.80, and
+that is most of what makes it a different thing at range.
+
+**The hem is the known risk and it is measured, not hoped for.** There is no
+cloth simulation — this is a game asset and eight of them can be on screen — so
+the skirt is skinned `LEG_SHARE_MAX` = 0.35 to the thighs at the hem, split
+left/right by how far across the body a vertex sits. That number was 0.55 first,
+and 0.55 is visibly worse: 0.6 m below a hip joint a 40-degree thigh swing drags
+the cloth 0.42 m, and `Run` rendered as a sack being pulled about rather than as
+a skirt. Every clip is then played, both meshes are evaluated with their armature
+deformation applied, and every Gub vertex that starts the rest pose *inside* the
+robe is tested against the cloth with a signed distance.
+
+The report splits what comes out into two columns, because "outside the robe" is
+two different things: a leg below the hem is outside it and is supposed to be —
+that is what a hem is for — while a knee through a panel is the failure. They are
+told apart by where the nearest cloth is, since anything that left through an
+opening has the open edge itself as its nearest surface. What that measures, at
+0.35:
+
+    clip         through a panel   under the hem   deepest panel poke
+    Idle              0.00%            3.14%       —
+    Walk              0.00%            6.06%       —
+    CrouchIdle        0.00%            5.75%       —
+    Throw             0.27%            9.47%       0.140 m
+    CrouchWalk        0.74%            4.57%       0.243 m
+    JumpOne           0.91%            4.66%       0.048 m
+    JumpTwo           2.00%            5.48%       0.275 m
+    Slide             2.96%            5.16%       0.366 m
+    Run               3.78%            7.43%       0.185 m
+
+**Idle, Walk and CrouchIdle are clean. Run is not, and the render says so.** A
+shin comes through the front of the skirt around knee height at the extremes of
+the stride — 0.185 m at its worst — and the honest description of
+`out/elder_run_sheet.png` is "the leg emerges through the robe a little too
+high", not "the robe holds". `Slide` and `JumpTwo`'s ground roll are worse in a
+different way: the body curls up inside the skirt and the robe becomes a bag with
+limbs out of it. Both are inherent to a rigid surface over a body that folds in
+half, both are under a second long, and both are seen from behind at speed. They
+are recorded here rather than fixed, because fixing them properly means cloth
+simulation, and that is a different decision from this one.
+
+**The material is what the brief was actually about** — *"the material is
+important of rit, make it a dark purple and very wizard style"* — and it is two
+1024² images this script generates, not shader nodes. That is not a preference:
+glTF carries images and flat factors, and a Noise Texture node would not survive
+the export at all. The base colour carries a vertical value ramp, the fold
+shading *in phase with the modelled folds* (the texture and the geometry share
+`FOLDS`, so painted valleys land in modelled valleys), a woven grain, and the
+trim bands and rune glyphs. Roughness is 0.82 against the Gub's 0.9: velvet is
+not quite as flat as whatever a Gub is made of, and a fraction of sheen is most
+of what tells a viewer they are looking at two materials.
+
+The purple itself was picked by rendering, not by picking. The first build was
+`#3A2A58`, which is a perfectly good dark purple on a swatch and came back as
+lilac, because a robe is lit by an ambient term and a key light and then run
+through ACES before anybody sees it. The shipped value is `#2F1D45` — 274
+degrees, 58% saturation, 27% value — with folds down to `#140C20` and shoulders
+up to `#3F2A5B`. Checked in both maps' own light rather than in a studio:
+`out/elder_noon_rust.png` uses `rust_env.tres` and `rust.tscn`'s exact `Sun`
+transform, `out/elder_dusk_whisperbloom.png` uses `arena_env.tres` with
+`arena.gd`'s moon and `torch.gd`'s flame.
+
+**`--emission` is the same lever D-027 argued for, and the Elder needs it more
+than the Gub did.** The emissive map is near-black cloth with bright runes on it,
+so the glow is arcane detail rather than a robe-shaped lamp, and one strength
+scales both. Default 1.0. At 0 the socket is left unwired — a plain base-colour
+PBR material rather than one multiplied by nothing — and
+`out/elder_dusk_emission0.png` is what that looks like under Whisperbloom's
+0.30-energy moon: a black cut-out with no purple in it and no runes at all, which
+is precisely the failure D-027 measured on the Gub's yellow. The robe has further
+to fall than the Gub did — 0.10 in linear against 0.6.
+
+**The robe has no sleeves and no mantle, and that is forced by this body.** The
+Gub's arms leave the shoulders at z = 1.098, directly under a head that starts at
+1.15; there is no room for a cape that an elbow does not live inside. What there
+is instead is a standing cowl over the back 96 degrees only, rising 0.26 m to
+z = 1.42 — behind the head, clear of the arms, and under the hat's brim so the
+two never argue. Wider than 96 degrees and its two ends come round far enough to
+stand up beside the Gub's cheeks in a front view, which reads as a broken collar
+rather than as a wizard.
+
+One number the cowl is on notice for: the Head bone turns up to **76 degrees**
+against the chest in `Run`, which is a lot, and the cowl's top edge follows it
+only 45% of the way from 75 mm away. Nothing shows in the renders. If a future
+clip turns the head further, it will show there first.
+
+**`tools/find_blender.sh` was split out of `tools/build_gub.sh`** so both build
+scripts share one search, for the reason `tools/find_godot.sh` gives at the top
+of itself: a search for where somebody installed a large application has to stay
+in step with reality, and two copies of it will not.

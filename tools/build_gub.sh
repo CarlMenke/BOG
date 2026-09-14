@@ -27,70 +27,13 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# An explicit setting is a claim, not a hint: if it is wrong, say so rather than
-# searching on and running a different Blender than the one that was asked for.
-if [ -n "${BLENDER:-}" ] && { [ ! -x "$BLENDER" ] || [ -d "$BLENDER" ]; }; then
-    echo "build_gub: BLENDER is set to something that is not an executable:"
-    echo "       $BLENDER"
-    exit 2
-fi
-
-# Every plausible place, in order. Blender is on PATH on no machine this has run
-# on; Windows installs it per minor version under Program Files, so the glob is
-# sorted and the newest match wins; and `$HOME` is not the Windows profile under
-# every bash on Windows, which is the mistake `tools/find_godot.sh` documents.
-blender_candidates() {
-    [ -n "${BLENDER:-}" ] && printf '%s\n' "$BLENDER"
-    command -v blender 2>/dev/null
-
-    printf '%s\n' /Applications/Blender.app/Contents/MacOS/Blender
-    printf '%s\n' "$HOME"/Applications/Blender.app/Contents/MacOS/Blender
-
-    # Newest first: `Blender 5.2` sorts after `Blender 4.2`, and the version
-    # check below only settles whether a candidate is new *enough*.
-    local dir
-    for dir in "/c/Program Files" "/mnt/c/Program Files" \
-               "${PROGRAMFILES:+$(cygpath -u "$PROGRAMFILES" 2>/dev/null)}"; do
-        [ -n "$dir" ] || continue
-        printf '%s\n' "$dir"/Blender\ Foundation/Blender\ */blender.exe | sort -Vr
-    done
-}
-
-# Blender prints its version and exits. The FBX importer and the layered-action
-# API this script uses are 4.4-and-later shapes (`action.fcurves` is gone), so an
-# older Blender fails deep inside the script with an AttributeError instead of
-# here with an explanation.
-BLENDER_BIN=""
-BLENDER_REJECTED=""
-while IFS= read -r candidate; do
-    [ -n "$candidate" ] || continue
-    [ -x "$candidate" ] && [ ! -d "$candidate" ] || continue
-    version="$("$candidate" --version 2>/dev/null | head -n 1)"
-    case "$version" in
-        "Blender "[5-9].*|"Blender "[1-9][0-9]*.*) BLENDER_BIN="$candidate"; break ;;
-        *) BLENDER_REJECTED="$BLENDER_REJECTED
-       $candidate (reports ${version:-nothing})" ;;
-    esac
-done < <(blender_candidates)
-
-if [ -z "$BLENDER_BIN" ] && [ -n "${BLENDER:-}" ]; then
-    # A binary asked for by name is honoured even at the wrong version.
-    BLENDER_BIN="$BLENDER"
-fi
-
-if [ -z "$BLENDER_BIN" ]; then
-    echo "build_gub: cannot find Blender 5 or newer. Looked on PATH, in"
-    echo "       /Applications, and under 'Program Files/Blender Foundation'."
-    if [ -n "$BLENDER_REJECTED" ]; then
-        echo "build_gub: these exist but are too old:$BLENDER_REJECTED"
-        echo "       Blender 4.3 and earlier have unlayered actions, and this"
-        echo "       script reads action.layers[].strips[].channelbags[]."
-    fi
-    echo "       Set BLENDER=/path/to/blender and try again."
-    exit 2
-fi
-
-echo "build_gub: $BLENDER_BIN ($("$BLENDER_BIN" --version 2>/dev/null | head -n 1))"
+# The search itself lives in `tools/find_blender.sh`, shared with
+# `tools/build_elder.sh`, for the reason `tools/find_godot.sh` gives at the top
+# of itself: a search for where somebody installed Blender has to stay in step
+# with reality, and two copies of it will not. It is sourced, so a missing
+# Blender ends this script rather than a subshell.
+BLENDER_TAG=build_gub
+. "$ROOT/tools/find_blender.sh"
 
 # `--factory-startup` is deliberate: this machine has third-party add-ons that
 # print into the log and open sockets on load, and a build that depends on what

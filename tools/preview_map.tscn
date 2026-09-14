@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3 uid="uid://bgubpreviewmap"]
+[gd_scene format=3 uid="uid://b670utoyqvuo2"]
 
 [ext_resource type="Script" path="res://tools/preview_map.gd" id="1"]
 
