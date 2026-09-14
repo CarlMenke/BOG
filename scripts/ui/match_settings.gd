@@ -28,6 +28,10 @@ const TEAM_ONLY := ["team_count", "random_teams", "friendly_fire"]
 ## Built in code, so it cannot be reached through `%` — nodes added at runtime
 ## have no owner to register a unique name with.
 var _seed_button: Button
+## The Capture G·U·B section's heading, separator and rules note, hidden with its
+## rows when another condition is picked (D-051).
+var _capture_section: Array[Control] = []
+var _capture_note: Label
 
 ## field name -> {"row": Control, "control": Control, "readout": Label}
 var _fields: Dictionary = {}
@@ -54,7 +58,7 @@ func _build() -> void:
 	# Appending here is the other half of never reordering that enum.
 	_choice("win_condition", "Ends on",
 		["First to the kill limit", "Last Gub standing", "The clock",
-			"First to collect G·U·B"])
+			"First to collect G·U·B", "Capture G·U·B (teams)"])
 
 	_section("Limits")
 	_slider("kill_limit", "Kill limit", 1, 50, 1, func(v: float) -> String:
@@ -83,6 +87,28 @@ func _build() -> void:
 	_slider("elder_drop_chance", "Elder robe chance", 0.0, 1.0, 0.01,
 		func(v: float) -> String: return "%d%% of deaths" % roundi(v * 100.0))
 	_toggle("friendly_fire", "Friendly fire")
+
+	# Capture G·U·B's own rules (D-051), a section of their own rather than rows
+	# tucked into Limits, and shown only when that condition is picked: they
+	# describe a different game, and a host reading "Dropped letter returns"
+	# under a kill-limit match would be reading about rules that do not exist.
+	_capture_section = _section("Capture G·U·B")
+	# How long a dead carrier's card lies where it fell before going home. The
+	# one number that decides what killing a carrier is worth.
+	_slider("capture_return_time", "Dropped letter returns", 3.0, 60.0, 1.0,
+		func(v: float) -> String: return "after %d s" % roundi(v))
+	# As a percentage off the base speed, like the Elder's boost, because "-10%"
+	# is a sentence about the game and "0.9" is a number about the code.
+	_slider("capture_carrier_speed", "Carrier speed", 0.5, 1.2, 0.05,
+		func(v: float) -> String:
+			var percent := roundi((v - 1.0) * 100.0)
+			return "normal" if percent == 0 else "%+d%%" % percent)
+	# The rules that are not dials, said once in the panel rather than learned
+	# the hard way in a match.
+	_capture_note = _note("Three letters. Carry one into your team's ring to bank "
+		+ "it; it goes back to the middle. A carrier cannot throw. A dead carrier "
+		+ "drops the card for anyone to take. Bank G, U and B to win.")
+	_capture_note.name = "CaptureRules"
 
 	_section("Feel")
 	# The single most important balance dial in the game: spears always kill, so
@@ -211,6 +237,12 @@ func _apply_visibility(config: MatchConfig) -> void:
 		config.win_condition == MatchConfig.WinCondition.LETTERS
 	_fields["letter_hold_time"]["row"].visible = \
 		config.win_condition == MatchConfig.WinCondition.LETTERS
+	var capture := config.win_condition == MatchConfig.WinCondition.CAPTURE
+	for node: Control in _capture_section:
+		node.visible = capture
+	_capture_note.visible = capture
+	_fields["capture_return_time"]["row"].visible = capture
+	_fields["capture_carrier_speed"]["row"].visible = capture
 	# A seed only means something to a map that is grown from one. On a static
 	# map the row would offer to reroll an island nobody is going to see.
 	_fields["map_seed"]["row"].visible = MapCatalog.is_procedural(config.map)
@@ -239,21 +271,48 @@ func _push(field: String, value: Variant) -> void:
 		return
 	var next := Net.config.duplicate_config()
 	next.set(field, value)
+	# Capture G·U·B is teams-only, and `MatchConfig._clamp_all` turns Teams on
+	# whenever it is picked (D-051). That clamp cannot tell which of the two was
+	# just changed, so the other direction is decided here, where it can: a host
+	# who picks Free-for-all while Capture is selected gets a free-for-all, on
+	# the kill limit, rather than a picker that snaps back to Teams.
+	if field == "mode" and int(value) == MatchConfig.Mode.FREE_FOR_ALL \
+			and next.win_condition == MatchConfig.WinCondition.CAPTURE:
+		next.win_condition = MatchConfig.WinCondition.KILL_LIMIT
 	Net.update_config(next)
 
 
 # --------------------------------------------------------------------- rows ---
 
-func _section(title: String) -> void:
+## Returns the nodes it added, so a section that only applies sometimes can be
+## hidden whole.
+func _section(title: String) -> Array[Control]:
+	var added: Array[Control] = []
 	if _rows_root.get_child_count() > 0:
 		var gap := Control.new()
 		gap.custom_minimum_size.y = 10
 		_rows_root.add_child(gap)
+		added.append(gap)
 	var label := Label.new()
 	label.theme_type_variation = "SectionLabel"
 	label.text = title.to_upper()
 	_rows_root.add_child(label)
-	_rows_root.add_child(HSeparator.new())
+	added.append(label)
+	var line := HSeparator.new()
+	_rows_root.add_child(line)
+	added.append(line)
+	return added
+
+
+## A line of small print under a section's rows.
+func _note(text: String) -> Label:
+	var label := Label.new()
+	label.theme_type_variation = "DimLabel"
+	label.text = text
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.custom_minimum_size.x = 200
+	_rows_root.add_child(label)
+	return label
 
 
 func _row(label_text: String) -> HBoxContainer:

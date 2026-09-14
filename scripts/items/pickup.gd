@@ -125,6 +125,8 @@ var _model: Node3D
 var _light: OmniLight3D
 var _age: float = 0.0
 var _taken: bool = false
+## Exempt from `LIFETIME`. See `drop`.
+var _keeps: bool = false
 ## Seeded per drop so two items side by side are not bobbing in lockstep.
 var _phase: float = 0.0
 
@@ -142,6 +144,13 @@ func drop(id: int, of_kind: Kind, of_letter: int, spot: Vector3) -> void:
 	# not recognise.
 	kind = clampi(of_kind, 0, Kind.size() - 1) as Kind
 	letter = of_letter
+	# A Capture G·U·B card never rots (D-051). There are exactly three letters
+	# in that match and the host decides when a dropped one goes home, so a
+	# card that withered on this clock would be a letter leaving the match — or,
+	# on a client, a card that vanished while the host still has it on the
+	# ground. Read from the config every peer already shares.
+	_keeps = kind == Kind.LETTER \
+		and Net.config.win_condition == MatchConfig.WinCondition.CAPTURE
 	# The robe sits lower than the others — see ROBE_DROP. The catch volume is
 	# built off HOVER regardless, so a drop that hangs differently is still
 	# collected by walking over the same patch of ground as every other one.
@@ -355,7 +364,7 @@ func _process(delta: float) -> void:
 		_model.rotate_y(SPIN_SPEED * ROBE_SPIN_SCALE * delta)
 	else:
 		_model.rotate_y(SPIN_SPEED * delta)
-	if _age >= LIFETIME:
+	if _age >= LIFETIME and not _keeps:
 		wither()
 
 

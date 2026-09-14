@@ -3767,3 +3767,219 @@ wall, the enemy's with no name under it. 38 checks to 43.
   marker that does not care what a plate is.
 - **Announcing a hold lost to death.** The kill row already says so, and a
   second row for the same moment pushes older rows out of a five-row feed.
+
+## D-051 — Capture G·U·B: three letters in the world, carried into your own base, dropped where a carrier dies and sent home after a host-set time
+The user: *"capture the flag game mode with the letters, you have to pick up the
+letter and drop it in your base, there are only 3 and dont drop from users
+dying"*. Asked what happens to a carrier's letter, the user said it drops on the
+ground for a host-set time and then returns to its spawn, and that anyone,
+including the other team, can pick it up. Asked for its own section of rules in
+the lobby, visible now, with bases a map can declare, and a fallback so the mode
+is playable until the dedicated map lands.
+
+**A new win condition, `MatchConfig.WinCondition.CAPTURE`, appended after
+LETTERS.** LETTERS is not changed. Its drop chance, its ten-second hold, its
+re-drop at the corpse and its checks in `match_rules` all stand exactly as they
+were. The two modes share the three-bit masks, the pooled team mask (D-049), the
+card mesh (D-041), the hold row, the carrier marker and the feed (D-050), and
+differ in how a letter is earned.
+
+**What it inverts, and why LETTERS keeps the original.**
+- **D-033's uniform drop chance.** There are exactly three cards, G, U and B,
+  spawned once at match start. No corpse drops a letter, whatever
+  `letter_drop_chance` says: `_drop_loot` still only rolls cards under LETTERS.
+  In LETTERS the drop is the whole economy, and a card is a thing a fight
+  produces. Here the cards are the objective, and more of them would be a
+  second objective.
+- **D-035's ten-second hold.** Touching a card does not start a countdown. It
+  starts a carry, which scores only when the carrier walks into their own base.
+  In LETTERS standing still is the tension; here the run home is. The hold's
+  "no spear while the card is in your hand" is kept, because the carry *is* the
+  hold row with an infinite deadline (below).
+- **D-035's "death returns the card at the corpse" is kept, and given a clock.**
+  In LETTERS a re-dropped card is an ordinary pickup and withers after
+  `Pickup.LIFETIME`, which is fine when another card is only a few deaths away.
+  Here a card that withered would be a letter leaving the match for good and
+  the match could deadlock, so capture cards never wither
+  (`Pickup._keeps`) and the host sends a dropped one home after
+  `capture_return_time`.
+
+**The rules as built.**
+- **A carry is a hold with no clock.** `claim_pickup` starts a row in
+  `_letter_holds` whose `ends_at` is INF, through the same `_do_begin_hold` RPC.
+  So on every peer, and with no new replication: the card is in the fist, the
+  spear or bolt is gone, the gold marker is over the carrier through walls, and
+  the feed says "Name picked up G". `_tick_letter_holds` never ends one.
+- **One carry at a time.** A carrier walking over another card leaves it where
+  it is, as a hold does.
+- **Banking.** Every tick the host checks each carrier against *its own team's*
+  base only: horizontal distance within the base radius and height within 3 m.
+  The carrier must be alive in `stats` **and** in its body. D-043 keeps a dead
+  Gub's body and collision where it fell, and a carrier that died on the edge of
+  a base must not bank from there. Banking ends the carry, calls `award_letter`
+  (team mask, the banker's own row, "Name banked G", the win check), and the
+  card goes straight back to its home point. Walking into the enemy base does
+  nothing.
+- **A team cannot pick up a letter it has already banked.** The card stays on
+  the ground for the other team. The alternative, a banked team carrying it off
+  for no score, lets a team that is ahead take the letter the other team needs
+  and sit on it. With this rule the late game is a fight over the middle, not a
+  keep-away.
+- **A dead carrier drops the card where they died**, on the ground under the
+  death point, for `capture_return_time` seconds (lobby dial, 15 s default,
+  3-60). Anybody may take it in that time: the killers, or the carrier's own
+  team recovering it. Picking it up clears the return. When the time runs out
+  the host withers the dropped copy on every peer and spawns the card at home,
+  and the feed says "G went home". A carrier who disconnects drops exactly as a
+  death does. **A death with no ground under it** (the void, a gorge) sends the
+  card home at once, with the same feed line.
+- **Winning** is the Teams letters test on the same pooled mask: the first team
+  holding G, U and B wins, with reason `capture` ("The team carried G·U·B
+  home."). A match ending mid-carry grants nothing, as a hold does.
+- **Carriers are slower.** `capture_carrier_speed` (lobby dial, 0.9 default,
+  0.5-1.2) multiplies ground speed at `Gub.target_speed`, beside the Elder's
+  boost. An Elder can carry: it is a faster Elder and a slower carrier at once,
+  still unkillable except by the void, for the rest of its twenty seconds.
+- **Spawns.** In this mode a Gub spawns and respawns on its own team's pads:
+  each pad belongs to one base (below), so the defenders come back next to what
+  they are defending.
+- **Rematch** is a scene reload after `MatchState.reset`, which clears the
+  cards, the declared objectives and the layout; the next warmup spawns three
+  fresh cards.
+
+**Free-for-all.** Capture G·U·B is a Teams mode: a base belongs to a team.
+`MatchConfig._clamp_all` forces `mode = TEAMS` whenever the condition is
+CAPTURE, so every path into a config (the lobby, a peer's dictionary, a harness)
+comes out playable. The lobby handles the other direction. Picking Free-for-all
+while Capture is selected sets the condition back to the kill limit in the same
+push. The clamp cannot do that, because it cannot tell which of the two fields
+was just changed.
+
+**The lobby.** "Capture G·U·B (teams)" is the fifth entry in "Ends on". Picking it
+shows a section of its own, **CAPTURE G·U·B**, between Limits and Feel: "Dropped
+letter returns" (after 15 s) and "Carrier speed" (-10%), and one line of small
+print stating the rules that are not dials. Both fields are in `_FIELDS` with
+clamps. The kill-limit, lives and letter rows hide as they do for any other
+condition.
+
+**HUD.** The G·U·B lamps show for both letter conditions, labelled TEAM LETTERS.
+While carrying, the lamp is full and the caption reads "CARRYING G · TO YOUR
+BASE" instead of a countdown. `letter_hold_remaining` is INF for a carry, so the
+HUD does not pass it on to be divided. The scoreboard and results show and rank
+by letters under CAPTURE as they do under LETTERS (`MatchConfig.scores_letters`).
+New feed rows: "Name dropped G" and "G went home", from two new event signals,
+`letter_dropped` and `letter_returned`, sent by one reliable `_announce_capture`
+RPC.
+
+**Bases, and the contract for a map built for this mode.** A `StaticMap` scene
+may declare:
+- a **`Bases`** node with one `Marker3D` per team, **in team order** (first child
+  is Team 1), each on the floor at the middle of the base;
+- **`base_radius`** (export on `StaticMap`, default 4.0 m);
+- a **`Letters`** node with three `Marker3D`s **in G, U, B order**, on the floor
+  where each card starts and returns;
+- its eight **`Spawns`** as before; each pad belongs to the nearest declared base.
+
+`StaticMap.base_points()` and `letter_points()` read them. `arena.gd` hands them
+to `MatchState.set_capture_map` before `register_arena`, which plans a
+`CaptureLayout` from them and the pads on every peer. Too few bases for the
+lobby's team count, or fewer than three letters, and that half falls back whole,
+with a warning. Declared letter points are still settled onto the nearest
+standable floor.
+
+**The fallback is a placeholder**, and today it is used on every map, because no
+map declares anything yet:
+- **Bases**: the pads are split by bearing around their centroid into one
+  contiguous arc per team, choosing the rotation that keeps the arcs tightest.
+  Each team's base is the pad in its arc nearest the arc's middle by bearing,
+  tie broken anticlockwise on every arc so the bases on an even ring come out
+  opposite. A pad, not the centroid, because a pad is proven standable and a
+  centroid can be inside a container. Pads belong to the arc they came from.
+- **Letters**: G at the midpoint of the first two bases, U and B either side of
+  it across the base-to-base axis (30% of the distance, 4-10 m), so all three are
+  equidistant from both bases. The host settles each onto real ground once the
+  physics has stepped: a ray peeled down the column, a floor no steeper than
+  normal.y 0.7 with a Gub's capsule of head room, nearest the bases' height. It
+  searches rings 2 m apart out to 10 m, first for a floor within 1.5 m of the
+  bases' height and only then for any floor, and keeps each card 4 m clear of the
+  ones already placed.
+- As measured in the gate: Whisperbloom Hollow's bases are 18.8 m apart (its
+  spawn ring is small) with the letters within 6 m of the middle. Rust's are
+  43 m apart, at the north yard and the south-west wall. Kopje Crossing's are at
+  opposite corners, 88 m apart, with the letters on the ground round the foot
+  of the central kopje rather than on top of it.
+
+**The bases are drawn** by `CaptureBase` on every peer, only in this mode: a
+glowing band at the edge fading upward, which reads on a slope where a flat ring
+would sink in, a faint 14 m column of light, a floor wash and a light, all in the
+team's colour, with no collision.
+
+**Checked.**
+- `tools/match_rules.gd`, "match rules" in the gate, three new scenarios, in a
+  Node3D arena with a floor box so drops land on real ground.
+  - "three cards, carried home, dropped and returned": three cards spawn on their
+    homes a few frames in. A kill at 100% letter drop chance drops loot but no
+    letter. Touching G makes a carrier with no clock, no spear, and 0.8x walking
+    speed. A second card is left on the ground. The enemy base banks nothing; the
+    own base banks G into the team mask and the banker's row, and G is back on
+    its home point with three cards in the world. A team leaves its own banked G
+    on the ground. An enemy carrier killed at a point drops U on the floor there,
+    due home in 12 s, and the drop is announced. A tick does not return it
+    early. The killing team picks it up. Dropped again and wound past its clock,
+    it goes home, the dropped copy is gone, and the return is announced. A
+    carrier lost to the void sends B home at once. A carrier whose `stats` row
+    says alive but whose body is dead banks nothing in its own base; once
+    respawned, the same carry banks, and the third letter wins with reason
+    `capture` and the team mask in the summary. `reset` clears it all.
+  - "bases and letters out of the spawn pads": the fallback on an eight-pad
+    ring gives two far-apart bases that are pads, a 4-4 pad split, three letter
+    points equidistant from both bases and outside them, and `in_base` rejects
+    a point outside the radius, a ledge 6 m up and the other team's base. Three
+    teams give three bases. Declared bases, letters and radius are used, and too
+    few declared bases fall back whole.
+  - "a Teams mode": `apply_dict` turns Teams on for CAPTURE. The real lobby
+    panel, under the host's `update_config`, shows the capture section and its
+    dial, and picking Free-for-all gives a free-for-all on the kill limit with
+    the section hidden. Both fields round-trip through `_FIELDS` and clamp at
+    both ends. A condition past CAPTURE clamps to it.
+  - Every existing LETTERS scenario passes unchanged. Removing the body-alive
+    guard from `_tick_capture` fails the dead-body check.
+- `tools/playthrough.gd` checks the layout on each map it walks, and the gate
+  greps "playthrough: capture layout PASS" on Whisperbloom Hollow, Rust and
+  Kopje Crossing. Two bases for two teams, well apart, each team with pads and
+  a floor under its base. Three settled letter points on a floor with head room,
+  outside both bases, apart.
+- `tools/capture_preview.tscn -- safari`, headless, in the gate as "capture match
+  on a real map". It builds the real arena in this mode and checks that both
+  bases are drawn, three cards are at home, and every Gub spawned on its own
+  team's pad. It also passes on hollow and rust by hand. Through `snapshot.gd`
+  it renders from above Team 1's base (`out/capture_base_*.png`). `ui_range`
+  mode `lobby_capture` renders the lobby section.
+- 43 checks to 47.
+
+### Rejected
+- **Changing LETTERS.** The user asked for a mode, and LETTERS is a finished
+  mode with its own checks.
+- **A card that returns home the moment its carrier dies.** The user chose a
+  drop with a timer, and a drop is what makes a kill on a carrier a fight over
+  the ground rather than a reset.
+- **A dropped card that belongs to nobody for ever** (no return), or one that
+  withers. Either can take a letter out of the match, and three letters is all
+  there are.
+- **Letting a team pick up a letter it has banked.** Keep-away with the other
+  team's last letter, for no score.
+- **Only the carrier's own team recovering a drop**, or only the enemy. The
+  user said anyone.
+- **Hiding Capture in the lobby under Free-for-all.** The user wanted it visible.
+  Forcing Teams on selection keeps it one click away, and falling back to the
+  kill limit when Free-for-all is picked keeps that picker honest.
+- **Base volumes as `Area3D`s.** An overlap on the host is one more thing to be
+  wrong about a dead body (D-043) and a remote Gub's interpolated position. A
+  distance test against the live body, gated on alive, is the whole rule and
+  reads the same in a harness.
+- **The centroid of a team's pads as its fallback base.** On Rust it can be
+  inside a container; a pad is proven standable.
+- **Letting carriers throw.** The carry is the hold row, and a thrown spear from
+  a hand showing a card is the disagreement D-035 exists to prevent. If
+  playtesting says carriers need to fight, it is a dial on the throw gate, not
+  a second kind of carry.

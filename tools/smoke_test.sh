@@ -277,6 +277,13 @@ also "camera stays out of the scenery" "aim PASS"
 # those is the absence of a call rather than a fault inside one.
 check "full playthrough" "playthrough: PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/playthrough.tscn
+# Capture G·U·B's bases and letters on this map (D-051), from the same run: two
+# bases on distinct pads well apart, each team with pads of its own, and three
+# letter points on a real floor with a Gub's head room, outside both bases and
+# apart. No map declares its own objectives yet, so this is the fallback being
+# proven playable on every map the mode can be picked on; Rust and Kopje Crossing
+# carry the same line below.
+also "full playthrough" "playthrough: capture layout PASS"
 # The same walk again on the hand-made map, which is a different branch in
 # `arena.gd` from the first frame: no generation, an instanced scene bringing
 # its own environment, sun, collision and spawns, and a void height a metre or
@@ -287,6 +294,7 @@ check "full playthrough" "playthrough: PASS" \
 check "rust playthrough" "playthrough: PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/playthrough.tscn -- rust
 also "rust playthrough" "arena: Rust built from"
+also "rust playthrough" "playthrough: capture layout PASS"
 # And on Kopje Crossing, the map with no `.glb` behind it (D-042). It is the
 # same `arena.gd` branch as Rust, which is exactly why it gets its own run: the
 # branch is shared but the build is not, and a hundred and twenty-three
@@ -295,6 +303,17 @@ also "rust playthrough" "arena: Rust built from"
 # Rust's — that it was the savanna that got built, not the island in its place.
 check "safari playthrough" "playthrough: PASS"     "$GODOT" --headless --path "$GODOT_ROOT" tools/playthrough.tscn -- safari
 also "safari playthrough" "arena: Kopje Crossing built from"
+also "safari playthrough" "playthrough: capture layout PASS"
+# A Capture G·U·B match standing up in the real arena (D-051): `arena.gd` draws
+# a ring per team, the host settles three cards onto the map once the physics
+# has stepped, and every Gub spawns on a pad of its own team's. The rules
+# themselves — carry, bank, the enemy base doing nothing, a dead carrier's drop
+# and its return, an enemy recovering it, winning — are `match_rules`, in a box
+# with a floor. Headless, a few seconds. The picture from above Team 1's base:
+#     ... --resolution 1600x900 --script tools/snapshot.gd -- \
+#         res://tools/capture_preview.tscn out/capture_base.png 150 safari
+check "capture match on a real map" "capture_preview: PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" tools/capture_preview.tscn -- safari
 # The two-process test, `tools/net_test.sh` (roster, config, chat, a kill, a
 # respawn, a disconnect, and D-044's ten rematches), is deliberately not in the
 # gate: it adds about 45 s to every run for a path that changes rarely. Run it

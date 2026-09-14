@@ -131,6 +131,8 @@ static func _reason_text(reason: String) -> String:
 			return "Last Gub standing."
 		"letters":
 			return "Somebody spelled it."
+		"capture":
+			return "The team carried G·U·B home."
 		_:
 			return "The match ended."
 
@@ -149,8 +151,8 @@ func _fill_table(summary: Dictionary) -> void:
 	# the host can be changing the next match's settings while people are still
 	# reading this table — and the whole point of this screen is that it shows
 	# the match that ended rather than the one being set up.
-	var letters: bool = int(summary.get("win_condition", MatchConfig.WinCondition.KILL_LIMIT)) \
-		== MatchConfig.WinCondition.LETTERS
+	var letters: bool = MatchConfig.scores_letters(
+		int(summary.get("win_condition", MatchConfig.WinCondition.KILL_LIMIT)))
 	# Under Teams + letters the team is what spelled it, so each team gets a row
 	# of its own above the players, carrying the pooled letters (D-049). The
 	# player rows below still show which letters each member banked — who

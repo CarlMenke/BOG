@@ -102,6 +102,18 @@ cannot throw for any of them, the card lights you up for everyone in the
 clearing, and if somebody kills you it drops where you fell for whoever reaches
 it first. The lamp you are earning fills up, with the seconds left under it.
 
+**Capture G·U·B** is capture the flag with the letters, always in teams. There are
+only three cards, G, U and B, sitting between the two bases when the match
+starts. Each team's base is a glowing ring in its colour with a column of light
+over it. Walk over a card to carry it. You cannot throw while you carry, you move
+a little slower, and everybody sees a gold card over your head through walls.
+Walk into **your own** ring and the letter is your team's, and the card goes
+back to the middle for the other team to fight over. You cannot pick up a letter
+your team already has. If you die carrying, the card drops where you fell and
+anyone can grab it, your team or theirs. If nobody does, it goes back to the
+middle after fifteen seconds (the host can change that). The first team to bank
+G, U and B wins.
+
 **The Elder.** About one death in fifty leaves a purple robe and a wizard hat on
 the ground, in every mode. Walk over it and for **twenty seconds you cannot be
 killed.**

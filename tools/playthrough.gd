@@ -432,7 +432,63 @@ func _stage_warmup() -> bool:
 	print("playthrough: phase PLAYING after %.1f s, local Gub on the floor at %.2f m" % [
 		float(Time.get_ticks_msec() - started) * 0.001,
 		mine.global_position.y if is_instance_valid(mine) else NAN])
+	_check_capture_layout()
 	return true
+
+
+## Capture G·U·B's bases and letters on this map, as the match would place them
+## (D-051). Checked on every map in every playthrough whatever the win
+## condition, because the layout is planned for every arena and the physics has
+## stepped by now: two bases for two teams, on distinct pads well apart, each
+## with pads of its own to spawn on, and three letter points that are on a real
+## floor with a Gub's head room, outside both bases and apart from each other.
+## No map declares its own objectives yet, so this is the fallback's check, and
+## it is what says the mode is playable on every map it can be picked on.
+func _check_capture_layout() -> void:
+	var failures_before := _failures
+	var layout := MatchState.capture_layout()
+	if not _require("the arena planned a capture layout", layout != null):
+		return
+	var arena := get_tree().current_scene as Arena
+	var space := arena.get_world_3d().direct_space_state
+	_check("capture: one base per team", layout.bases.size(), Net.config.team_count)
+	if layout.bases.size() < 2:
+		return
+	var apart := Vector2(layout.bases[0].x, layout.bases[0].z).distance_to(
+		Vector2(layout.bases[1].x, layout.bases[1].z))
+	_check("capture: the bases are well apart (%.1f m)" % apart,
+		apart > layout.base_radius * 4.0, true)
+	for team in layout.bases.size():
+		_check("capture: team %d has pads to spawn on" % (team + 1),
+			layout.pad_team.has(team), true)
+		_check("capture: team %d's base stands on a floor" % (team + 1),
+			_floor_under(space, layout.bases[team]), true)
+	var letters := layout.settle_letters(space)
+	_check("capture: three letter points", letters.size(), 3)
+	for i in letters.size():
+		var point := letters[i]
+		var glyph := MatchState.letter_name(MatchState.LETTERS[i])
+		_check("capture: %s is on a floor" % glyph, _floor_under(space, point), true)
+		_check("capture: a Gub fits where %s is" % glyph,
+			CaptureLayout.has_headroom(space, point), true)
+		for team in layout.bases.size():
+			_check("capture: %s is outside team %d's base" % [glyph, team + 1],
+				layout.in_base(team, point), false)
+		for j in range(i + 1, letters.size()):
+			_check("capture: %s and %s are apart" % [glyph,
+				MatchState.letter_name(MatchState.LETTERS[j])],
+				point.distance_to(letters[j]) > 3.0, true)
+	print("playthrough: capture layout on '%s' — bases %s, letters %s" % [_map,
+		", ".join(layout.bases.map(func(v: Vector3) -> String: return "(%.1f, %.1f, %.1f)" % [v.x, v.y, v.z])),
+		", ".join(letters.map(func(v: Vector3) -> String: return "(%.1f, %.1f, %.1f)" % [v.x, v.y, v.z]))])
+	if _failures == failures_before:
+		print("playthrough: capture layout PASS")
+
+
+func _floor_under(space: PhysicsDirectSpaceState3D, at: Vector3) -> bool:
+	var ray := PhysicsRayQueryParameters3D.create(at + Vector3.UP * 0.6, at + Vector3.DOWN * 0.6)
+	ray.collision_mask = 1
+	return not space.intersect_ray(ray).is_empty()
 
 
 ## Play the match out. Kills go through `MatchState.report_kill`, which is

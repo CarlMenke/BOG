@@ -44,6 +44,27 @@ extends Node3D
 ##   a property of a floating island with a deep rocky underside; a ground-level
 ##   arena wants a floor a few metres down, and a Gub that walks off the edge of
 ##   one should be dead before the fall becomes boring.
+##
+## And, **optionally, for Capture G·U·B** (D-051). A map that says nothing here
+## is still playable in that mode on the fallback in `capture_layout.gd`; a map
+## built for it should say all of it:
+##
+## - A **`Bases`** node holding **one `Marker3D` per team, in team order** — the
+##   first child is Team 1's base, the second Team 2's, and so on up to eight.
+##   The marker sits **on the floor** at the middle of the base. Fewer markers
+##   than the lobby has teams and the whole fallback is used instead, with a
+##   warning, because the map has not said where the missing bases go.
+## - **`base_radius`**, below, for how far across the ground a base reaches.
+##   A carrier also has to be within 3 m of the marker's height
+##   (`CaptureLayout.BASE_HEIGHT`), so a base on a platform is not scored from
+##   the ground under it.
+## - A **`Letters`** node holding **three `Marker3D`s, in G, U, B order**, on
+##   the floor where each card starts and returns to. Put them where both teams
+##   can reach them; the game settles each onto the nearest standable floor but
+##   does not move it anywhere smarter than that.
+## - **Spawns stay in `Spawns`.** Each pad belongs to the team whose base it is
+##   nearest, and in this mode a Gub respawns only on its own team's pads, so
+##   put four pads near each base for a two-team map.
 
 ## The ring `spawn_points()` invents when a map ships without any. Eight, the
 ## same count a real map owes, so the rest of the match behaves normally while
@@ -74,6 +95,11 @@ const COLLISION_CELL := 16.0
 ## export default is evaluated by the editor and the import step, where an
 ## autoload is not something that can be relied on to exist.
 @export var void_height: float = -45.0
+
+## How far across the ground a Capture G·U·B base reaches from its `Bases`
+## marker, in metres (D-051). Ignored by every other mode, and by a map with no
+## `Bases` node.
+@export var base_radius: float = 4.0
 
 ## What the build actually did — for the log line, and for `tools/preview_map.gd`
 ## to assert on. A map that comes out with no triangles in it is a map whose
@@ -260,4 +286,30 @@ func _fallback_spawns() -> Array[Transform3D]:
 		var here := Vector3(cos(bearing), 0.0, sin(bearing)) * FALLBACK_RADIUS
 		var yaw := Gub.yaw_towards(-here.normalized())
 		out.append(Transform3D(Basis(Vector3.UP, yaw), here))
+	return out
+
+
+# ---------------------------------------------------------------- capture ---
+
+## The Capture G·U·B bases this map declares, one per team in team order, or an
+## empty list when it declares none (D-051). World space, so call it after the
+## map is in the tree, like `spawn_points()`.
+func base_points() -> Array[Vector3]:
+	return _marker_points("Bases")
+
+
+## The three letter spawn points this map declares, G, U, B, or an empty list.
+func letter_points() -> Array[Vector3]:
+	return _marker_points("Letters")
+
+
+func _marker_points(node_name: String) -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	var root := get_node_or_null(node_name)
+	if root == null:
+		return out
+	for child in root.get_children():
+		var marker := child as Marker3D
+		if marker != null:
+			out.append(marker.global_position)
 	return out

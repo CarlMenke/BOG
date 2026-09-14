@@ -182,6 +182,18 @@ Spectating is a change of subject rather than a second camera (**D-020**) — a
 dead player's camera re-targets a living Gub, it does not switch to some other
 rig.
 
+A match ends on one of five win conditions, `MatchConfig.WinCondition`, whose
+ordinal travels on the wire, so it is only ever appended to: the kill limit,
+last Gub standing, the clock, **Collect G·U·B** (letters out of corpses, held up
+for ten seconds each, **D-033**, **D-035**) and **Capture G·U·B** (**D-051**).
+Capture is capture the flag with the three letters, and a Teams mode: three
+cards spawn once, a carrier walks one into its own team's base to bank it into
+the team's mask (**D-049**), the card goes back to its home point, and a dead
+carrier's card lies where they fell for the host's `capture_return_time` before
+going home. A carry is a letter hold with no deadline, so the card in the fist,
+the carrier marker and the feed are the letters mode's own (**D-050**). The
+bases and home points come from `CaptureLayout`, below.
+
 The loading card exists because the arena is *generated* and that costs two to
 six seconds inside `arena.gd`'s `_ready`. `change_scene_to_file` does not return
 until that finishes, so the card has to be on screen *before* the call — there is
@@ -256,6 +268,30 @@ because the rim is the most-looked-at line on a floating island and a grid
 leaves a staircase edge there. A polar ring lands on the outline by
 construction, and the last surface ring *is* the first underside ring.
 
+### Capture G·U·B bases and letter points
+
+`scripts/game/capture_layout.gd` plans one base per team and three letter home
+points for every arena, on every peer, from the spawn pads and whatever the map
+declares (**D-051**). A static map built for the mode declares, on its
+`StaticMap` root:
+
+- `Bases` — one `Marker3D` per team **in team order** (first child = Team 1), on
+  the floor at the middle of each base;
+- `base_radius` — the export on `StaticMap`, default 4 m (a carrier also has to
+  be within 3 m of the marker's height);
+- `Letters` — three `Marker3D`s **in G, U, B order**, on the floor where each card
+  starts and returns;
+- `Spawns` as always; each pad belongs to the nearest base, and in this mode Gubs
+  spawn only on their own team's pads.
+
+**No map declares these yet, so every map plays on a placeholder fallback**:
+the pads are split into one arc per team by bearing, each team's base is the pad
+nearest its arc's middle, and the letters sit between the first two bases (G at
+the midpoint, U and B either side across the axis). The host settles each card
+onto a standable floor near the bases' height once the physics has stepped.
+`tools/playthrough.gd` checks the result on all three maps. `CaptureBase` draws
+each base in its team's colour, only in this mode.
+
 ---
 
 ## Where things live
@@ -283,6 +319,8 @@ tools/           dev tools and testbeds — none of this ships
 | `scripts/world/arena.gd` | the map scene, and `register_arena` |
 | `scripts/world/map_catalog.gd` | the list of maps; ids in, entries out |
 | `scripts/world/static_map.gd` | what a hand-made map scene owes the match, and its collision |
+| `scripts/game/capture_layout.gd` | Capture G·U·B's bases and letter points: declared by a map, or the fallback (**D-051**) |
+| `scripts/world/capture_base.gd` | a team's base drawn in its colour (**D-051**) |
 | `scripts/world/island_generator.gd` | terrain, and the height oracle |
 | `scripts/player/gub.gd` | a player character |
 | `scripts/player/gub_animator.gd` | the blend tree, built in code (**D-029**) |

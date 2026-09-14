@@ -3,7 +3,7 @@ extends Control
 ## G, U and B — the three you need, and the one you are standing still for
 ## (PLAN 6.1, D-033, D-035).
 ##
-## Only ever on screen under `WinCondition.LETTERS`. The HUD hides the whole
+## Only ever on screen under the two letter conditions, LETTERS and CAPTURE. The HUD hides the whole
 ## control in every other mode, so nothing else about the bottom of the screen
 ## changes for a match that has no letters in it.
 ##
@@ -63,6 +63,9 @@ var _hold_fill: float = 0.0
 ## Whole seconds still to stand there. Never 0 while a hold is running — see
 ## `set_state`.
 var _hold_seconds: int = 0
+## Capture G·U·B (D-051): the card up is a carry with no clock, so the lamp is
+## full and the caption says where to take it rather than how long is left.
+var _carrying: bool = false
 
 
 func _ready() -> void:
@@ -80,17 +83,21 @@ func _ready() -> void:
 ## is. `ceili` gives that for free everywhere except the exact end, and `maxi`
 ## covers the end.
 func set_state(letters: int, hold_letter: int, remaining: float, total: float,
-		team: bool = false) -> void:
+		team: bool = false, carrying: bool = false) -> void:
 	var fill := 0.0
 	var seconds := 0
-	if hold_letter != 0:
+	if hold_letter != 0 and carrying:
+		fill = 1.0
+	elif hold_letter != 0:
 		fill = clampf(1.0 - remaining / maxf(0.01, total), 0.0, 1.0)
 		seconds = maxi(1, ceili(remaining))
 	if letters == _letters and hold_letter == _hold_letter and team == _team \
+			and carrying == _carrying \
 			and seconds == _hold_seconds and is_equal_approx(fill, _hold_fill):
 		return
 	_letters = letters
 	_team = team
+	_carrying = carrying
 	_hold_letter = hold_letter
 	_hold_fill = fill
 	_hold_seconds = seconds
@@ -149,6 +156,8 @@ func _draw_lamp(rect: Rect2, bit: int) -> void:
 ## number is what you need when you are deciding whether to run for cover.
 func _draw_caption() -> void:
 	var text := "HOLDING %s  ·  %d s" % [MatchState.letter_name(_hold_letter), _hold_seconds]
+	if _carrying:
+		text = "CARRYING %s  ·  TO YOUR BASE" % MatchState.letter_name(_hold_letter)
 	var font := get_theme_default_font()
 	var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, CAPTION_SIZE).x
 	draw_string(font, Vector2((size.x - width) * 0.5, CAPTION_TOP + CAPTION_SIZE),

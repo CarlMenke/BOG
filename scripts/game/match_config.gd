@@ -21,6 +21,7 @@ enum WinCondition {
 	LIVES,        ## last Gub (or team) standing
 	TIME_ONLY,    ## highest score when the clock runs out
 	LETTERS,      ## first to hold G, U and B — the Gubs card game's own ending
+	CAPTURE,      ## capture the flag with the three letters: carry each home (D-051)
 }
 
 const MIN_PLAYERS := 1
@@ -105,6 +106,24 @@ const TEAM_NONE := -1
 ## of the hand: a visible flicker for a setting whose entire point is that there
 ## is nothing to see.
 @export_range(0.0, 30.0) var letter_hold_time: float = 10.0
+
+## **Capture G·U·B** (D-051): how long a letter dropped by a dead carrier lies
+## where it fell before it goes home to its spawn. Anyone may pick it up in that
+## time, the carrier's own team included.
+##
+## A dial because it is the one number that decides what a kill on a carrier is
+## worth. Short, and killing a carrier near your base is a full reset; long, and
+## a card dropped in no man's land becomes the fight. Fifteen seconds is a little
+## more than a respawn plus a sprint back, so the dead carrier's team has a real
+## chance to recover it.
+@export_range(3.0, 60.0) var capture_return_time: float = 15.0
+
+## What a Gub carrying a letter in Capture G·U·B multiplies its ground speed by.
+## Below one on purpose: a carrier who outruns everybody to their base is a
+## carrier nobody gets to fight. Applied at `Gub.target_speed`, the same single
+## point the Elder's boost is, so the two multiply rather than one hiding the
+## other.
+@export_range(0.5, 1.2) var capture_carrier_speed: float = 0.9
 
 ## How often a death drops the Elder's robe, **in every mode**.
 ##
@@ -215,6 +234,7 @@ const _FIELDS := [
 	"spear_recharge", "mushroom_use_delay", "mushroom_lifetime", "mushroom_max_active",
 	"lure_use_delay", "lure_radius", "lure_hold", "lure_pull_strength", "lure_fuse",
 	"letter_drop_chance", "letter_hold_time",
+	"capture_return_time", "capture_carrier_speed",
 	"elder_drop_chance", "lightning_delay", "lightning_cooldown",
 	"elder_duration", "elder_speed_multiplier", "elder_jump_multiplier",
 	"max_players", "map", "map_seed",
@@ -277,6 +297,8 @@ func _clamp_all() -> void:
 	# Zero survives this on purpose — it is the "grant on touch" setting, not a
 	# value to be raised into a hold nobody asked for.
 	letter_hold_time = clampf(letter_hold_time, 0.0, 30.0)
+	capture_return_time = clampf(capture_return_time, 3.0, 60.0)
+	capture_carrier_speed = clampf(capture_carrier_speed, 0.5, 1.2)
 	elder_drop_chance = clampf(elder_drop_chance, 0.0, 1.0)
 	# Zero survives this on purpose, like `letter_hold_time` above: it is the
 	# "fires on the frame of the click" setting, not a slider dragged off the
@@ -293,9 +315,26 @@ func _clamp_all() -> void:
 	# mid-`_ready`, with no way to recover.
 	if not MapCatalog.is_valid(map):
 		map = MapCatalog.DEFAULT
+	# Capture G·U·B is a Teams mode by nature: a base belongs to a team, and a
+	# free-for-all has eight people and no bases (D-051). Forced here rather
+	# than refused, so every path into a config — the lobby, a peer's
+	# dictionary, a harness — comes out playable. The lobby does the reverse
+	# half itself: picking Free-for-all while this is selected moves the
+	# condition back to the kill limit (`MatchSettingsPanel._push`).
+	if win_condition == WinCondition.CAPTURE:
+		mode = Mode.TEAMS
 	# TIME_ONLY with no clock would never end.
 	if win_condition == WinCondition.TIME_ONLY and time_limit <= 0:
 		time_limit = 600
+
+
+## Whether a win condition is scored in G·U·B letters — the lamps, the letters
+## column and the letter-first ranking. True for both letter modes, which differ
+## in how a letter is *earned* (a hold, or a carry home) and not in what it
+## counts toward. The loot roll deliberately does not ask this: only LETTERS
+## drops cards out of corpses (D-051).
+static func scores_letters(condition: int) -> bool:
+	return condition == WinCondition.LETTERS or condition == WinCondition.CAPTURE
 
 
 ## Human-readable one-liner for the lobby header.
@@ -311,6 +350,8 @@ func summary() -> String:
 			parts.append("timed")
 		WinCondition.LETTERS:
 			parts.append("Collect G·U·B")
+		WinCondition.CAPTURE:
+			parts.append("Capture G·U·B")
 	if time_limit > 0:
 		parts.append("%d:%02d" % [time_limit / 60, time_limit % 60])
 	if mode == Mode.TEAMS and random_teams:

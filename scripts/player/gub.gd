@@ -707,7 +707,19 @@ func _wish_direction() -> Vector3:
 func target_speed() -> float:
 	var speed := CROUCH_SPEED if is_crouching() \
 		else (RUN_SPEED if wants_sprint else WALK_SPEED)
-	return speed * elder_scale(Net.config.elder_speed_multiplier)
+	return speed * elder_scale(Net.config.elder_speed_multiplier) * carrier_scale()
+
+
+## `capture_carrier_speed` while this Gub carries a letter in Capture G·U·B, and
+## 1.0 otherwise (D-051). Read off `MatchState`'s hold row, which exists on every
+## peer, so the owner that moves the Gub and every copy that watches it agree.
+## Multiplied with the Elder's boost rather than instead of it: an Elder carrying
+## a card is a faster Elder and a slower carrier, both at once.
+func carrier_scale() -> float:
+	if Net.config.win_condition != MatchConfig.WinCondition.CAPTURE \
+			or not MatchState.is_holding_letter(peer_id):
+		return 1.0
+	return Net.config.capture_carrier_speed
 
 
 ## How fast this Gub leaves the ground, in metres per second.

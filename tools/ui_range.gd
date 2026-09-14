@@ -13,7 +13,7 @@ extends Node
 ##         res://tools/ui_range.tscn out.png 40 <mode>
 ##
 ## Modes: menu, menu_join, menu_notice, settings, settings_network,
-##        lobby, lobby_full, lobby_teams, lobby_client, lobby_map.
+##        lobby, lobby_full, lobby_teams, lobby_client, lobby_map, lobby_capture.
 
 const MENU_SCENE := preload("res://scenes/ui/main_menu.tscn")
 const LOBBY_SCENE := preload("res://scenes/ui/lobby.tscn")
@@ -53,8 +53,8 @@ func _ready() -> void:
 			_open_lobby(5, true, true)
 		"lobby_client":
 			_open_lobby(4, false, false)
-		"lobby_map":
-			_open_lobby(3, false, true)
+		"lobby_map", "lobby_capture":
+			_open_lobby(3, _mode == "lobby_capture", true)
 		_:
 			_open_lobby(3, false, true)
 
@@ -140,6 +140,25 @@ func _open_lobby(extra: int, teams: bool, as_host: bool) -> void:
 		Net.chat_received.emit(FAKE_BASE + int(line[0]), String(line[1]))
 	if _mode == "lobby_map":
 		await _show_map_row(lobby)
+	elif _mode == "lobby_capture":
+		await _show_capture_rules(lobby)
+
+
+## Capture G·U·B picked, and the panel scrolled to its own rules section
+## (D-051), which only exists while that condition is selected.
+func _show_capture_rules(lobby: Node) -> void:
+	var next := Net.config.duplicate_config()
+	next.win_condition = MatchConfig.WinCondition.CAPTURE
+	Net.update_config(next)
+	var panel := lobby.find_child("MatchSettings", true, false)
+	var note := panel.find_child("CaptureRules", true, false) as Control if panel else null
+	var scroll := panel.find_child("Scroll", true, false) as ScrollContainer if panel else null
+	if note == null or scroll == null:
+		push_warning("ui_range: the match panel has no capture rules to scroll to")
+		return
+	await get_tree().process_frame
+	await get_tree().process_frame
+	scroll.ensure_control_visible(note)
 
 
 ## Scroll the match panel down to the Map section.

@@ -59,6 +59,9 @@ func _ready() -> void:
 	_run_void_credit()
 	_run_spawn_protection()
 	_run_random_teams()
+	await _run_capture()
+	_run_capture_layout()
+	_run_capture_lobby()
 	_run_config_validation()
 
 	print("match_rules: %d checks, %d failures" % [_checks, _failures])
@@ -86,7 +89,7 @@ func _ready() -> void:
 
 ## Put `Net` and `MatchState` into a running match with `count` fake players.
 ## Teams are assigned round-robin, so team scenarios get two of each.
-func _begin(count: int, configure: Callable) -> void:
+func _begin(count: int, configure: Callable, root: Node = null) -> void:
 	MatchState.reset()
 	Net.start_offline()
 	Net.players.clear()
@@ -105,7 +108,7 @@ func _begin(count: int, configure: Callable) -> void:
 	Net.config.respawn_delay = 0.0
 	configure.call(Net.config)
 	# Registering the arena is what starts a match.
-	MatchState.register_arena(self, [] as Array[Transform3D])
+	MatchState.register_arena(root if root != null else self, [] as Array[Transform3D])
 	# Warmup is skipped rather than waited out: these scenarios are about the
 	# rules, not the countdown.
 	MatchState.phase = MatchState.Phase.PLAYING
@@ -1077,6 +1080,371 @@ func _teams_digest() -> Array:
 	for peer_id: int in Net.peer_ids():
 		out.append([peer_id, Net.player_team(peer_id)])
 	return out
+
+
+## Capture G·U·B (D-051), in a world with a floor in it.
+##
+## Every other letters scenario here has no geometry, and that is fine for them;
+## this one cannot do without. A dead carrier's card lands on *the ground under
+## the death point*, the cards go out onto ground the physics has settled, and a
+## death over nothing has to send the card home instead — none of which can be
+## told apart from "the card went home" with no floor to land on. So the arena is
+## a Node3D with one big box under it, and the scenario waits two physics frames
+## for the box to be in the broadphase, exactly as a real map's collision is.
+const CAPTURE_BASES: Array[Vector3] = [Vector3(0, 0, -30), Vector3(0, 0, 30)]
+const CAPTURE_HOMES: Array[Vector3] = [Vector3(-14, 0, 0), Vector3(14, 0, 0), Vector3(0, 0, 14)]
+const CAPTURE_DEATH := Vector3(10, 0, -8)
+const CAPTURE_DEATH_2 := Vector3(-9, 0, 9)
+
+
+func _capture_world() -> Node3D:
+	var world := Node3D.new()
+	world.name = "CaptureWorld"
+	add_child(world)
+	var body := StaticBody3D.new()
+	body.collision_layer = 1
+	body.collision_mask = 0
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(200.0, 1.0, 200.0)
+	shape.shape = box
+	body.add_child(shape)
+	body.position = Vector3(0.0, -0.5, 0.0)
+	world.add_child(body)
+	return world
+
+
+func _capture_card(letter: int) -> int:
+	return int(MatchState._capture.get(letter, {}).get("pickup", 0))
+
+
+func _letter_cards() -> Array[Pickup]:
+	var out: Array[Pickup] = []
+	for id: int in MatchState._pickups:
+		var item: Pickup = MatchState._pickups[id]
+		if is_instance_valid(item) and item.kind == Pickup.Kind.LETTER:
+			out.append(item)
+	return out
+
+
+func _flat_distance(a: Vector3, b: Vector3) -> float:
+	return Vector2(a.x, a.z).distance_to(Vector2(b.x, b.z))
+
+
+## Put a Gub somewhere and let the host's own tick look at it, synchronously, so
+## no frame in between can move a remote Gub back towards its last snapshot.
+func _stand(peer_id: int, at: Vector3) -> void:
+	var gub: Gub = MatchState.gubs.get(peer_id)
+	if is_instance_valid(gub):
+		gub.global_position = at
+	MatchState._tick_capture()
+
+
+func _run_capture() -> void:
+	_scenario("capture G·U·B: three cards, carried home, dropped and returned")
+	var world := _capture_world()
+	var finished := {}
+	var dropped: Array = []
+	var returned: Array = []
+	_begin(4, func(c: MatchConfig) -> void:
+		c.mode = MatchConfig.Mode.TEAMS
+		c.team_count = 2
+		c.win_condition = MatchConfig.WinCondition.CAPTURE
+		c.kill_limit = 50
+		c.time_limit = 0
+		# The two chances forced to the top, so a letter out of a corpse would be
+		# certain if the loot roll ever handed one out in this mode.
+		c.letter_drop_chance = 1.0
+		c.elder_drop_chance = 0.0
+		# Not the defaults, so a check against them proves the dial was read.
+		c.capture_return_time = 12.0
+		c.capture_carrier_speed = 0.8
+		MatchState.set_capture_map(CAPTURE_BASES, CAPTURE_HOMES, 4.0), world)
+	MatchState.match_finished.connect(func(summary: Dictionary) -> void:
+		finished.merge(summary, true), CONNECT_ONE_SHOT)
+	var on_drop := func(peer_id: int, letter: int) -> void: dropped.append([peer_id, letter])
+	var on_return := func(letter: int) -> void: returned.append(letter)
+	MatchState.letter_dropped.connect(on_drop)
+	MatchState.letter_returned.connect(on_return)
+
+	# The cards go out on their own, a couple of physics frames in.
+	# Frames rather than a fixed count of physics ticks: the first frames after
+	# load can run several physics steps inside one process frame, and it is the
+	# host's `_process` that puts the cards out.
+	for i in 60:
+		if MatchState._capture.size() == 3:
+			break
+		await get_tree().process_frame
+	var cards := _letter_cards()
+	_check("three letters are out at the start", cards.size(), 3)
+	_check("one row per letter", MatchState._capture.size(), 3)
+	for i in MatchState.LETTERS.size():
+		var letter := MatchState.LETTERS[i]
+		var card: Pickup = MatchState._pickups.get(_capture_card(letter))
+		_check("%s is at home" % MatchState.letter_name(letter),
+			MatchState.capture_state(letter), "home")
+		_check("%s's card is the right letter" % MatchState.letter_name(letter),
+			card.letter if card != null else 0, letter)
+		_check("%s's card is on its home point" % MatchState.letter_name(letter),
+			card != null and _flat_distance(card.global_position, CAPTURE_HOMES[i]) < 0.01,
+			true)
+
+	# No card ever comes out of a corpse in this mode, even at 100%.
+	var before := MatchState._pickups.size()
+	MatchState.report_kill(903, 1, Gub.Cause.SPEAR, CAPTURE_DEATH_2, Vector3.FORWARD, "Spine1")
+	_check("a death still drops loot", MatchState._pickups.size(), before + 1)
+	_check("but never a letter", _letter_cards().size(), 3)
+	_revive(903)
+
+	# Pick up. Peer 1 is team 0, whose base is CAPTURE_BASES[0].
+	var g_card := _capture_card(MatchState.LETTER_G)
+	MatchState.claim_pickup(g_card, 1)
+	_check("touching a card makes a carrier", MatchState.is_holding_letter(1), true)
+	_check("of that letter", MatchState.letter_hold_letter(1), MatchState.LETTER_G)
+	_check("the card leaves the ground", _card_live(g_card), false)
+	_check("the letter is carried", MatchState.capture_state(MatchState.LETTER_G), "carried")
+	_check("a carry has no clock", is_inf(MatchState.letter_hold_remaining(1)), true)
+	_check("and scores nothing yet", MatchState.team_letters(0), 0)
+	var combat := _combat(1)
+	if combat != null:
+		_check("a carrier cannot throw", combat.has_spear(), false)
+	var body: Gub = MatchState.gubs.get(1)
+	if body != null:
+		_near("a carrier walks at the carrier speed", body.target_speed(),
+			Gub.WALK_SPEED * 0.8)
+	# One at a time.
+	var u_card := _capture_card(MatchState.LETTER_U)
+	MatchState.claim_pickup(u_card, 1)
+	_check("a carrier leaves a second card where it is", _card_live(u_card), true)
+	# Still nothing after the carry has run far longer than any hold.
+	MatchState._tick_letter_holds()
+	_check("no clock ends a carry", MatchState.is_holding_letter(1), true)
+
+	# The wrong base.
+	_stand(1, CAPTURE_BASES[1])
+	_check("walking into the enemy base banks nothing", MatchState.team_letters(0), 0)
+	_check("and the carrier still has it", MatchState.is_holding_letter(1), true)
+	_check("and neither does the enemy team", MatchState.team_letters(1), 0)
+
+	# The right one.
+	_stand(1, CAPTURE_BASES[0] + Vector3(2.5, 0.0, 1.5))
+	_check("walking into your own base banks it", MatchState.team_letters(0),
+		MatchState.LETTER_G)
+	_check("the banker's own row keeps it", MatchState.letters_for(1), MatchState.LETTER_G)
+	_check("and the carry ends", MatchState.is_holding_letter(1), false)
+	_check("the card goes back to its spawn", MatchState.capture_state(MatchState.LETTER_G),
+		"home")
+	var g_again: Pickup = MatchState._pickups.get(_capture_card(MatchState.LETTER_G))
+	_check("as a real card on its home point",
+		g_again != null and _flat_distance(g_again.global_position, CAPTURE_HOMES[0]) < 0.01,
+		true)
+	_check("still three letters in the world", _letter_cards().size(), 3)
+	_check("and the match goes on", MatchState.phase, MatchState.Phase.PLAYING)
+	_stand(1, Vector3.ZERO)
+
+	# A team cannot pick up a letter it has already banked; the other team can.
+	var g_id := _capture_card(MatchState.LETTER_G)
+	MatchState.claim_pickup(g_id, 902)
+	_check("a team leaves its own banked letter on the ground", _card_live(g_id), true)
+	_check("and its player carries nothing", MatchState.is_holding_letter(902), false)
+
+	# A carrier dies: the card drops where they died.
+	MatchState.claim_pickup(_capture_card(MatchState.LETTER_U), 901)
+	_check("the other team picks up U", MatchState.letter_hold_letter(901),
+		MatchState.LETTER_U)
+	MatchState.report_kill(901, 1, Gub.Cause.SPEAR, CAPTURE_DEATH, Vector3.FORWARD, "Spine1")
+	_check("a dead carrier carries nothing", MatchState.is_holding_letter(901), false)
+	_check("the card is dropped", MatchState.capture_state(MatchState.LETTER_U), "dropped")
+	var lying: Pickup = MatchState._pickups.get(_capture_card(MatchState.LETTER_U))
+	_check("there is a card on the ground", lying != null, true)
+	if lying != null:
+		_check("at the death point", _flat_distance(lying.global_position, CAPTURE_DEATH) < 0.01,
+			true)
+		_near("on the floor under it", lying.global_position.y, Pickup.HOVER)
+		_check("carrying U", lying.letter, MatchState.LETTER_U)
+	# Within a tenth of a second: the host's clock has moved on by however long
+	# the lines since the death took.
+	_check("and it goes home after the configured time", absf(
+		float(MatchState._capture[MatchState.LETTER_U]["return_at"]) - MatchState._now() - 12.0)
+		< 0.1, true)
+	_check("the drop is told", dropped, [[901, MatchState.LETTER_U]])
+	_check("the loot roll still gave no letter", _letter_cards().size(), 3)
+	_revive(901)
+
+	# Anybody can recover it before then — here the team that killed the carrier.
+	var dropped_id := _capture_card(MatchState.LETTER_U)
+	MatchState._tick_capture()
+	_check("nothing returns early", MatchState.capture_state(MatchState.LETTER_U), "dropped")
+	MatchState.claim_pickup(dropped_id, 902)
+	_check("an enemy picks up the dropped card", MatchState.letter_hold_letter(902),
+		MatchState.LETTER_U)
+	_check("which clears its return", MatchState.capture_state(MatchState.LETTER_U), "carried")
+
+	# And drops it again; this time nobody reaches it.
+	MatchState.report_kill(902, 901, Gub.Cause.SPEAR, CAPTURE_DEATH_2, Vector3.FORWARD, "Spine1")
+	var second_drop := _capture_card(MatchState.LETTER_U)
+	_check("dropped a second time", MatchState.capture_state(MatchState.LETTER_U), "dropped")
+	MatchState._capture[MatchState.LETTER_U]["return_at"] = 0.001
+	MatchState._tick_capture()
+	_check("a card left lying goes home on its own clock",
+		MatchState.capture_state(MatchState.LETTER_U), "home")
+	_check("the dropped copy is gone", _card_live(second_drop), false)
+	var u_home: Pickup = MatchState._pickups.get(_capture_card(MatchState.LETTER_U))
+	_check("and a card is back on U's home point",
+		u_home != null and _flat_distance(u_home.global_position, CAPTURE_HOMES[1]) < 0.01, true)
+	_check("the return is told", returned, [MatchState.LETTER_U])
+	_check("never more than three", _letter_cards().size(), 3)
+	_revive(902)
+
+	# A carrier who falls into the void: nowhere to land, so the card goes home.
+	MatchState.claim_pickup(_capture_card(MatchState.LETTER_B), 903)
+	MatchState.report_kill(903, 903, Gub.Cause.VOID, Vector3(0, -200, 0), Vector3.DOWN, "")
+	_check("a card lost to the void goes straight home",
+		MatchState.capture_state(MatchState.LETTER_B), "home")
+	_check("still three", _letter_cards().size(), 3)
+	_revive(903)
+
+	# Team 0 banks the other two, and wins.
+	MatchState.claim_pickup(_capture_card(MatchState.LETTER_U), 1)
+	_stand(1, CAPTURE_BASES[0])
+	_stand(1, Vector3.ZERO)
+	_check("two banked", MatchState.team_letters(0),
+		MatchState.LETTER_G | MatchState.LETTER_U)
+	_check("not over at two", MatchState.phase, MatchState.Phase.PLAYING)
+	# 902's row says alive (`_revive` wrote it) but its body is still the one
+	# that died: a Gub's body keeps its collision where it fell (D-043), and the
+	# body is what stands in a base. That must not bank.
+	MatchState.claim_pickup(_capture_card(MatchState.LETTER_B), 902)
+	_stand(902, CAPTURE_BASES[0])
+	_check("a carrier whose body is dead banks nothing", MatchState.team_letters(0),
+		MatchState.LETTER_G | MatchState.LETTER_U)
+	_check("and keeps carrying", MatchState.is_holding_letter(902), true)
+	# Once the body is back, the same carry in the same base banks.
+	MatchState._respawn(902)
+	_stand(902, CAPTURE_BASES[0])
+	_check("banking all three wins", MatchState.phase, MatchState.Phase.POST_MATCH)
+	_check("reason", finished.get("reason"), "capture")
+	_check("the summary carries the team's letters",
+		int(finished.get("team_letters", {}).get(0, 0)), MatchState.LETTER_ALL)
+	_check("and the ranking leads with the banker",
+		MatchState.letter_count(1) >= MatchState.letter_count(901), true)
+
+	# A rematch starts from nothing.
+	MatchState.letter_dropped.disconnect(on_drop)
+	MatchState.letter_returned.disconnect(on_return)
+	MatchState.reset()
+	_check("reset forgets the cards", MatchState._capture.is_empty(), true)
+	_check("and the team's letters", MatchState.team_letters(0), 0)
+	_check("and the layout", MatchState.capture_layout(), null)
+	Net.config.win_condition = MatchConfig.WinCondition.KILL_LIMIT
+	for child in get_children():
+		if child is Pickup:
+			child.queue_free()
+	world.queue_free()
+	await get_tree().process_frame
+
+
+## The layout on its own: the fallback out of a ring of spawn pads, and a map's
+## declared points taking over from it.
+func _run_capture_layout() -> void:
+	_scenario("capture G·U·B: bases and letters out of the spawn pads")
+	var pads: Array[Transform3D] = []
+	for i in 8:
+		var bearing := TAU * float(i) / 8.0 + 0.2
+		pads.append(Transform3D(Basis.IDENTITY,
+			Vector3(cos(bearing) * 20.0, 1.0, sin(bearing) * 20.0)))
+	var layout := CaptureLayout.plan(pads, 2)
+	_check("one base per team", layout.bases.size(), 2)
+	_check("from the fallback", layout.bases_declared, false)
+	_check("the bases are pads", pads.any(func(p: Transform3D) -> bool:
+		return p.origin == layout.bases[0]) and pads.any(func(p: Transform3D) -> bool:
+		return p.origin == layout.bases[1]), true)
+	_check("far apart", layout.bases[0].distance_to(layout.bases[1]) > 25.0, true)
+	var per_team := [0, 0]
+	for team: int in layout.pad_team:
+		per_team[team] += 1
+	_check("the pads split evenly between the bases", per_team, [4, 4])
+	_check("three letter points", layout.letters.size(), 3)
+	for point: Vector3 in layout.letters:
+		var a := _flat_distance(point, layout.bases[0])
+		var b := _flat_distance(point, layout.bases[1])
+		_near("a letter point is as far from one base as the other", a, b)
+		_check("and outside both", a > layout.base_radius, true)
+	_check("in base: inside the radius", layout.in_base(0, layout.bases[0] + Vector3(3, 0, 0)), true)
+	_check("in base: outside it", layout.in_base(0, layout.bases[0] + Vector3(5, 0, 0)), false)
+	_check("in base: on a ledge far above it",
+		layout.in_base(0, layout.bases[0] + Vector3(0, 6, 0)), false)
+	_check("in base: never the other team's", layout.in_base(1, layout.bases[0]), false)
+
+	var three := CaptureLayout.plan(pads, 3)
+	_check("three teams, three bases", three.bases.size(), 3)
+
+	var declared := CaptureLayout.plan(pads, 2, CAPTURE_BASES, CAPTURE_HOMES, 6.0)
+	_check("a map's bases are used", declared.bases, CAPTURE_BASES)
+	_check("and said to be", declared.bases_declared, true)
+	_check("a map's letters are used", declared.letters, CAPTURE_HOMES)
+	_check("a map's radius is used", declared.base_radius, 6.0)
+	_check("pads go to the nearest declared base",
+		declared.pad_team[0], declared.nearest_base(pads[0].origin))
+	var short := CaptureLayout.plan(pads, 3, CAPTURE_BASES, [] as Array[Vector3])
+	_check("too few declared bases falls back whole", short.bases_declared, false)
+	_check("with a base for every team", short.bases.size(), 3)
+
+
+## Free-for-all and Capture G·U·B, both ways round.
+func _run_capture_lobby() -> void:
+	_scenario("capture G·U·B is a Teams mode")
+	var config := MatchConfig.new()
+	config.apply_dict({"mode": MatchConfig.Mode.FREE_FOR_ALL,
+		"win_condition": MatchConfig.WinCondition.CAPTURE})
+	_check("choosing capture turns Teams on", config.mode, MatchConfig.Mode.TEAMS)
+	_check("and keeps capture", config.win_condition, MatchConfig.WinCondition.CAPTURE)
+
+	# The lobby panel's own push, through the host's real `update_config`.
+	MatchState.reset()
+	Net.start_offline()
+	var fresh := MatchConfig.new()
+	fresh.win_condition = MatchConfig.WinCondition.CAPTURE
+	Net.update_config(fresh)
+	_check("the host's config is Teams under capture", Net.config.mode, MatchConfig.Mode.TEAMS)
+	var panel := load("res://scenes/ui/match_settings.tscn").instantiate() as MatchSettingsPanel
+	add_child(panel)
+	var section := panel.find_child("CaptureRules", true, false) as Control
+	_check("the lobby has a capture rules section", section != null, true)
+	if section != null:
+		_check("shown under capture", section.visible, true)
+	var return_row: Control = panel._fields["capture_return_time"]["row"]
+	_check("with the return-time dial showing", return_row.visible, true)
+	panel._push("mode", MatchConfig.Mode.FREE_FOR_ALL)
+	_check("picking Free-for-all gives a free-for-all", Net.config.mode,
+		MatchConfig.Mode.FREE_FOR_ALL)
+	_check("on the kill limit", Net.config.win_condition, MatchConfig.WinCondition.KILL_LIMIT)
+	if section != null:
+		_check("and the capture section hides", section.visible, false)
+	_check("and so does its dial", return_row.visible, false)
+	panel.free()
+	Net.update_config(MatchConfig.new())
+
+	# The two dials travel.
+	var host := MatchConfig.new()
+	host.capture_return_time = 33.0
+	host.capture_carrier_speed = 0.75
+	var arrived := MatchConfig.new()
+	arrived.apply_dict(host.to_dict())
+	_check("the return time survives the trip", arrived.capture_return_time, 33.0)
+	_check("the carrier speed survives the trip", arrived.capture_carrier_speed, 0.75)
+	_check("both are in the replicated key list",
+		host.to_dict().has("capture_return_time") and host.to_dict().has("capture_carrier_speed"),
+		true)
+	arrived.apply_dict({"capture_return_time": 9000.0, "capture_carrier_speed": 40.0})
+	_check("an absurd return time is clamped", arrived.capture_return_time, 60.0)
+	_check("an absurd carrier speed is clamped", arrived.capture_carrier_speed, 1.2)
+	arrived.apply_dict({"capture_return_time": 0.0, "capture_carrier_speed": 0.0})
+	_check("a zero return time is clamped", arrived.capture_return_time, 3.0)
+	_check("a stationary carrier is clamped", arrived.capture_carrier_speed, 0.5)
+	arrived.apply_dict({"win_condition": MatchConfig.WinCondition.CAPTURE + 1})
+	_check("a condition past capture is clamped to it", arrived.win_condition,
+		MatchConfig.WinCondition.CAPTURE)
 
 
 func _run_config_validation() -> void:

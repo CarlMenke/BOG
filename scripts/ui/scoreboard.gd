@@ -76,7 +76,7 @@ func rebuild() -> void:
 	# Mutually exclusive with the lives column by construction — they are two
 	# values of one enum — so the two headings can share the far right of the
 	# table without ever having to be laid out around each other.
-	_letters_heading.visible = config.win_condition == MatchConfig.WinCondition.LETTERS
+	_letters_heading.visible = MatchConfig.scores_letters(config.win_condition)
 
 	if config.mode == MatchConfig.Mode.TEAMS:
 		_build_teams(config)
@@ -91,7 +91,7 @@ func _build_teams(config: MatchConfig) -> void:
 	var teams := range(config.team_count)
 	# Under letters the pooled count leads and kills break the tie, which is the
 	# order the results screen crowns them in (D-049).
-	var letters := config.win_condition == MatchConfig.WinCondition.LETTERS
+	var letters := MatchConfig.scores_letters(config.win_condition)
 	teams.sort_custom(func(a, b):
 		if letters and MatchState.team_letter_count(a) != MatchState.team_letter_count(b):
 			return MatchState.team_letter_count(a) > MatchState.team_letter_count(b)
@@ -183,7 +183,7 @@ func _player_row(peer_id: int, config: MatchConfig) -> Control:
 
 	line.add_child(_number(str(MatchState.kills(peer_id)), UIPalette.TEXT))
 	line.add_child(_number(str(MatchState.deaths(peer_id)), UIPalette.TEXT_DIM))
-	if config.win_condition == MatchConfig.WinCondition.LETTERS:
+	if MatchConfig.scores_letters(config.win_condition):
 		line.add_child(_letters_cell(peer_id))
 	if config.win_condition == MatchConfig.WinCondition.LIVES:
 		var left := MatchState.lives_left(peer_id)

@@ -96,6 +96,8 @@ func _ready() -> void:
 	MatchState.letter_hold_changed.connect(_on_letters_changed)
 	MatchState.letter_picked_up.connect(_on_letter_picked_up)
 	MatchState.letter_banked.connect(_on_letter_banked)
+	MatchState.letter_dropped.connect(_on_letter_dropped)
+	MatchState.letter_returned.connect(_on_letter_returned)
 	Net.chat_received.connect(_chat.add_message)
 	Net.left_lobby.connect(_on_left_lobby)
 	Net.return_to_lobby_requested.connect(_go_to_lobby)
@@ -259,17 +261,23 @@ func _refresh_abilities() -> void:
 ## `LetterTrack.set_state` throws away the repaint when nothing actually moved,
 ## which is what makes paying for both free.
 func _refresh_letters() -> void:
-	var show := Net.config.win_condition == MatchConfig.WinCondition.LETTERS
+	var show := MatchConfig.scores_letters(Net.config.win_condition)
 	_letters.visible = show
 	if not show:
 		return
 	var me := Net.local_id()
+	# A Capture G·U·B carry is a hold with no clock (D-051): the lamp is full
+	# from the moment the card is picked up, and the caption says where to take
+	# it instead of how long is left. `letter_hold_remaining` is INF for one, so
+	# it is not handed to a control that would divide by it.
+	var carrying := MatchState.is_capture()
 	# `scoring_letters` is your team's pooled mask in Teams and your own in a
 	# free-for-all (D-049) — the lamps show what the match is judged on, which
 	# in Teams is not what you personally banked.
 	_letters.set_state(MatchState.scoring_letters(me), MatchState.letter_hold_letter(me),
-		MatchState.letter_hold_remaining(me), Net.config.letter_hold_time,
-		Net.config.mode == MatchConfig.Mode.TEAMS)
+		0.0 if carrying else MatchState.letter_hold_remaining(me),
+		Net.config.letter_hold_time,
+		Net.config.mode == MatchConfig.Mode.TEAMS, carrying)
 
 
 ## The robe's countdown, for the local player only (D-040).
@@ -442,6 +450,19 @@ func _on_letter_picked_up(peer_id: int, letter: int) -> void:
 func _on_letter_banked(peer_id: int, letter: int) -> void:
 	_kill_feed.add_event([peer_id, "banked",
 		[MatchState.letter_name(letter), Pickup.LETTER_COLOUR]])
+
+
+## Capture G·U·B (D-051). A carrier's death already has a kill row; this is the
+## row that says the card is now on the ground and whose it was, which is what
+## both teams run towards.
+func _on_letter_dropped(peer_id: int, letter: int) -> void:
+	_kill_feed.add_event([peer_id, "dropped",
+		[MatchState.letter_name(letter), Pickup.LETTER_COLOUR]])
+
+
+func _on_letter_returned(letter: int) -> void:
+	_kill_feed.add_event([[MatchState.letter_name(letter), Pickup.LETTER_COLOUR],
+		"went home"])
 
 
 func _on_local_death(respawn_in: float) -> void:

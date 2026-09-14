@@ -50,6 +50,13 @@ signal letter_hold_changed(peer_id: int)
 ## the only one of the two a card produces. Both fire on every peer.
 signal letter_picked_up(peer_id: int, letter: int)
 signal letter_banked(peer_id: int, letter: int)
+## Capture G·U·B only (D-051), and events in the same sense as the two above: a
+## dead carrier's letter hit the ground, and a letter went home to its spawn —
+## after lying dropped too long, or straight away when a carrier died where no
+## card could land. Both fire on every peer. `letter_returned` names no peer,
+## because nobody did it.
+signal letter_dropped(peer_id: int, letter: int)
+signal letter_returned(letter: int)
 ## One player has become, or stopped being, the Elder. Carries the peer for the
 ## same reason the two above do: `_elders` already holds the answer by the time
 ## this fires, and a signal carrying a copy of it is a copy waiting to disagree.
@@ -183,6 +190,28 @@ var _team_letters: Dictionary = {}
 ## rule would mean a robe that refuses to be collected.
 var _elders: Dictionary = {}
 
+## Capture G·U·B (D-051). What the arena's map declared, handed over before
+## `register_arena`, and the layout planned from it and the spawn pads. The
+## layout exists on every peer, because every peer draws the bases; it is
+## planned whatever the win condition, because it costs a loop over eight pads
+## and a harness can then inspect it on any map.
+var _capture_declared_bases: Array[Vector3] = []
+var _capture_declared_letters: Array[Vector3] = []
+var _capture_declared_radius: float = CaptureLayout.DEFAULT_BASE_RADIUS
+var _capture_layout: CaptureLayout = null
+## Host only. letter -> {home: Vector3, pickup: int, carrier: int, return_at: float}.
+## Exactly one row per letter once the cards are out: `pickup` is the id of the
+## card on the ground (0 while carried), `carrier` the peer holding it (0 while
+## on the ground), and `return_at` the host clock at which a dropped card goes
+## home (0 while it is at home or carried). Empty until the cards are spawned.
+var _capture: Dictionary = {}
+## Host only. Set by a warmup in this mode, cleared once the cards are out. The
+## cards are settled onto the ground with physics queries, and a map's collision
+## is not in the broadphase until the physics has stepped — so they go out a
+## couple of physics frames after the arena registered, not from inside it.
+var _capture_pending: bool = false
+var _arena_physics_frame: int = 0
+
 
 func _ready() -> void:
 	Net.left_lobby.connect(_on_left_lobby)
@@ -213,6 +242,9 @@ func set_void_height(height: float = VOID_HEIGHT) -> void:
 func register_arena(players_root: Node, spawn_points: Array[Transform3D]) -> void:
 	_players_root = players_root
 	_spawn_points = spawn_points
+	_capture_layout = CaptureLayout.plan(_spawn_points, config().team_count,
+		_capture_declared_bases, _capture_declared_letters, _capture_declared_radius)
+	_arena_physics_frame = Engine.get_physics_frames()
 	# Deterministic but not identical between matches, so the same person does
 	# not always open on the same ledge.
 	var rng := RandomNumberGenerator.new()
@@ -349,6 +381,12 @@ func reset() -> void:
 	_next_pickup_id = 1
 	_clear_letter_holds()
 	_clear_elders()
+	_capture.clear()
+	_capture_pending = false
+	_capture_layout = null
+	_capture_declared_bases = []
+	_capture_declared_letters = []
+	_capture_declared_radius = CaptureLayout.DEFAULT_BASE_RADIUS
 	_arena_ready.clear()
 	_arena_ready_deadline = 0.0
 	# The arena these point into is the one being left, and it is freed on the
@@ -374,6 +412,8 @@ func _set_phase(next: Phase) -> void:
 func _begin_warmup() -> void:
 	stats.clear()
 	_team_letters.clear()
+	_capture.clear()
+	_capture_pending = is_capture()
 	for peer_id: int in Net.peer_ids():
 		stats[peer_id] = _new_stats()
 	_finished = false
@@ -421,6 +461,9 @@ func _process(delta: float) -> void:
 			_try_begin_warmup()
 		return
 
+	if _capture_pending and phase != Phase.POST_MATCH:
+		_try_spawn_capture_letters()
+
 	if phase == Phase.WARMUP:
 		_phase_timer -= delta
 		if _phase_timer <= 0.0:
@@ -435,6 +478,7 @@ func _process(delta: float) -> void:
 	_tick_respawns()
 	_tick_void()
 	_tick_letter_holds()
+	_tick_capture()
 	_tick_elders()
 
 
@@ -490,20 +534,21 @@ func _tick_void() -> void:
 
 # ------------------------------------------------------------------ spawns ---
 
-func _next_spawn() -> Transform3D:
-	if _spawn_points.is_empty():
+func _next_spawn(peer_id: int = 0) -> Transform3D:
+	var pool := _spawn_pool(peer_id)
+	if pool.is_empty():
 		return Transform3D.IDENTITY
 	# Walk the list rather than picking at random, so two Gubs cannot land on
 	# the same pad on the same frame.
-	var best := _spawn_points[_spawn_cursor % _spawn_points.size()]
+	var best := pool[_spawn_cursor % pool.size()]
 	_spawn_cursor += 1
 
 	# Prefer a pad with nobody standing near it. Spawning face to face with an
 	# armed Gub is the cheapest death in the game.
 	var safest := best
 	var safest_distance := -1.0
-	for i in _spawn_points.size():
-		var candidate := _spawn_points[(_spawn_cursor + i) % _spawn_points.size()]
+	for i in pool.size():
+		var candidate := pool[(_spawn_cursor + i) % pool.size()]
 		var nearest := INF
 		for gub: Gub in gubs.values():
 			if is_instance_valid(gub) and gub.alive:
@@ -516,8 +561,25 @@ func _next_spawn() -> Transform3D:
 	return safest
 
 
+## The pads `peer_id` may spawn on. Every pad, except in Capture G·U·B, where a
+## Gub spawns on the pads nearest its own team's base (D-051) — a carrier's
+## teammates come back next to the base they are defending, and nobody opens a
+## match standing in the other team's. A team with no pads of its own, and
+## `peer_id` 0 (a card with nowhere else to go), use every pad.
+func _spawn_pool(peer_id: int) -> Array[Transform3D]:
+	if peer_id == 0 or not is_capture() or _capture_layout == null \
+			or _capture_layout.pad_team.size() != _spawn_points.size():
+		return _spawn_points
+	var team := Net.player_team(peer_id)
+	var pool: Array[Transform3D] = []
+	for i in _spawn_points.size():
+		if _capture_layout.pad_team[i] == team:
+			pool.append(_spawn_points[i])
+	return pool if not pool.is_empty() else _spawn_points
+
+
 func _spawn_gub(peer_id: int) -> void:
-	var spawn := _next_spawn()
+	var spawn := _next_spawn(peer_id)
 	var life := _life_of(peer_id)
 	_create_gub.rpc(peer_id, spawn, life)
 	_create_gub(peer_id, spawn, life)
@@ -604,7 +666,7 @@ func _create_gub(peer_id: int, spawn: Transform3D, life: int) -> void:
 
 
 func _respawn(peer_id: int) -> void:
-	var spawn := _next_spawn()
+	var spawn := _next_spawn(peer_id)
 	var entry: Dictionary = stats[peer_id]
 	entry["alive"] = true
 	entry["respawn_at"] = 0.0
@@ -957,6 +1019,14 @@ func claim_pickup(pickup_id: int, peer_id: int) -> void:
 		return
 
 	match pickup.kind:
+		Pickup.Kind.LETTER when is_capture():
+			# Capture G·U·B (D-051). One letter carried at a time, and a letter
+			# the carrier's team has already banked is not picked up at all:
+			# the card stays where it is. Returning before `_take_pickup` is
+			# what leaves it there.
+			if is_holding_letter(peer_id) or scoring_letters(peer_id) & pickup.letter != 0:
+				return
+			_begin_capture_carry(peer_id, pickup.letter)
 		Pickup.Kind.LETTER:
 			# **One hold at a time** (D-035). A card walked over while a hold is
 			# already running is left exactly where it is — not consumed, not
@@ -1004,6 +1074,17 @@ func _take_pickup(pickup_id: int, peer_id: int) -> void:
 	_pickups.erase(pickup_id)
 	if is_instance_valid(pickup):
 		pickup.take(peer_id)
+
+
+## Take an item off the ground with nobody collecting it, on every peer. The
+## host's word that a dropped Capture G·U·B card has lain long enough (D-051);
+## it withers where it lies, and the same letter is spawned at home.
+@rpc("authority", "call_remote", "reliable")
+func _withdraw_pickup(pickup_id: int) -> void:
+	var pickup: Pickup = _pickups.get(pickup_id)
+	_pickups.erase(pickup_id)
+	if is_instance_valid(pickup):
+		pickup.wither()
 
 
 # ----------------------------------------------------------------- letters ---
@@ -1226,6 +1307,9 @@ func _interrupt_letter_hold(peer_id: int, at: Vector3) -> void:
 		return
 	var letter := int(_letter_holds[peer_id]["letter"])
 	_end_letter_hold(peer_id)
+	if is_capture():
+		_drop_capture_card(peer_id, letter, at)
+		return
 	if at == Vector3.INF:
 		return
 	# The ground under the corpse, or — when there is none — a spawn pad.
@@ -1301,6 +1385,194 @@ func letter_hold_letter(peer_id: int) -> int:
 	if not _letter_holds.has(peer_id):
 		return 0
 	return int(_letter_holds[peer_id]["letter"])
+
+
+# ---------------------------------------------------------- capture G·U·B ---
+
+## Capture the flag with the three letters (D-051). The user: *"capture the flag
+## game mode with the letters, you have to pick up the letter and drop it in
+## your base, there are only 3 and dont drop from users dying"*.
+##
+## **Three cards, spawned once, never rolled.** G, U and B go out at their home
+## points when the match starts and there are never more than three: no corpse
+## drops a letter in this mode (`_drop_loot` only rolls cards under LETTERS).
+##
+## **A carry is a hold with no clock.** Touching a card starts a row in
+## `_letter_holds` whose deadline is infinity, so everything D-035 and D-050
+## built on that row comes for free and cannot disagree: the card in the fist,
+## no spear or bolt while carrying, the gold marker over the carrier's head on
+## every screen, the "picked up" feed line. What ends it is not a clock but one
+## of three things — walking into your own base (banked), dying or leaving
+## (dropped), or the match ending.
+##
+## **Banking** adds the letter to the carrier's team mask through `award_letter`,
+## exactly as a finished hold does, and the card goes straight back to its home
+## point so both teams can still fight over it. A team whose mask is full wins.
+## A team cannot pick up a letter it has already banked; the card is left where
+## it is for the other team, so a team that is ahead cannot sit on the letters
+## the other team still needs.
+##
+## **A dead carrier's card drops where they died** and lies there for
+## `capture_return_time` seconds, for anybody to take — the carrier's own team
+## included — and then goes home. A death with no ground under it (the void, a
+## gorge) sends it home at once: a letter must never leave the match, or the
+## match can deadlock.
+
+
+## Called by `arena.gd` before `register_arena`, with whatever the map declared
+## (empty for a map that declares nothing, which is every map today).
+func set_capture_map(bases: Array[Vector3], letters: Array[Vector3],
+		radius: float = CaptureLayout.DEFAULT_BASE_RADIUS) -> void:
+	_capture_declared_bases = bases
+	_capture_declared_letters = letters
+	_capture_declared_radius = radius
+
+
+func is_capture() -> bool:
+	return config().win_condition == MatchConfig.WinCondition.CAPTURE
+
+
+## The layout planned for the arena currently registered, or null before one is.
+func capture_layout() -> CaptureLayout:
+	return _capture_layout
+
+
+## Host only. Where each letter is: "home", "carried" or "dropped", or "" when
+## the cards are not out. For harnesses and the HUD; the rules read `_capture`.
+func capture_state(letter: int) -> String:
+	var entry: Dictionary = _capture.get(letter, {})
+	if entry.is_empty():
+		return ""
+	if int(entry["carrier"]) != 0:
+		return "carried"
+	return "dropped" if float(entry["return_at"]) > 0.0 else "home"
+
+
+## Put the three cards out, once the physics can say where the ground is.
+func _try_spawn_capture_letters() -> void:
+	if _capture_layout == null or not _arena_is_standing():
+		return
+	# Two physics frames after registering, so a static map's collision, built
+	# in its own `_ready`, is in the broadphase before anything asks it for a
+	# floor. A world-less harness root has nothing to wait for.
+	if _world() != null and Engine.get_physics_frames() < _arena_physics_frame + 2:
+		return
+	_spawn_capture_letters()
+
+
+## Host only. Settle the home points and spawn G, U and B on them.
+func _spawn_capture_letters() -> void:
+	_capture_pending = false
+	_capture.clear()
+	if _capture_layout == null or _capture_layout.letters.size() < LETTERS.size():
+		push_warning("MatchState: no letter points for Capture G·U·B")
+		return
+	var world := _world()
+	var homes := _capture_layout.settle_letters(
+		world.direct_space_state if world != null else null)
+	for i in LETTERS.size():
+		var letter := LETTERS[i]
+		_capture[letter] = {"home": homes[i], "pickup": 0, "carrier": 0, "return_at": 0.0}
+		_send_capture_home(letter, false)
+
+
+## Host only. Put `letter` on its home point, withdrawing any copy still lying
+## somewhere else, and optionally say so in the feed.
+func _send_capture_home(letter: int, announce: bool) -> void:
+	var entry: Dictionary = _capture.get(letter, {})
+	if entry.is_empty():
+		return
+	var lying := int(entry["pickup"])
+	if lying != 0:
+		_withdraw_pickup.rpc(lying)
+		_withdraw_pickup(lying)
+	entry["carrier"] = 0
+	entry["return_at"] = 0.0
+	entry["pickup"] = _spawn_drop(Pickup.Kind.LETTER, letter, entry["home"])
+	if announce:
+		_announce_capture.rpc(0, letter)
+		_announce_capture(0, letter)
+
+
+## Host only, from `claim_pickup`, which has checked that this Gub is alive,
+## carrying nothing, and on a team that still needs this letter.
+func _begin_capture_carry(peer_id: int, letter: int) -> void:
+	var entry: Dictionary = _capture.get(letter, {})
+	if not entry.is_empty():
+		entry["pickup"] = 0
+		entry["carrier"] = peer_id
+		entry["return_at"] = 0.0
+	# INF is the whole difference between a carry and a hold: no tick ever
+	# finishes it, and `letter_hold_remaining` answers INF for it.
+	_do_begin_hold.rpc(peer_id, letter, INF)
+	_do_begin_hold(peer_id, letter, INF)
+
+
+## Host only. A carry ended by a death or a disconnect: the card lands at `at`
+## for `capture_return_time`, or goes home now if it cannot land.
+func _drop_capture_card(peer_id: int, letter: int, at: Vector3) -> void:
+	var entry: Dictionary = _capture.get(letter, {})
+	if entry.is_empty():
+		return
+	var spot := _drop_spot(at) if at != Vector3.INF else Vector3.INF
+	if spot == Vector3.INF:
+		_send_capture_home(letter, true)
+		return
+	entry["carrier"] = 0
+	entry["pickup"] = _spawn_drop(Pickup.Kind.LETTER, letter, spot)
+	entry["return_at"] = _now() + config().capture_return_time
+	_announce_capture.rpc(peer_id, letter)
+	_announce_capture(peer_id, letter)
+
+
+## Host only, every frame of a running match. Banks carriers standing in their
+## own base and sends home cards that have lain dropped too long.
+func _tick_capture() -> void:
+	if not is_capture() or _capture_layout == null:
+		return
+	for peer_id: int in _letter_holds.keys():
+		if not _letter_holds.has(peer_id) or phase != Phase.PLAYING:
+			continue
+		var gub: Gub = gubs.get(peer_id)
+		# Alive twice over: the host's row and the body. A dead Gub's body keeps
+		# its collision where it fell (D-043), and a carrier killed on the edge of
+		# the other team's base must not bank from the ground there.
+		if not is_alive(peer_id) or not is_instance_valid(gub) or not gub.alive:
+			continue
+		if _capture_layout.in_base(Net.player_team(peer_id), gub.global_position):
+			_bank_capture(peer_id)
+	if phase != Phase.PLAYING:
+		return
+	for letter: int in _capture:
+		var entry: Dictionary = _capture[letter]
+		var due := float(entry["return_at"])
+		if due > 0.0 and _now() >= due:
+			_send_capture_home(letter, true)
+
+
+## Host only. `peer_id` is alive in its own base with a card: score it and send
+## the card home. Only its *own* base — the base check above asks for the
+## carrier's team and nobody else's, so walking into the enemy's does nothing.
+func _bank_capture(peer_id: int) -> void:
+	var letter := letter_hold_letter(peer_id)
+	if letter == 0:
+		return
+	_end_letter_hold(peer_id)
+	award_letter(peer_id, letter)
+	# The award may have ended the match; the whistle leaves the cards alone.
+	if phase != Phase.PLAYING:
+		return
+	_send_capture_home(letter, false)
+
+
+## A dropped card or a returned one, told on every peer. `peer_id` 0 is a
+## return; anything else is that carrier's card hitting the ground.
+@rpc("authority", "call_remote", "reliable")
+func _announce_capture(peer_id: int, letter: int) -> void:
+	if peer_id == 0:
+		letter_returned.emit(letter)
+	else:
+		letter_dropped.emit(peer_id, letter)
 
 
 # ---------------------------------------------------------------- the elder ---
@@ -1487,7 +1759,7 @@ func team_score(team: int) -> int:
 ## under letters, and deaths stay the tiebreak under everything.
 func ranking() -> Array:
 	var ids := stats.keys()
-	var by_letters := config().win_condition == MatchConfig.WinCondition.LETTERS
+	var by_letters := MatchConfig.scores_letters(config().win_condition)
 	ids.sort_custom(func(a, b):
 		if by_letters and letter_count(a) != letter_count(b):
 			return letter_count(a) > letter_count(b)
@@ -1534,6 +1806,15 @@ func _check_win() -> void:
 				if has_all_letters(peer_id):
 					_finish("letters")
 					return
+		MatchConfig.WinCondition.CAPTURE:
+			# The same test as a Teams letters match, because it is the same
+			# pooled mask (D-049) filled a different way (D-051). The config
+			# forces Teams for this condition, so there is no per-player branch
+			# to fall back to.
+			for team: int in _team_letters:
+				if team_letters(team) & LETTER_ALL == LETTER_ALL:
+					_finish("capture")
+					return
 
 
 ## In teams, a kill counts toward the team's total, so the limit is a team limit.
@@ -1575,7 +1856,7 @@ func _finish(reason: String) -> void:
 		# The pooled masks, so the results screen can crown the team that
 		# spelled it rather than the team with the most kills, and can draw the
 		# team's letters when the member who banked one has already left (D-049).
-		if config().win_condition == MatchConfig.WinCondition.LETTERS:
+		if MatchConfig.scores_letters(config().win_condition):
 			var pooled := {}
 			for team in config().team_count:
 				pooled[team] = team_letters(team)

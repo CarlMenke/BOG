@@ -23,6 +23,11 @@ instead of a spear. The robe is visible to everybody from across the map, the
 clock is visible only to you, and the counter-play is not to kill an Elder but to
 outlast one. Falling off the map still counts, which is what the lure is for.
 
+A match ends on the kill limit, the last Gub standing, the clock, or one of two
+letter modes. **Collect G·U·B**: letter cards fall out of corpses, and you hold
+one up for ten seconds to keep it. **Capture G·U·B**: capture the flag, in
+teams, with exactly three letters that you carry into your own team's base.
+
 ---
 
 **Just want to play it?** See [`docs/PLAYING.md`](docs/PLAYING.md) — run one

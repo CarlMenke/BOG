@@ -88,9 +88,20 @@ func _ready() -> void:
 	else:
 		_build_procedural(entry, started)
 
+	# Capture G·U·B's objectives, if the map states any (D-051). Every map is
+	# asked, whatever the condition, and a procedural map states none: its
+	# layout is the fallback planned from the spawn ring.
+	var static_map := get_node_or_null("Map") as StaticMap
+	if static_map != null:
+		MatchState.set_capture_map(static_map.base_points(), static_map.letter_points(),
+			static_map.base_radius)
+	else:
+		MatchState.set_capture_map([] as Array[Vector3], [] as Array[Vector3])
+
 	# The handover. Every peer calls this for itself; only the host acts on it,
 	# and it is what starts the warmup.
 	MatchState.register_arena(_players, spawn_points)
+	_build_capture_bases()
 
 
 # -------------------------------------------------------------- procedural ---
@@ -355,3 +366,26 @@ func _build_torches() -> void:
 		torch.position = spot.position
 		lights.add_child(torch)
 		index += 1
+
+
+# ----------------------------------------------------------------- capture ---
+
+## A glowing ring in each team's colour at each Capture G·U·B base (D-051),
+## from the layout `register_arena` just planned. On every peer, and only in
+## that mode: a base drawn in a kill-limit match is a promise of a rule that is
+## not there.
+func _build_capture_bases() -> void:
+	var layout := MatchState.capture_layout()
+	if not MatchState.is_capture() or layout == null:
+		return
+	var holder := Node3D.new()
+	holder.name = "CaptureBases"
+	add_child(holder)
+	for team in layout.bases.size():
+		var base := CaptureBase.create(team, layout.base_radius)
+		# The base point is a spawn pad or a map's marker, both at foot height.
+		base.position = layout.bases[team]
+		holder.add_child(base)
+	print("  capture: %d bases (%s), letters %s" % [layout.bases.size(),
+		"declared by the map" if layout.bases_declared else "fallback from the spawn pads",
+		"declared by the map" if layout.letters_declared else "fallback between the bases"])
