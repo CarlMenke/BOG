@@ -247,6 +247,11 @@ func can_start_match() -> bool:
 		if peer_id != 1 and not is_ready(peer_id):
 			return false
 	if config.mode == MatchConfig.Mode.TEAMS:
+		# Random teams are dealt at Start, and dealing round-robin puts two or
+		# more Gubs on at least two teams — so whatever the roster says right now
+		# is about to be overwritten, and only the head count matters.
+		if config.random_teams:
+			return players.size() >= 2
 		# Every team that exists must have someone on it, or a team wins by
 		# default the moment the match starts.
 		var occupied := {}
@@ -277,6 +282,32 @@ func _smallest_team() -> int:
 		if counts[i] < counts[best]:
 			best = i
 	return best
+
+
+## Shuffle `ids` and deal them round-robin into `team_count` teams, returning
+## peer id -> team. Pure, so `tools/match_rules.gd` can deal rosters of any size
+## without a session.
+##
+## Round-robin over a shuffled order rather than "each to the smallest team" is
+## what makes the balance a property instead of a hope: after dealing k Gubs the
+## team sizes are floor/ceil of k/team_count, so no two differ by more than one
+## however many there are. More teams than Gubs simply leaves the tail empty,
+## which is the same state a lobby of hand-picked teams is allowed to start in.
+static func deal_teams(ids: Array, team_count: int) -> Dictionary:
+	var order := ids.duplicate()
+	order.shuffle()
+	var count := maxi(1, team_count)
+	var out := {}
+	for i in order.size():
+		out[order[i]] = i % count
+	return out
+
+
+## Host only. Overwrite every roster row's team with a fresh deal.
+func _deal_random_teams() -> void:
+	var dealt := deal_teams(players.keys(), config.team_count)
+	for peer_id: int in dealt:
+		players[peer_id]["team"] = dealt[peer_id]
 
 
 static func sanitize_name(raw: String, fallback: String = "Gub") -> String:
@@ -461,6 +492,11 @@ func _request_team(team: int) -> void:
 		peer_id = 1
 	if not players.has(peer_id) or config.mode != MatchConfig.Mode.TEAMS:
 		return
+	# The lobby disables the picker under random teams; this is the same refusal
+	# for a peer that sends the request anyway. It would be overwritten at Start
+	# regardless, but a stripe that moves and then moves back is a lie in between.
+	if config.random_teams:
+		return
 	players[peer_id]["team"] = clampi(int(team), 0, config.team_count - 1)
 	_broadcast_roster()
 	roster_changed.emit()
@@ -542,9 +578,21 @@ func _deliver_chat(peer_id: int, text: String) -> void:
 # ------------------------------------------------------------ match start ---
 
 ## Host only. Tells everyone to load the arena.
+##
+## Under random teams this is the one place teams are dealt. The roster goes out
+## *before* `_begin_match`: both are reliable RPCs on the default channel, so
+## ENet delivers them in the order they were sent, and every client has its new
+## team before it loads the arena that tints and labels Gubs by it (D-046,
+## D-047). A rematch goes through `request_rematch` instead and deliberately
+## deals nothing — the user asked that teams stand until everyone is back in
+## the lobby (D-048).
 func request_match_start() -> void:
 	if not is_host or not can_start_match():
 		return
+	if config.mode == MatchConfig.Mode.TEAMS and config.random_teams:
+		_deal_random_teams()
+		_broadcast_roster()
+		roster_changed.emit()
 	_begin_match.rpc()
 	_begin_match()
 
@@ -575,7 +623,8 @@ func _return_to_lobby() -> void:
 	return_to_lobby_requested.emit()
 
 
-## Host only. Run it again — same roster, same settings, same map seed.
+## Host only. Run it again — same roster, same teams, same settings, same map
+## seed. Random teams are not dealt again here (D-048).
 ##
 ## The seed is deliberately left alone. "Rematch" is a request for another go at
 ## the match everyone just agreed to, and quietly handing them a different island

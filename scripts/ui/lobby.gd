@@ -97,7 +97,7 @@ func _refresh() -> void:
 
 func _backdrop_entries() -> Array:
 	var entries: Array = []
-	var teams := Net.config.mode == MatchConfig.Mode.TEAMS
+	var teams := _teams_are_picked()
 	for peer_id: int in Net.peer_ids():
 		entries.append({
 			"name": Net.player_name(peer_id),
@@ -123,7 +123,7 @@ func _rebuild_player_list() -> void:
 	for child in _player_list.get_children():
 		child.queue_free()
 
-	var teams := Net.config.mode == MatchConfig.Mode.TEAMS
+	var teams := _teams_are_picked()
 	for peer_id: int in Net.peer_ids():
 		_player_list.add_child(_player_row(peer_id, teams))
 	if SHOW_EMPTY_SLOTS:
@@ -196,6 +196,17 @@ func _empty_row() -> Control:
 	return row
 
 
+## Whether the roster's team column means anything in the lobby right now.
+##
+## Under random teams it does not: whatever it holds — the joiner's default, or
+## the deal from the match everyone just came back from — is overwritten when
+## Start is pressed. Painting it into the stripes and the backdrop would show a
+## line-up nobody is going to play in, so the lobby draws those neutral and says
+## the teams are dealt at start instead (D-048).
+func _teams_are_picked() -> bool:
+	return Net.config.mode == MatchConfig.Mode.TEAMS and not Net.config.random_teams
+
+
 ## One button per team, tinted with the colour that team's nameplates will use.
 ## Rebuilt rather than hidden when the team count changes, because the host can
 ## move it from two to eight while people are looking at it.
@@ -205,6 +216,16 @@ func _rebuild_team_picker() -> void:
 	var teams := Net.config.mode == MatchConfig.Mode.TEAMS
 	_team_row.visible = teams
 	if not teams:
+		return
+	if Net.config.random_teams:
+		# No buttons to press, because there is no choice to make. One line in
+		# their place, in the same row, so the question "which team am I on?"
+		# is answered where it is asked.
+		var dealt := Label.new()
+		dealt.theme_type_variation = "SmallLabel"
+		dealt.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		dealt.text = "Random — %d teams dealt when the match starts" % Net.config.team_count
+		_team_picker.add_child(dealt)
 		return
 
 	var mine := Net.player_team(Net.local_id())
@@ -282,6 +303,8 @@ func _why_not_startable() -> String:
 		if peer_id != 1 and not Net.is_ready(peer_id):
 			return "Waiting on %s." % Net.player_name(peer_id)
 	if Net.config.mode == MatchConfig.Mode.TEAMS:
+		if Net.config.random_teams:
+			return "Random teams need at least two Gubs." if Net.player_count() < 2 else ""
 		var occupied := {}
 		for peer_id: int in Net.peer_ids():
 			occupied[Net.player_team(peer_id)] = true

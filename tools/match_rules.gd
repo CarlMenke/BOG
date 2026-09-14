@@ -56,6 +56,7 @@ func _ready() -> void:
 	_run_time_limit()
 	_run_void_credit()
 	_run_spawn_protection()
+	_run_random_teams()
 	_run_config_validation()
 
 	print("match_rules: %d checks, %d failures" % [_checks, _failures])
@@ -890,6 +891,106 @@ func _run_spawn_protection() -> void:
 	_check("paying the killer", MatchState.kills(1), 1)
 
 
+## Random teams (D-048): the deal is balanced, it lands on real teams, it is
+## what Start does and not what a rematch does, and a new start from the lobby
+## deals again.
+func _run_random_teams() -> void:
+	_scenario("random teams")
+	MatchState.reset()
+	# Many deals rather than one, because a shuffle that happens to come out
+	# balanced once proves nothing about the dealing.
+	for shape: Array in [[7, 2], [5, 3], [8, 8], [2, 5], [1, 2], [8, 3]]:
+		var count: int = shape[0]
+		var teams: int = shape[1]
+		var ids: Array = []
+		for i in count:
+			ids.append(1 if i == 0 else 900 + i)
+		for trial in 25:
+			var dealt := Net.deal_teams(ids, teams)
+			_check("%d into %d: everyone is dealt" % [count, teams],
+				dealt.size(), count)
+			var sizes := PackedInt32Array()
+			sizes.resize(teams)
+			sizes.fill(0)
+			var valid := true
+			for peer_id: Variant in ids:
+				var team: int = dealt.get(peer_id, MatchConfig.TEAM_NONE)
+				if team < 0 or team >= teams:
+					valid = false
+				else:
+					sizes[team] += 1
+			_check("%d into %d: everyone is on a real team" % [count, teams], valid, true)
+			var low: int = sizes[0]
+			var high: int = sizes[0]
+			for n in sizes:
+				low = mini(low, n)
+				high = maxi(high, n)
+			_check("%d into %d: team sizes within one (%s)" % [count, teams, str(sizes)],
+				high - low <= 1, true)
+
+	# Now through the shipping path: a seven-Gub lobby, host pressing Start.
+	Net.start_offline()
+	for i in range(1, 7):
+		Net.players[900 + i] = {"name": "R%d" % i, "team": 0, "ready": true}
+	Net.config.mode = MatchConfig.Mode.TEAMS
+	Net.config.team_count = 2
+	Net.config.random_teams = true
+	# Everyone is on team 0, which a hand-picked lobby refuses to start. A random
+	# one is about to be dealt, so only the head count is asked.
+	_check("random teams can start with everyone on one team",
+		Net.can_start_match(), true)
+	Net.set_team(1)
+	_check("a team pick is refused under random teams", Net.player_team(1), 0)
+
+	Net.request_match_start()
+	_check("the match is running", Net.match_running, true)
+	var at_start := _teams_digest()
+	var counts := [0, 0]
+	for peer_id: int in Net.peer_ids():
+		counts[Net.player_team(peer_id)] += 1
+	_check("Start dealt seven Gubs four and three", [mini(counts[0], counts[1]),
+		maxi(counts[0], counts[1])], [3, 4])
+
+	# The user's call: a rematch keeps the teams as dealt.
+	for i in 5:
+		Net.request_rematch()
+		_check("rematch %d keeps the dealt teams" % (i + 1), _teams_digest(), at_start)
+
+	# Back in the lobby they still stand — nothing deals until Start is pressed.
+	Net.request_return_to_lobby()
+	_check("returning to the lobby keeps them too", _teams_digest(), at_start)
+
+	# And a fresh start deals again. One deal of seven into two repeats the last
+	# with probability 1/35, so a new line-up within twenty starts is certain in
+	# every sense but the pedantic one.
+	var redealt := false
+	for i in 20:
+		Net.request_return_to_lobby()
+		Net.request_match_start()
+		if _teams_digest() != at_start:
+			redealt = true
+			break
+	_check("a new start from the lobby deals again", redealt, true)
+
+	# Off, Start leaves hand-picked teams exactly as they were.
+	Net.request_return_to_lobby()
+	Net.config.random_teams = false
+	for peer_id: int in Net.peer_ids():
+		Net.players[peer_id]["team"] = 1 if peer_id % 2 == 0 else 0
+	var picked := _teams_digest()
+	Net.request_match_start()
+	_check("without random teams, Start deals nothing", _teams_digest(), picked)
+	Net.request_return_to_lobby()
+	Net.config = MatchConfig.new()
+
+
+func _teams_digest() -> Array:
+	var out: Array = []
+	for peer_id: int in Net.peer_ids():
+		out.append([peer_id, Net.player_team(peer_id)])
+	return out
+
+
 func _run_config_validation() -> void:
 	_scenario("config arriving off the wire")
 	# `apply_dict` is the deserialiser for host-controlled match settings, so
@@ -1002,6 +1103,7 @@ func _run_config_validation() -> void:
 	host.map_seed = 987654
 	host.map = MapCatalog.ids()[MapCatalog.ids().size() - 1]
 	host.lure_radius = 12.5
+	host.random_teams = true
 	var arrived := MatchConfig.new()
 	arrived.apply_dict(host.to_dict())
 	_check("mode survives the trip", arrived.mode, host.mode)
@@ -1014,6 +1116,13 @@ func _run_config_validation() -> void:
 	_check("and the map is in the replicated key list",
 		host.to_dict().has("map"), true)
 	_check("floats survive", arrived.lure_radius, host.lure_radius)
+	# A lobby toggle left out of `_FIELDS` is one the host sees and nobody else
+	# does: every client's picker would stay live while the host dealt anyway.
+	_check("random teams survives", arrived.random_teams, true)
+	_check("and it is in the replicated key list",
+		host.to_dict().has("random_teams"), true)
+	config.apply_dict({"random_teams": "yes"})
+	_check("a string cannot become random teams", config.random_teams, false)
 
 	var copy := host.duplicate_config()
 	_check("duplicate_config matches", copy.to_dict(), host.to_dict())

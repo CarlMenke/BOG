@@ -3517,3 +3517,56 @@ the far teammate's name over the wall, the far enemy's absent. 33 checks to 38.
   not guaranteed to carry one; a quad cannot go missing.
 - **Showing enemy names through walls "briefly" or at short range.** That is the
   wallhack with a timer on it.
+
+## D-048 — Random teams are dealt at Start, round-robin over a shuffle, and a rematch keeps them
+The user: *"random teams".* Asked whether a rematch should deal again, the user
+said no: teams stay as dealt until everyone is back in the lobby.
+
+**A config field, a lobby toggle, and one place that deals.**
+`MatchConfig.random_teams` is in `_FIELDS`, so it reaches every client with the
+rest of the config. It is a bool, so `apply_dict`'s type check is its whole
+validation. The settings panel shows it under the team count, and hides it
+outside Teams with the other team-only rows. `Net.request_match_start` is the only
+caller of `_deal_random_teams`. It deals, broadcasts the roster, and only then
+sends `_begin_match`. Both are reliable RPCs on the default channel, so ENet
+delivers them in order, and every client has its team before it loads the arena
+that tints and labels by it (D-046, D-047). `request_rematch` is a different
+function and deals nothing. Returning to the lobby deals nothing either. The next
+Start from the lobby deals again.
+
+**Dealing is a pure static function, `Net.deal_teams(ids, team_count)`.** It
+shuffles a copy and assigns index mod team count. After k Gubs the sizes are the
+floor and ceiling of k / team_count, so they never differ by more than one. More
+teams than Gubs leaves the tail empty, which a hand-picked lobby may already
+start with. Harnesses that write stand-in roster rows never call Start, so they
+never deal.
+
+**The lobby.** Under random teams `can_start_match` asks only for two or more
+Gubs, because the current roster teams are about to be overwritten. The team
+picker becomes one line, "Random — n teams dealt when the match starts". The
+host refuses a `_request_team` sent anyway. The row stripes and the backdrop Gubs
+go neutral, because otherwise they would show the default or last match's teams,
+a line-up nobody will play. In the match every Gub is tinted, plated and
+chip-labelled from the dealt roster, unchanged from D-046 and D-047.
+
+**Checked.** `tools/match_rules.gd`, scenario "random teams", already in the gate
+as "match rules" (so the gate count stays 38). It runs 25 deals each of 7 into 2,
+5 into 3, 8 into 8, 2 into 5, 1 into 2 and 8 into 3. Every Gub must be dealt,
+onto a real team, with sizes within one. Then through the real host path in an
+offline session: seven Gubs all on team 0 may start; a team pick is refused; Start
+deals 4 and 3. Five rematches and a return to the lobby must keep that line-up.
+A new Start must deal a different one within twenty tries (a repeat is 1/35 each).
+With the toggle off, Start must leave hand-picked teams alone. The config
+round-trip asserts `random_teams` survives `to_dict`/`apply_dict` and is in the
+key list. `net_test.sh` passes unchanged. It runs free-for-all, so it does not
+cover the ordering across a real socket. That rests on ENet's channel ordering.
+
+### Rejected
+- **Dealing when the toggle is flipped.** Players who join afterwards unbalance
+  it, and the lobby would show teams that change again at Start anyway.
+- **Each Gub to the currently smallest team, in shuffled order.** It gives the
+  same sizes, but it is a loop with a tie-break to get wrong. Round-robin gives
+  the balance by construction.
+- **Dealing on rematch too.** The user's call.
+- **Balancing by skill or past score.** Nothing records skill, and "random" was
+  the request.

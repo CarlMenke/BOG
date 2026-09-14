@@ -39,6 +39,13 @@ const TEAM_NONE := -1
 @export_range(0, 3600) var time_limit: int = 600
 
 @export var friendly_fire: bool = false
+
+## Teams mode only. When set, nobody picks a team: the host shuffles the roster
+## and deals it round-robin across `team_count` the moment Start is pressed, so
+## no two teams differ by more than one Gub (D-048). Teams are dealt by
+## `Net.request_match_start` and nowhere else — a rematch keeps the teams that
+## were dealt, and only a fresh start from the lobby deals again.
+@export var random_teams: bool = false
 @export_range(0.0, 10.0) var respawn_delay: float = 3.0
 @export_range(0.0, 10.0) var spawn_protection: float = 2.0
 @export_range(0.0, 30.0) var warmup_time: float = 5.0
@@ -204,7 +211,7 @@ const TEAM_NONE := -1
 
 const _FIELDS := [
 	"mode", "win_condition", "team_count", "kill_limit", "lives", "time_limit",
-	"friendly_fire", "respawn_delay", "spawn_protection", "warmup_time",
+	"friendly_fire", "random_teams", "respawn_delay", "spawn_protection", "warmup_time",
 	"spear_recharge", "mushroom_use_delay", "mushroom_lifetime", "mushroom_max_active",
 	"lure_use_delay", "lure_radius", "lure_hold", "lure_pull_strength", "lure_fuse",
 	"letter_drop_chance", "letter_hold_time",
@@ -306,6 +313,8 @@ func summary() -> String:
 			parts.append("Collect G·U·B")
 	if time_limit > 0:
 		parts.append("%d:%02d" % [time_limit / 60, time_limit % 60])
+	if mode == Mode.TEAMS and random_teams:
+		parts.append("random teams")
 	if mode == Mode.TEAMS and friendly_fire:
 		parts.append("friendly fire")
 	return "  ·  ".join(parts)

@@ -19,7 +19,7 @@ extends PanelContainer
 ## Rows that only make sense under some configurations. Hiding them beats
 ## disabling them: a greyed-out "Friendly fire" in a free-for-all invites the
 ## question of what it would do, and there is no good answer.
-const TEAM_ONLY := ["team_count", "friendly_fire"]
+const TEAM_ONLY := ["team_count", "random_teams", "friendly_fire"]
 
 @onready var _rows_root: VBoxContainer = %Rows
 @onready var _summary: Label = %Summary
@@ -47,6 +47,9 @@ func _build() -> void:
 	_section("Mode")
 	_choice("mode", "Match type", ["Free-for-all", "Teams"])
 	_choice("team_count", "Teams", ["2", "3", "4", "5", "6", "7", "8"], 2)
+	# Directly under the count it deals into, and hidden with it outside Teams.
+	# Dealt at Start, not now — see `Net.request_match_start` (D-048).
+	_toggle("random_teams", "Random teams")
 	# In `MatchConfig.WinCondition` order, because `_choice` converts by index.
 	# Appending here is the other half of never reordering that enum.
 	_choice("win_condition", "Ends on",
