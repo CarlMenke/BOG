@@ -42,6 +42,11 @@ this is a one-time job unless you make a new tunnel.
 should say **INTERNET (PLAYIT)**. If it does, the code will work for anyone,
 anywhere, with nothing installed on their end.
 
+Working on the game rather than just playing it? In Claude Code, **`/host`**
+does all three of these — it checks the agent is up, builds a fresh `GUB.exe`
+only if the current one is stale, and prints the code before you open the lobby,
+since for a fixed tunnel it is the same code every time.
+
 ### The alternative: Tailscale
 
 If you cannot or would rather not run playit, everyone — not just you — can

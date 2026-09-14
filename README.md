@@ -123,6 +123,11 @@ Gub never feels laggy. Up to 8 players.
 Both presets are committed. Windows is the one the game is played on; macOS is
 universal, so it runs natively on Apple Silicon and on Intel.
 
+In Claude Code, **`/host`** does this and the rest of getting a game going —
+rebuilds only if the build is older than the sources, hands back the path to
+share, checks the playit agent, and prints the invite code. It lives in
+`.claude/skills/host/`.
+
 ```bash
 "$GODOT" --headless --path . --export-release "Windows Desktop" "$PWD/build/windows/GUB.exe"
 "$GODOT" --headless --path . --export-release "macOS"           "$PWD/build/macos/GUB.app"
