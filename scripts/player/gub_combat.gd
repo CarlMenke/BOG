@@ -56,7 +56,7 @@ extends Node
 ## **The Elder's release is not the spear's** (D-040). The user, having played
 ## one: *"there should be basically no delay for the lightning."* The bolt leaves
 ## `MatchConfig.lightning_delay` after the click — 0.2 s by default against the
-## spear's 0.71 — and the *same clip* is played fast enough to have got there, at
+## spear's 0.50 — and the *same clip* is played fast enough to have got there, at
 ## a rate derived from the delay by `GubAnimator.throw_rate_for_release`. The
 ## windup is still one piece of code with one set of edge cases; the only thing
 ## that branches is how fast it runs and when its release lands.
@@ -77,21 +77,21 @@ const LURE := preload("res://scenes/items/lure.tscn")
 # fact about the animation and this file only has to agree with it.
 #
 # It is measured off the clip rather than guessed, and then *derived*: `Throw`
-# is 3.83 s, the animator plays the 0.50-2.10 s window of it at 1.6x, and
-# tracking the `RightHand` bone through the clip gives a peak speed of 9.9 m/s
-# at 1.625 s, with the hand crossing in front of the body at 1.60 and reaching
-# furthest forward at 1.68. A thrown object separates at peak forward hand
-# speed, so the release is 1.633 s of clip — 0.71 s of real time after the
-# click at that rate. By 1.68 the hand is decelerating and letting go there
-# would read as a push rather than a throw.
+# is 2.833 s, the animator plays the 1.067-1.900 s window of it, and tracking
+# the `RightHand` bone against the hips through the built clip puts the hand
+# 0.80 m above them and drawn back at 1.433 and 0.718 m in front of them at
+# 1.567 — the furthest forward it ever gets. That extension is the release, and
+# the window is played at whatever rate lands it half a second after the click,
+# which on this clip is 1.0 (D-063). The hand is quickest at 1.600, on the way
+# *down*, and a spear leaving then would read as a slam rather than a throw.
 #
 # Deriving it from the window and the rate is the point: whoever moves either
 # of those without opening this file cannot leave the spear and the hand
 # disagreeing, which is the bug D-025 exists because of.
 #
-# The throw OneShot's 0.08 s fade-in needs no allowance on top: the clip's arm
-# does not start moving until 0.55 s, so the blend is long finished before
-# anything the eye is following depends on it.
+# The throw OneShot's 0.08 s fade-in needs no allowance on top: the window opens
+# on the quiet frame between the approach and the wind-up, so the blend is
+# finished before anything the eye is following has started.
 
 ## Where the throw leaves the hand, relative to the Gub. The spear is aimed at
 ## whatever the crosshair is over, not simply pushed along the camera's forward
@@ -351,9 +351,10 @@ func lightning_cycle() -> float:
 
 ## How fast the `Throw` clip is played for this Gub's windup.
 ##
-## The spear's authored 1.6 for an ordinary Gub; for an Elder, whatever puts the
-## clip's own release on `lightning_delay` (D-040) — 5.67x at the default 0.2 s,
-## which is 3.54 times the spear's. Derived from the dial every time it is asked
+## The spear's own 1.0 for an ordinary Gub — the clip's authored speed, since
+## D-063 windowed it to land its release on the half second it is wanted at. For
+## an Elder, whatever puts that same release on `lightning_delay` (D-040): 2.5x
+## at the default 0.2 s, where it was 5.67x on the old clip. Derived from the dial every time it is asked
 ## rather than cached, so a host who drags the delay mid-match does not leave one
 ## Gub throwing at the old rate for the rest of its life.
 ##
@@ -558,7 +559,7 @@ func _tick_windup() -> void:
 	# the same question again on arrival and is the copy that counts.
 	#
 	# Its *timing* stays the spear's, which is right: the robe arrived after the
-	# arm did, the clip is already playing at 1.6, and the release is where that
+	# arm did, the clip is already playing at the spear's rate, and the release is where that
 	# arm actually lets go. A bolt out of a spear's windup is a fifth of a second
 	# late by the dial and exactly on time by the animation, and the animation is
 	# what anybody is looking at.

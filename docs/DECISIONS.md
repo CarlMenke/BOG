@@ -734,8 +734,12 @@ That is the same lesson as D-018 and D-019 with a new seam: **a harness proves
 what it exercises, and this one was exercising only the host.**
 
 ## D-025 — The spear leaves the hand at the animation's release, not at the click
-*Still the design. The number moved: the release is 0.71 s into the new throw clip,
-not 0.57 s, and it is derived rather than measured by hand — see **D-029**.*
+*Still the design, and now on its third number. The release was 0.57 s, became
+0.71 s on the throw clip **D-029** rebuilt the Gub with, and is **0.50 s** since
+**D-063** — which changed the clip rather than only the rate, because the
+complaint that arrived after this record was that you could not see the spear
+leave. It has been derived rather than measured by hand throughout; what D-063
+moved is which end of the derivation is the constant.*
 The first playtest's complaint was "it throws and then the animation comes in
 later". It was right, and it was the wrong way round: `try_throw_spear` spawned
 the projectile on the frame of the click and fired the `SpearThrow` OneShot
@@ -5361,3 +5365,210 @@ health for a falloff to take away, and there is now, so it is a live question �
 but the Elder is a twenty-second power-up that already cannot die, and that is a
 change to make with a playtest behind it rather than on the way past. And no
 damage dials of any kind; the bow brings the first ones.
+## D-063 — The throw is a different clip, not a faster one, and the release is derived from the half second rather than toward it
+Two complaints, one sentence, and they pull against each other. The user, having
+played it: *"our goal is to make it so that its clearer to the player when the
+actual spear gets thrown, because there is a short delay from clicking fire to
+when it actually throws. This indication must only be through the gubs animation
+and model, i dont not want it through the ui."*
+
+So: half a second instead of 0.71 s, and a release you can see — **with no UI**,
+which rules out the obvious answer and is the right call. D-036 and D-054 deleted
+the crosshair's recharge ring twice over, and a windup bar would be the same
+mistake wearing a different hat: a meter that tells the thrower something its
+victim cannot see is not a tell, it is a HUD element apologising for an
+animation.
+
+### Speeding the old clip up was the wrong half of the answer
+
+Getting to 0.5 s was nearly free — `GubAnimator.throw_rate_for_release()` has
+existed since D-040 and the Elder already uses it — and it would have made the
+real complaint worse. `GUB_2/Throw` is a baseball-style over-shoulder throw whose
+release frame looks like every frame around it; the fix for "I cannot see it
+happen" is not to play it 42% faster.
+
+So the clip changed. `Throw` is now `2_Spear_Suite/SpearThrowLonger.fbx`,
+2.833 s, and the window the animator plays is **1.067–1.900 s** of it. The old
+file has not moved and is not going to — `assets/source/GUB_2/Throw.fbx` is still
+there, undeclared, and the `PACKS` entry it used to occupy is a comment spelling
+out the one line that puts it back.
+
+### What the new clip actually is, said plainly
+
+It is **not** the javelin plant-and-extend that `docs/PLAN_COMBAT.md` and the
+pack's own README went shopping for, and pretending otherwise would leave the
+next person looking for a plant that is not in there. It is an **overhand
+delivery with a 2.842 m run-up**: jog in, plant, take the arm up over the head,
+chop down and through, and finish bent forward over a lead foot.
+
+Every one of those is a reason it looked like a bad idea on paper, and the
+measurements are why it is not:
+
+- **The run-up is cut, not fought.** `lock_root_motion` clamps the 2.842 m away
+  on every clip in this pipeline — `GUB_2/Throw` itself travels 1.706 m — so the
+  question was never whether the travel survives but whether the *window* starts
+  after it. It does: the approach is over by 1.067, which is the frame the window
+  opens on.
+- **The forward dive never reaches the game.** This was the main risk written
+  into the step, and the answer is that the throw is a **layer**, filtered to
+  `GubAnimator.UPPER_BODY_BONES` — Spine1 and up. Hips and Spine are deliberately
+  outside that filter (D-029), so the clip's own pitch of the pelvis and lower
+  spine, 19° of it at the release and 23° at its worst, simply does not happen.
+  Measured against the clip it replaces, it is not even the more extreme of the
+  two: at their own releases the old throw pitches its lower spine 31° and this
+  one 19°. The Gub throws standing upright, and the in-game frames say so.
+- **The peak hand speed is not the argument, and never was.** The plan hoped for
+  a sharp isolated spike, and `tools/preview_clips.py` measured this clip as the
+  *flattest* of the three candidates — 1.73x its own neighbourhood against the
+  old clip's 2.02x. That reading is correct and it does not matter. What makes
+  this release legible is a **silhouette change**: at 1.433 the shaft is up over
+  the head at arm's length, and one sixth of a second later the hand is empty and
+  out in front. A raised spear against the sky is a shape you can read across a
+  clearing; a hand speed is not.
+
+### Where 1.567 comes from, and why it is not the peak
+
+The release is the frame the throwing hand is **furthest in front of the hips**:
+0.718 m at 1.567 s, measured on the built asset with `tools/hand_track.gd` and
+printed by `tools/build_gub.py` at the end of every build.
+
+That is a different rule from the one D-025 used, and the difference is a fact
+about the clip rather than a change of mind. On a baseball throw the hand is
+quickest on the way *out*, so peak speed comes 0.05 s before full extension and
+the peak is the honest release — which is how the old clip's 1.633 was chosen.
+On this one the hand is quickest at 1.600, **on the way down**: by then it is
+0.11 m back toward the body and dropping past the hip, and a spear leaving there
+reads as a slam. So full extension picks the frame, and the speed peak is what
+says which side of it to stand on.
+
+`tools/build_gub.py` had to be fixed to be able to say this. `measure_clip`
+tracked the hand in **world space**, before `lock_root_motion`, and called the
+furthest-forward moment `min(hand.y)` against a fixed world axis — which on a
+clip that covers 2.842 m and swings through 131° of hip yaw points at the
+approach rather than at the throw, and adds the run-up's 1.0 m/s to every hand
+speed. It is hip-relative and projected onto the body's own forward now, which is
+what `preview_clips.py` and `hand_track.gd` already did. Three tools, one number;
+that is the whole reason the constant can be checked instead of believed.
+
+### The derivation turned around, and stayed a derivation
+
+D-025 exists because a spear and a hand disagreed, and D-040 repeated it. The
+rule is that `THROW_RELEASE_TIME` is derived and never typed. It still is —
+`THROW_WINDOW / THROW_RATE`, the same expression as before — but the chain now
+runs the other way:
+
+    THROW_WINDOW          = 1.567 - 1.067   = 0.500    measured off the clip
+    THROW_RELEASE_TARGET  = 0.5                        what the user asked for
+    THROW_RATE            = WINDOW / TARGET = 1.0      derived
+    THROW_RELEASE_TIME    = WINDOW / RATE   = 0.5      derived, as before
+
+The rate is the thing that absorbs a change now, which is the right way round:
+move the window and the release still lands where it was promised. And
+`THROW_RELEASE_TIME` is derived *through* the rate rather than aliased to the
+target — the same number today and the wrong number the day somebody pins the
+rate by hand. Written this way, the ask is what visibly stops being met instead
+of the constant quietly lying.
+
+**The rate coming out at exactly 1.0 is the result, not a tidy coincidence.** The
+clip's own delivery takes exactly the half second it was wanted in, so what the
+player sees is the throw as it was drawn, at the speed it was drawn at. The old
+clip needed 1.6x to fit 1.133 s of arm into 0.71 s. The window's start is where
+the freedom went: 1.067 is a real pose — the arm hanging level with the hips
+between the approach and the wind-up, so the OneShot's 0.08 s fade-in finishes
+before anything the eye is following begins — *and* it is the start that makes
+the window the half second the release is owed.
+
+`THROW_RATE_MAX` changed shape for the same reason. It was a typed 8.0 whose own
+comment said it meant 0.14 s of arm; on a 0.500 s window the same 8.0 would have
+silently meant 0.06 s, three and a half frames, with nothing anywhere saying the
+number had stopped meaning what it said. So the floor is the constant now —
+`THROW_RELEASE_MIN = 0.14` — and the ceiling is `WINDOW / MIN`, 3.57x. The Elder
+at `lightning_delay` 0 gets exactly the behaviour it had.
+
+### The window ends at 1.900, and the fade-out is doing work there
+
+0.333 s past the release, which is further than it looks. Godot fades a one-shot
+out *inside* its window (the same fact `LAND_CLIP_END` records), so
+`THROW_FADE_OUT`'s 0.22 s runs from clip 1.680 and full weight ends a tenth of a
+second after the spear has gone. The clip's deepest forward pitch is 1.700–1.780
+and its recovery hunches the chest for the whole second after that. The fade is
+what the follow-through hands over to, instead of the graph playing out a
+recovery the standing physics body has no use for.
+
+### The two tells that already existed, checked rather than replaced
+
+Both hold. `HeldSpear` empties on the release tick — `GubCombat._do_throw_spear`
+calls `_refresh_hand()` and *then* launches the shaft, and the new smoke check
+reads the fist at the instant the projectile enters the tree, which is the one
+moment that promise is about. `spear_trail.gd` is untouched and is the streak in
+the frame two ticks after the release in the new mode's own snapshot. Nothing was
+added on top of them, and nothing went near the HUD.
+
+`preview_grip` was re-run across the new window, because the grip in
+`HeldSpear.GRIP_OFFSET` was tuned against 27 poses of which a fifth came from the
+old `Throw`. The shaft is in the fist for the whole window and clear of the head
+and the body throughout, including the frame it is straight up over the head.
+
+### What the gate gained and what it had to give back
+
+A new check, **"the spear leaves when the arm does"** — `combat_range`'s
+`release` mode, 71 checks now. One throw and three numbers off it: the shaft
+arrives 504 ms after the click against the 500 it was promised; the fist is
+already empty at the instant it does; and the tick it arrives on is within two of
+the tick the throwing hand is furthest in front of the hips.
+
+The third is the one worth having, because it is **the only check in the gate
+that reads the animation rather than a number derived from it**. Every other
+spear assertion here would go green on a window moved 0.2 s with the rate moved
+to match — the constants would agree with each other perfectly and the shaft
+would leave a Gub whose arm was still going back. `tools/match_rules.gd` gained
+the cheap half of the same idea: the release time asserted against the literal
+0.5, which is the only form of that assertion that can ever fail.
+
+Retuned rather than loosened, because the release got shorter: `spear kills` from
+110 ticks to 95 (click 20, plus 30 of windup, plus 20 of flight = 70, and the
+same 25 ticks of margin the 110 had). `SPEAR_VERDICT_DELAY` and `WARD_DURATION`
+are left where they are and say why in their own comments — both were sized with
+margin over the old, longer release, and a verdict taken late costs a headless
+run half a second while one taken early cannot tell "blocked" from "not there
+yet".
+
+### What the Elder inherits in the meantime, honestly
+
+`GubCombat.windup_rate()` plays **this same clip** for the Elder, at whatever
+rate lands the release on `lightning_delay`. That is 2.5x at the default 0.2 s,
+where it was 5.67x on the old clip — so the Elder's cast is *less* compressed
+than it was, not more, because the window it is compressing is less than half as
+long. The plan's worry that a new clip at 5.67x would be unusable does not
+arrive.
+
+It also matters less than it reads. The robe is a cone that covers the Gub from
+the shoulders down, so what a bolt's windup actually shows is the hat dipping and
+the hand snapping forward with the crackle in it, and both still do. It is
+acceptable to ship as it stands. **Step 5 of `docs/PLAN_COMBAT.md` is still the
+fix**, and it now knows what it is inheriting: a shared window that works rather
+than one that is embarrassing, so the argument for giving the Elder its own clip
+is "a cast is not a throw" and no longer "this looks broken".
+
+### Rejected
+
+**A windup bar, a charging crosshair, or any HUD element at all.** Asked for
+explicitly and refused explicitly; see the top of this record.
+
+**Keeping the old clip and only changing the rate.** It is the change that fixes
+the complaint the user stated *second* and makes the one they stated first worse.
+
+**Building both clips and naming the new one `SpearThrow`.** Clip names are one
+flat namespace across every pack (`check_declarations` refuses a collision), so
+this would have meant `gub.glb` carrying a 3.83 s clip nothing plays, an edit to
+`REQUIRED_CLIPS`, and edits to `hand_track.gd` and `preview_grip.gd`, both of
+which default to `Throw` — all so that the build log could go on reporting the
+release of a clip the game no longer uses. The name belongs to whichever clip is
+the throw.
+
+**Moving `THROW_RELEASE_IN_CLIP` to 1.600 to match the in-game reading.** The
+composed pose peaks about a frame after the clip does, because the mask drops a
+moving component. Chasing that would pin a *clip* constant to an artefact of
+whatever is blended under it in one particular stance, and standing still is not
+the only way a Gub throws. The clip's own extension is the frame; the harness
+carries the frame of slack, with the reason written next to it.

@@ -20,10 +20,24 @@ Measured by `tools/audit_source_packs.py`:
 | `SpearThrow.fbx` | 231 | 3.833 s | 0.858 m | 1.227 m | **The clip already shipping.** It measures identically to `GUB_2/Throw.fbx` — same Mixamo animation, downloaded a second time — so it is the baseball over-shoulder throw, here as the control the other one is judged against rather than as a new candidate. |
 | `SpearThrowLonger.fbx` | 171 | 2.833 s | 2.842 m | 2.842 m | A javelin throw **with a run-up**: the hips cover 2.84 m over the clip at 1.003 m/s. That travel is real motion, not root drift, and the window step 4 cuts has to start after the approach or the Gub will slide into its own throw. |
 
-These two are **alternates** — step 4 picks one. Neither is yet a plant-and-full-
-extension javelin of the kind the brief above describes; if `SpearThrowLonger`'s
-run-up cannot be cut away cleanly, a third candidate from Mixamo's "Throw
-Javelin" family is the next thing to fetch.
+**`SpearThrowLonger` is the one, and it is declared** (D-063). It is not the
+javelin plant-and-extend the brief above asked for — it is an overhand delivery
+with a run-up — but it does the thing the brief wanted a javelin for: the arm
+goes up over the head with the shaft raised, and one sixth of a second later the
+hand is empty and out in front. `PACKS` takes 1.067-1.900 s of it under the name
+`Throw`, which is the delivery with the approach cut off the front, and plays it
+at 1.0 — its authored speed, because that window is exactly the half second the
+release was asked to land at.
+
+The run-up does not survive and does not need to: `lock_root_motion` clamps the
+2.842 m away, the window opens after it, and the throw is a layer filtered to
+the upper body, so the clip's own forward pitch of the hips never reaches the
+game at all. The Gub throws standing upright from wherever it is.
+
+`SpearThrow.fbx` stays here undeclared, as the control: it measures identically
+to the retired `GUB_2/Throw.fbx`, so it is the clip that was replaced, not a
+second candidate. The build reports it as a file `PACKS` does not name, which is
+what it is.
 
 ## What every clip in every pack has to be
 

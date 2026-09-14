@@ -88,7 +88,7 @@ lies about its cooldown gets its request dropped.
 The spear is the one thing whose *feedback* is instant and whose *effect* is
 not. A click starts the throw animation everywhere — locally, and on the other
 peers through a cosmetic relay the host sends — and the spear leaves the hand
-0.71 s later, at the point in the clip where the arm is coming forward. That
+0.50 s later, on the frame the throwing arm reaches full extension. That
 number is derived from the throw clip's window and rate rather than tuned:
 `GubAnimator.THROW_RELEASE_TIME`, which `gub_combat.gd` reads. The aim is read
 then and not at the click, so a moving target has to be led (**D-025**,

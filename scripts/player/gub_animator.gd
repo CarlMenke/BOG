@@ -135,64 +135,125 @@ const LAND_CLIP_END := 1.45
 const ROLL_CLIP_START := 1.62
 const ROLL_CLIP_END := 2.10
 
-## The throw. `Throw` is 3.83 s of wind-up, throw, follow-through and a long
-## return to idle; only the middle 1.60 s is the throw. The arm does not move
-## until 0.55, so the fade-in has finished before anything the eye follows
-## starts, and the follow-through is done by 1.95.
-const THROW_CLIP_START := 0.50
-const THROW_CLIP_END := 2.10
-## Played faster than authored: 1.60 s of wind-up is a long time to hold a
-## button for, and 1.0 s is not. This is the one clip in the graph with a rate
-## that is not derived from a ground speed, so it gets its own TimeScale node.
-const THROW_RATE := 1.6
+## The throw. `Throw` is `2_Spear_Suite/SpearThrowLonger`, 2.833 s of run-up,
+## overhand delivery and a long hunched recovery (D-063). Only 1.067-1.900 is
+## the throw.
+##
+## The first second of it is an approach the game can never show: the clip
+## covers 2.842 m and `lock_root_motion` clamps every one of those metres away,
+## so a window that opened any earlier would be a Gub sprinting on the spot into
+## its own wind-up. The window opens instead on the quiet frame between the
+## approach and the wind-up — the throwing arm hanging level with the hips, its
+## furthest-forward swing spent — so the OneShot's 0.08 s fade-in is finished
+## before the arm starts back and there is nothing to snap out of.
+##
+## It closes at 1.900, which is 0.333 s past the release and further than it
+## looks: Godot fades a one-shot out *inside* its window (see LAND_CLIP_END), so
+## THROW_FADE_OUT's 0.22 s runs from 1.680 and what is actually held at full
+## weight ends a tenth of a second after the spear has gone. That is deliberate.
+## The clip's deepest forward pitch is 1.700-1.780 and its recovery hunches the
+## chest for the whole of the second after that; the fade is what the
+## follow-through hands over to, instead of the graph playing out a lunge the
+## physics body has nowhere to go with.
+const THROW_CLIP_START := 1.067
+const THROW_CLIP_END := 1.90
 
 ## Where in `Throw` the spear leaves the hand, in the clip's own seconds.
-## Measured, not chosen: tracking the right hand through the clip gives a peak
-## speed of 9.9 m/s at 1.625 s, the hand crossing in front of the body at
-## 1.60 and reaching furthest forward at 1.68. A thrown object separates at peak
-## forward hand speed, so 1.633 (frame 99) is the release; by 1.68 the hand is
-## decelerating and letting go there would read as a push.
-const THROW_RELEASE_IN_CLIP := 1.633
+##
+## Measured, not chosen — and by a different rule from the clip this replaced.
+## Tracking `RightHand` against `Hips` on the *built* asset
+## (`tools/hand_track.gd`), the hand is drawn back and 0.80 m above the hips at
+## 1.433, whips over the shoulder, and reaches 0.718 m in front of the hips at
+## 1.567: the furthest forward it ever gets, and the last frame before it starts
+## back toward the body. `tools/build_gub.py` prints that same 1.567 at the end
+## of every build, which is what makes this a number that can be checked.
+##
+## The old clip's release was its peak hand speed, 0.05 s *before* its full
+## extension, because a baseball throw's hand is fastest on the way out. This
+## one is fastest at 1.600, 10.2 m/s, on the way *down* — the hand is already
+## 0.11 m back toward the body by then and dropping past the hip. Letting go
+## there would read as a slam. So on this clip the rule that picks the frame is
+## full extension, and the speed peak is what says which side of it to be on.
+const THROW_RELEASE_IN_CLIP := 1.567
 
 ## The part of the clip that actually has to have happened by the time the thing
-## in the hand leaves it, in the clip's own seconds. 1.133 s of arm.
+## in the hand leaves it, in the clip's own seconds. 0.500 s of arm.
 ##
-## Named rather than left inline because there are now two questions asked about
-## it and they are inverses of each other: "how long does this take at a given
-## rate" and "what rate makes it take a given time". Both are below, and both
+## Named rather than left inline because there are now three questions asked
+## about it and they are inverses of each other: "how long does this take at a
+## given rate", "what rate makes it take a given time", and — since D-063 — what
+## rate the spear's own throw is played at. All three are below, and all three
 ## have to be reading the same window or the release lands somewhere the arm is
 ## not (D-040).
 const THROW_WINDOW := THROW_RELEASE_IN_CLIP - THROW_CLIP_START
 
-## The fastest the clip will ever be played, whatever it is asked for.
+## How long after the click the spear is *asked* to leave the hand, in real
+## seconds. The one number in this block that is a decision rather than a
+## measurement: the playtest that got D-025's windup called its 0.71 s a delay
+## ("there is a short delay from clicking fire to when it actually throws"), and
+## half a second is what was asked for instead.
+const THROW_RELEASE_TARGET := 0.5
+
+## The rate the window is played at. Derived from the ask above rather than
+## typed beside it, so that a window which moves moves the rate with it and
+## leaves the release where it was promised (D-025, D-063). This is still the
+## one clip in the graph whose rate is not derived from a ground speed, so it
+## still gets its own TimeScale node.
+##
+## It comes out at **1.0**, and that is the argument for this clip rather than a
+## coincidence to be tidied away: the delivery takes exactly the half second it
+## is wanted in, so what the player sees is the throw as it was drawn, at the
+## speed it was drawn at. The clip this replaced needed 1.6x to fit 1.133 s of
+## arm into 0.71 s, and the way to make an illegible release legible was never
+## going to be to play it faster still.
+const THROW_RATE := THROW_WINDOW / THROW_RELEASE_TARGET
+
+## The shortest any throw may be squeezed into, whatever is asked of it.
 ##
 ## It exists for one setting: `lightning_delay` of 0, which is legal and means
 ## "the bolt leaves on the frame of the click". A rate derived from a delay of
 ## zero is a division by zero, and a rate of several hundred is a frame of
-## nothing followed by an arm already back at its side. 8x puts the whole 1.133 s
-## of arm into 0.14 s, which is about as short as a throw can be and still read
-## as one — below that the ceiling does the clamping and the bolt simply leads
-## the hand, which at that setting is what was asked for.
-const THROW_RATE_MAX := 8.0
+## nothing followed by an arm already back at its side. 0.14 s is about as short
+## as a throw can be and still read as one; below it the ceiling does the
+## clamping and the bolt simply leads the hand, which at that setting is what
+## was asked for.
+##
+## Written as the floor and not as the rate, which is the change D-063 made
+## here. The ceiling used to be a typed 8.0 that *meant* 0.14 s, on a window of
+## 1.133 s; on this 0.500 s window the same 8.0 would have quietly become
+## 0.06 s of arm, three and a half frames of it, with nothing anywhere saying
+## the number had stopped meaning what its own comment said. The thing worth
+## carrying across a change of clip is the one with the argument attached.
+const THROW_RELEASE_MIN := 0.14
+## The fastest the clip will ever be played, whatever it is asked for. 3.57x.
+const THROW_RATE_MAX := THROW_WINDOW / THROW_RELEASE_MIN
 
 ## How long after `play_throw()` the spear actually leaves the hand, in real
 ## seconds. `GubCombat` reads this, and it is derived rather than typed so that
 ## moving the window or the rate cannot leave the spear and the hand disagreeing
-## (D-025 is what that costs). = (1.633 - 0.50) / 1.6.
+## (D-025 is what that costs). = (1.567 - 1.067) / 1.0.
+##
+## Derived *through the rate* rather than aliased to `THROW_RELEASE_TARGET`,
+## which would be the same number today and the wrong number the day somebody
+## pins the rate by hand: the rate is what the graph actually plays, so this has
+## to be whatever that rate produces. Written this way the ask above is the
+## thing that visibly stops being met, instead of this quietly lying.
 const THROW_RELEASE_TIME := THROW_WINDOW / THROW_RATE
 
 
 ## The playback rate that puts the release exactly `seconds` after the click.
 ##
 ## The Elder's bolt leaves `MatchConfig.lightning_delay` after the click rather
-## than at the spear's 0.71 s (D-040), and firing at 0.2 s while an arm authored
-## to take 1.133 s of clip is still on its way back would look broken — so the
+## than at the spear's 0.50 s (D-040), and firing at 0.2 s while an arm authored
+## to take 0.500 s of clip is still on its way back would look broken — so the
 ## clip is sped up to meet the number instead of the number being fitted to the
-## clip. At the default 0.2 that is 1.133 / 0.2 = **5.67x**, which is 3.54 times
-## the spear's own 1.6.
+## clip. At the default 0.2 that is 0.500 / 0.2 = **2.5x**, which is two and a
+## half times the spear's own 1.0. It was 5.67x on the old clip, and the Elder
+## borrowing the spear's throw is what step 5 of `docs/PLAN_COMBAT.md` exists to
+## end.
 ##
 ## Derived here rather than typed next to the delay for the reason
-## `THROW_RELEASE_TIME` is derived: a hard-coded 5.67 beside a dial that can be
+## `THROW_RELEASE_TIME` is derived: a hard-coded 2.5 beside a dial that can be
 ## dragged to 0.5 is a hand that finishes a third of a second before the bolt it
 ## is supposed to be throwing, and nothing anywhere would say so.
 static func throw_rate_for_release(seconds: float) -> float:

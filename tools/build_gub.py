@@ -1,7 +1,9 @@
 """Build the Gub — one skinned mesh, one skeleton, every clip — from packs of Mixamo FBX.
 
 `assets/source/GUB_2/` holds the same character exported eight times, one animation
-per file: Idle, Walking, Run, CrouchWalking, Slide, JumpOne, JumpTwo, Throw. Each
+per file: Idle, Walking, Run, CrouchWalking, Slide, JumpOne, JumpTwo, Throw — seven
+of which are still declared, the throw having been replaced out of the spear suite
+(D-063) while its file stays where it is. Each
 file carries a full copy of the mesh (8814 verts), the 49-bone `mixamorig:`
 skeleton and a 2048² base-colour JPEG. Godot wants the opposite shape: one
 `art/generated/gub.glb` with every clip in it, so one AnimationPlayer can blend
@@ -362,7 +364,7 @@ class Pack(collections.namedtuple("Pack", "folder what clips")):
 PACKS = (
     Pack("GUB_2",
          "the Gub as uploaded to Mixamo — the body every other pack is measured "
-         "against, and the eight clips the game shipped with",
+         "against, and seven of the eight clips the game shipped with",
          (
              Clip("Idle.fbx",          "Idle",       True,  LOOP_MEAN),
              Clip("Walking.fbx",       "Walk",       True,  LOOP_MEAN,
@@ -376,16 +378,41 @@ PACKS = (
                   rise_kept=0.0, floor_limit=-0.15),
              Clip("JumpTwo.fbx",       "JumpTwo",    False, 0.58,
                   rise_kept=1.0, floor_limit=-0.20),
-             Clip("Throw.fbx",         "Throw",      False, 0.50),
+             # `Throw.fbx` was declared here and is not any more (D-063). The
+             # throw the game plays is `2_Spear_Suite/SpearThrowLonger.fbx`
+             # below, under the same name, because a baseball throw's release
+             # frame looked like every frame around it. The file has not moved
+             # and is not going to: putting it back is this one line,
+             #     Clip("Throw.fbx",     "Throw",      False, 0.50),
+             # and deleting the line below. Two clips cannot both be called
+             # Throw — every pack lands in one AnimationPlayer.
+         )),
+
+    # The throw the game plays, and the one pack below that is no longer empty.
+    #
+    # `SpearThrowLonger.fbx` is an overhand delivery with a run-up: 2.833 s, of
+    # which the window `gub_animator.gd` cuts is 1.067-1.900 and the 0.833 s
+    # before it is the approach, which `lock_root_motion` would otherwise have
+    # the Gub run on the spot. `align` is 1.067 for the reason every one-shot's
+    # is: it is the first frame of the window, so the pose that appears when the
+    # OneShot fires is the aligned one.
+    #
+    # The other file in the folder, `SpearThrow.fbx`, is deliberately **not**
+    # declared. It measures identically to the retired `GUB_2/Throw.fbx` — the
+    # same Mixamo animation downloaded a second time — so it is the control the
+    # one below was judged against and not a second candidate. The build reports
+    # it as a file PACKS does not name, which is exactly right.
+    Pack("2_Spear_Suite",
+         "the throw the game plays: an overhand delivery whose release frame "
+         "does not look like the frames around it",
+         (
+             Clip("SpearThrowLonger.fbx", "Throw", False, 1.067),
          )),
 
     # Declared and empty. Each folder exists in the tree with a README saying
     # what belongs in it; none of them builds anything until a `Clip(...)` line
     # is written into it, which is the point — a folder somebody dropped files
     # into is not a promise, and a line in this table is.
-    Pack("2_Spear_Suite",
-         "a javelin-style throw with a plant and a full extension at the release, "
-         "so the moment the spear leaves the hand has a silhouette of its own"),
     Pack("3_Bow_Suite",
          "draw, a held aim loop, release, and ideally a dry-fire or a recover"),
     Pack("4_Elder_Suite",
@@ -1013,12 +1040,43 @@ def measure_clip(arm, action, clip):
         "stood_up": recovered,
     }
 
-    hand = tracks["RightHand"]
-    fastest = max(range(1, n), key=lambda i: (hand[i] - hand[i - 1]).length)
-    info["hand_peak"] = (hand[fastest] - hand[fastest - 1]).length * FPS
+    # The throwing hand, measured **relative to the hips** and along the body's
+    # own forward rather than in world space against a fixed world axis.
+    #
+    # Both were world-space until the throw clip changed (D-063), and both were
+    # wrong for the same reason. This runs before `lock_root_motion`, so a clip
+    # that travels carries its hand along at the body's speed and turns with it:
+    # `SpearThrowLonger` covers 2.842 m of run-up and swings through 131 deg of
+    # hip yaw while it throws, which put the old `min(hand.y)` "furthest
+    # forward" somewhere in the approach instead of at the extension, and added
+    # the run-up to every hand speed. It mattered less on a clip that travels
+    # 1.7 m and it was never right.
+    #
+    # Hip-relative is also what `tools/preview_clips.py` and
+    # `tools/hand_track.gd` report, so the release printed at the end of this
+    # build is now the same number those two print and the same one
+    # `gub_animator.gd`'s THROW_RELEASE_IN_CLIP is set from — three tools, one
+    # answer, which is the only way that constant can be checked rather than
+    # believed.
+    left, right = tracks[HIP_JOINTS[0]], tracks[HIP_JOINTS[1]]
+    rel = [tracks["RightHand"][i] - hips[i] for i in range(n)]
+    fastest = max(range(1, n), key=lambda i: (rel[i] - rel[i - 1]).length)
+    info["hand_peak"] = (rel[fastest] - rel[fastest - 1]).length * FPS
     info["hand_peak_at"] = seconds[fastest]
-    reach = min(range(n), key=lambda i: hand[i].y)
-    info["hand_reach_at"] = seconds[reach]
+
+    def reach(i):
+        """How far in front of the hips the hand is, in metres.
+
+        Forward is the hip line turned a quarter turn: `rest_facing` is the yaw
+        of the left-hip -> right-hip line, and the body faces (-y, x) of it.
+        """
+        side = right[i] - left[i]
+        span = math.hypot(side.x, side.y)
+        if span < 1e-6:
+            return 0.0
+        return (rel[i].x * -side.y + rel[i].y * side.x) / span
+
+    info["hand_reach_at"] = seconds[max(range(n), key=reach)]
     return info
 
 

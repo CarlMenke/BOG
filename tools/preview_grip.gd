@@ -8,7 +8,11 @@ extends Node3D
 ## The two optional vectors override the grip so values can be swept from the
 ## command line instead of edited and re-imported one at a time. `from`/`to`
 ## narrow the sheet to a window of the clip in seconds, which is how the throw
-## release (1.63 s of a 3.83 s clip) gets more than one sample on it.
+## release (1.567 s of a 2.83 s clip, D-063) gets more than one sample on it.
+## The window `gub_animator.gd` actually plays is 1.067-1.900, and the grip
+## numbers below were re-checked across it when the clip changed:
+##
+##     ... res://tools/preview_grip.tscn out/grip.png 25 Throw ##         -0.206,-0.582,0.097 -12,0,-15 1.067 1.90
 
 const GUB := preload("res://scenes/player/gub.tscn")
 

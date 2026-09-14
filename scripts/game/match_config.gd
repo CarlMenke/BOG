@@ -153,7 +153,8 @@ const TEAM_NONE := -1
 ## The user, having played it: *"There should be basically no delay for the
 ## lightning, right when you press then it should shoot maybe .2 seconds
 ## after."* **This supersedes the release-time half of D-038**, which fired the
-## bolt at the `Throw` clip's own 0.71 s release because the same clip was being
+## bolt at the `Throw` clip's own release — 0.71 s then, 0.50 s since D-063 —
+## because the same clip was being
 ## reused. The clip stays; it is played faster to meet this number instead —
 ## `GubAnimator.throw_rate_for_release` derives the rate, so the arm and the
 ## bolt cannot drift apart (D-040).

@@ -53,6 +53,18 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##              again, and then walks the player into one. Three verdicts, and
 ##              the second is the reason the first means anything: a spear that
 ##              never kills anybody would sail through the blocked check.
+##   release  — the one thing about the spear that is a *timing* and not a
+##              picture, measured rather than asserted (D-025, D-063). One
+##              throw, over the back wall like `recharge`'s, and three numbers
+##              off it: how long after the click the shaft actually appears in
+##              the world, whether the fist was already empty at the instant it
+##              did, and how far that instant is from the frame the throwing
+##              hand is furthest in front of the hips — which is the frame the
+##              release was cut from and the only independent witness to it. A
+##              window or a rate that moves without `THROW_RELEASE_TIME` moving
+##              with it fails the third of those even when the first two still
+##              agree with each other, which is exactly the bug D-025 exists
+##              because of and D-040 repeated.
 ##   recharge — throws until the spear has grown back a dozen times and requires
 ##              the shaft to be in the fist at the end of every one of them, then
 ##              takes it out of the fist by hand while the throw gate still says
@@ -198,6 +210,7 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##   free     — no script; play it yourself
 const MODES := ["flight", "hit", "arc", "miss", "aim", "mushroom", "cover",
 	"lure", "lure_self", "letter", "cards", "lightning", "blast", "ward", "recharge",
+	"release",
 	"respawn", "health", "embed", "hurt", "walk", "bhop", "leave", "free"]
 
 ## How long after the cast the verdict is taken, in physics ticks. The click
@@ -205,8 +218,8 @@ const MODES := ["flight", "hit", "arc", "miss", "aim", "mushroom", "cover",
 ## 0.2 s since D-040, which is 12 ticks — and the hitscan resolves on that same
 ## tick, since there is no projectile to fly.
 ##
-## Left at fifty rather than retuned down with the delay. It was 0.71 s of
-## windup plus a margin and is now most of it margin, and a verdict taken *late*
+## Left at fifty rather than retuned down with the delay. It was the spear's
+## whole windup plus a margin and is now most of it margin, and a verdict taken *late*
 ## costs a headless run half a second; one taken early cannot tell "the bolt did
 ## nothing" from "the bolt has not gone yet", which is the only way this mode can
 ## lie. If the dial is ever raised past 0.8 s this number has to move with it.
@@ -235,10 +248,12 @@ const BLAST_ELDER_SPOT := Vector3(-4.0, 0.1, -1.0)
 
 ## How long after the click a spear's verdict is taken, in physics ticks. Same
 ## arithmetic as the bolt's above and one more term: the click starts the
-## windup, the shaft leaves `GubAnimator.THROW_RELEASE_TIME` (0.71 s, 42.5
-## ticks) later, and then it has fourteen metres to cross at 42 m/s — twenty
-## ticks. Ninety-five is that plus a margin, and the margin matters more here
-## than it looks: the whole point of `cover` is a throw that is *supposed* to
+## windup, the shaft leaves `GubAnimator.THROW_RELEASE_TIME` (0.50 s since
+## D-063, 30 ticks) later, and then it has fourteen metres to cross at 42 m/s —
+## twenty ticks. Ninety-five is that plus a margin, and it is left where it was
+## when the release was 0.71 s rather than retuned down with it, for the reason
+## `LIGHTNING_VERDICT_DELAY` above is: the margin matters more here than it
+## looks, because the whole point of `cover` is a throw that is *supposed* to
 ## produce nothing, and a verdict taken too early cannot tell "blocked" from
 ## "not there yet".
 const SPEAR_VERDICT_DELAY := 95
@@ -289,10 +304,49 @@ const COVER_OFFSET := 0.5
 ##
 ## Twelve rather than one because the failure it guards is a race between two
 ## clocks, and a race lost by a millisecond passes a single trial by luck. At
-## the 0.15 s recharge this mode sets, a cycle is the 0.71 s windup plus that —
-## 52 ticks — so twelve of them is about 630 ticks, which is what the smoke
-## gate's warmup count is sized for.
+## the 0.15 s recharge this mode sets, a cycle is the 0.50 s windup plus that —
+## 39 ticks — so twelve of them is about 470 ticks, which is what the smoke
+## gate's warmup count is sized for. It was 630 while the windup was 0.71 s.
 const RECHARGE_CYCLES := 12
+
+## `release`'s patience and its settle, in physics ticks.
+##
+## The first is how long after the click a shaft that never appears is given
+## before the mode gives up and says so — three times `THROW_RELEASE_TIME` at
+## the rate this clip is played at, so a release that has merely drifted is
+## still measured and reported as a number rather than reported as "no spear".
+## The second is how long the hand is tracked past the shaft, and it is there
+## because the third verdict is about a *maximum*: the hand has to be seen
+## coming back before the frame it was furthest forward on is known. It reaches
+## 0.718 m at the release and is 0.11 m back a tenth of a second later
+## (`tools/hand_track.gd`), so twelve ticks is comfortably past the turn.
+const RELEASE_PATIENCE := 90
+const RELEASE_SETTLE := 12
+
+## How far apart the shaft and the arm may be, in physics ticks, before the two
+## are called disagreeing. Measured at two, every run; three is one tick of
+## headroom over that and nothing more.
+##
+## Three sounds loose and is not slack: none of it is tolerance for the timing,
+## which is asserted separately and to a frame and a half. It is the sum of two
+## known offsets, both of them in the measuring rather than in the throw.
+##
+## *The pose read here is a frame old.* The release fires from
+## `GubCombat._tick_windup` in `_process`; the arm is sampled in
+## `_physics_process`, which runs before it, off a skeleton the AnimationTree
+## last wrote during the previous frame.
+##
+## *The arm the player sees is not the arm in the clip.* The throw is a layer
+## filtered to `GubAnimator.UPPER_BODY_BONES`, so the clip's own forward pitch
+## of the hips and lower spine — 19 deg of it at the release — never happens,
+## and the hand's reach in front of the hips is 0.51 m here against the clip's
+## own 0.718 m. Dropping a moving component moves the maximum: the clip peaks at
+## 1.567 s and the composed pose peaks about a frame later.
+##
+## What this cannot absorb is the fault it is here for. Putting the release back
+## where the old clip's was, or anywhere else a plausible mistake would put it,
+## is four ticks or more.
+const RELEASE_AGREEMENT := 3
 
 ## How long the deliberate desync waits for the hand to notice, in physics
 ## ticks. Half a second is forty times `HAND_SYNC_GRACE` and several times any
@@ -330,9 +384,10 @@ const COVER_LIFETIME := 120.0
 ## next door can prove the teardown is correct once something calls it, and only
 ## this can prove that something does.
 ##
-## Three seconds is long enough for the first spear's full 0.71 s windup and
+## Three seconds is long enough for the first spear's full 0.50 s windup and
 ## 0.33 s of flight to land inside the window with room either side, and short
-## enough that the run is over in about six.
+## enough that the run is over in about six. It had the same room to spare when
+## the windup was 0.71 s, which is why the number did not move with it (D-063).
 const WARD_DURATION := 3.0
 
 ## How long the `ward` mode will wait for that to happen before calling it a
@@ -456,6 +511,13 @@ const VIEWS := {
 	# pixel tall. Pass `pov` after the mode to look down the throw anyway — that
 	# is the view the player actually gets, and it is worth checking.
 	"aim": {"eye": Vector3(11.0, 8.0, 0.0), "look": Vector3(1.5, 0.2, -13.0), "fov": 55.0},
+	# Side on and close, because the subject is an arm: this mode's verdict is
+	# about where the throwing hand is, and a three-quarter view foreshortens
+	# exactly the axis being measured. Nothing in the gate photographs it —
+	# `preview_grip` is the picture of this — but a mode with no camera entry is
+	# a mode nobody can look at when it fails.
+	"release": {"eye": Vector3(3.4, 1.6, 9.2), "look": Vector3(0.0, 1.05, 9.0),
+		"fov": 50.0},
 }
 
 const PLAYER_SPOT := Vector3(0.0, 0.1, 9.0)
@@ -537,6 +599,24 @@ var _worst_out_of_step: int = 0
 var _desync_at: int = 0
 var _desync_recovered: int = -1
 var _recharge_thrown: int = 0
+
+## `release`'s bookkeeping: the tick and the millisecond of the click, of the
+## shaft appearing, and of the frame the throwing hand was furthest in front of
+## the hips — plus whether the fist still had anything in it at the instant the
+## shaft existed, which is D-025's promise read at the one moment it is about.
+var _release_clicked: int = 0
+var _release_clicked_ms: int = 0
+var _release_spear_at: int = 0
+var _release_spear_ms: int = 0
+var _release_fist_full: bool = true
+var _release_reach_at: int = 0
+var _release_reach: float = -INF
+## Looked up once. `find_child` on every tick of a mode that is about
+## frame-accurate timing is the wrong kind of cost to add to the thing being
+## measured.
+var _release_skeleton: Skeleton3D
+var _release_hand_bone: int = -1
+var _release_hips_bone: int = -1
 
 ## `ward`'s state machine, the same shape as `cover`'s and on gates for the same
 ## reason: the robe is claimed by an `Area3D` overlap and burns out on a
@@ -703,7 +783,7 @@ func _dummy_count() -> int:
 		# Nobody to shoot at. `recharge` throws a dozen spears over the back
 		# wall on purpose (see `RECHARGE_TARGET`) and a dummy in the roster
 		# would only be something for one of them to find.
-		"recharge", "bhop":
+		"recharge", "bhop", "release":
 			return 0
 		_:
 			return 2
@@ -815,6 +895,9 @@ func _physics_process(_delta: float) -> void:
 	if _mode == "recharge":
 		_drive_recharge(player, combat)
 		return
+	if _mode == "release":
+		_drive_release(player, combat)
+		return
 	if _mode == "ward":
 		_drive_ward(combat)
 		return
@@ -858,12 +941,12 @@ func _physics_process(_delta: float) -> void:
 	# `GubCombat.try_throw_spear` only starts the windup, and the spear leaves
 	# the hand THROW_RELEASE_TIME later — so a mode that waits for a spear has
 	# to allow the windup before the projectile even exists, and its whole
-	# flight after that. With the new `Throw` clip that is 0.71 s, which at 60
-	# ticks a second is 42.5 ticks: frame 20 + 42.5 = tick 63 before the spear
-	# is in the air, then 14 m at 42 m/s (0.33 s, 20 ticks) to the dummy, so the
-	# kill lands around tick 83. The warmup counts in `tools/smoke_test.sh` are
-	# sized for that — 110 for the kill, and the lure's 132 is untouched because
-	# the lure leaves on the click.
+	# flight after that. Since D-063 that is 0.50 s, which at 60 ticks a second
+	# is 30 ticks: frame 20 + 30 = tick 50 before the spear is in the air, then
+	# 14 m at 42 m/s (0.33 s, 20 ticks) to the dummy, so the kill lands around
+	# tick 70. The warmup counts in `tools/smoke_test.sh` are sized for that —
+	# 95 for the kill, down from the 110 the 0.71 s release needed, and the
+	# lure's 132 is untouched because the lure leaves on the click.
 	if _frames < 20 or _acted:
 		return
 	_acted = true
@@ -2102,6 +2185,103 @@ func _drive_desync(combat: GubCombat, hand: HeldSpear) -> void:
 	get_tree().quit()
 
 
+# ----------------------------------------------------------------- release ---
+
+## One throw, and the three numbers that say the spear and the arm agree.
+##
+## Deliberately not a picture. Every other spear mode here ends in a PNG of
+## something that either happened or did not; this one ends in a duration, and
+## the whole of D-025 is that the duration is the thing that was wrong. It is
+## also the only check anywhere that reads the *animation* rather than the
+## constant derived from it: `_hand_reach` walks the built skeleton, so a window
+## edited in `gub_animator.gd` without `THROW_RELEASE_TIME` following it lands
+## the shaft somewhere the hand is not, and says so.
+func _drive_release(player: Gub, combat: GubCombat) -> void:
+	var hand := player.held_spear
+	if hand == null:
+		return
+	if _release_clicked == 0:
+		# Same twenty frames of settling every other mode takes, and the same
+		# reason: the rig has to have found the target and the spawn-frame
+		# transforms have to have been published.
+		if _frames < 20 or not combat.has_spear() or not hand.is_carried():
+			return
+		_release_clicked = _frames
+		_release_clicked_ms = Time.get_ticks_msec()
+		_acted = true
+		combat.try_throw_spear()
+		return
+
+	var reach := _hand_reach(player)
+	if _trace:
+		print("  f%d (+%d) hand %.3f m in front of the hips"
+			% [_frames, _frames - _release_clicked, reach])
+	if reach > _release_reach:
+		_release_reach = reach
+		_release_reach_at = _frames
+
+	if _release_spear_at == 0:
+		if _frames - _release_clicked < RELEASE_PATIENCE:
+			return
+	elif _frames - _release_spear_at < RELEASE_SETTLE:
+		return
+	_report_release()
+	get_tree().quit()
+
+
+## How far in front of the hips the throwing hand is, in metres.
+##
+## Off the skeleton's own pose and projected onto the Gub's facing, which is the
+## same quantity `tools/hand_track.gd` prints and `tools/build_gub.py` reports
+## as "furthest forward" — so the frame this peaks on is the frame
+## `GubAnimator.THROW_RELEASE_IN_CLIP` was cut from, arrived at from a different
+## direction. Global rather than skeleton-local on purpose: which skeleton axis
+## points forward is a fact about how the GLB was exported, and `facing()` is a
+## fact about the game.
+func _hand_reach(player: Gub) -> float:
+	if _release_skeleton == null:
+		_release_skeleton = player.find_child("Skeleton3D", true, false) as Skeleton3D
+		if _release_skeleton == null:
+			return -INF
+		_release_hand_bone = _release_skeleton.find_bone("RightHand")
+		_release_hips_bone = _release_skeleton.find_bone("Hips")
+	if _release_hand_bone < 0 or _release_hips_bone < 0:
+		return -INF
+	var arm := _release_skeleton.get_bone_global_pose(_release_hand_bone).origin
+	var pelvis := _release_skeleton.get_bone_global_pose(_release_hips_bone).origin
+	return (_release_skeleton.global_transform.basis * (arm - pelvis)).dot(player.facing())
+
+
+func _report_release() -> void:
+	if _release_spear_at == 0:
+		print("combat_range: clicked on tick %d and no spear ever appeared — release FAIL"
+			% _release_clicked)
+		return
+	var want := GubAnimator.THROW_RELEASE_TIME
+	var got := (_release_spear_ms - _release_clicked_ms) * 0.001
+	var frame := 1.0 / 60.0
+	var drift := absf(got - want)
+	var apart := absi(_release_spear_at - _release_reach_at)
+	var failures: Array[String] = []
+	# A frame and a half, and not zero: the release fires on the first `_process`
+	# past a millisecond deadline, so it is always late, by up to a frame.
+	# Measured at 4 ms over, every run. Anything wider than this would start to
+	# hide a window moved by a whole authored key, which at this clip's rate is
+	# one frame of real time.
+	if drift > frame * 1.5:
+		failures.append("the shaft is %.0f ms from the %.0f ms it was promised"
+			% [got * 1000.0, want * 1000.0])
+	if _release_fist_full:
+		failures.append("the fist still had something in it when the shaft appeared")
+	if apart > RELEASE_AGREEMENT:
+		failures.append("the arm was furthest forward %d ticks from the throw" % apart)
+	if failures.is_empty():
+		print("combat_range: shaft at %.0f ms after the click (asked for %.0f), fist empty on the same tick, arm furthest forward (%.3f m) %d tick(s) away — release PASS"
+			% [got * 1000.0, want * 1000.0, _release_reach, apart])
+		return
+	print("combat_range: release FAIL — %s" % "; ".join(failures))
+
+
 func _report_recharge() -> void:
 	var came_back := _desync_recovered >= 0 and _desync_recovered <= HAND_SYNC_GRACE
 	if _recharge_failures == 0 and came_back:
@@ -2162,7 +2342,7 @@ func _target_point() -> Vector3:
 			return ARC_TARGET
 		"aim":
 			return AIM_TARGET
-		"recharge":
+		"recharge", "release":
 			return RECHARGE_TARGET
 		"miss":
 			return Vector3(0.0, 0.05, -14.0)
@@ -2196,6 +2376,17 @@ func _watch_spawned(node: Node) -> void:
 				% [victim_ids.size(), ", ".join(names) if names else "nobody"]))
 		return
 	var spear := node as SpearProjectile
+	if spear != null and _mode == "release" and _release_spear_at == 0:
+		# Read here and nowhere else, because "the fist empties when the spear
+		# leaves" is a statement about one instant and this is that instant.
+		# `GubCombat._do_throw_spear` empties the hand and *then* launches the
+		# shaft, so a fist still holding something on this line is a hand that
+		# is lying about how dangerous its owner is (D-025, `HeldSpear`).
+		var thrower := MatchState.gubs.get(1) as Gub
+		_release_spear_at = _frames
+		_release_spear_ms = Time.get_ticks_msec()
+		_release_fist_full = (thrower != null and thrower.held_spear != null
+			and thrower.held_spear.is_carried())
 	if spear == null or not _trace:
 		return
 	spear.struck_gub.connect(func(victim: Gub, point: Vector3, bone: String) -> void:

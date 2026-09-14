@@ -168,6 +168,20 @@ also "mushroom stops a spear" "solid PASS"
 # cycles fail here and the emptied fist never refills.
 check "the spear grows back" "recharge PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- recharge
+# The half second itself, measured on a running game rather than asserted about
+# the constants (D-063). One throw, three numbers off it: the shaft arrives in
+# the world THROW_RELEASE_TIME after the click to within a frame and a half, the
+# fist is already empty at the instant it does — D-025's promise read at the one
+# moment it is about — and the tick it arrives on is the tick the throwing hand
+# is furthest in front of the hips.
+#
+# That third verdict is the only thing in this gate that reads the *animation*
+# rather than a number derived from it. Move the window or the rate without
+# `THROW_RELEASE_TIME` following, and it fails while the first two still agree
+# with each other — which is exactly the bug D-025 exists because of and D-040
+# repeated. Headless, and it quits itself about a second in.
+check "the spear leaves when the arm does" "release PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- release
 # The Elder's invincibility, asserted against a real spear rather than in logic
 # (D-040). `match_rules` can prove that `report_kill` refuses the kill; only this
 # can prove that a shaft launched at a body fourteen metres away arrives, is
@@ -430,17 +444,18 @@ check "ragdoll survives landing" "ragdoll_stability: PASS" \
 # setting, which is persisted in Godot's user-data directory (shared by every
 # checkout of this project) and is whatever anyone last typed into a name box.
 #
-# 110 ticks, not the 70 it used to be. The throw is clicked on tick 20 and the
-# spear does not leave the hand until THROW_RELEASE_TIME after that (D-025),
-# which on the new `Throw` clip is 0.71 s = 42.5 ticks, so the spear appears
-# around tick 63; it then flies 14 m at 42 m/s (0.33 s, 20 ticks) and the kill
-# lands around tick 83. The old count of 70 stopped the run before that even at
-# the old 0.57 s. Worth saying out loud because the failure would have read as a
-# broken throw and not as a warmup that was now too short. The lure's 132 below
-# needs no allowance: a lure leaves on the click.
+# 95 ticks. It was 110, and before that 70, and it moves for the same reason
+# each time: the throw is clicked on tick 20 and the spear does not leave the
+# hand until THROW_RELEASE_TIME after that (D-025), which since D-063 is 0.50 s
+# = 30 ticks. So the spear appears around tick 50; it then flies 14 m at 42 m/s
+# (0.33 s, 20 ticks) and the kill lands around tick 70, leaving 25 ticks of
+# margin — the same margin the 110 had over the old release, retuned down with
+# it rather than left behind as slack. Worth saying out loud because a failure
+# the other way would have read as a broken throw and not as a warmup that was
+# too short. The lure's 132 below needs no allowance: a lure leaves on the click.
 check "spear kills" "killed Dummy 1" \
     "$GODOT" --path "$GODOT_ROOT" --resolution 640x360 --script tools/snapshot.gd -- \
-    res://tools/combat_range.tscn "$GODOT_LOG_DIR/hit.png" 110 hit
+    res://tools/combat_range.tscn "$GODOT_LOG_DIR/hit.png" 95 hit
 check "lure catches" "combat_range: lure caught 1" \
     "$GODOT" --path "$GODOT_ROOT" --resolution 640x360 --script tools/snapshot.gd -- \
     res://tools/combat_range.tscn "$GODOT_LOG_DIR/lure.png" 132 lure
@@ -456,7 +471,7 @@ check "lure catches" "combat_range: lure caught 1" \
 # 90 ticks, and the margin in it is now much larger than it was. The robe drops
 # on tick 20 and is claimed on 21, the cast follows immediately, and the bolt
 # leaves `lightning_delay` later — 0.2 s = 12 ticks since D-040, where it used
-# to be THROW_RELEASE_TIME's 42.5 — so the kill lands around tick 34 and the
+# to be THROW_RELEASE_TIME's 42.5 and is now its 30 — so the kill lands around tick 34 and the
 # verdict is printed 50 ticks after the cast. The hero shot of an actual bolt is
 # a separate, earlier frame, and it moved with the delay:
 #     ... --script tools/snapshot.gd -- res://tools/combat_range.tscn \

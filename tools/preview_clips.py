@@ -108,6 +108,14 @@ step's case is not that the new clip's hand is faster (9.88 against 9.81 is
 nothing) but that its peak is *a sharp isolated spike rather than a broad
 plateau*. Measured that way it does not hold up — `SpearThrowLonger` is the
 *flattest* of the three — and the sheet is what settles what that means.
+
+It settled it (D-063): the clip was taken anyway, because what makes its release
+legible is a **silhouette change** and not a speed. The shaft goes up over the
+head at arm's length and is gone a sixth of a second later, which is a thing this
+script draws and the speed column cannot say. Note also that the detected moment
+is the peak *speed* and the release the game uses is the peak *reach* — 1.600 and
+1.567 on that clip, one frame apart and not the same criterion. `--focus` is how
+you look at the other one.
 `--focus 1.2` overrides the detector for every clip; `--focus 1.633,1.6,1.6`
 overrides it per clip, in the order the files were given.
 

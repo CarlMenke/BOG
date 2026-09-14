@@ -22,11 +22,11 @@ island and out to a results screen, and two automated checks now walk that path:
 one in a single process, one across two processes over a real socket.
 
 ```
-bash tools/smoke_test.sh        # 70 checks, ~4 minutes, finds Godot by itself
+bash tools/smoke_test.sh        # 71 checks, ~4 minutes, finds Godot by itself
 bash tools/net_test.sh          # two processes, one socket; ~45 s, run by hand
 ```
 
-`smoke_test.sh` is the gate and it passes, 70 of 70. `net_test.sh` is kept out
+`smoke_test.sh` is the gate and it passes, 71 of 71. `net_test.sh` is kept out
 of it to keep the gate fast; run it by hand after touching networking, the lobby
 or the results screen. It passes all eleven stages (186 + 33 assertions), ten of
 which end in a rematch, with the engine quiet in both processes — the error it
@@ -146,7 +146,11 @@ of what that means:
 - **The UI** is themed and complete: menu with a live glade behind it, an
   eight-Gub lobby, HUD, scoreboard, kill feed, pause, settings, chat, results.
 - **Combat** is a one-hit spear, a mushroom you cannot be shot through, and a
-  lure that drags people into the open.
+  lure that drags people into the open. The spear leaves the hand **half a
+  second** after the click, on the frame the throwing arm reaches full extension
+  (D-025, **D-063**) — an overhand delivery with the shaft raised over the head
+  first, so the moment it goes has a shape of its own and nothing on the HUD has
+  to explain it.
 - **The Gub itself was rebuilt** (D-029). Eight Mixamo FBX files become one
   `art/generated/gub.glb` through `tools/build_gub.py` — nine clips, 10.5k
   triangles, 1.80 m, root motion locked and every clip's facing aligned — and
@@ -166,7 +170,7 @@ of what that means:
   the robe burns out on a host-owned clock rather than on a death, and a spear
   thrown at one is turned aside in a violet flash. It moves 35% faster, jumps
   to 2.64 m instead of 1.69, and carries **no spear at all**. The same mouse
-  button plays the same `Throw` clip — at 5.67x, derived from the delay so the
+  button plays the same `Throw` clip — at 2.5x since D-063, derived from the delay so the
   arm keeps up — and fires a hitscan **bolt out of the hand 0.2 s after the
   click**: 28 m, 1 s recharge, one hit kills, stopped by a shield mushroom
   exactly as a spear is, and refused during a letter hold. The fist crackles
@@ -287,6 +291,7 @@ Three tiers, because three different kinds of claim need three different proofs
 | `tools/invite_codes.tscn` | 2675 assertions over 1296 endpoints, plus the host's typed public address |
 | `tools/combat_range.tscn cover` | a mushroom stops a spear, the same throw without one does not, and a Gub cannot walk into the cap (D-039) |
 | `tools/combat_range.tscn recharge` | the spear is back in the fist after twelve throws, and an emptied fist refills itself (D-039) |
+| `tools/combat_range.tscn release` | the shaft appears `THROW_RELEASE_TIME` after the click, the fist is empty on that same tick, and that tick is the one the throwing arm is furthest forward — the only check that reads the animation rather than the constant (D-063) |
 | `tools/combat_range.tscn ward` | a real spear cannot kill an Elder, the robe burns out on its own, and the same throw kills once it has (D-040) |
 | `tools/combat_range.tscn bhop` | timed hops climb to 1.3x run speed and no further, as a Gub, an Elder and a capture carrier; running, one jump, a late hop and a hop out of a dive roll do not beat run speed (D-052). **In the gate**, headless with `--fixed-fps 60` |
 | `tools/combat_range.tscn respawn` | a Gub that dies holding a mushroom and an Elder that dies in its robe both come back empty-handed, including a remote Gub whose client is 200 ms behind the host (D-043) |

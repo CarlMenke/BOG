@@ -1529,14 +1529,24 @@ func _run_config_validation() -> void:
 	# The clip is sped up to put its own release on whatever the delay says
 	# (D-040), and both directions of that arithmetic are asserted here rather
 	# than left to be noticed as an arm that finishes before the bolt goes.
-	_near("0.2 s of delay is a 5.67x throw",
+	_near("0.2 s of delay is a 2.5x throw",
 		GubAnimator.throw_rate_for_release(0.2), GubAnimator.THROW_WINDOW / 0.2)
 	_near("and that rate releases at 0.2 s again",
 		GubAnimator.throw_release_for_rate(
 			GubAnimator.throw_rate_for_release(0.2)), 0.2)
-	_near("the spear's own rate still releases at 0.71",
+	_near("the spear's own rate still releases at 0.50",
 		GubAnimator.throw_release_for_rate(GubAnimator.THROW_RATE),
 		GubAnimator.THROW_RELEASE_TIME)
+	# The half second the user asked for, asserted against the literal rather
+	# than against the constant it is derived from — which is the only way this
+	# line can ever fail. `THROW_RELEASE_TIME` is `THROW_WINDOW / THROW_RATE` and
+	# the rate is `THROW_WINDOW / THROW_RELEASE_TARGET`, so the two agree by
+	# construction and will go on agreeing at any number at all; what this
+	# catches is the day somebody pins the rate by hand and the promise quietly
+	# stops being half a second. `tools/combat_range.gd`'s `release` mode is the
+	# other half, and the half that measures rather than asserts.
+	_near("and that is the half second the throw was asked for",
+		GubAnimator.THROW_RELEASE_TIME, 0.5)
 	# The setting that would otherwise be a division by zero.
 	_near("a zero delay saturates rather than dividing by zero",
 		GubAnimator.throw_rate_for_release(0.0), GubAnimator.THROW_RATE_MAX)
