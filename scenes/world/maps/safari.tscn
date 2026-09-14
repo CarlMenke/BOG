@@ -1,0 +1,94 @@
+[gd_scene load_steps=3 format=3 uid="uid://bgubmapsafari1"]
+
+; Kopje Crossing — the arena's third map, and the first hand-made one that is
+; not an import (D-029, D-030, D-031).
+;
+; Rust is a bought `.glb` with a script wrapped round it; this scene has no
+; geometry in it at all. `scripts/world/maps/safari_map.gd` extends `StaticMap`
+; and *builds* the map in `_ready()` from a layout table — a hundred and
+; twenty-three rock platforms, the plateau they stand on and the cliff it stands
+; on — and then calls `super()`, which sweeps the lot into world-space trimesh
+; collision on physics layer 1 exactly as it does for Rust. Trees, grass, bushes
+; and the waterhole are added *after* that call, so none of them is collision;
+; trees carry their own cylinder trunk colliders instead.
+;
+; So this file is the four nodes `static_map.gd` asks for, and nothing else:
+;
+;   Environment  a midday `WorldEnvironment`, because `arena.gd` builds none for
+;                a static map and the island's is a torch-lit night (D-009).
+;   Sun          64 degrees up and over the north-east, so every shadow on the
+;                map falls the same way and the kopje's own shadow never covers
+;                the spiral you are trying to climb. Serialised ROW-major, which
+;                is how a `.tscn` stores a `Transform3D`.
+;   Spawns       eight `Marker3D`s on a 44 m ring at bearings 22.5 + 45k, each
+;                facing the middle. They are on flat open ground, out past the
+;                city square where the platforms are, which is why — unlike
+;                Rust's — they all sit at exactly 0.12 m, the island's
+;                SPAWN_LIFT, and all read the same sightline.
+;
+; The map is the one thing here that is not stated but checked.
+; `tools/preview_map.gd` stands a Gub-sized capsule on every pad and
+; `tools/parkour_report.gd` rebuilds the whole jump graph out of the platform
+; table and walks it from the ground, and `tools/smoke_test.sh` runs both as
+; gates — so a gap nobody can cross fails a build rather than being discovered
+; by somebody standing on a rock.
+
+[ext_resource type="Script" path="res://scripts/world/maps/safari_map.gd" id="1_safari_map"]
+[ext_resource type="Environment" path="res://resources/config/safari_env.tres" id="2_safari_env"]
+
+[node name="Safari" type="Node3D"]
+script = ExtResource("1_safari_map")
+void_height = -14.0
+
+[node name="Environment" type="WorldEnvironment" parent="."]
+environment = ExtResource("2_safari_env")
+
+; High and hard, and the only light on the map. 64 degrees of elevation with the
+; light travelling toward (-x, -z): high enough that the kopje does not lay a
+; nine-metre shadow across the spiral, off-axis enough that every rock on the
+; map has a lit face and a dark one to read its shape from. Two shadow splits
+; out to 130 m, which is the diagonal of the plateau — the far rim has to cast,
+; because the acacias around it are most of what gives the map a horizon.
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.70711, -0.63554, 0.30998, 0, 0.43837, 0.89879, -0.70711, -0.63554, 0.30998, 0, 30, 0)
+light_color = Color(1, 0.96, 0.88, 1)
+light_energy = 1.3
+light_specular = 0.4
+shadow_enabled = true
+directional_shadow_mode = 1
+directional_shadow_max_distance = 130.0
+directional_shadow_blend_splits = true
+
+[node name="Spawns" type="Node3D" parent="."]
+
+; 0  east-north-east, looking down the termite fields at the kopje
+[node name="Spawn0" type="Marker3D" parent="Spawns"]
+transform = Transform3D(0.38268, 0, 0.92388, 0, 1, 0, -0.92388, 0, 0.38268, 40.6507, 0.12, 16.8381)
+
+; 1  south-east, behind the baobab
+[node name="Spawn1" type="Marker3D" parent="Spawns"]
+transform = Transform3D(0.92388, 0, 0.38268, 0, 1, 0, -0.38268, 0, 0.92388, 16.8381, 0.12, 40.6507)
+
+; 2  south, onto the south connector
+[node name="Spawn2" type="Marker3D" parent="Spawns"]
+transform = Transform3D(0.92388, 0, -0.38268, 0, 1, 0, 0.38268, 0, 0.92388, -16.8381, 0.12, 40.6507)
+
+; 3  south-west, the waterhole side — the shortest way onto a platform anywhere
+[node name="Spawn3" type="Marker3D" parent="Spawns"]
+transform = Transform3D(0.38268, 0, -0.92388, 0, 1, 0, 0.92388, 0, 0.38268, -40.6507, 0.12, 16.8381)
+
+; 4  west, above the west connector
+[node name="Spawn4" type="Marker3D" parent="Spawns"]
+transform = Transform3D(-0.38268, 0, -0.92388, 0, 1, 0, 0.92388, 0, -0.38268, -40.6507, 0.12, -16.8381)
+
+; 5  west-north-west, at the foot of the dead forest
+[node name="Spawn5" type="Marker3D" parent="Spawns"]
+transform = Transform3D(-0.92388, 0, -0.38268, 0, 1, 0, 0.38268, 0, -0.92388, -16.8381, 0.12, -40.6507)
+
+; 6  north, behind the ridge
+[node name="Spawn6" type="Marker3D" parent="Spawns"]
+transform = Transform3D(-0.92388, 0, 0.38268, 0, 1, 0, -0.38268, 0, -0.92388, 16.8381, 0.12, -40.6507)
+
+; 7  north-east, at the low corner of the termite fields
+[node name="Spawn7" type="Marker3D" parent="Spawns"]
+transform = Transform3D(-0.38268, 0, 0.92388, 0, 1, 0, -0.92388, 0, -0.38268, 40.6507, 0.12, -16.8381)

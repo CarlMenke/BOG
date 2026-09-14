@@ -1,0 +1,111 @@
+[gd_resource type="Environment" load_steps=3 format=3 uid="uid://cq2gubsafarienv"]
+
+; Environment for Kopje Crossing. Noon on a high savanna, and the brightest
+; thing in the game by some way — Rust is mid-afternoon in a container yard and
+; `arena_env.tres` is the island's torch-lit dusk (D-009).
+;
+; Derived from `rust_env.tres`, and only the numbers that make midday different
+; from afternoon were changed. That is deliberate: the two static maps should
+; not need different eyes, so the tonemapping, the glow and the SSAO below are
+; Rust's, unaltered, and the sky and the fog are the whole of the difference.
+;
+;   * A bluer, harder sky. `sky_top` goes from (0.26, 0.44, 0.74) to
+;     (0.28, 0.50, 0.86) and the horizon from dusty to pale gold — the sun is
+;     overhead rather than low, so there is less atmosphere between the camera
+;     and the top of the sky and more of it at the rim.
+;   * A *paler ground half*, at (0.78, 0.68, 0.50) into (0.45, 0.36, 0.25). The
+;     sky's lower hemisphere is the only bounce light in the scene
+;     (`ambient_light_source` is the sky), and on this map that bounce is coming
+;     off sand. With Rust's darker ground colours the shaded side of every rock
+;     went blue, which is the one thing that stops a savanna reading as hot.
+;   * **`background_energy_multiplier` is the exposure control**, not
+;     `ambient_light_energy` — see the long note in `rust_env.tres`, which
+;     measured it. 1.35 rather than Rust's 1.45: this map is 96 m of pale sand
+;     under a 64-degree sun and there is nothing here like the drilling tower's
+;     shadow to lift.
+;
+; Measured, not guessed, the way Rust's 1.45 was. Rendered at 1000x1000 through
+; `tools/parkour_report.tscn` (iso) and 1280x720 through `tools/preview_map.tscn`
+; (pad0), then counted with PIL:
+;
+;     view    below 8/255    at 255 in all channels
+;     iso        0.60 %            0.00 %
+;     pad0       0.00 %            0.00 %
+;
+; against a budget of under 2 % crushed and under 1 % clipped. At
+; background_energy 1.6 the pad0 view put 1.4 % of the frame at 255 — the sand
+; in the middle distance blew out first, before anything in the sky did.
+;
+; Fog is thinner than Rust's (0.0009 against 0.0016) and sits lower: the map is
+; 96 m across and the whole point of the outer band is that you can see someone
+; walking in from a spawn pad forty metres away. The height fog at -3 with a
+; density of 0.015 is doing the opposite job — it pools in the bottom of the
+; cliff skirt so the edge of the world has some depth to it.
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_safarisky"]
+sky_top_color = Color(0.28, 0.5, 0.86, 1)
+sky_horizon_color = Color(0.88, 0.82, 0.68, 1)
+sky_curve = 0.13
+sky_energy_multiplier = 1.0
+ground_bottom_color = Color(0.45, 0.36, 0.25, 1)
+ground_horizon_color = Color(0.78, 0.68, 0.5, 1)
+ground_curve = 0.04
+ground_energy_multiplier = 1.0
+sun_angle_max = 12.0
+sun_curve = 0.08
+use_debanding = true
+
+[sub_resource type="Sky" id="Sky_safari"]
+sky_material = SubResource("ProceduralSkyMaterial_safarisky")
+radiance_size = 3
+
+[resource]
+resource_name = "SafariEnvironment"
+background_mode = 2
+sky = SubResource("Sky_safari")
+background_energy_multiplier = 1.35
+ambient_light_source = 3
+reflected_light_source = 2
+tonemap_mode = 3
+tonemap_exposure = 1.0
+tonemap_white = 6.0
+ssao_enabled = true
+ssao_radius = 1.1
+ssao_intensity = 1.2
+ssao_power = 1.4
+ssao_detail = 0.6
+ssao_horizon = 0.08
+ssao_sharpness = 0.98
+ssao_light_affect = 0.0
+ssao_ao_channel_affect = 0.35
+glow_enabled = true
+glow_levels/1 = 0.0
+glow_levels/2 = 0.35
+glow_levels/3 = 0.85
+glow_levels/4 = 1.0
+glow_levels/5 = 0.7
+glow_levels/6 = 0.25
+glow_levels/7 = 0.0
+glow_normalized = true
+glow_intensity = 0.55
+glow_strength = 1.0
+glow_mix = 0.05
+glow_bloom = 0.0
+glow_blend_mode = 1
+glow_hdr_threshold = 2.0
+glow_hdr_scale = 2.0
+glow_hdr_luminance_cap = 10.0
+fog_enabled = true
+fog_light_color = Color(0.86, 0.8, 0.66, 1)
+fog_light_energy = 1.0
+fog_sun_scatter = 0.12
+fog_density = 0.0009
+fog_aerial_perspective = 0.2
+fog_sky_affect = 0.0
+fog_height = -3.0
+fog_height_density = 0.015
+volumetric_fog_enabled = false
+adjustment_enabled = true
+adjustment_brightness = 1.0
+adjustment_contrast = 1.04
+adjustment_saturation = 1.06

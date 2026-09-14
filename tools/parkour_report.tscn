@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://bgubparkourrep"]
+
+[ext_resource type="Script" path="res://tools/parkour_report.gd" id="1"]
+
+[node name="ParkourReport" type="Node3D"]
+script = ExtResource("1")

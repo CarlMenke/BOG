@@ -58,6 +58,18 @@ const MAPS: Array[Dictionary] = [
 		# the literal "%d" if this said one.
 		"loading_line": "Unloading the containers",
 	},
+	{
+		"id": "safari",
+		"display_name": "Kopje Crossing",
+		"kind": Kind.STATIC,
+		"scene": "res://scenes/world/maps/safari.tscn",
+		# Static in a second sense as well: this one has no `.glb` behind it at
+		# all. The scene is four nodes and a script that builds a hundred and
+		# twenty-three rock platforms out of a layout table. From this table's
+		# point of view that is none of its business, which is exactly what the
+		# `kind` column is for.
+		"loading_line": "Stacking the kopje",
+	},
 	# A static map is one more entry and nothing else in this file changes —
 	# the lobby's picker, `SceneFlow`'s loading card and `arena.gd`'s branch all
 	# read this table and none of them names a map.
