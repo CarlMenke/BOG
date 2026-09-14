@@ -2,9 +2,10 @@
 
 A match-based third-person multiplayer game in Godot 4.7.2. You are a Gub — a
 small yellow alien — fighting with thrown spears that kill in one hit, on one of
-two maps: **Whisperbloom Hollow**, a floating enchanted-forest island grown from
-a seed, or **Rust**, a hand-made industrial yard under a hard sun. The host
-picks in the lobby.
+three maps: **Whisperbloom Hollow**, a floating enchanted-forest island grown from
+a seed; **Rust**, a hand-made industrial yard under a hard sun; or **Kopje
+Crossing**, a savanna plateau with a hundred and twenty-three rocks to climb. The
+host picks in the lobby.
 
 Spears are the whole fight. One lands, you die, and the thrower's hand is empty
 until it grows back, so an empty hand is the most useful thing on screen: it
@@ -227,8 +228,9 @@ and `tools/` is full of scenes for it:
 | `preview_ragdoll`, `ragdoll_stability` | how a corpse falls, and whether it survives |
 | `preview_sky` | the sky and environment |
 | `preview_island` | **the island** — nine framings, `match` for real Gubs, `hud` to keep the HUD |
-| `preview_map` | **Rust** — top-down, side, or eye height on any spawn pad; `probe` prints the floor as ASCII. Checks every pad with the physics, and is in the gate |
-| `playthrough.tscn` | the whole flow, menu to results, headless. Add `-- rust` to play it on the static map |
+| `preview_map` | **a static map** — top-down, side, or eye height on any spawn pad; `probe` prints the floor as ASCII. Rust by default, `map=res://scenes/world/maps/safari.tscn` for the savanna. Checks every pad with the physics, and is in the gate for both |
+| `parkour_report` | **Kopje Crossing** — rebuilds the Gub's jump arc and proves every platform can be reached from the ground. In the gate |
+| `playthrough.tscn` | the whole flow, menu to results, headless. Add `-- rust` or `-- safari` to play it on a static map |
 | `match_rules.tscn` | 195 assertions across 14 scoring scenarios, headless |
 | `net_loopback.tscn` | two real processes over a real socket. Not in the gate — it binds a port |
 | `inspect_scene.gd` | dump a scene's tree, clips, bones and triangle counts |
@@ -328,6 +330,13 @@ instances the `.glb` untouched; `scripts/world/static_map.gd` builds the
 collision and puts back the back-face culling at load, because neither survives
 the import (**D-031**). `tools/preview_map.gd` is how you look at it and how the
 gate checks its spawn pads.
+
+**Kopje Crossing has no import at all.** `scenes/world/maps/safari.tscn` is the
+same four nodes, but its script, `scripts/world/maps/safari_map.gd`, builds the
+map in `_ready` out of MegaKit rocks placed from layout tables and then lets
+`StaticMap` bake the collision exactly as it does for Rust. Editing the map means
+editing a table; `tools/parkour_report.gd` then says whether every platform is
+still reachable (**D-042**).
 
 ---
 

@@ -61,6 +61,16 @@ class Platform extends RefCounted:
 
 const KIT := "res://assets/Stylized_Nature_MegaKitStandard/glTF/%s.gltf"
 const DESERT_DIFFUSE := "res://assets/Stylized_Nature_MegaKitStandard/glTF/Rocks_Desert_Diffuse.png"
+## The kit's leaf cards come twice: a `_C` texture painted in the tree's own
+## colour, which is what the meshes point at, and an uncoloured white one with
+## the same alpha. Only the white one can be tinted. `albedo_color` multiplies,
+## and a multiply can darken a colour or pull a channel down but never put back
+## a channel the texture does not have — the twisted tree's `_C` leaves are
+## (169, 23, 23), so every tint of them is a darker red, and the common tree's
+## are (88, 123, 0), so every tint of those is a green. The canopies below take
+## the white cards and get their colour entirely from the palette.
+const LEAVES_NORMAL_WHITE := "res://assets/Stylized_Nature_MegaKitStandard/glTF/Leaves_NormalTree.png"
+const LEAVES_TWISTED_WHITE := "res://assets/Stylized_Nature_MegaKitStandard/glTF/Leaves_TwistedTree.png"
 
 ## The one seed. See the header: every peer builds this map, so every peer has
 ## to draw the same numbers in the same order.
@@ -306,6 +316,15 @@ const GRASS_WEIGHTS: PackedFloat32Array = [0.45, 0.35, 0.20]
 const PEBBLE_MODELS: PackedStringArray = [
 	"Pebble_Round_1", "Pebble_Round_2", "Pebble_Round_3", "Pebble_Square_1",
 	"Pebble_Square_2", "Pebble_Square_4"]
+
+## Canopy colours, applied to white leaf cards so they are the colour and not a
+## filter over one (see `LEAVES_NORMAL_WHITE`). Dry-season olive-gold for the
+## acacias, a touch greener for the baobab so the one landmark tree stands apart
+## from the forty around it, and the bushes duller and darker than either so they
+## sit down in the grass.
+const ACACIA_TINT := Color(0.74, 0.66, 0.30)
+const BAOBAB_TINT := Color(0.62, 0.62, 0.30)
+const BUSH_TINT := Color(0.58, 0.50, 0.26)
 
 const RIM_ACACIAS := 26
 const BAND_ACACIAS := 10
@@ -1167,17 +1186,22 @@ func _build_materials() -> void:
 		# is a blade that disappears when you walk around it.
 		_grass_material.cull_mode = BaseMaterial3D.CULL_DISABLED
 
+	# The bush is the twisted tree's leaf card on a small mesh, so it had the
+	# same red problem as the baobab and gets the same fix.
 	_bush_material = _kit_material("Bush_Common", 0)
 	if _bush_material != null:
-		_bush_material.albedo_color = Color(0.88, 0.86, 0.5)
+		_bush_material.albedo_texture = load(LEAVES_TWISTED_WHITE)
+		_bush_material.albedo_color = BUSH_TINT
 		_bush_material.cull_mode = BaseMaterial3D.CULL_DISABLED
 
 	_acacia_leaf = _leaf_material("CommonTree_1")
 	if _acacia_leaf != null:
-		_acacia_leaf.albedo_color = Color(0.90, 0.96, 0.62)
+		_acacia_leaf.albedo_texture = load(LEAVES_NORMAL_WHITE)
+		_acacia_leaf.albedo_color = ACACIA_TINT
 	_baobab_leaf = _leaf_material("TwistedTree_2")
 	if _baobab_leaf != null:
-		_baobab_leaf.albedo_color = Color(0.92, 0.90, 0.58)
+		_baobab_leaf.albedo_texture = load(LEAVES_TWISTED_WHITE)
+		_baobab_leaf.albedo_color = BAOBAB_TINT
 
 	_ground_material = StandardMaterial3D.new()
 	_ground_material.albedo_color = Color(0.80, 0.68, 0.44)

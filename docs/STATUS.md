@@ -4,7 +4,7 @@ Resume point for GUB. Read this first, then `docs/ARCHITECTURE.md` (how it fits
 together), `docs/PLAN.md` (the full task list, with checkboxes) and
 `docs/DECISIONS.md` (why things are the way they are).
 
-Last updated: 2026-09-07.
+Last updated: 2026-09-13.
 
 ---
 
@@ -116,8 +116,12 @@ of what that means:
   to build, which is why `SceneFlow` shows a loading card.
 - **The second map** (Rust) is hand-made rather than generated: an industrial
   yard, 42 x 28 x 64 m, instanced from a 43 MB `.glb` with its collision and its
-  back-face culling built at load (**D-031**). The host picks between the two in
-  the lobby's Match panel; the seed row hides itself for the static one.
+  back-face culling built at load (**D-031**). The host picks between the maps in
+  the lobby's Match panel; the seed row hides itself for the static ones.
+- **The third map** (Kopje Crossing) is hand-made and has no import: a 96 m
+  savanna plateau whose 123 rock platforms are laid out of tables in
+  `safari_map.gd` and baked into collision by the same `StaticMap` (**D-042**).
+  A checker proves every platform is reachable on the Gub's real jump arc.
 - **The UI** is themed and complete: menu with a live glade behind it, an
   eight-Gub lobby, HUD, scoreboard, kill feed, pause, settings, chat, results.
 - **Combat** is a one-hit spear, a mushroom you cannot be shot through, and a
@@ -182,6 +186,11 @@ of what that means:
    in play wants a couple of shadowless `OmniLight3D`s under a `Lights` node
    (the contract already allows for it and the scene has none); and the void
    height of -13 m was reasoned from the geometry, not fallen through.
+   **Kopje Crossing is in the same state** (**D-042**): built, in the lobby,
+   walked end to end and checked for reachability by the gate, and never played
+   by a person. Its open questions are its own — whether the 9.5 m summit is a
+   hill to fight over or a perch nobody leaves, and whether knee-high grass hides
+   a crouched Gub more than a one-hit spear can afford.
 4. **Playing it, properly.** A person has walked around the island and thrown
    spears, and the automated checks cover the rest — but nobody has played a
    *match* to a conclusion against another person, and no one has tuned the feel:
@@ -243,7 +252,7 @@ Three tiers, because three different kinds of claim need three different proofs
 
 | tool | proves |
 |---|---|
-| `tools/smoke_test.sh` | **the gate** — import, and twenty-one checks |
+| `tools/smoke_test.sh` | **the gate** — import, and twenty-six checks |
 | `tools/cursor_flow.tscn` | entering a match takes the mouse, and leaving gives it back |
 | `tools/playthrough.tscn` | the whole path, menu to results; 50 assertions on the island, 58 on Rust. Takes a map id after a `--` |
 | `tools/match_rules.tscn` | 195 assertions across 14 scoring scenarios |
@@ -254,7 +263,8 @@ Three tiers, because three different kinds of claim need three different proofs
 | `tools/ragdoll_stability.tscn` | a corpse is still a corpse 150 ticks later |
 | `tools/combat_range.tscn` | the real match path: a spear, a mushroom, a lure, a letter, the Elder's bolt |
 | `tools/net_loopback.tscn` | two processes, one socket, including a *client* using all three abilities. **Not in the gate** — it binds a port |
-| `tools/preview_map.tscn` | Rust: renders it, and checks every spawn pad with the physics. **In the gate** |
+| `tools/preview_map.tscn` | Rust and Kopje Crossing: renders one, and checks every spawn pad with the physics. **In the gate** for both |
+| `tools/parkour_report.tscn` | every Kopje Crossing platform has its rock, fits a Gub, and is reachable from the ground (D-042). **In the gate** |
 | `tools/preview_*.tscn` | it *looks* right. Needs a person, always will |
 
 **`playthrough` is the one that catches integration.** Every other harness looks

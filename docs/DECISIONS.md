@@ -2980,3 +2980,97 @@ camera the letter is mostly behind the Gub's head. That is not new — the
 position is `CARD_ABOVE_FIST`, exactly where the glyph hung — and it is the
 right way round anyway, because the hold is an announcement aimed at everybody
 else (D-035).
+
+## D-042 — Kopje Crossing: a map written as a table, checked as a jump graph, and coloured on white leaves
+The third map, id `safari`, is a 96 m savanna plateau with a rock kopje in the
+middle, a hundred and twenty-three climbable platforms around it in eight zones
+(the kopje's spiral, a ridge, a termite field, a baobab, a waterhole, a dead
+forest, connector runs and eight lone rocks), and eight spawn pads on a 44 m ring
+out in the open grass. It is a `StaticMap` in the D-030 sense — one row in
+`MapCatalog`, instanced whole by `arena.gd`'s static branch — and nothing in
+`arena.gd`, `SceneFlow` or the lobby changed to admit it, which was the point of
+that decision and is the first time it has been tested by a map nobody planned
+for when it was written.
+
+**There is no `.glb`.** Rust is a bought arena that `static_map.gd` wraps
+collision around (D-031). Kopje Crossing is the other kind of hand-made map:
+every rock is a MegaKit piece placed from layout tables in
+`scripts/world/maps/safari_map.gd`, built in `_ready`, and then handed to the
+very same `super()` that sweeps Rust into world-space trimesh collision — 313,400
+triangles into 18 shapes in about 300 ms. The alternative was to block the map
+out in Blender and export it like Rust, and it was rejected for the reason that
+matters most on a parkour map: a gap that plays badly is a number in a table, not
+a re-export and a re-import, and the whole map is a hundred kilobytes of script
+instead of forty megabytes of mesh.
+
+The price is that every peer builds the map itself, so the map *is* its RNG.
+Every random draw comes from one `RandomNumberGenerator` seeded with a constant
+and consumed in a fixed order — two peers that disagreed about where a rock is
+would disagree about where the floor is. Build order is the other thing to be
+careful of and the header says so: everything added before `super()` is
+collision and everything after is scenery. Trees go in after, with the same
+cylinder trunks `PropScatter` gives them; grass, bushes, pebbles and the water
+get no collider at all.
+
+### Reachability is a check, not a feeling
+`tools/parkour_report.gd` rebuilds the Gub's jump arc from the constants on `Gub`
+(run speed, jump velocity, the dive's forward and up speeds, and the 1.35x fall
+multiplier that is still a literal in `_apply_gravity`), builds the whole graph
+of which landing can reach which from `SafariMap.platforms`, and walks it from
+the ground. It also checks the table against the physics: a ray down onto every
+landing has to find the rock within 30 cm of where the table says it is, and a
+Gub-sized capsule has to fit on it. It fails the build if anything is
+unreachable by hops and leaps alone — the hard "big" dive is allowed as a
+shortcut and never as the only way somewhere — if anything strands a player, or
+if a landing or a trunk crowds a spawn pad. On this layout the tree is 69% hops
+to 31% leaps. It is about six seconds, so it is in the gate.
+
+A render cannot show any of that. That is the same argument as D-015's and the
+one that put `preview_map` in the gate for Rust: the failure a picture cannot see
+is the one worth a checker.
+
+### The spawn pads passed, and the sightline was looked at rather than asserted
+`tools/preview_map.gd` takes a `map=` argument, and pointed at `safari.tscn` it
+passes all 60 checks: floor, capsule, facing, separation. Its reported sightline
+down each pad's nose is 21.8 m and 26.9 m for pads 2 and 5 and 6.0–7.8 m for the
+other six. On Rust that number moved two pads, because six metres was a container
+wall. Here the probe's sightline grid reads 5–15 m almost everywhere inside the
+ring — the map is a field of rocks you are meant to climb — and the eye-height
+renders from every pad show open ground with the first hop in front of it. No
+pad moved. A minimum-sightline assertion in `preview_map` was considered and
+rejected: the right floor for a container yard and for a rock garden are
+different numbers, and one threshold in a shared tool would be wrong for one of
+them.
+
+### The canopies are coloured on white leaf cards
+The first renders had temperate-green acacias and a dark red baobab. There was no
+random hue range to wrap — every canopy has one fixed tint — and the cause was in
+the kit: each leaf card ships as a painted `_C` texture, which the meshes use,
+and as a white one with the same alpha. `albedo_color` multiplies, and a multiply
+can only take channels away. The twisted-tree leaf is painted (169, 23, 23), so
+any tint of it is a darker red; the common tree's is (88, 123, 0), so any tint of
+it is a green. The bushes share the twisted tree's card and were forty red dots.
+
+So the three leaf materials load the white cards and take their whole colour from
+`ACACIA_TINT`, `BAOBAB_TINT` and `BUSH_TINT`. Two alternatives were rejected:
+tints above 1.0, which brighten without moving the hue (a red canopy at 1.4 is
+pink), and recolouring the kit's PNGs, which would recolour every other user of
+the kit, the island included.
+
+### What checks it
+Four lines in the gate, 22 checks to 26: a whole playthrough on `safari` with an
+`also` that it was Kopje Crossing that got built, `preview_map` on its pads, and
+`parkour_report`. Renders are not committed; `out/safari_top.png`,
+`out/safari_side.png` and `out/safari_pad0.png` … `out/safari_pad7.png` come from
+`preview_map` with `map=res://scenes/world/maps/safari.tscn` and the `top`,
+`side` and `pad<n>` views.
+
+One trap worth writing down: a new `class_name` is invisible to a script run with
+`--script` until the class cache is rebuilt, so `parkour_report` fails to parse on
+`SafariMap` straight after a checkout until `--import` has run once. The gate
+imports first; running the tool by hand is where it bites.
+
+Like Rust (STATUS, "what is left"), nobody has played a match on it. Whether
+eight Gubs on a 96 m plateau find each other, whether a 9.5 m summit with dives
+to both saddles is a king-of-the-hill or a sniper's nest, and whether 3,100 grass
+instances hide a crouched Gub more than they should are questions for a person.

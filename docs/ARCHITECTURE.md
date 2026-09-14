@@ -201,7 +201,7 @@ and a **static** one is a hand-made scene that brings its own environment, sun,
 lights and spawn markers — the contract is written down in
 `scripts/world/static_map.gd`, and no procedural step runs for one.
 
-There are two maps.
+There are three maps.
 
 **Rust** is the static one: a hand-made industrial arena, 42 x 28 x 64 m,
 instanced whole from `art/maps/rust/rust.glb` (148 meshes, 96,301 triangles) by
@@ -220,6 +220,20 @@ plane. They were found with `tools/preview_map.gd`, which scans the floor on a
 grid and prints it, and they are re-checked by that same tool in the gate with
 the physics the match will use — a ray that has to find a floor and a Gub-sized
 capsule that has to fit.
+
+**Kopje Crossing** is also static, and has no import behind it (**D-042**).
+`scenes/world/maps/safari.tscn` carries the same four nodes Rust's does, but its
+root script `SafariMap` extends `StaticMap` and *builds* the map before calling
+`super()`: a superellipse plateau 96 m across at y = 0, a cliff skirt, and 123
+MegaKit rock platforms from layout tables in eight zones. `super()` then bakes
+all of it into collision exactly as it does Rust. Dressing — acacias, baobabs,
+dead trees, boulders, grass, bushes, the waterhole — is added *after* `super()`,
+so it is not trimesh collision; trees and boulders bring their own simple
+colliders. Every peer builds the map independently, so every random draw comes
+from one constant-seeded `RandomNumberGenerator` in a fixed order.
+`SafariMap.platforms` is also the input to `tools/parkour_report.gd`, which
+rebuilds the Gub's jump arc from `Gub`'s constants and fails the gate if any
+landing is unreachable from the ground.
 
 **Whisperbloom Hollow** is the procedural one. It is built
 from one integer seed at load, in an order that is load-bearing:
