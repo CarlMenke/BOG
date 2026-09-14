@@ -92,7 +92,11 @@ peers through a cosmetic relay the host sends — and the spear leaves the hand
 number is derived from the throw clip's window and rate rather than tuned:
 `GubAnimator.THROW_RELEASE_TIME`, which `gub_combat.gd` reads. The aim is read
 then and not at the click, so a moving target has to be led (**D-025**,
-**D-029**).
+**D-029**). The Elder's bolt runs through the same windup and the same release
+tick and comes out the other end as hitscan instead of a shaft (**D-038**) — on
+its own clip, at its own rate, releasing at `MatchConfig.lightning_delay`
+(**D-040**, **D-064**). One windup, one release tick, two outcomes; the only
+thing that branches is which clip is fired and how fast.
 
 The pattern throughout is **`rpc()` then call locally**. Both halves matter, and
 only one of them has ever been exercised offline — see the testbed note below.

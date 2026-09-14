@@ -182,6 +182,21 @@ check "the spear grows back" "recharge PASS" \
 # repeated. Headless, and it quits itself about a second in.
 check "the spear leaves when the arm does" "release PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- release
+# The same question asked of the Elder, which since D-064 is a different
+# question about a different clip. One bolt, three numbers: it arrives
+# `MatchConfig.lightning_delay` after the click to within a frame and a half,
+# the composed arm is 83% of the way out when it does, and the tick it arrives
+# on is the tick that arm stops going forward.
+#
+# The second and third are what this adds over `release`. `Cast` is a clip whose
+# hand stops a third of a second before it is furthest in front of the hips — it
+# is *held* out there while the body unwinds — so the release rule D-063 used on
+# the throw, applied to this clip, would put the bolt in the recovery while
+# every constant in the file went on agreeing with every other. This is the line
+# that would notice, and the mistake is eight ticks away from passing it.
+# Headless, and it quits itself about a second in.
+check "the bolt leaves when the arm does" "cast PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- cast
 # The Elder's invincibility, asserted against a real spear rather than in logic
 # (D-040). `match_rules` can prove that `report_kill` refuses the kill; only this
 # can prove that a shaft launched at a body fourteen metres away arrives, is

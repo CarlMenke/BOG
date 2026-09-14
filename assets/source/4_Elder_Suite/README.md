@@ -4,9 +4,9 @@ A **short one-handed cast or point**. The Elder's bolt leaves 0.2 s after the
 click, so the whole clip is about that long; anything with a wind-up will be
 played fast enough to look silly.
 
-This exists because the Elder currently borrows the spear's own throw clip and
-plays it at 5.67x, which only works while that clip is a baseball throw. A
-javelin plant-and-extend at 5.67x will not read as anything.
+This existed because the Elder borrowed the spear's own throw clip, which worked
+only while that clip was a baseball throw. It stopped being one in D-063 and the
+Elder stopped borrowing it in D-064.
 
 ## What is in here
 
@@ -21,8 +21,8 @@ Pack* is in `_rejected/` with its measurements, if a second opinion is ever
 wanted.
 
 Note the length against the brief above. 2.283 s is eleven times the 0.2 s the
-bolt takes to leave, so step 5's job is to pick a **window** and a rate off this
-clip, not to play it — exactly what `windup_rate()` already does with the
+bolt takes to leave, so what the game plays is a **window** of this clip at a
+derived rate, not the clip — exactly what `windup_rate()` already did with the
 spear's throw, only against a clip that is a cast rather than a throw.
 
 ## What every clip in every pack has to be
@@ -43,12 +43,19 @@ from that clip's own page** — the multi-select Download button in *My Assets*
 ships the skin in one file of the batch and nothing in the rest, which is what
 put 105 files in `_rejected/`.
 
-## Dropping files in here does nothing on its own
+## It is declared, and here is what was done with it
 
-A folder somebody dropped files into is not a promise; a line in `PACKS` is. Add
-a `Clip(...)` for each file in this pack's entry in `tools/build_gub.py`, with
-its clip name, whether it loops, and its alignment reference. Until then the
-pack is skipped and the build says so.
+`Standing1HMagicAttack1.fbx` is `Cast` in `PACKS` since **D-064**, aligned on
+0.467. `gub_animator.gd` plays **0.467-1.600** of it and the bolt leaves at
+**0.983** — the frame the hand stops going forward, which on this clip is
+neither its peak speed (0.783) nor its furthest reach (1.333, in the recovery).
+At the default `lightning_delay` that window is played at 2.58x.
+
+Anything else dropped in here still does nothing on its own. A folder somebody
+dropped files into is not a promise; a line in `PACKS` is. Add a `Clip(...)` for
+each new file in this pack's entry in `tools/build_gub.py`, with its clip name,
+whether it loops, and its alignment reference. Until then the file is skipped
+and the build says so.
 
     bash tools/build_gub.sh -- --list-packs   # what the pipeline thinks is here
     bash tools/build_gub.sh                   # rebuild art/generated/gub.glb

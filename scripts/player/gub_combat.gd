@@ -47,7 +47,6 @@ extends Node
 ## **The Elder replaces the spear rather than adding to it** (D-038). For as long
 ## as `MatchState` says this Gub is the Elder — twenty seconds, since D-040 —
 ## `has_spear()` is false, the fist holds no shaft, and the same click runs the
-## same `Throw` clip through the
 ## same windup — the branch is taken at the *release*, next to where the aim is
 ## read, and what comes out is a hitscan bolt instead of a projectile. One
 ## windup, one release tick, two outcomes: a parallel windup for the Elder would
@@ -56,10 +55,19 @@ extends Node
 ## **The Elder's release is not the spear's** (D-040). The user, having played
 ## one: *"there should be basically no delay for the lightning."* The bolt leaves
 ## `MatchConfig.lightning_delay` after the click — 0.2 s by default against the
-## spear's 0.50 — and the *same clip* is played fast enough to have got there, at
-## a rate derived from the delay by `GubAnimator.throw_rate_for_release`. The
-## windup is still one piece of code with one set of edge cases; the only thing
-## that branches is how fast it runs and when its release lands.
+## spear's 0.50 — and the clip is played fast enough to have got there, at a rate
+## derived from the delay by `GubAnimator.cast_rate_for_release`. The windup is
+## still one piece of code with one set of edge cases; the only thing that
+## branches is which clip runs, how fast it runs, and when its release lands.
+##
+## **The clip stopped being shared, and the windup did not** (D-064). Until step
+## 5 of `docs/PLAN_COMBAT.md` the Elder played the spear's own `Throw` at
+## whatever rate met the delay, which worked while the throw was a baseball
+## throw and read as an accident once it became an overhand delivery with a
+## run-up. `Cast` is the Elder's own clip now, with its own window, its own
+## rate and its own ceiling. What did *not* fork is anything in this file below
+## `_play_windup`: one click, one `_windup_release_at`, one release tick, one
+## cancel path, one place the aim is read.
 
 signal cooldowns_changed()
 ## Carried stock changed: spent, picked up, or wiped by a death. Separate from
@@ -349,14 +357,19 @@ func lightning_cycle() -> float:
 	return _config.lightning_delay + _config.lightning_cooldown
 
 
-## How fast the `Throw` clip is played for this Gub's windup.
+## How fast this Gub's windup clip is played.
 ##
-## The spear's own 1.0 for an ordinary Gub — the clip's authored speed, since
+## The spear's own 1.0 for an ordinary Gub — `Throw`'s authored speed, since
 ## D-063 windowed it to land its release on the half second it is wanted at. For
-## an Elder, whatever puts that same release on `lightning_delay` (D-040): 2.5x
-## at the default 0.2 s, where it was 5.67x on the old clip. Derived from the dial every time it is asked
+## an Elder, whatever puts `Cast`'s release on `lightning_delay` (D-040, D-064):
+## 2.58x at the default 0.2 s. Derived from the dial every time it is asked
 ## rather than cached, so a host who drags the delay mid-match does not leave one
 ## Gub throwing at the old rate for the rest of its life.
+##
+## The two branches are rates over *different windows* and are not comparable as
+## numbers: 1.0 is 0.500 s of the throw and 2.58 is 0.516 s of the cast squeezed
+## into 0.2. What they have in common is the only thing that matters here, which
+## is that each one is derived from its own clip's window and its own release.
 ##
 ## Asked by `_play_windup` on every peer, not only the caster's, which is the
 ## reason it is a function of replicated state alone: the rate never travels, so
@@ -364,17 +377,17 @@ func lightning_cycle() -> float:
 func windup_rate() -> float:
 	if not is_elder():
 		return GubAnimator.THROW_RATE
-	return GubAnimator.throw_rate_for_release(_config.lightning_delay)
+	return GubAnimator.cast_rate_for_release(_config.lightning_delay)
 
 
 ## How long after the click this Gub's throw actually leaves the hand.
 ##
 ## For the spear this is `GubAnimator.THROW_RELEASE_TIME` and always has been.
 ## For an Elder it is the dial — except at the very bottom of the dial's range,
-## where `windup_rate()` has hit `THROW_RATE_MAX` and the arm cannot be sped up
-## any further. There the bolt leads the hand rather than the hand being made to
-## catch an impossible number, which at a delay of zero is the setting's whole
-## point. Everywhere above about 0.14 s the two are the same number.
+## where `windup_rate()` has hit `GubAnimator.CAST_RATE_MAX` and the arm cannot
+## be sped up any further. There the bolt leads the hand rather than the hand
+## being made to catch an impossible number, which at a delay of zero is the
+## setting's whole point. Everywhere above 0.14 s the two are the same number.
 func release_delay() -> float:
 	return _config.lightning_delay if is_elder() else GubAnimator.THROW_RELEASE_TIME
 
@@ -559,10 +572,19 @@ func _tick_windup() -> void:
 	# the same question again on arrival and is the copy that counts.
 	#
 	# Its *timing* stays the spear's, which is right: the robe arrived after the
-	# arm did, the clip is already playing at the spear's rate, and the release is where that
-	# arm actually lets go. A bolt out of a spear's windup is a fifth of a second
-	# late by the dial and exactly on time by the animation, and the animation is
-	# what anybody is looking at.
+	# arm did, the throw clip is already playing at the spear's rate, and the
+	# release is where that arm actually lets go. A bolt out of a spear's windup
+	# is a fifth of a second late by the dial and exactly on time by the
+	# animation, and the animation is what anybody is looking at. Since D-064 it
+	# is also a bolt out of a *throw* rather than out of a cast, and the mirror
+	# of that is a spear out of a cast, when a robe burns out inside the fifth
+	# of a second between an Elder's click and its release. Both are the same
+	# trade and it is the right way round: the weapon is whichever one this Gub
+	# has now, and the animation is the one the eye has already been following
+	# for a fifth of a second. Restarting the clip here to match the weapon
+	# would be a hand that snaps back to its side and starts again, which is a
+	# worse lie than an arm finishing a motion its owner has changed its mind
+	# about.
 	if is_elder():
 		if Net.is_host:
 			_host_cast_lightning(origin, direction)
@@ -575,17 +597,28 @@ func _tick_windup() -> void:
 		_request_throw_spear.rpc_id(1, origin, direction)
 
 
-## Start the arm going back, at whichever rate this Gub's weapon needs (D-040).
+## Start the arm going, with whichever clip and whichever rate this Gub's weapon
+## needs (D-040, D-064).
 ##
-## The rate is worked out here rather than handed in, and that is what keeps the
+## Both are worked out here rather than handed in, and that is what keeps the
 ## Elder's fast windup honest on the seven machines that are only watching: this
 ## same function is what `_do_throw_windup` calls on every other peer, and it
 ## reaches the same answer from the same replicated robe and the same replicated
 ## config. Sending the rate with the relay would have been one more number on
-## the wire that could be a different number at the far end.
+## the wire that could be a different number at the far end — and sending the
+## *clip* would be the same mistake with a worse failure, a Gub throwing a spear
+## it does not have.
+##
+## This one branch is the whole of the fork. Everything downstream of it — the
+## release tick, the aim, the cancel on death and on a letter, the cooldown —
+## is the single piece of code D-025 and D-038 exist to keep single.
 func _play_windup() -> void:
 	var animator := _gub.get_node_or_null("AnimationTree") as GubAnimator
-	if animator != null:
+	if animator == null:
+		return
+	if is_elder():
+		animator.play_cast(windup_rate())
+	else:
 		animator.play_throw(windup_rate())
 
 
@@ -754,8 +787,9 @@ func _wants_shaft() -> bool:
 ## the user played it and asked for "basically no delay", and a weapon that
 ## announces itself for two thirds of a second is not the weapon they were
 ## asking for. The clip is sped up to match rather than cut short
-## (`windup_rate`), because an arm still on its way back when the bolt leaves is
-## the one thing that would read as broken rather than as fast.
+## (`windup_rate`), because an arm still on its way out when the bolt leaves is
+## the one thing that would read as broken rather than as fast. Since D-064 it
+## is the Elder's own `Cast` being sped up rather than the spear's `Throw`.
 func try_cast_lightning() -> void:
 	if not has_lightning() or is_winding_up():
 		return

@@ -415,9 +415,25 @@ PACKS = (
     # into is not a promise, and a line in this table is.
     Pack("3_Bow_Suite",
          "draw, a held aim loop, release, and ideally a dry-fire or a recover"),
+    # The Elder's cast, and the second pack with something in it (D-064).
+    #
+    # `Standing1HMagicAttack1.fbx` is 2.283 s and the one clip in this build
+    # that needs nothing locked: it travels 0.000 m end to end and never gets
+    # more than 0.124 m from where it started, so `lock_root_motion` has nothing
+    # to clamp and the window did not have to be cut after a run-up. The window
+    # `gub_animator.gd` plays is 0.467-1.600 and `align` is its first frame, for
+    # the reason every one-shot's is.
+    #
+    # The rest of Mixamo's *Lite Magic Pack* is in `assets/source/_rejected/`
+    # with its measurements. This was not chosen out of it — it was the only
+    # candidate downloaded With Skin, and the others are there so that a second
+    # opinion is a download nobody has to repeat rather than a search.
     Pack("4_Elder_Suite",
-         "a short one-handed cast or point — the Elder's bolt leaves 0.2 s after "
-         "the click, so the whole clip is about that long"),
+         "the Elder's cast: a one-handed throw forward, in place, and the only "
+         "clip here that travels nowhere",
+         (
+             Clip("Standing1HMagicAttack1.fbx", "Cast", False, 0.467),
+         )),
     Pack("5_Locomotion",
          "strafe left, strafe right and run backward, and their walk equivalents: "
          "the set that stops the feet skating sideways"),
@@ -1842,13 +1858,19 @@ def main():
         log("    %-11s length %.3f  low %s..%s (hips %.3f m)  standing again %s"
             % ("Slide", row["duration"], at(row, "low_from"), at(row, "low_to"),
                row["hips_min"], at(row, "stood_up")))
-    row = rows.get("Throw")
-    if row is None:
-        log("    %-11s not in this build" % "Throw")
-    else:
-        log("    %-11s length %.3f  release %.3f (right hand at peak %.2f m/s), "
+    # Both windups, because `gub_animator.gd` cuts a release out of both and the
+    # two of them disagree about which of these columns *is* the release: the
+    # throw's is its furthest forward and the cast's is neither that nor the
+    # peak (D-063, D-064). Printing both for both is what lets either constant
+    # be checked against the asset rather than believed.
+    for name in ("Throw", "Cast"):
+        row = rows.get(name)
+        if row is None:
+            log("    %-11s not in this build" % name)
+            continue
+        log("    %-11s length %.3f  peak hand speed %.3f (%.2f m/s), "
             "furthest forward %.3f"
-            % ("Throw", row["duration"], row["hand_peak_at"], row["hand_peak"],
+            % (name, row["duration"], row["hand_peak_at"], row["hand_peak"],
                row["hand_reach_at"]))
     log("\ndone.")
 

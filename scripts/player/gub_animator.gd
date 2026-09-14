@@ -24,8 +24,16 @@ extends AnimationTree
 ##     slide      OneShot        the low part of Slide, full body
 ##     land       OneShot        JumpOne's touchdown and absorb, full body
 ##     roll       OneShot        JumpTwo's ground roll, full body
+##     cast       OneShot        Cast at the Elder's own rate, upper body only
 ##     throw      OneShot        Throw at THROW_RATE, filtered to the upper body
 ##     output   <- throw
+##
+## The two windups are two one-shots and not one one-shot with a choice of clip,
+## for the reason the four above it are four: a one-shot owns a clip, a window
+## and a pair of fades, and the throw and the cast agree on none of the three
+## (D-064). What they are not is two *timings* — `GubCombat` fires exactly one of
+## them per click and has one release tick for both, which is the thing D-025
+## and D-038 exist to keep single.
 ##
 ## Both blend positions are in **game** metres per second, not in clip units:
 ## each locomotion node carries its own playback rate (`game speed / authored
@@ -46,7 +54,7 @@ extends AnimationTree
 ## moves, with nothing in the log.
 const REQUIRED_CLIPS: Array[String] = [
 	"Idle", "Walk", "Run", "CrouchIdle", "CrouchWalk",
-	"JumpOne", "JumpTwo", "Slide", "Throw",
+	"JumpOne", "JumpTwo", "Slide", "Throw", "Cast",
 ]
 
 # -------------------------------------------------------- the airborne arc ---
@@ -224,9 +232,15 @@ const THROW_RATE := THROW_WINDOW / THROW_RELEASE_TARGET
 ## 0.06 s of arm, three and a half frames of it, with nothing anywhere saying
 ## the number had stopped meaning what its own comment said. The thing worth
 ## carrying across a change of clip is the one with the argument attached.
+##
+## The floor stays here and the **ceiling moved to the cast** (D-064), which is
+## where the only thing that was ever squeezed by it went. The spear is played
+## at THROW_RATE and at nothing else, so a ceiling over the throw's own window
+## was a clamp no setting in this game could reach; what asks to be sped up is
+## the Elder, and since it stopped borrowing this clip its ceiling has to come
+## off the clip it does play. The number itself is a fact about the eye rather
+## than about either clip, which is why one of it serves both.
 const THROW_RELEASE_MIN := 0.14
-## The fastest the clip will ever be played, whatever it is asked for. 3.57x.
-const THROW_RATE_MAX := THROW_WINDOW / THROW_RELEASE_MIN
 
 ## How long after `play_throw()` the spear actually leaves the hand, in real
 ## seconds. `GubCombat` reads this, and it is derived rather than typed so that
@@ -241,35 +255,114 @@ const THROW_RATE_MAX := THROW_WINDOW / THROW_RELEASE_MIN
 const THROW_RELEASE_TIME := THROW_WINDOW / THROW_RATE
 
 
-## The playback rate that puts the release exactly `seconds` after the click.
+# ---------------------------------------------------------------- the cast ---
+
+## The Elder's cast. `Cast` is `4_Elder_Suite/Standing1HMagicAttack1.fbx`,
+## 2.283 s and in place — it travels 0.000 m end to end and never gets more than
+## 0.124 m from where it started, so unlike every other one-shot in this graph
+## there is no run-up for the window to have to open after (D-064).
+##
+## It is its own clip and not the spear's at a higher rate, which is the whole
+## of step 5 of `docs/PLAN_COMBAT.md`. D-063 left the Elder riding
+## `SpearThrowLonger`'s window at 2.5x and said plainly that it read only
+## because the robe is a cone: what a bolt's windup actually showed was the hat
+## dipping and the hand snapping forward with the crackle in it. That is still
+## all the robe lets through — so the argument for this clip is not that the old
+## one looked broken, it is that the arm under the hat is now doing a cast
+## instead of a throw, and the hand the crackle sits in ends up **out in front
+## and stopped** rather than swung down past the hip.
+##
+## 0.467 is the quiet frame. The clip opens with the arm swinging back and out
+## to the right, and at 0.467 that swing is spent: the hand is moving at
+## 0.58 m/s, the slowest it gets anywhere between the first frame and the
+## follow-through, and it is the last frame before it starts to rise into the
+## cock. So CAST_FADE_IN has something still to blend out of, which is the
+## choice D-063 made on the throw and for the same reason.
+##
+## 1.600 closes it, 0.617 s of clip past the release, and that is the fade-out's
+## number rather than the clip's. Godot fades a one-shot out *inside* its window
+## (see LAND_CLIP_END), so at the default delay's 2.58x the window is 0.439 s of
+## real time and CAST_FADE_OUT's 0.14 s runs from 0.299 — a tenth of a second
+## after the bolt has gone, which is the property the throw's own end was picked
+## for. What the fade takes over from is the unwind: the arm holds the point to
+## 1.13 and the body then turns back out from under it, which is a recovery a
+## standing physics body has nowhere to go with.
+const CAST_CLIP_START := 0.467
+const CAST_CLIP_END := 1.60
+
+## Where in `Cast` the bolt leaves the hand, in the clip's own seconds.
+##
+## Measured on the built asset with `tools/hand_track.gd`, hip-relative, and by
+## a **third** rule — neither the peak hand speed D-025 took on the old throw
+## nor the full forward extension D-063 took on the new one. Both of those are
+## wrong here, and this clip says so rather loudly:
+##
+## - **Peak speed is 0.783 s**, 5.97 m/s, and at that frame the hand is 0.157 m
+##   in front of the hips: barely past its own belly, arm still folded. A bolt
+##   leaving there comes out of the Gub rather than out of the hand.
+## - **Furthest forward is 1.333 s**, and it is an artefact. The hand stops
+##   moving at 0.98 and is then *held* out in front while the body unwinds
+##   beneath it — so the hip-relative reach goes on creeping outward to 0.558 m
+##   a third of a second after the cast is over, on an arm travelling 0.2 m/s.
+##   D-063's rule, asked of this clip, picks the recovery.
+##
+## What this clip is, is a **throw that stops**: the hand is cocked behind the
+## hip line at 0.700, whipped forward, and by 0.983 it has stopped going forward
+## at all (its forward component crosses zero there) and fallen under a metre a
+## second (0.90). Two independent readings of one frame, and that frame is where
+## the motion ends and the pose begins. Everything after it is a point being
+## held, which is what a caster does once the thing has left.
+const CAST_RELEASE_IN_CLIP := 0.983
+
+## The part of the cast that has to have happened by the time the bolt leaves,
+## in the clip's own seconds. 0.516 s of arm: a wind-up into the cock at 0.700
+## and a 0.283 s whip out of it.
+const CAST_WINDOW := CAST_RELEASE_IN_CLIP - CAST_CLIP_START
+
+## The shortest the cast may ever be squeezed into, and the ceiling that makes a
+## `MatchConfig.lightning_delay` of 0 a setting rather than a division by zero.
+##
+## The floor is THROW_RELEASE_MIN's 0.14 s, and it is deliberately the same
+## number rather than a second copy of it: how briefly an arm can move and still
+## be seen to move is a fact about the eye and not about which clip is playing.
+## What is not the same is what it buys, which is the reason the ceiling moved
+## here at all — 0.14 s of a 0.516 s cast is **3.69x**, against the 3.57x the
+## same floor bought on the spear's 0.500 s window. At that rate the wind-up
+## plays in 0.063 s and the whip in 0.077 s, and the bolt leads the hand by
+## however far under 0.14 s the dial has been dragged, which at zero is exactly
+## what that setting asked for.
+const CAST_RELEASE_MIN := THROW_RELEASE_MIN
+const CAST_RATE_MAX := CAST_WINDOW / CAST_RELEASE_MIN
+
+
+## The playback rate that puts the cast's release exactly `seconds` after the
+## click.
 ##
 ## The Elder's bolt leaves `MatchConfig.lightning_delay` after the click rather
 ## than at the spear's 0.50 s (D-040), and firing at 0.2 s while an arm authored
-## to take 0.500 s of clip is still on its way back would look broken — so the
+## to take 0.516 s of clip is still on its way out would look broken — so the
 ## clip is sped up to meet the number instead of the number being fitted to the
-## clip. At the default 0.2 that is 0.500 / 0.2 = **2.5x**, which is two and a
-## half times the spear's own 1.0. It was 5.67x on the old clip, and the Elder
-## borrowing the spear's throw is what step 5 of `docs/PLAN_COMBAT.md` exists to
-## end.
+## clip. At the default 0.2 that is 0.516 / 0.2 = **2.58x**, and the Elder is
+## the only thing in the game that ever asks.
 ##
 ## Derived here rather than typed next to the delay for the reason
-## `THROW_RELEASE_TIME` is derived: a hard-coded 2.5 beside a dial that can be
-## dragged to 0.5 is a hand that finishes a third of a second before the bolt it
+## `THROW_RELEASE_TIME` is derived: a hard-coded 2.58 beside a dial that can be
+## dragged to 0.5 is a hand that arrives a third of a second after the bolt it
 ## is supposed to be throwing, and nothing anywhere would say so.
-static func throw_rate_for_release(seconds: float) -> float:
+static func cast_rate_for_release(seconds: float) -> float:
 	# Below the ceiling's own release time there is nothing left to scale, so
 	# this returns the ceiling rather than dividing by something at or near zero.
-	if seconds <= THROW_WINDOW / THROW_RATE_MAX:
-		return THROW_RATE_MAX
-	return THROW_WINDOW / seconds
+	if seconds <= CAST_WINDOW / CAST_RATE_MAX:
+		return CAST_RATE_MAX
+	return CAST_WINDOW / seconds
 
 
-## The inverse: when the release actually lands for a clip played at `rate`.
-## Only differs from what was asked for once `throw_rate_for_release` has hit its
-## ceiling, which is the one place the two can disagree and the one place the
-## disagreement is intended.
-static func throw_release_for_rate(rate: float) -> float:
-	return THROW_WINDOW / maxf(rate, 0.01)
+## The inverse: when the cast's release actually lands for a clip played at
+## `rate`. Only differs from what was asked for once `cast_rate_for_release` has
+## hit its ceiling, which is the one place the two can disagree and the one
+## place the disagreement is intended.
+static func cast_release_for_rate(rate: float) -> float:
+	return CAST_WINDOW / maxf(rate, 0.01)
 
 ## Fade times, in and out, for the four one-shots. The slide comes in fast and
 ## leaves slowly because its exit *is* the stand-up; the landings come in almost
@@ -282,6 +375,14 @@ const ROLL_FADE_IN := 0.05
 const ROLL_FADE_OUT := 0.25
 const THROW_FADE_IN := 0.08
 const THROW_FADE_OUT := 0.22
+## The cast comes in and leaves faster than the throw, because at the default
+## delay it is playing at 2.58x where the throw plays at 1.0. 0.06 s of
+## real-time fade-in is 0.155 s of this clip and finishes at 0.622 — clear of
+## the cock at 0.700, and so clear of everything the eye is about to follow;
+## the throw's own 0.08 would land at 0.673 and blend through the first frames
+## of the whip. The fade-out is 0.14 for the arithmetic under CAST_CLIP_END.
+const CAST_FADE_IN := 0.06
+const CAST_FADE_OUT := 0.14
 
 # ------------------------------------------------------------------ blends ---
 
@@ -347,6 +448,9 @@ const P_ROLL := "parameters/roll/request"
 const P_THROW := "parameters/throw/request"
 const P_THROW_ACTIVE := "parameters/throw/active"
 const P_THROW_RATE := "parameters/throw_rate/scale"
+const P_CAST := "parameters/cast/request"
+const P_CAST_ACTIVE := "parameters/cast/active"
+const P_CAST_RATE := "parameters/cast_rate/scale"
 
 var _body: Gub
 var _skeleton_path: String = ""
@@ -399,7 +503,10 @@ func _ready() -> void:
 	active = true
 
 	# A parameter and not a property, so it can only be set once the graph is
-	# installed.
+	# installed. There is deliberately no matching line for the cast: it has no
+	# authored speed to open on, `play_cast` has no default rate for the same
+	# reason, and a number put here would be one the dial had never been asked
+	# about, sitting where it could be played.
 	set(P_THROW_RATE, THROW_RATE)
 
 	_grounded = _body.is_grounded()
@@ -492,10 +599,16 @@ func _build_graph(player: AnimationPlayer) -> AnimationNodeBlendTree:
 	tree.add_node("roll_clip", _window("JumpTwo", ROLL_CLIP_START, ROLL_CLIP_END),
 		Vector2(960, 700))
 	tree.add_node("roll", _shot(ROLL_FADE_IN, ROLL_FADE_OUT), Vector2(1160, 400))
+	tree.add_node("cast_clip", _window("Cast", CAST_CLIP_START, CAST_CLIP_END),
+		Vector2(1160, 860))
+	tree.add_node("cast_rate", AnimationNodeTimeScale.new(), Vector2(1340, 860))
+	tree.add_node("cast", _upper_body_shot(CAST_FADE_IN, CAST_FADE_OUT),
+		Vector2(1360, 560))
 	tree.add_node("throw_clip", _window("Throw", THROW_CLIP_START, THROW_CLIP_END),
 		Vector2(1160, 700))
 	tree.add_node("throw_rate", AnimationNodeTimeScale.new(), Vector2(1340, 700))
-	tree.add_node("throw", _upper_body_shot(), Vector2(1360, 440))
+	tree.add_node("throw", _upper_body_shot(THROW_FADE_IN, THROW_FADE_OUT),
+		Vector2(1560, 440))
 
 	tree.connect_node("stance", 0, "stand")
 	tree.connect_node("stance", 1, "crouch")
@@ -511,8 +624,15 @@ func _build_graph(player: AnimationPlayer) -> AnimationNodeBlendTree:
 	tree.connect_node("land", 1, "land_clip")
 	tree.connect_node("roll", 0, "land")
 	tree.connect_node("roll", 1, "roll_clip")
+	tree.connect_node("cast_rate", 0, "cast_clip")
+	tree.connect_node("cast", 0, "roll")
+	tree.connect_node("cast", 1, "cast_rate")
 	tree.connect_node("throw_rate", 0, "throw_clip")
-	tree.connect_node("throw", 0, "roll")
+	# The throw sits *over* the cast rather than beside it, and the order is not
+	# arbitrary even though only one of the two is ever fired per click: a Gub
+	# that stops being the Elder is holding a spear again on the same frame
+	# (D-038), so the shot that must win a tie is the spear's.
+	tree.connect_node("throw", 0, "cast")
 	tree.connect_node("throw", 1, "throw_rate")
 	tree.connect_node("output", 0, "throw")
 	return tree
@@ -621,11 +741,14 @@ func _shot(fade_in: float, fade_out: float) -> AnimationNodeOneShot:
 	return shot
 
 
-## The throw is a layer, not a state, and the filter is what makes it one: only
-## `UPPER_BODY_BONES` take the clip, and the legs stay in whatever the blend
-## below is producing.
-func _upper_body_shot() -> AnimationNodeOneShot:
-	var shot := _shot(THROW_FADE_IN, THROW_FADE_OUT)
+## The throw and the cast are layers, not states, and the filter is what makes
+## them so: only `UPPER_BODY_BONES` take the clip, and the legs stay in whatever
+## the blend below is producing. Which is most of why the Elder can be given a
+## clip that turns its whole body through 106 deg without the legs going
+## anywhere — Hips and Spine are outside the filter (D-029), so the pelvis keeps
+## facing the crosshair and what arrives is the cast from the middle spine up.
+func _upper_body_shot(fade_in: float, fade_out: float) -> AnimationNodeOneShot:
+	var shot := _shot(fade_in, fade_out)
 	if _skeleton_path.is_empty():
 		return shot
 	shot.filter_enabled = true
@@ -821,10 +944,29 @@ func play_throw(rate: float = THROW_RATE) -> void:
 	set(P_THROW, AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
 
 
-## True from the moment the throw is fired until its fade-out has finished. The
-## camera uses it to keep the body facing the crosshair through the throw.
+## Fire the Elder's cast. The same call as `play_throw` on the other one-shot,
+## and made by the same line of `GubCombat._play_windup` on every peer (D-064).
+##
+## There is no default rate, and that is the statement: the throw has an
+## authored speed of its own and the cast does not. Every cast there will ever
+## be is played at whatever `cast_rate_for_release` makes of
+## `MatchConfig.lightning_delay`, so a default here would only be a number
+## waiting to be played when somebody forgets to ask the dial.
+func play_cast(rate: float) -> void:
+	if tree_root == null:
+		return
+	set(P_CAST_RATE, maxf(rate, 0.01))
+	set(P_CAST, AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
+
+
+## True from the moment a windup is fired until its fade-out has finished — the
+## throw's or the Elder's cast, because what asks is the camera and what the
+## camera wants to know is whether this Gub is in the middle of an attack it
+## should be kept facing the crosshair through. One question, both answers.
 func is_throwing() -> bool:
-	return tree_root != null and bool(get(P_THROW_ACTIVE))
+	if tree_root == null:
+		return false
+	return bool(get(P_THROW_ACTIVE)) or bool(get(P_CAST_ACTIVE))
 
 
 ## Airborne, in an airtime a dive was spent in.

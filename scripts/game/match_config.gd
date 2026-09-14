@@ -154,14 +154,14 @@ const TEAM_NONE := -1
 ## lightning, right when you press then it should shoot maybe .2 seconds
 ## after."* **This supersedes the release-time half of D-038**, which fired the
 ## bolt at the `Throw` clip's own release — 0.71 s then, 0.50 s since D-063 —
-## because the same clip was being
-## reused. The clip stays; it is played faster to meet this number instead —
-## `GubAnimator.throw_rate_for_release` derives the rate, so the arm and the
-## bolt cannot drift apart (D-040).
+## because the same clip was being reused. The Elder has its own `Cast` clip
+## since D-064, and it is played faster to meet this number rather than this
+## number being fitted to it — `GubAnimator.cast_rate_for_release` derives the
+## rate, so the arm and the bolt cannot drift apart (D-040).
 ##
 ## **Zero is legal and means "on the frame of the click"**, which is why the
 ## range starts there rather than at something safely small. The clip still
-## plays, at `GubAnimator.THROW_RATE_MAX`, and the bolt leads the hand by about
+## plays, at `GubAnimator.CAST_RATE_MAX`, and the bolt leads the hand by about
 ## a seventh of a second — which at that setting is precisely what was asked
 ## for.
 @export_range(0.0, 2.0) var lightning_delay: float = 0.2

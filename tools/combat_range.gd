@@ -65,6 +65,15 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##              with it fails the third of those even when the first two still
 ##              agree with each other, which is exactly the bug D-025 exists
 ##              because of and D-040 repeated.
+##   cast     — `release`'s question asked of the Elder, which is a different
+##              question about the same one tick (D-064). One bolt, and three
+##              numbers off it: how long after the click it actually appears,
+##              whether the arm had got there when it did, and whether the hand
+##              is still going forward at that instant. The third is the one
+##              worth having, because `Cast` is a clip whose hand stops half a
+##              second before it is furthest in front of the hips — so
+##              `release`'s own rule, asked here, would pass on a bolt fired
+##              during the recovery.
 ##   recharge — throws until the spear has grown back a dozen times and requires
 ##              the shaft to be in the fist at the end of every one of them, then
 ##              takes it out of the fist by hand while the throw gate still says
@@ -210,7 +219,7 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##   free     — no script; play it yourself
 const MODES := ["flight", "hit", "arc", "miss", "aim", "mushroom", "cover",
 	"lure", "lure_self", "letter", "cards", "lightning", "blast", "ward", "recharge",
-	"release",
+	"release", "cast",
 	"respawn", "health", "embed", "hurt", "walk", "bhop", "leave", "free"]
 
 ## How long after the cast the verdict is taken, in physics ticks. The click
@@ -347,6 +356,42 @@ const RELEASE_SETTLE := 12
 ## where the old clip's was, or anywhere else a plausible mistake would put it,
 ## is four ticks or more.
 const RELEASE_AGREEMENT := 3
+
+## `cast`'s patience, settle and agreement, in physics ticks — the same three
+## numbers as `release`'s and none of them the same value, because the thing
+## being watched takes a fifth of the time.
+##
+## The patience is three times the longest the dial can ask for (2.0 s) so that
+## a bolt which has merely drifted is still measured. The settle is how long the
+## arm is tracked past the bolt, and it is longer than `release`'s twelve
+## because what this mode has to see is the hand *stop*: at the default delay
+## the whole window is 0.44 s of real time and the hand is still creeping
+## outward for a third of it.
+const CAST_PATIENCE := 360
+const CAST_SETTLE := 30
+
+## How far apart the bolt and the end of the arm's advance may be, in ticks.
+##
+## The same three as `release`'s and measured the same way: zero or one, every
+## run. Three is two ticks of headroom over that and nothing more.
+##
+## It can be this tight even though the thing it watches is a deceleration
+## rather than a peak, because the composed arm turns over hard — 0.016 m on the
+## last tick of the whip against 0.013 m back on the next. What it is for is the
+## plausible mistake, which is a release put on the frame the hand is furthest
+## in front of the hips: that is 0.35 s of clip later, eight ticks at the
+## default delay, and fails this by a mile.
+const CAST_AGREEMENT := 3
+
+## How much the composed hand has to still be advancing, in metres per tick, for
+## the advance to count as unfinished. Two millimetres a tick is 0.12 m/s, well
+## under the 0.9 m/s the clip is still doing a tick before its release and well
+## over the 0.06 m/s it drifts at while the point is held.
+const CAST_ADVANCE_EPSILON := 0.002
+
+## How far the hand has to have come out of the cock before a stop is allowed to
+## count as the end of the whip, in metres. See `_drive_cast`.
+const CAST_ADVANCE_MIN := 0.10
 
 ## How long the deliberate desync waits for the hand to notice, in physics
 ## ticks. Half a second is forty times `HAND_SYNC_GRACE` and several times any
@@ -518,6 +563,11 @@ const VIEWS := {
 	# a mode nobody can look at when it fails.
 	"release": {"eye": Vector3(3.4, 1.6, 9.2), "look": Vector3(0.0, 1.05, 9.0),
 		"fov": 50.0},
+	# The same shot for the same reason, a little further out and a little
+	# higher: the subject is still an arm, but it is an arm inside a robe, and
+	# the hat is half of what the cast has left to show with.
+	"cast": {"eye": Vector3(3.8, 1.8, 9.4), "look": Vector3(0.0, 1.15, 9.0),
+		"fov": 50.0},
 }
 
 const PLAYER_SPOT := Vector3(0.0, 0.1, 9.0)
@@ -614,6 +664,22 @@ var _release_reach: float = -INF
 ## Looked up once. `find_child` on every tick of a mode that is about
 ## frame-accurate timing is the wrong kind of cost to add to the thing being
 ## measured.
+## `cast`'s bookkeeping, which is `release`'s plus the one thing that differs:
+## the tick the hand stopped advancing, which is this clip's release and is not
+## the tick it was furthest forward on.
+var _cast_clicked: int = 0
+var _cast_clicked_ms: int = 0
+var _cast_bolt_at: int = 0
+var _cast_bolt_ms: int = 0
+var _cast_reach: float = -INF
+var _cast_reach_at: int = 0
+var _cast_stopped_at: int = 0
+var _cast_last_reach: float = -INF
+var _cast_advanced: bool = false
+var _cast_stopped: bool = false
+var _cast_low: float = INF
+var _cast_bolt_reach: float = -INF
+
 var _release_skeleton: Skeleton3D
 var _release_hand_bone: int = -1
 var _release_hips_bone: int = -1
@@ -783,7 +849,7 @@ func _dummy_count() -> int:
 		# Nobody to shoot at. `recharge` throws a dozen spears over the back
 		# wall on purpose (see `RECHARGE_TARGET`) and a dummy in the roster
 		# would only be something for one of them to find.
-		"recharge", "bhop", "release":
+		"recharge", "bhop", "release", "cast":
 			return 0
 		_:
 			return 2
@@ -897,6 +963,9 @@ func _physics_process(_delta: float) -> void:
 		return
 	if _mode == "release":
 		_drive_release(player, combat)
+		return
+	if _mode == "cast":
+		_drive_cast(player, combat)
 		return
 	if _mode == "ward":
 		_drive_ward(combat)
@@ -2252,6 +2321,121 @@ func _hand_reach(player: Gub) -> float:
 	return (_release_skeleton.global_transform.basis * (arm - pelvis)).dot(player.facing())
 
 
+## One bolt, and the three numbers that say the Elder's hand and its lightning
+## agree (D-064).
+##
+## It is `release` with the weapon swapped, deliberately written next to it and
+## deliberately *not* merged with it, because the two modes disagree about the
+## only interesting line in either: what "the arm has got there" means. On the
+## throw it is a maximum — the hand is furthest in front of the hips at the
+## release and on its way back a frame later — and on the cast it is a stop,
+## with the hand held out in front for a third of a second afterwards and the
+## hip-relative maximum arriving during the recovery, 0.35 s of clip too late.
+## One function with a flag in it would have had to carry both rules anyway, and
+## the flag is the thing that would rot.
+func _drive_cast(player: Gub, combat: GubCombat) -> void:
+	if _cast_clicked == 0:
+		# The robe is put on by hand rather than dropped and walked over: what
+		# this mode is about is one tick of one animation, and `lightning` is
+		# the mode that proves the whole loot path.
+		if _frames == 12:
+			MatchState._make_elder(1)
+			return
+		# The same twenty frames of settling every other mode takes.
+		if _frames < 20 or not combat.has_lightning():
+			return
+		_cast_clicked = _frames
+		_cast_clicked_ms = Time.get_ticks_msec()
+		_acted = true
+		# Through the ordinary click, not through `try_cast_lightning`: the
+		# branch from one to the other is part of what is being checked (D-038).
+		combat.try_throw_spear()
+		return
+
+	var reach := _hand_reach(player)
+	if _trace:
+		print("  f%d (+%d) hand %.3f m in front of the hips"
+			% [_frames, _frames - _cast_clicked, reach])
+	if reach > _cast_reach:
+		_cast_reach = reach
+		_cast_reach_at = _frames
+	# The release this clip actually has: the tick the hand stops going forward,
+	# latched at the **first** stop and not at the last.
+	#
+	# That is not a tidying-up, it is the measurement. Composed in the game the
+	# arm cocks back to -0.03 m, whips out to 0.39 m, and then — after the bolt
+	# has gone — dips 0.05 m and goes out again to 0.47 m as the clip's recovery
+	# unwinds a body whose hips and lower spine the mask never applied. So "the
+	# last tick that advanced" is eight ticks past the bolt and is the recovery,
+	# which is the same trap in the composed pose that `CAST_RELEASE_IN_CLIP`
+	# documents in the clip. The first stop after a real advance is the end of
+	# the whip, and it is the one the eye reads.
+	#
+	# "A real advance" is what CAST_ADVANCE_MIN is for: the whip covers 0.43 m
+	# and the largest wobble anywhere else in the window is the 0.05 m dip, so a
+	# tenth of a metre is clear of one and nowhere near the other. Without it the
+	# very first sample counts as a rise and the first dip after it latches, and
+	# this mode measures the wind-up instead of the cast.
+	if not _cast_stopped and _cast_last_reach > -INF:
+		if reach > _cast_last_reach + CAST_ADVANCE_EPSILON:
+			_cast_stopped_at = _frames
+			_cast_advanced = reach - _cast_low >= CAST_ADVANCE_MIN
+		elif _cast_advanced:
+			_cast_stopped = true
+	_cast_low = minf(_cast_low, reach)
+	_cast_last_reach = reach
+
+	if _cast_bolt_at == 0:
+		if _frames - _cast_clicked < CAST_PATIENCE:
+			return
+	elif _frames - _cast_bolt_at < CAST_SETTLE:
+		return
+	_report_cast()
+	get_tree().quit()
+
+
+func _report_cast() -> void:
+	if _cast_bolt_at == 0:
+		print("combat_range: clicked on tick %d and no bolt ever appeared — cast FAIL"
+			% _cast_clicked)
+		return
+	var want := Net.config.lightning_delay
+	var got := (_cast_bolt_ms - _cast_clicked_ms) * 0.001
+	var frame := 1.0 / 60.0
+	var apart := absi(_cast_bolt_at - _cast_stopped_at)
+	var failures: Array[String] = []
+	if absf(got - want) > frame * 1.5:
+		failures.append("the bolt is %.0f ms from the %.0f ms the dial asked for"
+			% [got * 1000.0, want * 1000.0])
+	if apart > CAST_AGREEMENT:
+		failures.append("the hand stopped advancing %d tick(s) from the bolt" % apart)
+	# The half of it that is about the pose rather than the timing: a bolt that
+	# leaves while the arm is still folded up against the body is the failure
+	# this whole step exists to prevent, and it is invisible to every other
+	# assertion here. Two thirds of the way out is not a tuned threshold — the
+	# clip is at 86% of its own final reach on the frame it stops, and the frame
+	# the hand is quickest on, which is the release rule this clip was *not*
+	# given, is at 23%.
+	if _cast_reach > 0.0 and _cast_reach_out() < 0.66:
+		failures.append("the hand was only %.0f%% of the way out when the bolt left"
+			% (_cast_reach_out() * 100.0))
+	if failures.is_empty():
+		print("combat_range: bolt at %.0f ms after the click (dial says %.0f), hand %.0f%% out and stopping %d tick(s) away — cast PASS"
+			% [got * 1000.0, want * 1000.0, _cast_reach_out() * 100.0, apart])
+		return
+	print("combat_range: cast FAIL — %s" % "; ".join(failures))
+
+
+## How far out the composed arm was when the bolt left, as a fraction of the
+## furthest it got in this windup. A fraction rather than a distance because the
+## distance is a fact about the robe's proportions and the mask, and what is
+## being asked is about the *shape* of the motion.
+func _cast_reach_out() -> float:
+	if _cast_reach <= 0.0:
+		return 0.0
+	return clampf(_cast_bolt_reach / _cast_reach, 0.0, 1.0)
+
+
 func _report_release() -> void:
 	if _release_spear_at == 0:
 		print("combat_range: clicked on tick %d and no spear ever appeared — release FAIL"
@@ -2375,6 +2559,16 @@ func _watch_spawned(node: Node) -> void:
 			print("combat_range: lure caught %d — %s"
 				% [victim_ids.size(), ", ".join(names) if names else "nobody"]))
 		return
+	var bolt := node as LightningBolt
+	if bolt != null and _mode == "cast" and _cast_bolt_at == 0:
+		# The one instant this mode is about. The bolt is hitscan, so the frame
+		# it enters the tree *is* the frame it was fired on — there is no flight
+		# to subtract — and the arm is read on the same line, which is what makes
+		# "the hand had got there" a measurement rather than a belief.
+		_cast_bolt_at = _frames
+		_cast_bolt_ms = Time.get_ticks_msec()
+		var caster := MatchState.gubs.get(1) as Gub
+		_cast_bolt_reach = _hand_reach(caster) if caster != null else -INF
 	var spear := node as SpearProjectile
 	if spear != null and _mode == "release" and _release_spear_at == 0:
 		# Read here and nowhere else, because "the fist empties when the spear

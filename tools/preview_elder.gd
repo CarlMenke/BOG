@@ -3,10 +3,17 @@ extends Node3D
 ## Development tool, not shipped.
 ##
 ##   Godot --path . --resolution 1100x900 --script tools/snapshot.gd -- \
-##       res://tools/preview_elder.tscn out/elder.png <ticks> <view> <light> [clip] [time]
+##       res://tools/preview_elder.tscn out/elder.png <ticks> <view> <light> [clip] [from] [to]
 ##
 ##   view:   mid | back | far | pair | sheet
 ##   light:  studio | dusk | afternoon   ("noon" still accepted for afternoon)
+##
+## `from` and `to` are the sheet's window in the clip's own seconds. `to` was
+## always the end of the clip, which is the right default for a cycle and the
+## wrong one for a one-shot: the Elder's `Cast` is 2.283 s of which the graph
+## plays 0.467-1.600, and five samples of the whole file put one of them in the
+## cast and four in a Gub standing about (D-064). Left off, it is the end of the
+## clip and the sheet is what it always was.
 ##
 ## This scene is not only a camera. **It is the check that the robe binds**, and
 ## it does the attach exactly the way a game would: load the Gub, find its
@@ -78,6 +85,8 @@ var _view: String = "mid"
 var _light: String = "studio"
 var _clip: String = "Idle"
 var _time: float = 0.0
+## The far end of the `sheet` window, or -1 for "the end of the clip".
+var _until: float = -1.0
 
 
 func _ready() -> void:
@@ -90,7 +99,11 @@ func _ready() -> void:
 		_clip = args[5]
 	if args.size() >= 7:
 		_time = float(args[6])
-	print("preview_elder: view=%s light=%s clip=%s t=%.2f" % [_view, _light, _clip, _time])
+	if args.size() >= 8:
+		_until = float(args[7])
+	print("preview_elder: view=%s light=%s clip=%s from=%.2f to=%s"
+		% [_view, _light, _clip, _time,
+			"end" if _until < 0.0 else "%.2f" % _until])
 
 	_build_light()
 	match _view:
@@ -256,12 +269,17 @@ func _build_sheet() -> void:
 	var length: float = player.get_animation(_clip).length if player.has_animation(_clip) else 1.0
 	probe.free()
 	var from: float = _time
-	var span: float = maxf(length - from, 0.01)
+	var to: float = length if _until < 0.0 else minf(_until, length)
+	var span: float = maxf(to - from, 0.01)
 
 	var x := -SHEET_SPACING * (SHEET_SAMPLES - 1) * 0.5
 	var forward := Vector3.BACK
+	# The last sample lands *on* `to` when a window was asked for and one step
+	# short of it when it was not, which is `tools/preview_anim.gd`'s rule and
+	# is there for the same reason: a looping clip's last frame is its first.
+	var steps := float(SHEET_SAMPLES if _until < 0.0 else maxi(SHEET_SAMPLES - 1, 1))
 	for i in SHEET_SAMPLES:
-		var t: float = from + span * float(i) / float(SHEET_SAMPLES)
+		var t: float = from + span * float(i) / steps
 		var elder := _make_elder(_clip, t, i == 0)
 		elder.position = Vector3(x, 0.0, 0.0)
 		x += SHEET_SPACING
@@ -277,7 +295,8 @@ func _build_sheet() -> void:
 		elder.add_child(stamp)
 
 	_ground_line()
-	_caption("%s   (%.2fs)   %s" % [_clip, length, _light], Vector3(0.0, 2.62, 0.0))
+	_caption("%s   %.2f-%.2f s of %.2f   %s" % [_clip, from, to, length, _light],
+		Vector3(0.0, 2.62, 0.0))
 
 	var view := get_viewport().get_visible_rect().size
 	var aspect: float = view.x / maxf(view.y, 1.0)

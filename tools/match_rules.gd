@@ -1526,16 +1526,24 @@ func _run_config_validation() -> void:
 	config.apply_dict({"lightning_delay": 90.0})
 	_check("and an absurd one is clamped", config.lightning_delay, 2.0)
 
-	# The clip is sped up to put its own release on whatever the delay says
-	# (D-040), and both directions of that arithmetic are asserted here rather
-	# than left to be noticed as an arm that finishes before the bolt goes.
-	_near("0.2 s of delay is a 2.5x throw",
-		GubAnimator.throw_rate_for_release(0.2), GubAnimator.THROW_WINDOW / 0.2)
+	# The Elder's clip is sped up to put its own release on whatever the delay
+	# says (D-040, D-064), and both directions of that arithmetic are asserted
+	# here rather than left to be noticed as an arm that finishes after the bolt
+	# has gone.
+	_near("0.2 s of delay is a 2.58x cast",
+		GubAnimator.cast_rate_for_release(0.2), GubAnimator.CAST_WINDOW / 0.2)
 	_near("and that rate releases at 0.2 s again",
-		GubAnimator.throw_release_for_rate(
-			GubAnimator.throw_rate_for_release(0.2)), 0.2)
+		GubAnimator.cast_release_for_rate(
+			GubAnimator.cast_rate_for_release(0.2)), 0.2)
+	# The two windups are two clips with two windows since D-064, and this is
+	# the line that fails if one of them is ever quietly wired to the other's:
+	# the cast's window is 0.516 s against the throw's 0.500, so a cast played
+	# at the throw's rate lands 16 ms late and a throw played at the cast's
+	# lands early, and nothing else in this file would notice either.
+	_check("the two windups are not the same window",
+		is_equal_approx(GubAnimator.CAST_WINDOW, GubAnimator.THROW_WINDOW), false)
 	_near("the spear's own rate still releases at 0.50",
-		GubAnimator.throw_release_for_rate(GubAnimator.THROW_RATE),
+		GubAnimator.THROW_WINDOW / GubAnimator.THROW_RATE,
 		GubAnimator.THROW_RELEASE_TIME)
 	# The half second the user asked for, asserted against the literal rather
 	# than against the constant it is derived from — which is the only way this
@@ -1549,9 +1557,17 @@ func _run_config_validation() -> void:
 		GubAnimator.THROW_RELEASE_TIME, 0.5)
 	# The setting that would otherwise be a division by zero.
 	_near("a zero delay saturates rather than dividing by zero",
-		GubAnimator.throw_rate_for_release(0.0), GubAnimator.THROW_RATE_MAX)
+		GubAnimator.cast_rate_for_release(0.0), GubAnimator.CAST_RATE_MAX)
 	_check("and the clip still plays at a finite rate",
-		is_finite(GubAnimator.throw_rate_for_release(0.0)), true)
+		is_finite(GubAnimator.cast_rate_for_release(0.0)), true)
+	# And what that ceiling *means*, which is the half of it that can rot: it is
+	# 0.14 s of arm off the cast's own window, and the day somebody moves the
+	# window without moving the floor this is the line that says the ceiling has
+	# stopped meaning what its comment says (D-063's lesson, applied to the clip
+	# that inherited the ceiling).
+	_near("and the ceiling is still the floor it says it is",
+		GubAnimator.cast_release_for_rate(GubAnimator.CAST_RATE_MAX),
+		GubAnimator.CAST_RELEASE_MIN)
 
 	# Regression guard: lure_fuse defaulted to 0.35 while its own range started
 	# at 0.5, so every fresh config was silently raised and the declared default

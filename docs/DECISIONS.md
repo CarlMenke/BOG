@@ -5572,3 +5572,260 @@ moving component. Chasing that would pin a *clip* constant to an artefact of
 whatever is blended under it in one particular stance, and standing still is not
 the only way a Gub throws. The clip's own extension is the frame; the harness
 carries the frame of slack, with the reason written next to it.
+
+## D-064 — The Elder casts its own clip, and its release is the frame the hand stops rather than the frame it is furthest out
+
+D-063 gave the spear a throw you can see leave the hand and left the Elder
+riding it: `GubCombat.windup_rate()` played `Throw`'s 0.500 s window at 2.5x to
+land the bolt on `MatchConfig.lightning_delay`. That record was honest about
+what it had handed on — *"acceptable to ship as it stands… step 5 is still the
+fix, and it now knows what it is inheriting"* — and the reason it was only
+acceptable is the robe. The Elder is a cone from the shoulders down (D-037), so
+what a windup actually shows is the hat dipping and the hand snapping forward
+with the crackle in it, and an overhand delivery with a run-up, cut to its last
+half second and played two and a half times too fast, still produces those two
+things.
+
+So the argument for this step is not that the old one looked broken. It is that
+**a cast is not a throw**, and there is no reason for the most dangerous player
+in the match to be doing an impression of one.
+
+### The clip, and the one thing about it that is unusual
+
+`4_Elder_Suite/Standing1HMagicAttack1.fbx`, 2.283 s, 138 frames, now declared in
+`PACKS` as `Cast`. It is the only clip in this build that needs nothing locked:
+it travels **0.000 m** end to end and never gets more than 0.124 m from where it
+started, so `lock_root_motion` has nothing to clamp and the window did not have
+to be cut to clear a run-up the way the throw's did.
+
+What it *does* do is turn. The pelvis swings through 106° while the arm comes
+round, and that is exactly the content the layer throws away: the windup is
+filtered to `GubAnimator.UPPER_BODY_BONES`, Hips and Spine deliberately outside
+it since D-029, so the Gub casts with its pelvis facing the crosshair and only
+the middle spine up takes the clip. The same property that made
+`SpearThrowLonger`'s forward dive never arrive is what makes this clip usable.
+
+### The window is 0.467–1.600
+
+**0.467 is the quiet frame.** The clip opens with the arm swinging back and out
+to the right, and at 0.467 that swing is spent: the hand is doing 0.58 m/s, the
+slowest it gets between the first frame and the follow-through, and it is the
+last frame before it starts to rise into the cock. `CAST_FADE_IN`'s 0.06 s is
+0.155 s of clip at the default rate and finishes at 0.622, clear of the cock at
+0.700 — so the blend is over before anything the eye is about to follow begins.
+That is D-063's reasoning about `THROW_CLIP_START`, applied to a different clip
+and reaching a different frame.
+
+**1.600 closes it, and that is the fade-out's number rather than the clip's.**
+Godot fades a one-shot out *inside* its window (the fact `LAND_CLIP_END`
+records), so at the default delay's 2.58x the window is 0.439 s of real time and
+`CAST_FADE_OUT`'s 0.14 s runs from 0.299 — a tenth of a second after the bolt
+has gone, which is the property the throw's own end was picked for. What the
+fade takes over from is the unwind: the arm holds the point to 1.13 and the body
+then turns back out from under it.
+
+### The release is 0.983, by a third rule
+
+This is the part worth reading, because the clip breaks both of the rules that
+came before it. Measured on the built asset with `tools/hand_track.gd`, hip
+relative, and reproduced by `tools/build_gub.py` at the end of every build:
+
+- **D-025's rule, peak hand speed, is 0.783 s.** The hand is doing 5.97 m/s
+  there and is 0.157 m in front of the hips — barely past its own belly, arm
+  still folded. In the game's own composed pose that is 23% of the way out. A
+  bolt leaving there comes out of the Gub rather than out of the hand.
+- **D-063's rule, furthest in front of the hips, is 1.333 s, and it is an
+  artefact.** The hand stops moving at 0.98 and is then *held* out in front
+  while the body unwinds beneath it, so the hip-relative reach goes on creeping
+  outward to 0.558 m a third of a second after the cast is over, on an arm
+  travelling 0.2 m/s. Asked of this clip, the rule that was right for the throw
+  picks the recovery.
+
+What this clip is, is **a throw that stops**. The hand is cocked *behind* the
+hip line at 0.700 (−0.041 m), whipped forward, and by 0.983 it has stopped going
+forward at all — its forward component crosses zero — and has fallen under a
+metre a second (0.90, from 5.97). Two independent readings of one frame. That
+frame is where the motion ends and the pose begins, and everything after it is a
+point being held, which is what a caster does once the thing has left.
+
+D-063 said the rule that picks the frame is a fact about the clip rather than a
+change of mind. This is the third clip and the third answer, and that is the
+same statement made once more rather than a pattern coming apart: a baseball
+throw releases at its peak because the hand is quickest on the way out, a
+javelin-ish delivery releases at full extension because its peak is on the way
+down, and a cast releases where the arm stops because what it is throwing is
+already in the hand and does not need to be slung.
+
+### The derivation, in D-063's shape
+
+    CAST_WINDOW        = 0.983 - 0.467      = 0.516    measured off the clip
+    rate               = WINDOW / delay     = 2.58x    at the default 0.2 s
+    CAST_RELEASE_MIN   = THROW_RELEASE_MIN  = 0.14     a fact about the eye
+    CAST_RATE_MAX      = WINDOW / MIN       = 3.69x    derived
+
+Nothing here is a number sitting beside a dial that can move it.
+`cast_rate_for_release` is asked on every peer, every click, off replicated
+state alone, so the rate never travels and can never travel wrong.
+
+### `THROW_RATE_MAX` became `CAST_RATE_MAX`, and moved windows doing it
+
+The step brief asked whether the Elder's ceiling should come off the Elder's
+clip. It should, and the reason is stronger than symmetry: **once the Elder
+stopped borrowing the throw, `THROW_RATE_MAX` had no caller at all.** The spear
+is played at `THROW_RATE` and at nothing else, so a ceiling over the throw's own
+window was a clamp no setting in this game could reach. So it is not duplicated,
+it is *moved*: `THROW_RATE_MAX` is gone and `CAST_RATE_MAX` is `CAST_WINDOW /
+CAST_RELEASE_MIN` = **3.69x**, where the same floor over the spear's 0.500 s
+window was 3.57x.
+
+What it means in seconds of arm is what it has always meant and now says so on
+the clip it belongs to: **0.14 s**. At that rate the wind-up plays in 0.063 s
+and the whip in 0.077 s. It is reached only below a `lightning_delay` of 0.14,
+and at the dial's legal 0 the bolt leads the hand by the whole 0.14 — which at
+that setting is precisely what was asked for (D-040), and which is the division
+by zero the ceiling exists to be instead of.
+
+The **floor** did not move and is not copied. `CAST_RELEASE_MIN :=
+THROW_RELEASE_MIN`, an alias with the argument attached, the way
+`GubAnimator.LAND_MIN_AIRTIME` is `Gub.ROLL_MIN_AIRTIME`: how briefly an arm can
+move and still be seen to move is a fact about the eye, not about which clip is
+playing. Two copies of 0.14 would be two numbers that could drift apart into a
+throw and a cast with different ideas of what "as fast as this can go" means.
+
+### Two one-shots, and the one line that branches
+
+The graph gained a `cast` OneShot with its own windowed clip and its own
+TimeScale, sitting under `throw` in the same chain as the other four. Not one
+one-shot with a switchable clip, because a one-shot owns a clip, a window *and*
+a pair of fades and these two agree on none of the three; and the four shots
+already in that chain are the pattern for exactly this.
+
+**What did not fork is everything that matters.** `GubCombat._play_windup` asks
+`is_elder()` once and calls `play_cast(windup_rate())` or
+`play_throw(windup_rate())`. Downstream of that line there is still one click,
+one `_windup_release_at`, one release tick, one cancel-on-death, one
+cancel-on-letter, one place the aim is sampled and one place the branch into
+spear-or-bolt is taken — which is the whole of what D-025 and D-038 exist to
+keep single. `is_throwing()`, which the camera uses to hold the body on the
+crosshair, ORs the two `active` flags, so it is still one question with one
+answer.
+
+`play_cast` deliberately has **no default rate**, and neither does `_setup` give
+`cast_rate` a starting value the way it gives `throw_rate` `THROW_RATE`. The
+throw has an authored speed of its own; the cast does not, and a default would
+only be a number the dial had never been asked about, sitting somewhere it could
+be played.
+
+### What the layer actually produces, measured
+
+The composed in-game pose is not the clip, and it was measured rather than
+assumed — `tools/combat_range.tscn -- cast trace`, which walks the built
+skeleton exactly as `release` does. Reading the hand's distance in front of the
+hips along the Gub's own facing, from the click:
+
+    +1..+6    0.323 -> -0.033     the cock, and the clip's own -0.041 arrives
+    +7..+12   -0.033 -> 0.392     the whip
+    +13       the bolt            0.379 m, 83% of the way out
+    +13..+15  0.392 -> 0.346      a 0.05 m dip
+    +16..+20  0.346 -> 0.470      the recovery, coming out again
+    +21 on    falling away
+
+Two things fall out of that. The first is that the arm **has got there when the
+bolt does**: the whip's own peak is at +12 and the bolt is at +13, which is a
+tick of measuring offset and not a disagreement. The second is that the trap in
+the clip is also in the composed pose, wearing a different hat — "furthest
+forward" in the game is +20, in the recovery, eight ticks late — so the gate's
+new check latches the **first** stop after a real advance rather than the last.
+
+### The gate, at 72
+
+A new check, **"the bolt leaves when the arm does"** — `combat_range`'s `cast`
+mode, the Elder's twin of `release` and written next to it rather than merged
+with it, because the two disagree about the only interesting line in either:
+what "the arm has got there" means. One bolt and three numbers off it: it
+arrives 200 ms after the click against the 200 the dial asked for; the composed
+arm is 83% of the way out at that instant; and the tick it arrives on is within
+one of the tick that arm stops going forward.
+
+The second and third are what this adds over `release`. Put the release on this
+clip's furthest-forward frame — the plausible mistake, and the one D-063's own
+rule would make — and every constant in `gub_animator.gd` would go on agreeing
+with every other while the bolt left during the recovery. That is eight ticks
+away from passing this check.
+
+`tools/match_rules.gd` gained the cheap half of the same idea, as it did for the
+throw: the two directions of the rate arithmetic on the cast's window, an
+assertion that the two windups are **not** the same window (so a cast quietly
+wired to the throw's rate, 16 ms late, is a failure and not a rounding), and an
+assertion that the ceiling still releases at the floor it says it does.
+
+Nothing had to be retuned. `LIGHTNING_VERDICT_DELAY`, `lightning kills`, `blast`
+and `ward` all key off `lightning_delay`, which has not moved — this step
+changed which clip runs and how fast, not when the bolt leaves — so every
+existing Elder check passed unchanged and none was loosened.
+
+### The pictures
+
+    bash tools/preview_clips.sh 4_Elder_Suite/Standing1HMagicAttack1.fbx \
+        --out out/elder_cast_arc.png --focus 0.75 --burst 12 --burst-span 1.1 \
+        --context 0 --azimuth 55 --scale 300
+
+    GODOT --path . --resolution 1700x900 --script tools/snapshot.gd -- \
+        res://tools/preview_elder.tscn out/elder_cast_window.png 30 sheet \
+        studio Cast 0.467 1.600
+
+    GODOT --path . --resolution 1280x720 --script tools/snapshot.gd -- \
+        res://tools/combat_range.tscn out/elder_cast_ingame.png 34 cast
+
+The second is the one that answers the question this step had to answer, and it
+answers it yes: **the cast reads under the cone.** Five Elders across the window
+— arms low and level, arm folded in with the hat tipping over it, arm straight
+out horizontal, still out, coming down — and the middle frame is a floor-length
+purple cone with one yellow arm shot dead straight out of it, which is a shape
+you can read across a clearing and is not a shape any other pose in this game
+makes. The third is the same pose in a real match with the bolt leaving the
+palm on the frame the check measures.
+
+`tools/preview_elder.gd`'s `sheet` gained a `to` argument to take those: it
+always sampled to the end of the clip, which is right for a cycle and wrong for
+a one-shot — five samples of all 2.283 s of `Cast` put one in the cast and four
+in a Gub standing about.
+
+### Rejected
+
+**A second windup in `gub_combat.gd`.** The brief forbade it and it would have
+been wrong anyway: the cancel-on-death, the cancel-on-letter, the cooldown
+refund and the aim sample are four edge cases each, and a second copy of them
+that only the Elder runs is four bugs nobody would find for a month. The branch
+is one line, in the one function that was already asking which weapon this is.
+
+**One one-shot with a switchable clip**, either a `Blend2` held at 0 or 1 or an
+`AnimationNodeTransition`. It looked tidier and is not: the fades are part of
+what differs, so the shared node would have needed its fade times rewritten per
+fire; `Blend2`'s remaining-time is `amount > 0.5 ? rem1 : rem0`, which is a
+detail of Godot's internals that the one-shot's auto-fade-out would then have
+depended on; and `Transition`'s request/reset semantics would have had to be
+proven not to interfere with the seek that makes re-firing restart the window.
+Two shots need none of that proven.
+
+**Giving the cast a release target of its own**, the way the throw has
+`THROW_RELEASE_TARGET = 0.5`. There is already a target and it is a lobby dial:
+`MatchConfig.lightning_delay`. A second one beside it is the exact shape of bug
+D-040 was written about.
+
+**Keeping `THROW_RATE_MAX` as well**, so that each clip had a ceiling. It would
+have been a constant with no caller and no reachable setting, and the next
+person to read it would have had to work that out before they could ignore it.
+
+**Changing the 0.14 s floor while moving it.** A cast is a snappier motion than
+a throw and a shorter floor is arguable, but there is no measurement behind a
+different number and inventing one to go with the new clip is how a constant
+stops meaning what its comment says — which is the thing D-063 spent a section
+on.
+
+**`Cast` on the Elder's own skeleton rather than the Gub's.** Never seriously,
+but worth writing down once: the robe is a second skinned mesh on the Gub's own
+skeleton (D-037), so there is exactly one skeleton, and a cast is a clip on it
+like any other. Nothing about this step touched `build_elder.py`, the bolt's
+hitscan and blast (D-053) or the Elder's invulnerability (D-040), and none of
+the three needed it.
