@@ -308,13 +308,21 @@ corner_radius_bottom_right = 4
 corner_radius_bottom_left = 4
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_id6tp"]
-bg_color = Color(0.3, 0.35, 0.42, 0.7)
+content_margin_left = 0.0
+content_margin_top = 5.0
+content_margin_right = 0.0
+content_margin_bottom = 5.0
+bg_color = Color(0.38, 0.45, 0.55, 0.75)
 corner_radius_top_left = 3
 corner_radius_top_right = 3
 corner_radius_bottom_right = 3
 corner_radius_bottom_left = 3
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_7j1xt"]
+content_margin_left = 0.0
+content_margin_top = 5.0
+content_margin_right = 0.0
+content_margin_bottom = 5.0
 bg_color = Color(0.72, 0.45, 0.18, 1)
 corner_radius_top_left = 3
 corner_radius_top_right = 3
@@ -322,6 +330,10 @@ corner_radius_bottom_right = 3
 corner_radius_bottom_left = 3
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_cf38p"]
+content_margin_left = 0.0
+content_margin_top = 5.0
+content_margin_right = 0.0
+content_margin_bottom = 5.0
 bg_color = Color(1, 0.64, 0.26, 1)
 corner_radius_top_left = 3
 corner_radius_top_right = 3
@@ -329,7 +341,11 @@ corner_radius_bottom_right = 3
 corner_radius_bottom_left = 3
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_uxwg7"]
-bg_color = Color(0.02, 0.027, 0.04, 0.5)
+content_margin_left = 0.0
+content_margin_top = 5.0
+content_margin_right = 0.0
+content_margin_bottom = 5.0
+bg_color = Color(0.02, 0.027, 0.04, 0.55)
 corner_radius_top_left = 3
 corner_radius_top_right = 3
 corner_radius_bottom_right = 3
@@ -694,13 +710,21 @@ bg_color = Color(0.008, 0.012, 0.02, 0.86)
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_3s2kg"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_t3vxg"]
-bg_color = Color(0.3, 0.35, 0.42, 0.7)
+content_margin_left = 5.0
+content_margin_top = 0.0
+content_margin_right = 5.0
+content_margin_bottom = 0.0
+bg_color = Color(0.38, 0.45, 0.55, 0.75)
 corner_radius_top_left = 3
 corner_radius_top_right = 3
 corner_radius_bottom_right = 3
 corner_radius_bottom_left = 3
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_0ke4e"]
+content_margin_left = 5.0
+content_margin_top = 0.0
+content_margin_right = 5.0
+content_margin_bottom = 0.0
 bg_color = Color(0.72, 0.45, 0.18, 1)
 corner_radius_top_left = 3
 corner_radius_top_right = 3
@@ -708,6 +732,10 @@ corner_radius_bottom_right = 3
 corner_radius_bottom_left = 3
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_mntmc"]
+content_margin_left = 5.0
+content_margin_top = 0.0
+content_margin_right = 5.0
+content_margin_bottom = 0.0
 bg_color = Color(1, 0.64, 0.26, 1)
 corner_radius_top_left = 3
 corner_radius_top_right = 3
@@ -715,7 +743,11 @@ corner_radius_bottom_right = 3
 corner_radius_bottom_left = 3
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_1ba0s"]
-bg_color = Color(0.02, 0.027, 0.04, 0.5)
+content_margin_left = 5.0
+content_margin_top = 0.0
+content_margin_right = 5.0
+content_margin_bottom = 0.0
+bg_color = Color(0.02, 0.027, 0.04, 0.55)
 corner_radius_top_left = 3
 corner_radius_top_right = 3
 corner_radius_bottom_right = 3
@@ -881,3 +913,7 @@ VScrollBar/styles/grabber = SubResource("StyleBoxFlat_t3vxg")
 VScrollBar/styles/grabber_highlight = SubResource("StyleBoxFlat_0ke4e")
 VScrollBar/styles/grabber_pressed = SubResource("StyleBoxFlat_mntmc")
 VScrollBar/styles/scroll = SubResource("StyleBoxFlat_1ba0s")
+ValueLabel/base_type = &"Label"
+ValueLabel/colors/font_color = Color(1, 0.64, 0.26, 1)
+ValueLabel/font_sizes/font_size = 16
+ValueLabel/fonts/font = SubResource("SystemFont_mgqdl")

@@ -971,6 +971,64 @@ check "the weapon tile follows the pick" "weapon_tiles PASS"     "$GODOT" --path
 check "spear reload timer on the tile" "reload_timer PASS" \
     "$GODOT" --path "$GODOT_ROOT" --resolution 640x360 --script tools/snapshot.gd -- \
     res://tools/hud_range.tscn "$GODOT_LOG_DIR/reload_timer.png" 270 reload_timer
+# The ability bar's tiles are photographs of the real props (D-076), and this is
+# the claim that makes seven of them a *set* rather than seven pictures: one
+# camera, one light rig, and one framing rule — the geometric mean of a
+# silhouette's on-screen width and height is 66% of the tile, capped at 88% on
+# the longer side, with anything over 2:1 laid on the diagonal.
+#
+# Checked against the **committed PNGs** rather than by re-rendering them, which
+# is the whole point of baking: what has to hold on every machine is that the
+# pictures in the repository obey the rule, not that this machine's GPU can
+# reproduce them. It re-measures each tile's alpha and fails if any one has
+# drifted out of budget — a re-bake with the camera nudged, or a prop replaced
+# by one of a different shape, shows up here rather than in somebody's peripheral
+# vision three weeks later.
+#
+# The picture to look at, which no number settles:
+#     ... --path . --script tools/bake_tiles.gd -- sheet   # out/tiles_sheet.png
+check "the ability tiles are one set" "bake_tiles: PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" --script tools/bake_tiles.gd -- check
+# **A dial the host cannot drag is a setting that cannot be changed** (D-076).
+#
+# The match panel's readout used to sit beside its slider, and a `Label`'s
+# minimum width is the width of its own text — so every unit string this panel
+# learned to say came off the track. At the worst label it currently has this was
+# not a squeeze but a wipe-out: `bow_drop_full` measured a **zero-pixel** track
+# behind "25.5 m/s²  ·  flat to 39 m  (and the bolt with it)", with
+# `sword_recharge` at 47 px and `sword_reach` at 92.
+#
+# So this is not a screenshot. For every slider it walks the slider's own range
+# at the slider's own step, renders each formatted unit through the real font,
+# and keeps the value that comes out widest — the actual worst label, not a
+# typical one — then pushes all of them at once and measures what is left of
+# every track, under every win condition, because `_apply_visibility` hides rows
+# and a row that is not laid out has no width. 244 rows; `MIN_TRACK` is 180 px.
+# With the readout put back beside the slider it fails on 27 of them.
+check "every slider can be dragged" "widths: PASS" \
+    "$GODOT" --path "$GODOT_ROOT" --resolution 1600x900 --script tools/snapshot.gd -- \
+    res://tools/ui_range.tscn "$GODOT_LOG_DIR/widths.png" 60 widths
+# Capturing a config to the clipboard (D-076), through the real button, the real
+# fields and the real `DisplayServer` clipboard.
+#
+# `fields` is the one that matters and the one that would rot: the capture is
+# built from `MatchConfig.fields()` — what actually travels on the wire — and
+# this compares the sheet's row set against that list **in both directions**, so
+# a dial added next month is in the clipboard the day it lands rather than the
+# day somebody remembers. A hand-written list would pass on the day it was
+# written and be silently short by one for ever after.
+#
+# `clipboard` copies for real and reads it back, requiring every row to have
+# survived into the text and the name and both lines of the notes with it, and
+# then prints the whole payload into the log — because "reads correctly pasted
+# into a chat window" is the actual requirement and no substring test settles it.
+# `saved` keeps it for the session and applies it back over every field.
+check "a config reaches the clipboard" "capture: PASS" \
+    "$GODOT" --path "$GODOT_ROOT" --resolution 1600x900 --script tools/snapshot.gd -- \
+    res://tools/ui_range.tscn "$GODOT_LOG_DIR/capture_config.png" 60 capture_config
+also "a config reaches the clipboard" "capture: fields PASS"
+also "a config reaches the clipboard" "capture: clipboard PASS"
+also "a config reaches the clipboard" "capture: saved PASS"
 # Holds W and requires the Gub to have gone somewhere. Movement was wired into
 # the testbeds and nowhere else, so every testbed could be walked around while
 # the real arena could not, and the abilities — which read their own keys —

@@ -22,6 +22,12 @@ text = "Match"
 layout_mode = 2
 size_flags_horizontal = 3
 
+[node name="CaptureButton" type="Button" parent="Body/Heading"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"GhostButton"
+text = "CAPTURE"
+
 [node name="HostOnlyHint" type="Label" parent="Body/Heading"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -39,7 +45,12 @@ layout_mode = 2
 size_flags_vertical = 3
 horizontal_scroll_mode = 0
 
-[node name="Rows" type="VBoxContainer" parent="Body/Scroll"]
+[node name="Gutter" type="MarginContainer" parent="Body/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/margin_right = 8
+
+[node name="Rows" type="VBoxContainer" parent="Body/Scroll/Gutter"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3

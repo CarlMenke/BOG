@@ -721,6 +721,31 @@ Gate **100 → 107**; `net_test.sh` green.
 
 ## Step 14 — The UI professionalisation pass
 
+***Done, as D-076.*** The record says what the theme *is* — one blue-cast
+near-black ground, three surfaces, two accents that mean interaction and
+readiness and nothing else coloured at all, two faces in six sizes, 4/12/20 and
+a hairline — before it says what changed, because "keep it on theme" could not
+be checked until somebody wrote that down. **Primitive is the right word and it
+meant the pass could not be "add".**
+
+The ability tiles are photographs of the seven real `.glb`s, baked by
+`tools/bake_tiles.gd` under one camera, one light rig and **one framing rule** —
+the geometric mean of a silhouette's on-screen width and height is 66% of the
+tile, capped at 88% on the longer side, slender props on the diagonal. Not "the
+longest axis is the same fraction", which is the rule that makes a 7.5:1 arrow a
+hairline and a 1.2:1 mushroom a block. The lobby's weapon strip wears the same
+pictures. **The slider bug was real and worse than reported**: at the panel's
+worst label `bow_drop_full` measured a **zero-pixel** track. The unit moved under
+the slider and the narrowest track in the panel is now 320 px, measured across
+244 rows. A config captures to the clipboard from `MatchConfig.fields()` — all
+47, in the panel's own words, readable pasted into chat — kept for the session
+and applied back. Along the way: a scrollbar that had no width (a struck Known
+Issue), and a health bar that had been twice the 224 px its own constant claimed
+since D-062.
+
+Nothing D-036, D-046, D-047, D-050 or D-054 deleted came back. Gate **120 →
+126**.
+
 *Added 2026-09-14. Queued behind steps 11-13. The user's own words, because this
 is a taste brief and paraphrasing it would lose the constraints:*
 

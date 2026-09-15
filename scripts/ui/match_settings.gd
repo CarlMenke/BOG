@@ -24,6 +24,13 @@ const TEAM_ONLY := ["team_count", "random_teams", "friendly_fire"]
 @onready var _rows_root: VBoxContainer = %Rows
 @onready var _summary: Label = %Summary
 @onready var _host_only_hint: Label = %HostOnlyHint
+## Opens the capture sheet (D-076). In the heading rather than at the foot of
+## the rows, because the rows scroll and a button that is below the fold at every
+## window size the game ships at is a button nobody finds. **Not host-only**: a
+## client can read this panel and therefore has something to capture, and
+## "write down what we played on" is a thing a player wants at least as often as
+## a host does. Only `APPLY`, on a saved row, is host-only.
+@onready var _capture_button: Button = %CaptureButton
 
 ## Built in code, so it cannot be reached through `%` — nodes added at runtime
 ## have no owner to register a unique name with.
@@ -35,6 +42,18 @@ var _capture_note: Label
 
 ## field name -> {"row": Control, "control": Control, "readout": Label}
 var _fields: Dictionary = {}
+## The heading the next row will be filed under, so a captured config can say
+## which part of the panel a setting came from without a second table.
+var _current_section: String = ""
+## The capture sheet (D-076), built on first use and kept: it carries the name
+## and the notes being typed, and rebuilding it on every open would throw those
+## away every time the panel refreshed behind it.
+var _sheet: CanvasLayer = null
+var _sheet_name: LineEdit
+var _sheet_notes: TextEdit
+var _sheet_preview: TextEdit
+var _sheet_saved: VBoxContainer
+var _sheet_status: Label
 ## Set while widgets are being written from `Net.config`, so the change signals
 ## that causes do not bounce straight back out as edits.
 var _applying: bool = false
@@ -42,6 +61,7 @@ var _applying: bool = false
 
 func _ready() -> void:
 	_build()
+	_capture_button.pressed.connect(open_capture)
 	Net.config_changed.connect(refresh)
 	Net.roster_changed.connect(refresh)
 	refresh()
@@ -263,6 +283,399 @@ func _build() -> void:
 	_seed_row()
 
 
+## Every slider row in the panel, as `{"field", "label", "slider", "readout",
+## "format", "row"}`. Public because `tools/ui_range.gd` measures this panel
+## rather than eyeballing it: a readout wide enough to squeeze the slider beside
+## it to nothing is a setting the host cannot change, and that is arithmetic on
+## two rectangles rather than something a screenshot proves. See the `widths`
+## mode there and D-076.
+func slider_rows() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for field: String in _fields:
+		var entry: Dictionary = _fields[field]
+		if not (entry["control"] is HSlider):
+			continue
+		out.append({
+			"field": field,
+			"label": entry["label"] as Label,
+			"slider": entry["control"] as HSlider,
+			"readout": entry["readout"] as Label,
+			"format": entry["format"] as Callable,
+			"row": entry["row"] as Control,
+		})
+	return out
+
+
+# ------------------------------------------------------ capturing a config ---
+#
+# D-076, on the user's own *"there should be some way to capture a settings
+# config from the menu... and i can put in some notes about that. Ideally there
+# is also a copy to clipboard button that copied everything."*
+#
+# **The clipboard payload is the feature.** The reason to want this is to hand a
+# config to a playtester or to write down what a match was actually played on,
+# and both of those end in a chat window — so the text is written to be read
+# there by a person, in a proportional font, and not to be parsed. One line per
+# setting, each line saying what it is and what it is set to, under the panel's
+# own headings.
+#
+# **Built from `MatchConfig.fields()`, never from a list written here.** That is
+# what travels on the wire, so a field missing from a capture is a setting the
+# person you sent it to would never see. Eight of those fields have no row in
+# this panel — `spawn_protection`, `warmup_time`, the mushroom's lifetime and
+# cap, the lure's four — and they are captured anyway, under their own heading,
+# because "capture all the settings" means all of them and a dial that is not on
+# the panel is exactly the one somebody would otherwise forget.
+
+## What the transcript calls the fields this panel has no row for.
+const UNLISTED_SECTION := "Not on the panel"
+
+
+## Every field of the config, in wire order, as `{field, section, label, value}`.
+## The one place that decides what a captured config *is*; the transcript below
+## and `tools/ui_range.gd -- capture_config` both read it, so the check and the
+## clipboard cannot disagree about what was left out.
+func capture_rows() -> Array[Dictionary]:
+	var config := Net.config
+	var out: Array[Dictionary] = []
+	for field: String in MatchConfig.fields():
+		var entry: Dictionary = _fields.get(field, {})
+		var label: String = _pretty(field)
+		var section: String = UNLISTED_SECTION
+		if not entry.is_empty():
+			var node: Label = entry.get("label")
+			if node != null:
+				label = node.text
+			section = String(entry.get("section", UNLISTED_SECTION))
+		out.append({
+			"field": field,
+			"section": section,
+			"label": label,
+			"value": _capture_value(field, entry, config),
+		})
+	return out
+
+
+## What one field reads as. The panel's own words wherever the panel has them —
+## a slider's formatter already says "80  (80% of a Gub)" and "a swing every
+## 1.47 s  (chains)", which is the whole reason those formatters exist and is far
+## better than the float underneath. A field with no row falls back to the value.
+func _capture_value(field: String, entry: Dictionary, config: MatchConfig) -> String:
+	var raw: Variant = config.get(field)
+	if entry.is_empty():
+		return _plain(raw)
+	var control: Control = entry["control"]
+	if control is HSlider:
+		var formatter: Callable = entry["format"]
+		return String(formatter.call(float(raw)))
+	if control is OptionButton:
+		var picker := control as OptionButton
+		if picker.selected >= 0:
+			return picker.get_item_text(picker.selected)
+		return _plain(raw)
+	if control is CheckButton:
+		return "on" if bool(raw) else "off"
+	return _plain(raw)
+
+
+static func _plain(value: Variant) -> String:
+	if typeof(value) == TYPE_FLOAT:
+		return "%.2f" % float(value)
+	if typeof(value) == TYPE_BOOL:
+		return "on" if bool(value) else "off"
+	return str(value)
+
+
+## `spawn_protection` becomes `Spawn protection`, for the eight fields with no
+## row of their own to take a label from.
+static func _pretty(field: String) -> String:
+	var words := field.replace("_", " ")
+	return words.substr(0, 1).to_upper() + words.substr(1)
+
+
+## The thing that goes on the clipboard.
+func transcript(title: String, notes: String) -> String:
+	var rows := capture_rows()
+	var lines: Array[String] = []
+	var named := title.strip_edges()
+	lines.append("GUB match config — %s" % (named if not named.is_empty()
+		else "unnamed"))
+	lines.append(Net.config.summary())
+	var said := notes.strip_edges()
+	if not said.is_empty():
+		# Indented under "Notes:" rather than run together, so a note with its
+		# own line breaks in it still reads as one block of somebody's words.
+		lines.append("")
+		lines.append("Notes:")
+		for line: String in said.split("\n"):
+			lines.append("  " + line)
+	# Grouped by the panel's own headings, in the order the headings first come
+	# up, and in wire order *inside* each one. Nothing is dropped and nothing is
+	# invented — this is a sort, not a filter — but it matters: `_FIELDS` is
+	# ordered by when a feature landed rather than by where its dials are, so
+	# printed straight it walks MODE, LIMITS, MODE, FEEL, LIMITS, FEEL and reads
+	# like a changelog instead of like a config.
+	var order: Array[String] = []
+	var grouped := {}
+	for row: Dictionary in rows:
+		var section := String(row["section"])
+		if not grouped.has(section):
+			grouped[section] = [] as Array[String]
+			order.append(section)
+		grouped[section].append("  %s: %s" % [row["label"], row["value"]])
+	for section: String in order:
+		lines.append("")
+		lines.append(section.to_upper())
+		lines.append_array(grouped[section] as Array[String])
+	lines.append("")
+	lines.append("(%d settings, captured %s)" % [rows.size(),
+		Time.get_datetime_string_from_system(false, true)])
+	return "\n".join(lines)
+
+
+# --------------------------------------------------------------- the sheet ---
+
+## Open the capture sheet, building it the first time.
+##
+## On its own `CanvasLayer` rather than as a child Control, and that is the only
+## structural decision in here: this panel lives inside the lobby's
+## `PanelStack`, with the chat panel as a *later* sibling, so a full-screen
+## overlay parented to it in the ordinary way would be drawn underneath the chat
+## it is supposed to be covering. A `CanvasLayer` is above everything below its
+## own layer wherever it is hung, which means this panel can own a modal without
+## knowing a thing about the screen it is sitting on.
+func open_capture() -> void:
+	if _sheet == null:
+		_build_sheet()
+	_refresh_sheet()
+	_sheet.visible = true
+	_sheet_name.grab_focus()
+
+
+func close_capture() -> void:
+	if _sheet != null:
+		_sheet.visible = false
+
+
+func _build_sheet() -> void:
+	_sheet = CanvasLayer.new()
+	_sheet.layer = 10
+	add_child(_sheet)
+
+	var scrim := PanelContainer.new()
+	scrim.theme_type_variation = "ScrimPanel"
+	scrim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	# **The theme has to be handed over by hand here**, and it is the price of the
+	# `CanvasLayer` above. A `Control` finds its theme by walking up its *Control*
+	# ancestors, and a `CanvasLayer` is a plain `Node` — so everything under this
+	# layer has no Control parent, falls through to Godot's own default theme, and
+	# comes out as grey engine boxes in the middle of a game that has a theme.
+	# There is no project-wide default to catch it (this project sets the theme on
+	# each screen's root), which is exactly why it showed up as nothing rather
+	# than as something slightly wrong.
+	scrim.theme = _inherited_theme(self)
+	_sheet.add_child(scrim)
+
+	var centre := CenterContainer.new()
+	scrim.add_child(centre)
+
+	var card := PanelContainer.new()
+	card.theme_type_variation = "CardPanel"
+	card.custom_minimum_size = Vector2(740, 660)
+	centre.add_child(card)
+
+	var body := VBoxContainer.new()
+	body.add_theme_constant_override("separation", UIPalette.GAP)
+	card.add_child(body)
+
+	var heading := HBoxContainer.new()
+	body.add_child(heading)
+	var title := Label.new()
+	title.theme_type_variation = "LeadLabel"
+	title.text = "Capture this config"
+	heading.add_child(title)
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	heading.add_child(spacer)
+	_sheet_status = Label.new()
+	_sheet_status.name = "CaptureStatus"
+	_sheet_status.theme_type_variation = "TinyLabel"
+	heading.add_child(_sheet_status)
+
+	body.add_child(_sheet_caption("NAME"))
+	_sheet_name = LineEdit.new()
+	_sheet_name.name = "CaptureName"
+	_sheet_name.placeholder_text = "What is this one?"
+	_sheet_name.text_changed.connect(func(_text: String) -> void: _refresh_preview())
+	body.add_child(_sheet_name)
+
+	body.add_child(_sheet_caption("NOTES"))
+	_sheet_notes = TextEdit.new()
+	_sheet_notes.name = "CaptureNotes"
+	_sheet_notes.placeholder_text = "Why, and what you were trying to find out."
+	_sheet_notes.custom_minimum_size.y = 74
+	_sheet_notes.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	_sheet_notes.text_changed.connect(_refresh_preview)
+	body.add_child(_sheet_notes)
+
+	# The payload, on screen, before it goes anywhere. Read-only and *exactly*
+	# what the button copies — the whole risk with a copy button is that nobody
+	# ever sees what came out of it, and a preview is one assignment away.
+	body.add_child(_sheet_caption("WHAT GETS COPIED"))
+	_sheet_preview = TextEdit.new()
+	_sheet_preview.name = "CapturePreview"
+	_sheet_preview.editable = false
+	_sheet_preview.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_sheet_preview.custom_minimum_size.y = 196
+	_sheet_preview.add_theme_font_size_override("font_size", UIPalette.FONT_TINY)
+	body.add_child(_sheet_preview)
+
+	body.add_child(_sheet_caption("SAVED THIS SESSION"))
+	# Scrolled rather than free to grow: `UIState.MAX_CAPTURES` is eight, and
+	# eight rows added to a card that already holds a preview would push the copy
+	# button off the bottom of the screen — which is the one button on this sheet
+	# that has to be reachable.
+	var saved_scroll := ScrollContainer.new()
+	saved_scroll.custom_minimum_size.y = 96
+	saved_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	body.add_child(saved_scroll)
+	_sheet_saved = VBoxContainer.new()
+	_sheet_saved.name = "CaptureSaved"
+	_sheet_saved.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_sheet_saved.add_theme_constant_override("separation", 4)
+	saved_scroll.add_child(_sheet_saved)
+
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", UIPalette.GAP)
+	actions.alignment = BoxContainer.ALIGNMENT_END
+	body.add_child(actions)
+
+	var close := Button.new()
+	close.theme_type_variation = "GhostButton"
+	close.text = "CLOSE"
+	close.pressed.connect(close_capture)
+	actions.add_child(close)
+
+	var save := Button.new()
+	save.name = "CaptureSave"
+	save.text = "SAVE FOR THIS SESSION"
+	save.pressed.connect(_on_sheet_save)
+	actions.add_child(save)
+
+	var copy := Button.new()
+	copy.name = "CaptureCopy"
+	copy.theme_type_variation = "PrimaryButton"
+	copy.text = "COPY TO CLIPBOARD"
+	copy.pressed.connect(_on_sheet_copy)
+	actions.add_child(copy)
+	_sheet.visible = false
+
+
+## The nearest theme above this panel. `Control.theme` is what a node was
+## *given*, not what it resolves to, so this is the walk the engine would have
+## done if the layer were a Control.
+static func _inherited_theme(from: Control) -> Theme:
+	var node: Node = from
+	while node != null:
+		var control := node as Control
+		if control != null and control.theme != null:
+			return control.theme
+		node = node.get_parent()
+	return null
+
+
+static func _sheet_caption(text: String) -> Label:
+	var label := Label.new()
+	label.theme_type_variation = "SectionLabel"
+	label.text = text
+	return label
+
+
+func _refresh_sheet() -> void:
+	_refresh_preview()
+	_rebuild_saved()
+
+
+func _refresh_preview() -> void:
+	if _sheet_preview == null:
+		return
+	_sheet_preview.text = transcript(_sheet_name.text, _sheet_notes.text)
+
+
+func _rebuild_saved() -> void:
+	for child in _sheet_saved.get_children():
+		_sheet_saved.remove_child(child)
+		child.queue_free()
+	var saved := UIState.captured_configs()
+	if saved.is_empty():
+		var none := Label.new()
+		none.theme_type_variation = "SmallLabel"
+		none.text = "Nothing captured yet."
+		_sheet_saved.add_child(none)
+		return
+	for capture: Dictionary in saved:
+		_sheet_saved.add_child(_saved_row(capture))
+
+
+func _saved_row(capture: Dictionary) -> Control:
+	var row := PanelContainer.new()
+	row.theme_type_variation = "RowPanel"
+	var line := HBoxContainer.new()
+	line.add_theme_constant_override("separation", UIPalette.GAP)
+	row.add_child(line)
+
+	var name_label := Label.new()
+	name_label.text = String(capture["name"])
+	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	line.add_child(name_label)
+
+	var copy := Button.new()
+	copy.theme_type_variation = "GhostButton"
+	copy.text = "COPY"
+	copy.pressed.connect(func() -> void:
+		DisplayServer.clipboard_set(String(capture["text"]))
+		_say("Copied %s." % capture["name"]))
+	line.add_child(copy)
+
+	# Applying a capture is one `Net.update_config` — the same call every slider
+	# in this panel already makes — so it is here rather than not, per the step's
+	# own "if applying one back is cheap, do it". A client gets the button
+	# disabled, for the reason every other control in this panel is disabled for
+	# them: the host owns the config.
+	var apply := Button.new()
+	apply.theme_type_variation = "GhostButton"
+	apply.text = "APPLY"
+	apply.disabled = not Net.is_host
+	apply.pressed.connect(func() -> void:
+		var next := MatchConfig.new()
+		next.apply_dict(capture["config"])
+		Net.update_config(next)
+		_say("Applied %s." % capture["name"]))
+	line.add_child(apply)
+	return row
+
+
+func _on_sheet_copy() -> void:
+	DisplayServer.clipboard_set(transcript(_sheet_name.text, _sheet_notes.text))
+	_say("Copied. Paste it anywhere.")
+
+
+func _on_sheet_save() -> void:
+	var named := _sheet_name.text.strip_edges()
+	if named.is_empty():
+		named = Net.config.summary()
+	UIState.remember_config(named, _sheet_notes.text,
+		transcript(named, _sheet_notes.text), Net.config.to_dict())
+	_rebuild_saved()
+	_say("Saved for this session.")
+
+
+func _say(text: String) -> void:
+	if _sheet_status != null:
+		_sheet_status.text = text
+
+
 # --------------------------------------------------------------- refreshing ---
 
 ## Pull everything from `Net.config`. Called on load, on every broadcast from
@@ -277,6 +690,11 @@ func refresh() -> void:
 	_apply_editability()
 	_summary.text = config.summary()
 	_applying = false
+	# The sheet quotes the config, so a dial moved behind it has to move in the
+	# preview too — otherwise the one thing on screen claiming to be what will be
+	# copied is the one thing that is out of date.
+	if _sheet != null and _sheet.visible:
+		_refresh_preview()
 
 
 func _write_field(field: String, config: MatchConfig) -> void:
@@ -383,6 +801,7 @@ func _push(field: String, value: Variant) -> void:
 ## Returns the nodes it added, so a section that only applies sometimes can be
 ## hidden whole.
 func _section(title: String) -> Array[Control]:
+	_current_section = title
 	var added: Array[Control] = []
 	if _rows_root.get_child_count() > 0:
 		var gap := Control.new()
@@ -411,23 +830,66 @@ func _note(text: String) -> Label:
 	return label
 
 
+## The one column measurement in this panel. Every row's name sits in it and
+## every slider's unit is indented by it, so the names line up down the left
+## edge and the units line up under the tracks.
+const NAME_COLUMN := 168
+const ROW_GAP := 14
+
+
 func _row(label_text: String) -> HBoxContainer:
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 14)
+	row.add_theme_constant_override("separation", ROW_GAP)
 	row.custom_minimum_size.y = 28
-	var label := Label.new()
-	label.text = label_text
-	label.theme_type_variation = "DimLabel"
-	label.custom_minimum_size.x = 168
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	row.add_child(label)
+	row.add_child(_name_label(label_text))
+	row.set_meta("label", row.get_child(0))
 	_rows_root.add_child(row)
 	return row
 
 
+func _name_label(label_text: String) -> Label:
+	var label := Label.new()
+	label.text = label_text
+	label.theme_type_variation = "DimLabel"
+	label.custom_minimum_size.x = NAME_COLUMN
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	return label
+
+
+## A slider row is two lines, and that is the whole of D-076's slider fix.
+##
+## It used to be one: name, track, readout, left to right, with the track on
+## `SIZE_EXPAND_FILL` and therefore holding whatever the other two left it. A
+## `Label`'s minimum width is the width of its own text, so every unit string
+## this panel learned to say came straight off the track — and they got longer
+## with every step from D-062 on. At the worst label the panel currently has
+## (`bow_drop_full`, "25.5 m/s²  ·  flat to 39 m  (and the bolt with it)") the
+## track measured **zero pixels**: a grabber with nothing to slide along, a
+## setting that could be read and not changed.
+##
+## So the unit goes **under** the track, indented to the track's own left edge,
+## and the track takes the entire rest of the row. The readout is the only
+## control in this panel that can be handed an arbitrarily long string, and down
+## there it costs the slider nothing at all — it wraps instead of pushing, which
+## is why `AUTOWRAP_WORD_SMART` is set rather than a minimum width: a label that
+## cannot wrap has a minimum width, and a minimum width is how this bug works.
+##
+## Measured rather than eyeballed. `tools/ui_range.gd -- widths` puts every
+## slider at the value that renders its own unit widest, in the real font, under
+## every win condition, and fails the gate if any track is under `MIN_TRACK`.
 func _slider(field: String, label_text: String, low: float, high: float, step: float,
 		formatter: Callable) -> void:
-	var row := _row(label_text)
+	var row := VBoxContainer.new()
+	row.add_theme_constant_override("separation", 0)
+	_rows_root.add_child(row)
+
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", ROW_GAP)
+	top.custom_minimum_size.y = 26
+	var label := _name_label(label_text)
+	top.add_child(label)
+	row.add_child(top)
+
 	var slider := HSlider.new()
 	slider.min_value = low
 	slider.max_value = high
@@ -435,17 +897,29 @@ func _slider(field: String, label_text: String, low: float, high: float, step: f
 	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	slider.custom_minimum_size.y = 18
-	row.add_child(slider)
+	top.add_child(slider)
+
+	var under := HBoxContainer.new()
+	under.add_theme_constant_override("separation", ROW_GAP)
+	# A couple of pixels taller than the unit needs, so consecutive two-line rows
+	# do not run into one another down a panel of forty of them.
+	under.custom_minimum_size.y = 24
+	row.add_child(under)
+	# An empty control rather than a margin, so the indent is the *same* number
+	# the name column is and cannot drift away from it.
+	var indent := Control.new()
+	indent.custom_minimum_size.x = NAME_COLUMN
+	indent.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	under.add_child(indent)
 
 	var readout := Label.new()
-	readout.theme_type_variation = "AccentLabel"
-	readout.custom_minimum_size.x = 92
-	readout.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	readout.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	row.add_child(readout)
+	readout.theme_type_variation = "ValueLabel"
+	readout.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	readout.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	under.add_child(readout)
 
 	_fields[field] = {"row": row, "control": slider, "readout": readout,
-		"format": formatter}
+		"label": label, "section": _current_section, "format": formatter}
 	slider.value_changed.connect(func(value: float) -> void:
 		_write_readout(field, value)
 		# Ints on the wire for int fields: `MatchConfig.apply_dict` will coerce
@@ -463,6 +937,7 @@ func _choice(field: String, label_text: String, options: Array,
 	picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(picker)
 	_fields[field] = {"row": row, "control": picker, "offset": offset,
+		"label": row.get_meta("label"), "section": _current_section,
 		"format": func(_v: float) -> String: return ""}
 	picker.item_selected.connect(func(index: int) -> void:
 		_push(field, index + offset))
@@ -474,6 +949,7 @@ func _toggle(field: String, label_text: String) -> void:
 	toggle.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(toggle)
 	_fields[field] = {"row": row, "control": toggle,
+		"label": row.get_meta("label"), "section": _current_section,
 		"format": func(_v: float) -> String: return ""}
 	toggle.toggled.connect(func(on: bool) -> void: _push(field, on))
 
@@ -501,6 +977,7 @@ func _map_row() -> void:
 	row.add_child(picker)
 
 	_fields["map"] = {"row": row, "control": picker, "ids": MapCatalog.ids(),
+		"label": row.get_meta("label"), "section": _current_section,
 		"format": func(_v: float) -> String: return ""}
 	picker.item_selected.connect(func(index: int) -> void:
 		var ids := MapCatalog.ids()
@@ -532,6 +1009,7 @@ func _seed_row() -> void:
 	_seed_button = button
 
 	_fields["map_seed"] = {"row": row, "control": value,
+		"label": row.get_meta("label"), "section": _current_section,
 		"format": func(_v: float) -> String: return ""}
 	button.pressed.connect(func() -> void:
 		_push("map_seed", randi_range(1, 99999999)))

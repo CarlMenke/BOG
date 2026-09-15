@@ -9273,3 +9273,325 @@ head. That is the argument for having drawn it, and it is also the first time
 this game has made *being mid-action* visible from across a clearing. No
 crosshair and no HUD treatment (D-036, D-054): the bottle in the hand is the
 tell, which is the sentence the spear and the bow already make.
+## D-076 — The professionalisation pass: what the theme is, tiles that are photographs, and a slider you can actually drag
+
+The user, on the whole UI at once: *"the in game ui need a professionalization
+pass. Try to keep it on theme, but it needs some real thought. Also, for the
+images in the tool bar, use screen shots of the actual assets instead of icons.
+Try to make sure the fonts and colors and styling stays more on that primitive
+theming. This goes for both lobby and in game."* Then, separately, the two
+concrete ones: *"in the match configs, some of the units descriptions are
+getting so long that the slide bars have no width so they can be adjusted, the
+units should be under the slider not on the same line"*, and *"there should be
+some way to capture a settings config from the menu... and i can put in some
+notes about that. Ideally there is also a copy to clipboard button that copied
+everything. its okay if this is not persisted completely."*
+
+### What the theme is
+
+"Keep it on theme" cannot be checked until somebody says what the theme is, and
+nothing in this repository ever had. So, before any of it: **this is what is in
+`ui_palette.gd` and `ui_theme.gd` today**, read off the files rather than
+invented, and it is the thing the rest of this entry had to hold.
+
+**One ground, three surfaces.** The base is the project's own
+`default_clear_color` — `VOID`, a near-black with a blue cast (0.024, 0.031,
+0.047) — so a fade to black and a fade to the menu are the same colour. On it
+sit exactly three surfaces: **glass** (`PANEL`, the same near-black at 90%,
+because the menu and the lobby both have live 3D behind them and an opaque panel
+throws it away), a **raised** step for a row inside a list, and a **scrim** for
+anything that takes the screen. Edges are hairlines at 16% alpha, deliberately —
+at 1600x900 a 1 px border at full strength reads as a wireframe rather than as
+an edge.
+
+**Two accents, and nothing else is coloured.** **Torch amber** (1.00, 0.64,
+0.26) means *interaction*: hover, focus, the selected thing, a live value.
+**Gub yellow** (1.00, 0.84, 0.26) means *you, and your readiness*: armed, ready,
+the wordmark. Red and green exist for death and for "ready" and appear nowhere
+else. That is the whole palette, and the restraint is the point — the moment a
+third thing is amber, amber stops meaning anything. Team colours are the one
+exception and they are not a UI palette at all: they come from `Nameplate`, so a
+row in the lobby and a name over a head are the same colour by construction
+(D-046, D-047).
+
+**Two faces, six sizes, one trick.** Bahnschrift — the DIN-ish grotesque Windows
+ships — carries headings, buttons and every number read under pressure; Segoe UI
+carries body copy; both fall through `allow_system_fallback`. Sizes step 14, 16,
+19, 23, 30, 44, authored against the 1600x900 base viewport, and the whole lot
+scales from there. The one trick is 3 px of glyph tracking on short all-caps
+labels, which is what makes `LIMITS` read as a heading instead of as shouting.
+
+**One geometry.** 4 px corners, 12 px gap, 20 px pad, 1 px hairline. No
+gradients, no shadows, no bevels, no rounded pills, one weight of line.
+
+**The user's word for this is *primitive*, and it is the right word.** Flat
+rectangles, hairlines, two torch colours, one weight, no ornament, over a night
+forest lit by a fire. Primitive the way a woodcut is primitive — few marks, all
+of them load-bearing — not primitive as in unfinished. **Which means
+"professionalise" here cannot mean "add".** Everything below is either a defect
+measured against that description, or a place where the UI was saying something
+about the game that it could have been showing instead.
+
+### What did *not* change, and why
+
+Read first, moved never. **The crosshair is still a plain reticle**: D-036 threw
+the recharge ring out twice and D-054 confirmed the rule it left behind — the
+middle of the screen is for aiming — and a pass that quietly put a ring back
+would be a regression wearing a nicer font. **Nothing on this HUD drains**;
+**no timer moved onto the crosshair**; **nobody else's letter hold gained a HUD
+element** beyond the feed row and the head marker D-050 chose. The health bar's
+three bands are `Nameplate`'s own and were left alone on purpose (D-062): a HUD
+that coloured health by a different rule than the bodies do would be two answers
+to one question.
+
+**The results table keeps KILLS and DEATHS on every row.** Printing a column
+heading eight times is the classic amateur tell and it was the first thing this
+pass reached for. It is wrong here: the table interleaves team rows with player
+rows and grows a letters column only under two conditions (D-049, D-051), and
+`_letters_stat` is shaped as a `_stat` precisely so the glyphs keep the column
+rhythm. A single header row would have to know which columns exist in which
+mode, to make the table tidier in the one mode nobody is reading it in.
+
+**The settings panel's rows were not restructured.** The slider bug below is a
+property of *long* unit strings, and that panel's longest readout is `100%`. Its
+sliders were measured and they are fine. Giving forty rows a second line each to
+match a panel they are never on screen beside would be consistency bought with
+nothing.
+
+### The slider rows — a dial nobody could drag
+
+Not cosmetic and not close. The match panel's rows were `name | track | unit`,
+with the track on `SIZE_EXPAND_FILL` and therefore holding whatever the other
+two left it — and a `Label`'s minimum width is the width of its own text. Every
+unit string this panel learned to say since D-062 came straight off the track.
+
+**Measured, at the worst label the panel can produce rather than at a typical
+one.** `tools/ui_range.gd -- widths` walks every slider's own range at its own
+step, renders each formatted unit through the real font, keeps the value that
+comes out widest, pushes the whole worst set as one config, and measures what is
+left of every track under every win condition — 244 rows, because
+`_apply_visibility` hides rows and a row that is not laid out has no width. On
+the commit before this one:
+
+| field | worst label | track |
+|---|---|---|
+| `bow_drop_full` | `25.5 m/s²  ·  flat to 39 m  (and the bolt with it)` | **0.0 px** |
+| `sword_recharge` | `0.40 s  ·  a swing every 1.47 s  (chains)` | 47.0 px |
+| `sword_reach` | `2.84 m  ·  4.55 m with the advance` | 92.0 px |
+
+Zero. A grabber with nothing to slide along: the bow's drop at full draw could
+be read and not changed, and the two rows the great sword landed in D-068 were
+barely better. 27 rows of 244 were under a draggable width.
+
+The unit now goes **under** the track, indented to the track's own left edge, and
+the track takes the entire rest of the row. `AUTOWRAP_WORD_SMART` rather than a
+minimum width, because a label that cannot wrap *has* a minimum width and a
+minimum width is how this bug works. The narrowest track in the whole panel, at
+every field's worst label, is now **320 px** (`capture_return_time`). The
+check is in the gate; with the readout put back beside the slider it fails on 27
+rows.
+
+### The tiles are photographs
+
+*"use screen shots of the actual assets instead of icons"*. Seven props, each
+already a built `.glb`: spear, bow, arrow, great sword, mushroom, lure, heal
+potion. `tools/bake_tiles.gd` photographs them to `resources/ui/tiles/`.
+
+**Baked, not rendered at runtime** — D-003 and D-016's argument, and how every
+generated thing here works. Seven `SubViewport`s with seven cameras running
+behind a fight would buy a picture that is identical every frame; a PNG is
+diffable, is one command to regenerate, and costs the HUD a `draw_texture_rect`.
+
+**The framing rule, which is the only thing that makes seven photographs a set.**
+One camera, one pair of lights, one bearing; the *only* thing that differs
+between the seven is the zoom, and that number comes out of one rule:
+
+> the geometric mean of the silhouette's on-screen width and height is **66%**
+> of the tile's side, capped so the longer of the two never passes **88%** of
+> it, with anything over 2:1 laid on the tile's diagonal first.
+
+**Why not "the longest axis is the same fraction of the tile".** That is the
+obvious rule and it is the one that makes seven photographs look like seven
+unrelated pictures, because these props are not the same shape — the arrow is
+1.000 x 0.134 m (7.5:1) and the mushroom is 1.797 x 2.029 x 2.374 m (1.2:1).
+Give both the same *length* and the arrow is a hairline ruled across an empty
+square while the mushroom is a block, edge to edge. They would have exactly one
+thing in common and it would not be anything the eye reads. The geometric mean
+is the side of the square carrying the silhouette's own proportions, so a prop
+twice as slender is allowed to be √2 longer, in exact proportion, and the two
+end up occupying the same rectangle. Measured off the finished tiles the seven
+share a bounding box to within 0.003 of the side (0.658–0.661), while the spear
+still runs 2.2x the length the mushroom is wide.
+
+**What that equalises is the box, not the paint**, and that is the right answer
+rather than a miss: inked area still runs 4% (the arrow, a line) to 30% (the
+potion, a sphere). A rule that gave a line and a sphere the same number of lit
+pixels would have to draw the line a quarter of the tile thick.
+
+The 45° roll for slender props is where `AbilitySlot`'s drawn glyphs already put
+the spear and the great sword, for a reason worth keeping: a vertical line in a
+square reads as a divider. It is also √2 more room, which is why the reach cap
+never binds on today's seven — the cap is a rail for the day a 12:1 prop arrives,
+and `check` prints which of the two bound each prop so the day it starts biting
+is visible.
+
+**One light rig means one lighting.** Six of the seven are ordinary lit
+materials; the spear alone is D-027's black-albedo-plus-emission and would have
+come out flat beside six modelled neighbours. So in this rig, and only here, a
+pre-shaded emission map is used as *albedo* with emission off. Nothing is written
+back to the asset, and it is written as a property of the material rather than as
+a special case for one file, so the next black-albedo prop joins the set instead
+of arriving flat.
+
+**The drawn glyphs are kept.** Lightning has no asset to photograph — it is a
+bolt, not a prop — so it keeps its polygon, and a tile whose PNG is missing falls
+back to its own glyph rather than to an empty square. `ability_slot.gd` still
+holds a complete drawn set and a fresh clone before its first import still has a
+readable bar.
+
+**State had to move from hue to brightness.** A drawn glyph tinted itself to the
+slot's colour for free; painting a photograph amber throws away the only thing it
+is for. So D-036's three levels — empty, waiting, ready — are carried by the
+border (which that entry already called "the state at a glance from the corner of
+the eye") and by how brightly the photograph is lit: 1.0, 0.46, 0.20. The recharge
+sweep, the seconds and the windup silence are untouched (D-054).
+
+**A foot on the tile.** The count sits bottom-left and the key cap bottom-right,
+and the note on `COUNT_LEFT` is the record of somebody hand-fitting the drawn
+glyphs around both. A photograph is framed by a rule and cannot be asked to do
+that, so the bottom 19 px gets a veil — dark enough that a white "2" reads over a
+red mushroom, thin enough that the prop still runs behind it.
+
+**The lobby got them too**, which is the other half of *"this goes for both lobby
+and in game"*: the weapon strip's three buttons carry the prop above the name,
+off the same baked PNG the bar's first square wears, through an
+`AbilitySlot.WEAPON_KIND` table rather than a `match` (D-069's rule). Three words
+on three identical grey buttons is a list; three props is a choice.
+
+The arrow is baked and is not on a tile today. It is in the set because the rule
+has to hold across all seven and a rule proven on the two most extreme aspect
+ratios in the pack is worth more than one proven on six.
+
+### Capturing a config
+
+**Built from `MatchConfig.fields()`, never from a list written in the panel.**
+That is what `to_dict` sends, so a field missing from a capture is a setting the
+person you sent it to would never see, and a hand-written list is complete on the
+day it is written and silently short by one for ever after. `_FIELDS` became
+public as `fields()` for this, with the reason in its doc comment. All 47,
+including the eight the panel has no row for — `spawn_protection`, `warmup_time`,
+the mushroom's lifetime and cap, the lure's four — which are captured under their
+own heading, because "capture all the settings" means all of them and a dial that
+is not on the panel is exactly the one somebody would otherwise forget.
+
+**The clipboard payload is the feature.** The reason to want this is to hand a
+config to a playtester or to write down what a match was actually played on, and
+both end in a chat window — so it is written to be read there by a person, in a
+proportional font, and not to be parsed. One line per setting, in the panel's own
+words: the slider formatters already say `80  (80% of a Gub)` and
+`a swing every 1.87 s  (chains)`, which is the whole reason those formatters
+exist and is far better than the float underneath.
+
+Grouped by the panel's headings, in first-appearance order, wire order inside
+each. That is a sort and not a filter, and it earns its keep: `_FIELDS` is
+ordered by when a feature landed rather than by where its dials are, so printed
+straight it walks MODE, LIMITS, MODE, FEEL, LIMITS, FEEL and reads like a
+changelog instead of like a config.
+
+**The sheet shows the payload before it goes anywhere.** The whole risk with a
+copy button is that nobody ever sees what came out of it, and a preview is one
+assignment away. Name, notes, preview, the session's saved list, and three
+buttons.
+
+**Not persisted, deliberately**, which the user allowed — *"its okay if this is
+not persisted completely"*. Captures live on `UIState` for the session, which is
+the one journey a host takes between capturing a config and wanting it back
+(lobby → match → results → lobby), for the same reason a notice does. Persisting
+means a file format, a migration the day `fields()` grows, and one more thing
+that can be stale. **Applying one back was cheap and is therefore there**: it is
+one `Net.update_config`, the same call every slider in the panel already makes,
+host-only for the reason every other control in the panel is.
+
+The sheet hangs on a `CanvasLayer` of its own, and that is the only structural
+decision in it: this panel sits in the lobby's `PanelStack` with the chat panel
+as a *later* sibling, so a full-screen overlay parented in the ordinary way is
+drawn underneath the thing it is covering. The price is that the theme has to be
+handed over by hand — a `Control` finds its theme by walking up its *Control*
+ancestors, a `CanvasLayer` is a plain `Node`, and this project sets the theme per
+screen with no project-wide default to catch the fall. The first render of the
+sheet came out as grey engine boxes, which is a good failure: loud, immediate,
+and impossible to mistake for a styling opinion.
+
+### The rest of the pass
+
+Three things, each a defect measured against the description at the top.
+
+**A scroll bar with no width is a panel that does not say it scrolls.** Listed as
+a Known Issue since the lobby's match panel grew past a screen. The four
+scrollbar styleboxes were `_flat`, and a `StyleBoxFlat` with no content margins
+has a minimum size of zero — and a `ScrollBar`'s thickness *is* that minimum
+size. So a panel that scrolls at every window size the game ships at had a bar
+one or two pixels wide in a colour chosen to be quiet, and read as clipped rather
+than as scrollable. 5 px of margin each side and a grabber taken up to the
+palette's `LINE_STRONG` family; amber on hover and on the drag, like everything
+else in this UI you can grab. The Known Issue is struck.
+
+**The health bar was twice the width it says it is.** `HEALTH_BAR.x` has said 224
+since D-062, with the reason in its own comment — the Elder's track and the
+letter hold's are 224 and the three stack in one column — and it was never what
+happened: it is a plain `Control` in a `VBoxContainer`, so it filled the column's
+440 and sat at twice the width of the two bars it was written to match. (The
+Elder track draws its own 224 centred inside whatever it is given, which is why
+that one was right and this one was not.) `SIZE_SHRINK_CENTER`, and the constant
+is now true. It also picked up the theme's geometry — 3 px corners and a hairline
+— because it was the one element on the HUD that is a solid saturated fill *and*
+the one element with square corners. Colours untouched, per above.
+
+**A unit under a slider is a caption on a control, not a line of the panel**, so
+it got a theme variation of its own (`ValueLabel`): amber like every other live
+value, one step down from body. The name in the left column is what the eye scans
+down, and a unit set at the same size competes with it on every row.
+
+### Checked
+
+Six checks, 120 to **126**, all rendered:
+
+- **`the ability tiles are one set`** — `bake_tiles.gd -- check`, headless,
+  against the **committed PNGs** rather than by re-rendering them. That is the
+  point of baking: what must hold on every machine is that the pictures in the
+  repository obey the rule, not that this machine's GPU can reproduce them. It
+  re-measures each tile's alpha and fails if any has drifted out of budget, so a
+  re-bake with the camera nudged shows up here rather than in somebody's
+  peripheral vision three weeks later. `-- sheet` writes the seven side by side,
+  which is the only way to answer "do these read as a set" at all.
+- **`every slider can be dragged`** — the 244-row measurement above.
+- **`a config reaches the clipboard`**, and three more off the same run.
+  `fields` compares the sheet's row set against `MatchConfig.fields()` **in both
+  directions**, which is the assertion that would rot and therefore the one worth
+  having. `clipboard` copies for real through `DisplayServer`, reads it back,
+  requires every row and the name and both lines of the notes to have survived —
+  and prints the whole payload into the log, because "reads correctly pasted into
+  a chat window" is the actual requirement and no substring test settles it.
+  `saved` keeps it for the session and applies it back over all 47 fields.
+
+`ui_range` gained `lobby_feel` (the panel scrolled to the worst label there is),
+`widths` and `capture_config`. Before and after of every screen touched are in
+`out/ui_before/` and `out/ui_after/`.
+
+### Rejected
+
+- **A single header row on the results table.** See above: it would have to know
+  which columns exist in which mode, to tidy a table nobody reads in that mode.
+- **Restructuring the settings panel's rows to match.** Its longest readout is
+  `100%`. Measured, fine, left alone.
+- **Tinting the photographs to the slot state.** It is the one thing a photograph
+  cannot do and the whole reason for having one.
+- **Rendering the tiles live in `SubViewport`s.** D-003, D-016, and seven
+  cameras behind a fight for a picture that never changes.
+- **"Longest axis is the same fraction of the tile."** The hairline-and-block
+  rule. Argued at length above.
+- **Persisting captured configs to `user://`.** A file format and a migration for
+  something whose point is the clipboard. The user allowed the simpler thing.
+- **Anything on the crosshair, a drain, a ring, or a HUD element for somebody
+  else's hold.** D-036, D-050, D-054. Several of those are deletions and a pass
+  that restores them is a regression with better typography.

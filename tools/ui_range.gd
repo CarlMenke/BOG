@@ -14,7 +14,10 @@ extends Node
 ##
 ## Modes: menu, menu_join, menu_notice, settings, settings_network,
 ##        lobby, lobby_full, lobby_teams, lobby_client, lobby_map, lobby_capture,
-##        lobby_weapons.
+##        lobby_weapons, lobby_feel, widths, capture_config.
+##
+## `widths` and `capture_config` print a verdict and are in the gate (D-076).
+## Everything else is a photograph.
 
 const MENU_SCENE := preload("res://scenes/ui/main_menu.tscn")
 const LOBBY_SCENE := preload("res://scenes/ui/lobby.tscn")
@@ -67,6 +70,8 @@ func _ready() -> void:
 			# Three Gubs, three weapons, and the panels folded away so the ring
 			# and the strip are what the shot is of (D-069).
 			_open_lobby(2, false, true)
+		"lobby_feel", "widths", "capture_config":
+			_open_lobby(3, false, true)
 		_:
 			_open_lobby(3, false, true)
 
@@ -157,6 +162,10 @@ func _open_lobby(extra: int, teams: bool, as_host: bool) -> void:
 		await _show_capture_rules(lobby)
 	elif _mode == "lobby_weapons":
 		await _collapse_to_weapons(lobby)
+	elif _mode == "lobby_feel" or _mode == "widths":
+		await _worst_labels(lobby)
+	elif _mode == "capture_config":
+		await _capture_config(lobby)
 
 
 ## The collapsed lobby: panels folded away, the ring in the open, the strip under
@@ -239,3 +248,259 @@ func _show_map_row(lobby: Node) -> void:
 	var last := rows.get_child(rows.get_child_count() - 1) as Control
 	if last != null:
 		scroll.ensure_control_visible(last)
+
+
+# ------------------------------------------------- the worst label there is ---
+
+## The narrowest a slider track is allowed to get, in pixels at the 1600x900
+## base viewport. Not a taste number: below about this a 0-1800 range is fewer
+## than two hundred pixels of travel, every step is sub-pixel, and the grabber
+## is a thumb-width of the row. The bug this catches went the whole way — the
+## readout beside the slider set the row's minimum width, so a long enough one
+## drove the track to nothing and the setting could not be changed at all.
+const MIN_TRACK := 180.0
+
+## Which panel row to photograph in `lobby_feel`: the one whose readout is the
+## longest string this panel can produce.
+const WORST_FIELD := "bow_drop_full"
+
+
+## Put every slider in the match panel at the value that makes its own readout
+## as wide as it can be, and then measure what is left of the track.
+##
+## The worst label is not a guess and not a typical one: for every field, this
+## walks the slider's own range at the slider's own step and keeps the value
+## whose formatted readout is widest **in pixels through the real font**, which
+## is the thing that actually squeezes a row. The whole worst set is pushed as
+## one config, so the shot is every dial at its own worst at once.
+##
+## Repeated for each win condition, because `_apply_visibility` hides rows and a
+## row that is not laid out has no width to measure — the capture pair only
+## exists under Capture, the kill limit only under the kill limit, and so on.
+func _worst_labels(lobby: Node) -> void:
+	var panel := lobby.find_child("MatchSettings", true, false) as MatchSettingsPanel
+	if panel == null:
+		push_warning("ui_range: the lobby has no match settings panel")
+		return
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	# One pass to find the worst value per field, a second to apply them all —
+	# two readouts here quote *another* field (the bow's flat band is speed
+	# against drop), so the widest string for one of them depends on where the
+	# other one is standing.
+	var worst := _solve_worst(panel)
+	_push_worst(panel, worst)
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	if _mode == "lobby_feel":
+		var rows := panel.slider_rows()
+		for row: Dictionary in rows:
+			if String(row["field"]) == WORST_FIELD:
+				var scroll := panel.find_child("Scroll", true, false) as ScrollContainer
+				if scroll != null:
+					scroll.ensure_control_visible(row["row"] as Control)
+				break
+		await get_tree().process_frame
+		return
+
+	# Every condition in turn, so every conditional row gets laid out once.
+	var failures := 0
+	var measured := 0
+	var narrowest := {"field": "", "width": 99999.0, "text": ""}
+	for teams: bool in [false, true]:
+		for condition: int in range(MatchConfig.WinCondition.size()):
+			if condition == MatchConfig.WinCondition.CAPTURE and not teams:
+				continue
+			var next := Net.config.duplicate_config()
+			next.mode = MatchConfig.Mode.TEAMS if teams else MatchConfig.Mode.FREE_FOR_ALL
+			next.win_condition = condition as MatchConfig.WinCondition
+			Net.update_config(next)
+			_push_worst(panel, worst)
+			await get_tree().process_frame
+			await get_tree().process_frame
+			for row: Dictionary in panel.slider_rows():
+				var control: Control = row["row"]
+				if not control.is_visible_in_tree():
+					continue
+				var slider: HSlider = row["slider"]
+				var width := slider.size.x
+				measured += 1
+				if width < narrowest["width"]:
+					narrowest = {"field": row["field"], "width": width,
+						"text": (row["readout"] as Label).text}
+				if width < MIN_TRACK:
+					failures += 1
+					print("widths: %-22s track %6.1f px  readout %s"
+						% [row["field"], width, (row["readout"] as Label).text])
+
+	print("widths: %d rows measured across every condition" % measured)
+	print("widths: narrowest is %s at %.1f px, showing \"%s\""
+		% [narrowest["field"], narrowest["width"], narrowest["text"]])
+	print("widths: %s" % ("PASS" if failures == 0 else "FAIL (%d under %.0f px)"
+		% [failures, MIN_TRACK]))
+
+
+## For each slider field, the value whose readout renders widest.
+func _solve_worst(panel: MatchSettingsPanel) -> Dictionary:
+	var out := {}
+	for pass_index in 2:
+		for row: Dictionary in panel.slider_rows():
+			var slider: HSlider = row["slider"]
+			var readout: Label = row["readout"]
+			var font := readout.get_theme_font("font")
+			var size := readout.get_theme_font_size("font_size")
+			var formatter: Callable = row["format"]
+			var best := slider.min_value
+			var best_width := -1.0
+			var step := maxf(slider.step, (slider.max_value - slider.min_value) / 240.0)
+			var value := slider.min_value
+			while value <= slider.max_value + 0.0001:
+				var text: String = formatter.call(value)
+				var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT,
+					-1, size).x
+				if width > best_width:
+					best_width = width
+					best = value
+				value += step
+			out[String(row["field"])] = best
+		if pass_index == 0:
+			_push_worst(panel, out)
+	return out
+
+
+func _push_worst(panel: MatchSettingsPanel, worst: Dictionary) -> void:
+	var next := Net.config.duplicate_config()
+	for field: String in worst:
+		var current: Variant = next.get(field)
+		next.set(field, int(worst[field]) if typeof(current) == TYPE_INT
+			else float(worst[field]))
+	Net.update_config(next)
+	panel.refresh()
+
+
+
+# ------------------------------------------------- capturing a config (D-076) ---
+
+## What the check types into the sheet. Two lines in the notes on purpose: the
+## transcript indents a note under its own heading and a one-line note would
+## never exercise that.
+const CAPTURE_NAME := "Sniper night"
+const CAPTURE_NOTES := "bow only, long recharge.\nchecking the flat band reads right."
+
+
+## Open the capture sheet through its real button, type a name and notes into
+## the real fields, press the real copy button, and read the clipboard back.
+##
+## The assertion that matters is **completeness**: every field in
+## `MatchConfig.fields()` — what actually travels on the wire — has to have
+## produced a line, because a capture that quietly drops a setting is worse than
+## no capture at all, and the way it would drop one is by being built from a list
+## somebody wrote by hand. So this compares the sheet's own row set against
+## `fields()` in both directions, and then checks those rows survived into the
+## text on the clipboard.
+##
+## The clipboard is real: `DisplayServer.clipboard_set` and `clipboard_get`, on
+## the same machine, in the same process. It is the one part of this feature that
+## cannot be proved by looking at the panel.
+func _capture_config(lobby: Node) -> void:
+	var panel := lobby.find_child("MatchSettings", true, false) as MatchSettingsPanel
+	if panel == null:
+		push_warning("ui_range: the lobby has no match settings panel")
+		return
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	var button := panel.find_child("CaptureButton", true, false) as Button
+	if button == null:
+		print("capture: FAIL (no capture button in the panel heading)")
+		return
+	button.pressed.emit()
+	await get_tree().process_frame
+
+	var name_field := panel.find_child("CaptureName", true, false) as LineEdit
+	var notes_field := panel.find_child("CaptureNotes", true, false) as TextEdit
+	var copy := panel.find_child("CaptureCopy", true, false) as Button
+	var save := panel.find_child("CaptureSave", true, false) as Button
+	if name_field == null or notes_field == null or copy == null or save == null:
+		print("capture: FAIL (the sheet is missing a control)")
+		return
+	name_field.text = CAPTURE_NAME
+	notes_field.text = CAPTURE_NOTES
+	name_field.text_changed.emit(CAPTURE_NAME)
+	await get_tree().process_frame
+
+	var ok := true
+
+	# Completeness, both ways round.
+	var wanted := MatchConfig.fields()
+	var got := PackedStringArray()
+	for row: Dictionary in panel.capture_rows():
+		got.append(String(row["field"]))
+	var missing := PackedStringArray()
+	for field: String in wanted:
+		if not got.has(field):
+			missing.append(field)
+	var extra := PackedStringArray()
+	for field: String in got:
+		if not wanted.has(field):
+			extra.append(field)
+	if missing.is_empty() and extra.is_empty() and got.size() == wanted.size():
+		print("capture: fields PASS (%d, exactly MatchConfig.fields())" % got.size())
+	else:
+		ok = false
+		print("capture: fields FAIL (missing %s, extra %s, %d of %d)"
+			% [missing, extra, got.size(), wanted.size()])
+
+	# The clipboard, for real.
+	DisplayServer.clipboard_set("")
+	copy.pressed.emit()
+	var payload := DisplayServer.clipboard_get()
+	if payload.strip_edges().is_empty():
+		print("capture: clipboard FAIL (nothing was copied)")
+		ok = false
+	else:
+		var absent := PackedStringArray()
+		for row: Dictionary in panel.capture_rows():
+			if not payload.contains("  %s: %s" % [row["label"], row["value"]]):
+				absent.append(String(row["field"]))
+		var headed := payload.begins_with("GUB match config")
+		var named := payload.contains(CAPTURE_NAME)
+		var noted := payload.contains("bow only, long recharge.") \
+			and payload.contains("checking the flat band reads right.")
+		if absent.is_empty() and headed and named and noted:
+			print("capture: clipboard PASS (%d bytes, %d lines, every field in it)"
+				% [payload.length(), payload.split("\n").size()])
+		else:
+			ok = false
+			print("capture: clipboard FAIL (headed %s, named %s, noted %s, absent %s)"
+				% [headed, named, noted, absent])
+		# Printed in full, because a payload nobody reads is a payload nobody can
+		# say is readable — and "reads correctly pasted into chat" is the whole
+		# requirement and is not something a substring test can settle.
+		print("---- clipboard ----")
+		print(payload)
+		print("---- end ----")
+
+	# Saved for the session, and applied back.
+	UIState.forget_configs()
+	save.pressed.emit()
+	await get_tree().process_frame
+	var saved := UIState.captured_configs()
+	if saved.size() == 1 and String(saved[0]["name"]) == CAPTURE_NAME:
+		var round_trip := MatchConfig.new()
+		round_trip.apply_dict(saved[0]["config"])
+		var same := true
+		for field: String in wanted:
+			if str(round_trip.get(field)) != str(Net.config.get(field)):
+				same = false
+				print("capture: %s came back as %s, not %s"
+					% [field, round_trip.get(field), Net.config.get(field)])
+		print("capture: saved %s" % ("PASS" if same else "FAIL"))
+		ok = ok and same
+	else:
+		ok = false
+		print("capture: saved FAIL (%d captures)" % saved.size())
+
+	print("capture: %s" % ("PASS" if ok else "FAIL"))

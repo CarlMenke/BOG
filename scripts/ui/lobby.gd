@@ -27,6 +27,12 @@ extends Node3D
 ## against a number in the settings panel.
 const SHOW_EMPTY_SLOTS := true
 
+## How tall the prop is on a weapon button. Bigger than the HUD's 62 px tile
+## because this is the surface a player is *choosing* on and the panels are
+## folded away to make room for it (D-069); the picture is the point here and
+## the caption under it is the label.
+const WEAPON_ICON := 84
+
 @onready var _backdrop: GubBackdrop = %Backdrop
 @onready var _player_list: VBoxContainer = %PlayerList
 @onready var _player_count: Label = %PlayerCount
@@ -338,7 +344,17 @@ func _rebuild_weapon_picker() -> void:
 	for weapon: int in Loadout.all():
 		var button := Button.new()
 		button.text = Loadout.NAMES[weapon].to_upper()
-		button.custom_minimum_size.x = 168
+		# The prop itself, above its name (D-076). The same baked photograph the
+		# ability bar's first square wears, so the thing a player picks here and
+		# the thing they see in the corner of the screen for the next ten minutes
+		# are one picture rather than two descriptions of it. Three words on three
+		# identical grey buttons is a list; three props is a choice.
+		button.icon = AbilitySlot.art_for_weapon(weapon)
+		button.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+		button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		button.add_theme_constant_override("icon_max_width", WEAPON_ICON)
+		button.add_theme_constant_override("h_separation", 0)
+		button.custom_minimum_size = Vector2(168, WEAPON_ICON + 52)
 		button.toggle_mode = true
 		button.button_pressed = weapon == mine
 		# The pick is fixed once the host presses Start, alongside the map and

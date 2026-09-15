@@ -109,6 +109,12 @@ static func _labels(theme: Theme, display: Font, tracked: Font) -> void:
 	_label_variation(theme, "Small", null, UIPalette.FONT_SMALL, UIPalette.TEXT_DIM)
 	_label_variation(theme, "Tiny", null, UIPalette.FONT_TINY, UIPalette.TEXT_FAINT)
 	_label_variation(theme, "Accent", display, UIPalette.FONT_BODY, UIPalette.AMBER)
+	# The unit under a slider (D-076). Amber, because it is the live value of the
+	# control above it and live values are amber everywhere else; a step smaller
+	# than body, because it is a caption on a control rather than a line of the
+	# panel — the name in the left column is what the eye scans down, and a unit
+	# set at the same size as that name competes with it on every row.
+	_label_variation(theme, "Value", display, UIPalette.FONT_SMALL, UIPalette.AMBER)
 	# Numbers the player reads under pressure: the clock, a score, a countdown.
 	_label_variation(theme, "Readout", display, UIPalette.FONT_HEAD, UIPalette.TEXT)
 
@@ -299,12 +305,34 @@ static func _sliders(theme: Theme) -> void:
 	theme.set_stylebox("grabber_area_highlight", "HSlider", _flat(UIPalette.AMBER, 3))
 
 
+## **A scroll bar with no width is a panel that does not say it scrolls** (D-076,
+## and a Known Issue in `docs/STATUS.md` until it).
+##
+## These four styleboxes were all `_flat`, and a `StyleBoxFlat` with no content
+## margins has a minimum size of zero. A `ScrollBar`'s thickness is exactly that
+## minimum size, so the lobby's match panel — which scrolls at every window size
+## the game ships at — had a bar one or two pixels wide in a colour chosen to be
+## quiet. The rows past "Spear recharge" were reachable and nothing on screen
+## said so; the panel read as clipped.
+##
+## `BAR` is the width the margins buy, and the grabber is taken up to the
+## palette's `LINE_STRONG` family so it reads against the near-black track
+## without becoming a third accent. Amber on hover and on the drag, like every
+## other thing in this UI you can grab.
 static func _scrollbars(theme: Theme) -> void:
+	const BAR := 5
 	for type: String in ["VScrollBar", "HScrollBar"]:
-		theme.set_stylebox("scroll", type, _flat(Color(0.02, 0.027, 0.04, 0.5), 3))
-		theme.set_stylebox("grabber", type, _flat(Color(0.30, 0.35, 0.42, 0.7), 3))
-		theme.set_stylebox("grabber_highlight", type, _flat(UIPalette.AMBER_DIM, 3))
-		theme.set_stylebox("grabber_pressed", type, _flat(UIPalette.AMBER, 3))
+		var horizontal := type == "HScrollBar"
+		var pad_x := 0 if horizontal else BAR
+		var pad_y := BAR if horizontal else 0
+		theme.set_stylebox("scroll", type,
+			_pad(_flat(Color(0.02, 0.027, 0.04, 0.55), 3), pad_x, pad_y))
+		theme.set_stylebox("grabber", type,
+			_pad(_flat(Color(0.38, 0.45, 0.55, 0.75), 3), pad_x, pad_y))
+		theme.set_stylebox("grabber_highlight", type,
+			_pad(_flat(UIPalette.AMBER_DIM, 3), pad_x, pad_y))
+		theme.set_stylebox("grabber_pressed", type,
+			_pad(_flat(UIPalette.AMBER, 3), pad_x, pad_y))
 
 
 static func _misc(theme: Theme, body: Font) -> void:

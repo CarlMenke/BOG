@@ -3,11 +3,29 @@ extends Control
 ## One square in the ability bar: what it is, which key fires it, and whether
 ## pressing that key right now will do anything (PLAN 6.1).
 ##
-## The glyphs are drawn rather than imported. There is no icon set in this
-## project and there is not going to be one for three shapes that are a spear, a
-## mushroom and a lure — a stick with a point on it, a cap on a stem, and a ball
-## with spikes are half a dozen `draw_` calls each, they stay crisp at any
-## window size, and they tint with the slot's state for free.
+## **The tile is a photograph of the thing** (D-076, on the user's own
+## *"use screen shots of the actual assets instead of icons"*). Every subject on
+## this bar is already a built `.glb`, and a drawn glyph of a prop the player is
+## about to hold is a second, worse description of it that has to be kept in
+## step by hand. `tools/bake_tiles.gd` photographs all seven under one camera,
+## one light rig and one framing rule, and commits the result to
+## `resources/ui/tiles/`; see that file's header for the rule and why it is not
+## "fit the bounding box".
+##
+## **The drawn glyphs are kept, as the fallback and for the bolt.** Lightning is
+## the one thing on this bar with no asset to photograph — it is a bolt, not a
+## prop — so it keeps the polygon it has always been drawn as, and a tile whose
+## PNG is missing falls back to its own glyph rather than to an empty square.
+## Which means this file still holds a complete drawn set, and a fresh clone
+## before its first import still has a readable ability bar.
+##
+## **State is the border and the brightness, not the hue.** A drawn glyph could
+## be tinted to the slot's colour for free; a photograph cannot, and painting one
+## amber would throw away the only thing it is there for. So the three levels
+## D-036 settled — empty, waiting, ready — are carried by the border (which that
+## entry already called "the state at a glance from the corner of the eye") and
+## by how brightly the photograph is lit: full for a tile you can press, knocked
+## back for one you cannot, knocked back further for one you have none of.
 ##
 ## The key cap is read out of the input map rather than typed in, so a slot can
 ## never claim Q while the action is bound to something else.
@@ -50,6 +68,53 @@ enum Kind { SPEAR, MUSHROOM, LURE, LIGHTNING, POTION, BOW, SWORD }
 
 const SIZE := 62.0
 const RADIUS := 5.0
+
+## Which photograph each kind wears. Keyed by `Kind` so a tile that changes what
+## it stands for (D-069, and the Elder since D-038) changes its picture with it,
+## and missing an entry is how the bolt keeps its drawn glyph.
+const TILE_ART := {
+	Kind.SPEAR: "res://resources/ui/tiles/spear.png",
+	Kind.MUSHROOM: "res://resources/ui/tiles/mushroom.png",
+	Kind.LURE: "res://resources/ui/tiles/lure.png",
+	Kind.POTION: "res://resources/ui/tiles/heal_potion.png",
+	Kind.BOW: "res://resources/ui/tiles/bow.png",
+	Kind.SWORD: "res://resources/ui/tiles/greatsword.png",
+}
+
+## Which photograph a *weapon* wears, so the lobby's picker and the first square
+## on the bar show the same prop. A table indexed by a weapon rather than a
+## `match`, which is D-069's rule and the reason `Loadout.CARRY_CLIPS` is one
+## too: nothing should have to branch on which weapon a Gub brought.
+const WEAPON_KIND := {
+	Loadout.Weapon.SPEAR: Kind.SPEAR,
+	Loadout.Weapon.BOW: Kind.BOW,
+	Loadout.Weapon.SWORD: Kind.SWORD,
+}
+
+## How much of the tile the photograph is drawn into. The bake already framed
+## the prop inside its own square (`bake_tiles.INK`), so this is only the margin
+## that keeps it off the border and out of the two corners the count and the key
+## cap live in.
+const ART_INSET := 3.0
+
+## What a photograph is dimmed to in each of the three states D-036 settled.
+## Ready is untouched; waiting is knocked back but still legible as the thing it
+## is; empty is knocked back further, because "you have none" and "not for
+## another second" are different answers and a player who cannot tell them apart
+## keeps pressing the key.
+const ART_READY := 1.0
+const ART_WAITING := 0.46
+const ART_EMPTY := 0.20
+
+## The strip along the bottom of the tile that the carried count and the key cap
+## sit on. A drawn glyph could be kept clear of those two corners by hand — the
+## note on `COUNT_LEFT` below is the record of somebody doing exactly that — and
+## a photograph cannot, because it is framed by a rule rather than by a
+## draughtsman. So the tile gets a foot: a veil, not a bar, dark enough that a
+## white "2" and a grey "Q" read over a red mushroom and thin enough that the
+## prop still runs behind it.
+const FOOT_HEIGHT := 19.0
+const FOOT_TINT := Color(0.02, 0.027, 0.04, 0.70)
 
 ## Where the carried count sits: bottom-left, which is the one corner of the
 ## square that no glyph reaches into and that the key cap — bottom-right — does
@@ -197,12 +262,64 @@ func _draw() -> void:
 	draw_rect(box, UIPalette.faded(tint, 0.85 if _lit else 0.5), false, 1.5)
 	if _total > 0.0:
 		_draw_sweep(recharge_progress())
-	_draw_glyph(tint)
+	var photographed := _draw_art()
+	if not photographed:
+		_draw_glyph(tint)
+	else:
+		draw_rect(Rect2(0.0, SIZE - FOOT_HEIGHT, SIZE, FOOT_HEIGHT),
+			FOOT_TINT, true)
 	if _total > 0.0:
 		_draw_timer()
 
 	if _count >= 0:
 		_draw_count()
+
+
+## The photograph, at the brightness its state calls for. Returns false for a
+## kind with no picture — the bolt, or a build whose tiles have not been
+## imported — so `_draw` can fall through to the drawn glyph.
+##
+## Loaded on the first draw rather than in `_ready`, and held in a static cache,
+## because four slots on the bar and three more in the lobby's weapon strip all
+## want the same handful of textures and `ResourceLoader` is the only thing that
+## should be deciding how many copies of a PNG exist.
+func _draw_art() -> bool:
+	var texture := _art()
+	if texture == null:
+		return false
+	var shade := ART_READY
+	if _count == 0:
+		shade = ART_EMPTY
+	elif not _lit:
+		shade = ART_WAITING
+	draw_texture_rect(texture,
+		Rect2(Vector2(ART_INSET, ART_INSET), Vector2(SIZE, SIZE) - Vector2(ART_INSET, ART_INSET) * 2.0),
+		false, Color(shade, shade, shade, 1.0))
+	return true
+
+
+static var _art_cache: Dictionary = {}
+
+
+static func _art_for(kind: Kind) -> Texture2D:
+	if _art_cache.has(kind):
+		return _art_cache[kind]
+	var texture: Texture2D = null
+	if TILE_ART.has(kind) and ResourceLoader.exists(TILE_ART[kind]):
+		texture = load(TILE_ART[kind]) as Texture2D
+	_art_cache[kind] = texture
+	return texture
+
+
+func _art() -> Texture2D:
+	return _art_for(kind)
+
+
+## The photograph for a weapon, for anything that shows a weapon and is not a
+## slot — the lobby's picker strip. Public so the lobby does not have to know
+## what a `Kind` is.
+static func art_for_weapon(weapon: Variant) -> Texture2D:
+	return _art_for(WEAPON_KIND.get(Loadout.sanitize(weapon), Kind.SPEAR))
 
 
 ## Three levels, not two, and the third is the one D-032 made an everyday sight:

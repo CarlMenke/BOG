@@ -34,6 +34,47 @@ static func take_notice() -> Dictionary:
 	return out
 
 
+# ------------------------------------------------------- captured configs ---
+#
+# Configs the host has snapshotted from the lobby (D-076), kept for the session
+# and no longer. The user's own scope: *"its okay if this is not persisted
+# completely"*.
+#
+# **Deliberately not written to `user://`.** The reason to capture a config is
+# to hand it to somebody or to write down what a match was played on, and both
+# of those end at the clipboard — the copy button is the feature and the list is
+# a convenience on the way to it. Persisting would mean a file format, a
+# migration the day `_FIELDS` grows, and one more thing that can be stale;
+# living for the session costs an array. They survive a lobby to match to
+# results to lobby round trip, which is the one journey a host takes between
+# capturing a config and wanting it back, for the same reason a notice does.
+
+## Newest first. `{"name", "notes", "text", "config": Dictionary}` — the whole
+## dictionary rather than the transcript alone, so a capture can be *applied*
+## and not only read.
+static var _captures: Array[Dictionary] = []
+
+## How many are kept. A session's worth of trying things out is a handful; a
+## list long enough to need scrolling is one nobody reads.
+const MAX_CAPTURES := 8
+
+
+static func remember_config(name: String, notes: String, text: String,
+		config: Dictionary) -> void:
+	_captures.push_front({"name": name, "notes": notes, "text": text,
+		"config": config})
+	while _captures.size() > MAX_CAPTURES:
+		_captures.pop_back()
+
+
+static func captured_configs() -> Array[Dictionary]:
+	return _captures
+
+
+static func forget_configs() -> void:
+	_captures.clear()
+
+
 ## `Net` is loaded as a script rather than reached through the autoload node so
 ## that these stay usable from static context.
 const NET := preload("res://scripts/net/net.gd")

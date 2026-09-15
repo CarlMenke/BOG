@@ -431,6 +431,16 @@ const _FIELDS := [
 ]
 
 
+## Every field a config is made of, in the order it travels. Public since D-076,
+## because the lobby's clipboard capture has to enumerate "what a config is" and
+## the only correct answer is this list: it is what `to_dict` sends, so a setting
+## that is not in it is a setting nobody else ever sees, and a capture built from
+## a hand-written list would be complete on the day it was written and silently
+## short by one on the day the next dial lands.
+static func fields() -> PackedStringArray:
+	return PackedStringArray(_FIELDS)
+
+
 func to_dict() -> Dictionary:
 	var out := {}
 	for field: String in _FIELDS:

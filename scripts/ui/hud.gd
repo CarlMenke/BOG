@@ -76,7 +76,10 @@ var _spectating: bool = false
 var _flash: float = 0.0
 ## Your own health, built in `_build_health` rather than in `hud.tscn`.
 var _health: Control
-var _health_fill: ColorRect
+var _health_fill: Panel
+## The fill's own box, kept because the bands repaint it every time the number
+## moves and a `StyleBoxFlat` is changed in place rather than replaced.
+var _health_fill_style: StyleBoxFlat
 var _health_value: Label
 ## What the bar and the number are currently showing, so a per-frame refresh of
 ## something that changes a few times a minute costs a comparison.
@@ -278,7 +281,7 @@ func _refresh_health() -> void:
 		colour = UIPalette.DANGER
 	elif fraction < Nameplate.HEALTH_HURT_AT:
 		colour = UIPalette.AMBER
-	_health_fill.color = colour
+	_health_fill_style.bg_color = colour
 
 
 ## Built here rather than in `hud.tscn` for the same reason the lives pips are:
@@ -292,19 +295,36 @@ func _build_health() -> void:
 	_health = Control.new()
 	_health.name = "Health"
 	_health.custom_minimum_size = HEALTH_BAR
+	# **Shrink, not fill** (D-076). `HEALTH_BAR.x` has said 224 since D-062, for
+	# the reason the constant's own comment gives — the Elder's track and the
+	# letter hold's are 224 and the three stack in one column — and it was never
+	# what happened: the bar is a plain `Control` in a `VBoxContainer`, so it
+	# filled the column's 440 and sat at twice the width of the two bars it was
+	# written to match. The Elder track draws its own 224 centred inside whatever
+	# it is given, which is why that one was right and this one was not.
+	_health.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_health.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_health.visible = false
 
-	var back := ColorRect.new()
+	# Rounded and hairlined, like every other surface in this UI. It was two flat
+	# rectangles with square corners, which made the one element on the HUD that
+	# is a solid saturated fill also the one element that did not belong to the
+	# theme's geometry. The colours are untouched: the three bands are
+	# `Nameplate`'s own (D-062) and are shared with the plate over every head, so
+	# a HUD that coloured health by a different rule than the bodies do would be
+	# two answers to one question.
+	var back := Panel.new()
 	back.set_anchors_preset(Control.PRESET_FULL_RECT)
-	back.color = UIPalette.faded(UIPalette.VOID, 0.72)
+	back.add_theme_stylebox_override("panel", _health_box(
+		UIPalette.faded(UIPalette.VOID, 0.72), UIPalette.LINE))
 	back.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_health.add_child(back)
 
-	_health_fill = ColorRect.new()
+	_health_fill_style = _health_box(UIPalette.GOOD, Color(0, 0, 0, 0))
+	_health_fill = Panel.new()
 	_health_fill.anchor_right = 1.0
 	_health_fill.anchor_bottom = 1.0
-	_health_fill.color = UIPalette.GOOD
+	_health_fill.add_theme_stylebox_override("panel", _health_fill_style)
 	_health_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_health.add_child(_health_fill)
 
@@ -326,6 +346,19 @@ func _build_health() -> void:
 
 	column.add_child(_health)
 	column.move_child(_health, _abilities.get_index())
+
+
+## One box for both halves of the bar. Radius 3 rather than the palette's 4:
+## the bar is 22 px tall and a 4 px corner on something that short starts to
+## read as a capsule.
+static func _health_box(fill: Color, border: Color) -> StyleBoxFlat:
+	var box := StyleBoxFlat.new()
+	box.bg_color = fill
+	box.set_corner_radius_all(3)
+	if border.a > 0.0:
+		box.border_color = border
+		box.set_border_width_all(1)
+	return box
 
 
 func _refresh_abilities() -> void:

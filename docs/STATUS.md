@@ -22,11 +22,11 @@ island and out to a results screen, and two automated checks now walk that path:
 one in a single process, one across two processes over a real socket.
 
 ```
-bash tools/smoke_test.sh        # 120 checks, ~6 minutes, finds Godot by itself
+bash tools/smoke_test.sh        # 126 checks, ~6 minutes, finds Godot by itself
 bash tools/net_test.sh          # two processes, one socket; ~45 s, run by hand
 ```
 
-`smoke_test.sh` is the gate and it passes, 120 of 120. `net_test.sh` is kept out
+`smoke_test.sh` is the gate and it passes, 126 of 126. `net_test.sh` is kept out
 of it to keep the gate fast; run it by hand after touching networking, the lobby
 or the results screen. It passes all twelve stages (200 + 34 assertions), ten of
 which end in a rematch, with the engine quiet in both processes — the error it
@@ -287,7 +287,7 @@ Three tiers, because three different kinds of claim need three different proofs
 
 | tool | proves |
 |---|---|
-| `tools/smoke_test.sh` | **the gate** — import, and one hundred and twenty checks |
+| `tools/smoke_test.sh` | **the gate** — import, and one hundred and twenty-six checks |
 | `tools/cursor_flow.tscn` | entering a match takes the mouse, and leaving gives it back |
 | `tools/playthrough.tscn` | the whole path, menu to results; 50 assertions on the island, 58 on Rust. Takes a map id after a `--` |
 | `tools/match_rules.tscn` | 888 assertions across 20 scoring scenarios, the last of them three Gubs carrying three different weapons (D-069) |
@@ -322,6 +322,7 @@ Three tiers, because three different kinds of claim need three different proofs
 | `tools/preview_map.tscn` | Rust, Kopje Crossing, Lantern Wharf and Halcyon Wake: renders one, and checks every spawn pad with the physics. **In the gate** for all four |
 | `tools/island_report.tscn` | Whisperbloom Hollow as numbers: footprint, slope, every scatter layer's placed count, tree heights, spawn spacing and the capture bases (D-055). **In the gate** on four seeds |
 | `tools/parkour_report.tscn` | every platform on a built map has its rock, fits a Gub, and is reachable from the ground (D-042); on Lantern Wharf also that no jump reaches a tower or wall top, no sightline runs past 25 m (26 m from a roof), and no pad sees the other base's pads (D-056); on Halcyon Wake every deck reachable, the mast out of reach, sightlines under 21 m on the main deck and 38 m from a landing, and nothing but the void over every edge of the deck (D-057). **In the gate** for all three |
+| `tools/bake_tiles.gd` | the ability bar's seven tiles, photographed from the real `.glb`s under one camera, one light rig and one framing rule — the geometric mean of a silhouette's on-screen width and height is 66% of the tile, capped at 88% on the longer side, slender props laid on the diagonal (D-076). `-- check` re-measures the **committed** PNGs and is **in the gate**, headless, because what has to hold on every machine is that the pictures in the repository obey the rule rather than that this machine's GPU can reproduce them; `-- sheet` writes `out/tiles_sheet.png`, the seven side by side, which is the only way to answer "do they read as a set" |
 | `tools/preview_*.tscn` | it *looks* right. Needs a person, always will |
 
 **`playthrough` is the one that catches integration.** Every other harness looks
@@ -343,8 +344,15 @@ screen to the flow.
 `preview_island` views: `wide under eye eye0..eye7 shrine grove arch bridge
 spawns hollow top canopy tree`,
 plus `match` for real Gubs and the diagnostic flags in its `FLAGS` dictionary.
-`ui_range` modes: `menu menu_join menu_notice settings lobby lobby_full
-lobby_teams lobby_client lobby_map lobby_weapons`. `lobby_map` scrolls the Match
+`ui_range` modes: `menu menu_join menu_notice settings settings_network lobby
+lobby_full lobby_teams lobby_client lobby_map lobby_capture lobby_weapons
+lobby_feel widths capture_config`. The last two print a verdict and sit in the
+gate (D-076): `widths` puts every slider in the match panel at the value that
+renders its own unit widest, under every win condition, and fails if any track
+is under 180 px — it read **zero** for `bow_drop_full` before that entry;
+`capture_config` drives the capture sheet through its real buttons, copies to the
+real clipboard, reads it back and prints the whole payload. `lobby_feel` is the
+same worst-label config, photographed. `lobby_map` scrolls the Match
 panel down to the Map section, which is the only way to photograph it — the panel
 scrolls and the section is below the fold at every size the game runs at.
 `lobby_weapons` presses the real collapse button, so it is the picker surface:
@@ -382,9 +390,6 @@ and the tool quietly uses its defaults. Pass them literally.
   prefers a pad with nobody near it, so it rarely bites, but the ring solver in
   `arena.gd` could enforce a minimum separation between pads as well as a slope
   limit.
-- **The lobby's match panel scrolls without saying so.** The rows past "Spear
-  recharge" are reachable but the scrollbar is invisible against the theme, so
-  the panel reads as clipped rather than scrollable.
 
 Five more are limitations of the source art rather than faults in the code, and
 D-029 argues each one out rather than pretending it is fixed:
