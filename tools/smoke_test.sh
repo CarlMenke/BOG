@@ -533,6 +533,22 @@ also "every carried weapon clears the ground" "card PASS"
 # the shaft past it fails here on the commit that lands it instead of being found
 # two steps later by somebody measuring something else.
 also "every carried weapon clears the ground" "level PASS"
+# And `palm PASS`, which is the **fifth** and is about the hand rather than the
+# Gub (D-074). Everything above asks where the spear is relative to the body, the
+# floor or the horizon, and none of it can see the thing the user actually said:
+# *"the spear visually is just outside the hand... it appears as if its attached
+# to the back of the hand."* A shaft riding the knuckles is exactly as far from
+# the trunk, exactly as level and exactly as high off the grass as one in the
+# fist, so four green lines sat under a grip whose shaft passed **outside the
+# mitten altogether** — 0.076 m from the centre of a fist 0.132 m thick.
+#
+# It went unseen because the only thing `GRIP_PALM` had ever been checked against
+# was the `RightHand`-weighted skin at rest, which is the wrist: 918 of the
+# mitten's 1,030 vertices hang off the three finger chains and none of them were
+# in that span. This measures the whole mitten, skinned in the carry pose, and
+# requires the shaft's axis to pass inside it (`PALM_MAX`). It reads 0.050 m now
+# and D-072's grip reads 0.076 and fails it.
+also "every carried weapon clears the ground" "palm PASS"
 # **A grip is still the grip its own clips solve for** (D-073), which is the
 # general form of the fault the four steps above kept hitting one at a time.
 #

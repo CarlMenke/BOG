@@ -176,11 +176,45 @@ const GRIP_ROTATION := Vector3(52.31, 0.00, 53.82)
 ## that derivation is now code rather than a comment.
 ##
 ## Deliberately *off* the wrist bone's axis: a hand holds a stick in its palm
-## rather than through its own bones. The `RightHand`-weighted skin spans
-## x -0.083..0.085, z -0.065..0.065, y -0.025..0.103 in hand-local rest space, so
-## 5 cm off the axis and 6 cm up toward the knuckles is inside the fist with room
-## to spare.
-const GRIP_PALM := Vector3(-0.03, 0.06, -0.04)
+## rather than through its own bones. `+X` runs across the palm toward the
+## fingertips, `+Y` up the arm and out through the fingers, and **`+Z` is the
+## palm normal** — which in `Idle`'s raised guard points back in at the Gub's own
+## chest, so this third component is the one that costs trunk clearance.
+##
+## **`z` is -0.01 and was -0.04, which is D-074 and is the whole of it.** The
+## user, on D-072's cocked-to-throw carry: *"the spear visually is just outside
+## the hand, it doesnt appear to be in the palm... right now it appears as if its
+## attached to the back of the hand when in idle."*
+##
+## They are describing a real 4 cm. The number this vector used to be checked
+## against was the `RightHand`-weighted skin **at rest** — x -0.083..0.085,
+## z -0.065..0.065 — and a bone's own vertices are the wrist, not the fist: the
+## three finger chains carry 918 of the mitten's 1,030 vertices and every one of
+## them was outside that span. Measured instead as the whole mitten **in the pose
+## the spear is carried in**, the fist's centre sits at hand-local
+## `(0.002, 0.062, 0.029)`. The `y` was right to two millimetres. The `z` was
+## 0.069 out, on the far side of the hand from the palm.
+##
+## What that did to the shaft: it passes the fist 0.68 m up its own length, where
+## the carved staff is 0.040 m in radius and 0.056 at its widest knots, and the
+## mitten's back surface lay only 0.018 m from the shaft's axis. So **three
+## centimetres of shaft stood out through the back of the hand** while the palm
+## half of the fist held nothing, which is exactly the thing the user could see.
+##
+## -0.01 is where the shaft's own body comes flush with the back of the hand and
+## no further: it is a 3 cm move, it brings the axis from 0.076 m of the fist's
+## centre to 0.050 m, and `preview_carry -- measure` checks that distance every
+## run now (`palm PASS`, `PALM_MAX`). It is not the centre of the fist — centring
+## it would be a 9 cm move and would put the butt through the ribs — it is the
+## smallest move that stops the shaft breaking out of the back of the hand.
+##
+## It is paid for out of the trunk: **0.165 m to 0.142 m**, at about 7.5 mm a
+## centimetre, against a `SKIN_MIN` of 0.06. The floor is not paid at all (the
+## worst carried end goes +0.272 to +0.281) and neither is the letter card
+## (0.117 m to 0.108 m of grass under it). `GRIP_ROTATION` is untouched and was
+## never in question: the −60° bearing and the level shaft are the part the user
+## says works.
+const GRIP_PALM := Vector3(-0.03, 0.06, -0.01)
 
 ## Where the butt of the shaft sits in the fist, in hand-local metres.
 ##
@@ -201,7 +235,7 @@ const GRIP_PALM := Vector3(-0.03, 0.06, -0.04)
 ## initialise one and half this file's readers want a constant. What closes the
 ## gap is `tools/preview_carry.tscn -- measure`, which recomputes it from the
 ## rotation on every run and fails the gate if the two have drifted apart.
-const GRIP_OFFSET := Vector3(0.5187, -0.1854, -0.3576)
+const GRIP_OFFSET := Vector3(0.5187, -0.1854, -0.3276)
 
 ## The two numbers the offset above was derived from, named so the letter card
 ## can be placed off the same measurement instead of guessed at again. The mesh
@@ -501,6 +535,14 @@ func is_charged() -> bool:
 ## outside this file (`tools/preview_sword.tscn -- measure`) and starts from the
 ## same point: a hand holds a hilt where it holds a shaft, and a second palm
 ## measured separately would be a second opinion about where this fist is.
+##
+## **That sentence has teeth, and D-074 is when it bit.** Moving `GRIP_PALM` for
+## the spear moved the great sword and the Elder's crackle with it, because both
+## of them read this — three props hanging off one number, which is the point of
+## the number. `SWORD_GRIP_OFFSET` had to be re-pasted and `derived FAIL` is what
+## said so, on the first run, before anything shipped. Changing this function is
+## never a spear change; see `GRIP_PALM` for what it cost and `SWORD_GRIP_OFFSET`
+## for what it did to the sword.
 static func fist_offset() -> Vector3:
 	return GRIP_OFFSET + shaft_direction() * (GRIP_FRACTION * SHAFT_LENGTH)
 
@@ -628,8 +670,33 @@ const SWORD_REAR_HAND := 0.980
 ## there was no check and nobody re-reads a paste. `preview_carry -- hilt` is
 ## that check now, and it is the general form of the fault this session kept
 ## hitting: **a fit against a clip set that has since changed**. See its header.
+##
+## **Re-pasted again at D-074, and that time it moved 3 cm**, because the offset
+## is `fist_offset()` minus a length down the hilt and `fist_offset()` *is*
+## `GRIP_PALM` — one palm for both props, which is D-068's own call above: a hand
+## holds a hilt where it holds a shaft. So correcting the palm point for the
+## spear corrected it for the sword, `derived FAIL` said so on the first run, and
+## the z here went -0.8164 to -0.7864. Neither the scale nor the rotation moved,
+## because neither is a function of the palm: the scale is the fists' separation
+## over the model's hilt span and the rotation is the line between the fists.
+## This constant is the rigid translation that puts the point below the fist, and
+## it is the only part of the fit the palm can touch.
+##
+## What that did to the sword, which is worth having in one place because nobody
+## asked for it:
+##
+##   pommel to the joining fist, carried   0.116 m -> 0.089 m   better
+##   lowest the point dips in the swing     -0.437  ->  -0.409   better
+##   the point at the release               1.434 m ->  1.412 m  against a 1.430 dial
+##   worst pommel miss across the swing     0.150 m ->  0.154 m  against 0.16 allowed
+##
+## Three of the four improve and the fourth is `preview_sword`'s own `fit`
+## residual, which loses 3.6 mm of a 10 mm margin. That residual is the fists
+## *separating* through the swing and cannot be translated away — moving the
+## grip trades the swing's worst sample against the carry pose's, and D-073's
+## `carried` is the half that says the second hand is on the weapon.
 const SWORD_SCALE := 1.2585
-const SWORD_GRIP_OFFSET := Vector3(0.6117, 0.4203, -0.8164)
+const SWORD_GRIP_OFFSET := Vector3(0.6117, 0.4203, -0.7864)
 const SWORD_GRIP_ROTATION := Vector3(65.102, -180.000, -143.141)
 
 

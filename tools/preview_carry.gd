@@ -14,6 +14,11 @@ extends Node3D
 ##   Godot --path . --resolution 2400x900 --script tools/snapshot.gd -- \
 ##       res://tools/preview_carry.tscn out/carry_spear.png 25 sheet spear
 ##
+##   # the fist, close, with the spear gripped at each palm z given (D-074)
+##   Godot --path . --resolution 2400x900 --script tools/snapshot.gd -- \
+##       res://tools/preview_carry.tscn out/carry_spear_palm.png 25 \
+##       fist -0.04 -0.01
+##
 ##   # the same three from overhead, which is where a bearing is an angle
 ##   Godot --path . --resolution 2400x900 --script tools/snapshot.gd -- \
 ##       res://tools/preview_carry.tscn out/carry_sword_bearings.png 25 \
@@ -100,6 +105,45 @@ const SKIN_MIN := 0.06
 ## point on the end of it.
 const LEVEL_MAX := 30.0
 
+## How far the spear's shaft may pass from the centre of the Gub's own fist, in
+## metres, in the pose it is carried in.
+##
+## **This is the number the user found by eye and no check could have told them**
+## (D-074). The complaint was *"the spear visually is just outside the hand, it
+## doesnt appear to be in the palm... it appears as if its attached to the back
+## of the hand"*, and `HeldGear.GRIP_PALM` read 0.076 m — against a mitten that
+## is 0.132 m thick, so the shaft's own axis passed **outside the fist
+## altogether** while every other number on this page said PASS.
+##
+## It went unnoticed because the only thing the palm point had ever been checked
+## against was the `RightHand`-weighted skin **at rest**, which is the wrist and
+## not the fist: the three finger chains carry 918 of the mitten's 1,030
+## vertices, and the hand a carried spear is held in is a closed one that the
+## rest pose does not show. So this measures the whole mitten — `FIST_BONES`, the
+## hand and every finger bone under it — skinned in the carry pose and averaged,
+## which is a *fist* rather than a bone.
+##
+## 0.066 is half the mitten's own thickness across the palm, so the threshold is
+## "the shaft's axis is inside the hand" and nothing more opinionated than that.
+## The shipped grip reads 0.050 m; D-072's, which is the grip this check was
+## written about, reads 0.076 and fails it.
+##
+## **The spear only**, for the same reason `LEVEL_MAX` is: the bow hangs off a
+## fist by one limb and the great sword is held by two, and `hilt`'s `carried`
+## already asks the sword the harder version of this question.
+const PALM_MAX := 0.066
+
+## Every bone the mitten hangs off: the hand and the three finger chains under
+## it. All of them are in `GubAnimator.UPPER_BODY_BONES`, which is what makes the
+## fist a single measurement rather than twelve — the carry clip owns the whole
+## chain, so where the fist is *in the hand's own frame* is the carry clip's
+## alone and the locomotion underneath cannot move it.
+const FIST_BONES := ["RightHand",
+	"RightHandThumb1", "RightHandThumb2", "RightHandThumb3", "RightHandThumb4",
+	"RightHandIndex1", "RightHandIndex2", "RightHandIndex3", "RightHandIndex4",
+	"RightHandMiddle1", "RightHandMiddle2", "RightHandMiddle3",
+	"RightHandMiddle4"]
+
 ## Every clip a Gub carries a weapon *around* in.
 ##
 ## `preview_bow._carried_clips` and `preview_sword.CARRY_SKIP`'s list, kept
@@ -138,6 +182,16 @@ const SHEET_GAP := 0.8
 ## that sheet is seen obliquely and this one head-on with 1.24 m of shaft lying
 ## across every body.
 const ELEVATION_SPREAD := 2.4
+## How the `fist` mode is framed (D-074). Behind the Gub's right shoulder rather
+## than in front of it, and 0.9 m of Gub per column rather than 1.7, because that
+## sheet is about a body and this one is about a hand.
+const FIST_AZIMUTH := 125.0
+const FIST_ELEVATION := 15.0
+const FIST_SPREAD := 0.9
+## The window each fist gets, in metres — the frame is this plus however far
+## apart the row stands, so adding a column widens the sheet instead of shrinking
+## every hand in it.
+const FIST_FRAME := 0.55
 
 @export var samples: int = SAMPLES
 
@@ -150,6 +204,13 @@ var _skin_bones: PackedInt32Array = PackedInt32Array()
 var _skin_weights: PackedFloat32Array = PackedFloat32Array()
 var _skin_binds: Array[Transform3D] = []
 var _skin_bone_of_bind: PackedInt32Array = PackedInt32Array()
+
+## The spear hand's own mitten, cached the same way and in the same pass — the
+## hand and every finger bone under it, which `_build_skin` keeps separately
+## because `TRUNK_BONES` deliberately throws the arms away.
+var _fist_rest: PackedVector3Array = PackedVector3Array()
+var _fist_bones: PackedInt32Array = PackedInt32Array()
+var _fist_weights: PackedFloat32Array = PackedFloat32Array()
 
 
 func _ready() -> void:
@@ -180,6 +241,12 @@ func _ready() -> void:
 			args[7] if args.size() > 7 else "")
 		get_tree().quit()
 		return
+	if mode == "fist":
+		var zs: Array[float] = []
+		for i in range(4, args.size()):
+			zs.append(float(args[i]))
+		_fist(zs)
+		return
 	if mode == "elevations":
 		_elevations(args[4] if args.size() > 4 else "spear",
 			args[5] if args.size() > 5 else "side")
@@ -208,6 +275,7 @@ func _measure(everything: bool) -> void:
 			spear_level = row[1]
 
 	failures += _report_card(gub, skeleton, player, clips)
+	failures += _report_palm(skeleton, player)
 
 	# The spear lies level, and this is the line that keeps that a fact rather
 	# than a sentence somebody wrote on a day it was true (`LEVEL_MAX` says why).
@@ -330,6 +398,88 @@ func _report_card(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
 		% lowest + "in %s and its half-height %.3f, so %.3f m of it is in the "
 		% [lowest_in, half, -bottom] + "ground")
 	return 1
+
+
+## The shaft against the **hand**, which is the one thing every table above
+## measures around rather than at (D-074).
+##
+## Everything else on this page asks where the spear is relative to the Gub's
+## body, its floor or the horizon. None of that can see the complaint the user
+## actually raised — *"it doesnt appear to be in the palm... it appears as if its
+## attached to the back of the hand"* — because a shaft riding the knuckles is
+## exactly as far from the trunk, exactly as level and exactly as high off the
+## grass as one in the fist. It is a different question and it needs its own
+## number: how far the shaft's axis passes from the centre of the mitten, in the
+## hand's own frame.
+##
+## **Measured in the carried `Idle`, and that is the whole pose.** Every bone the
+## mitten hangs off is in `UPPER_BODY_BONES` (`FIST_BONES` says so), so the fist's
+## shape *in the hand's own frame* belongs to the carry clip and nothing the
+## locomotion plane does can move it — the same thing that makes the trunk column
+## of every table above read one number in all twelve clips. Twelve moments of
+## the carry loop are sampled anyway, because the clip breathes, and the worst is
+## the one reported.
+##
+## The spear only: `PALM_MAX` says why.
+func _report_palm(skeleton: Skeleton3D, player: AnimationPlayer) -> int:
+	if _fist_rest.is_empty():
+		push_warning("preview_carry: no hand mesh; the palm is not measured")
+		return 0
+	var carry := Loadout.carry_clip(Loadout.Weapon.SPEAR)
+	var hand := skeleton.find_bone(HeldGear.HAND_BONE)
+	var dir := HeldGear.shaft_direction()
+	var length := player.get_animation(carry).length
+	var worst := 0.0
+	var at_worst := Vector3.ZERO
+	for i in CARRY_SAMPLES:
+		_pose(player, skeleton, "Idle", 0.0, carry,
+			length * float(i) / float(CARRY_SAMPLES))
+		var centre := _fist_centre(skeleton, hand)
+		# Perpendicular to the shaft, because sliding the grip *along* the shaft
+		# is `GRIP_FRACTION`'s business and is not what is being asked here.
+		var to_fist := centre - HeldGear.GRIP_PALM
+		var off := (to_fist - dir * to_fist.dot(dir)).length()
+		if off > worst:
+			worst = off
+			at_worst = centre
+	if worst <= PALM_MAX:
+		print("preview_carry: the spear's shaft passes %.3f m from the centre "
+			% worst + "of the fist, which is at %v in the hand's own frame, "
+			% at_worst + "against %.3f allowed — palm PASS" % PALM_MAX)
+		return 0
+	print("preview_carry: palm FAIL — the spear's shaft passes %.3f m from the "
+		% worst + "centre of the fist (%v in the hand's own frame) against "
+		% at_worst + "%.3f allowed, so it is riding the outside of the hand rather "
+		% PALM_MAX + "than sitting in it. Move `HeldGear.GRIP_PALM`, which is "
+		+ "what that constant is for, and re-read the trunk column above for "
+		+ "what it cost.")
+	return 1
+
+
+## Where the middle of the spear hand is, in hand-local metres, at whatever pose
+## the skeleton is currently in — the mitten skinned by the formula the GPU runs
+## and averaged, which is `_nearest_skin`'s method asked for a centre instead of
+## a minimum.
+func _fist_centre(skeleton: Skeleton3D, hand: int) -> Vector3:
+	var bones: Array[Transform3D] = []
+	for i in _skin_binds.size():
+		var bone := _skin_bone_of_bind[i]
+		bones.append(Transform3D.IDENTITY if bone < 0
+			else skeleton.get_bone_global_pose(bone) * _skin_binds[i])
+	var to_hand := skeleton.get_bone_global_pose(hand).affine_inverse()
+	var sum := Vector3.ZERO
+	for v in _fist_rest.size():
+		var out := Vector3.ZERO
+		for j in 4:
+			var w := _fist_weights[v * 4 + j]
+			if w <= 0.0:
+				continue
+			var bind := _fist_bones[v * 4 + j]
+			if bind < 0 or bind >= bones.size():
+				continue
+			out += (bones[bind] * _fist_rest[v]) * w
+		sum += to_hand * out
+	return sum / float(maxi(_fist_rest.size(), 1))
 
 
 ## The lowest end of `weapon`'s prop above the floor through one locomotion
@@ -1055,6 +1205,7 @@ func _build_skin(gub: Gub, skeleton: Skeleton3D) -> void:
 		return
 	var skin := mesh_node.skin
 	var trunk := {}
+	var fist := {}
 	for i in skin.get_bind_count():
 		_skin_binds.append(skin.get_bind_pose(i))
 		var bone := skin.get_bind_bone(i)
@@ -1063,6 +1214,8 @@ func _build_skin(gub: Gub, skeleton: Skeleton3D) -> void:
 		_skin_bone_of_bind.append(bone)
 		if bone >= 0 and skeleton.get_bone_name(bone) in TRUNK_BONES:
 			trunk[i] = true
+		if bone >= 0 and skeleton.get_bone_name(bone) in FIST_BONES:
+			fist[i] = true
 
 	var arrays := mesh_node.mesh.surface_get_arrays(0)
 	var rest: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
@@ -1070,17 +1223,27 @@ func _build_skin(gub: Gub, skeleton: Skeleton3D) -> void:
 	var weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
 	for v in rest.size():
 		var share := 0.0
+		var in_fist := 0.0
 		for j in 4:
 			if trunk.has(bones[v * 4 + j]):
 				share += weights[v * 4 + j]
+			if fist.has(bones[v * 4 + j]):
+				in_fist += weights[v * 4 + j]
+		# The same half-share rule and for the same reason: a vertex belongs to
+		# one side of the wrist, so the seam is not counted twice.
+		if in_fist >= TRUNK_SHARE:
+			_fist_rest.append(rest[v])
+			for j in 4:
+				_fist_bones.append(bones[v * 4 + j])
+				_fist_weights.append(weights[v * 4 + j])
 		if share < TRUNK_SHARE:
 			continue
 		_skin_rest.append(rest[v])
 		for j in 4:
 			_skin_bones.append(bones[v * 4 + j])
 			_skin_weights.append(weights[v * 4 + j])
-	print("preview_carry: %d of %d vertices are trunk or head"
-		% [_skin_rest.size(), rest.size()])
+	print("preview_carry: %d of %d vertices are trunk or head, and %d are the "
+		% [_skin_rest.size(), rest.size(), _fist_rest.size()] + "spear hand")
 
 
 ## How near the segment `a`..`b` comes to the skinned body, in metres.
@@ -1212,6 +1375,101 @@ func _sheet(weapon_name: String, carry_override: String = "",
 		gub.add_child(stamp)
 
 	_build_stage(eye)
+
+
+## The fist, close enough to see whether the shaft is in it (D-074).
+##
+## **The one judgement on this page that is not a number's to make.** The user
+## can see that a spear is riding the back of a hand and `palm` can now say so in
+## millimetres, but "does this read as a Gub holding a spear" is settled by
+## looking, and a sheet framed on a whole body puts the fist twenty pixels
+## across. So: one Gub per palm z asked for, all in the carried `Idle`, framed on
+## the hand.
+##
+## Seen from **behind the Gub's right shoulder**, which is not the sheet's own
+## camera and is chosen for the same kind of reason `elevations plan` is. From
+## the front the shaft crosses the fist in the screen plane and passing in front
+## of the hand looks the same as passing through it; from behind the shoulder the
+## palm normal lies across the screen, so the shaft either overlaps the mitten or
+## has daylight between it and the mitten, and that is the whole question.
+func _fist(zs: Array[float]) -> void:
+	if zs.is_empty():
+		zs = [HeldGear.GRIP_PALM.z]
+	var azimuth := deg_to_rad(FIST_AZIMUTH)
+	var elevation := deg_to_rad(FIST_ELEVATION)
+	var eye := Vector3(sin(azimuth) * cos(elevation), sin(elevation),
+		-cos(azimuth) * cos(elevation))
+	var row := -Vector3(cos(azimuth), 0.0, sin(azimuth))
+	var carry := Loadout.carry_clip(Loadout.Weapon.SPEAR)
+	var centre := Vector3.ZERO
+
+	for i in zs.size():
+		var gub := _bare_gub()
+		var skeleton := gub.find_child("Skeleton3D", true, false) as Skeleton3D
+		var player := gub.find_child("AnimationPlayer", true, false) as AnimationPlayer
+		gub.position = row * (float(i) - float(zs.size() - 1) * 0.5) * FIST_SPREAD
+		gub.weapon = Loadout.Weapon.SPEAR
+		_show(gub, Loadout.Weapon.SPEAR)
+		_pose(player, skeleton, "Idle", 0.0, carry, 0.0)
+		# The grip derived from the palm point being asked about, exactly as
+		# `HeldGear` would derive it — the rotation is held, because this picture
+		# is about one component of one vector and nothing else.
+		var palm := Vector3(HeldGear.GRIP_PALM.x, HeldGear.GRIP_PALM.y, zs[i])
+		gub.held_gear.set_grip(palm - HeldGear.shaft_direction()
+			* (HeldGear.GRIP_FRACTION * HeldGear.SHAFT_LENGTH),
+			HeldGear.GRIP_ROTATION)
+		var hand := skeleton.find_bone(HeldGear.HAND_BONE)
+		# `Skeleton3D.global_transform` already carries the Gub's own placement,
+		# so this is the world hand and not the hand times the Gub twice — which
+		# matters here and does not in the tables above, where the Gub is at the
+		# origin and the doubling is the identity.
+		var at := skeleton.global_transform * skeleton.get_bone_global_pose(hand)
+		centre += at * _fist_middle(skeleton, hand)
+
+		var stamp := Label3D.new()
+		stamp.text = "palm z %+.3f%s" % [zs[i],
+			"  (shipped)" if is_equal_approx(zs[i], HeldGear.GRIP_PALM.z) else ""]
+		stamp.font_size = 44
+		stamp.pixel_size = 0.0004
+		# Hung in the world above the hand rather than parented to the Gub: the
+		# Gub carries a scale, and a label placed in its local space lands a
+		# metre off. Over the top of whatever is in front of it as well, because
+		# at this range the head is between the camera and the hand.
+		stamp.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		stamp.no_depth_test = true
+		add_child(stamp)
+		stamp.global_position = at.origin + Vector3(0.0, FIST_FRAME * 0.5, 0.0)
+	centre /= float(zs.size())
+
+	var light := DirectionalLight3D.new()
+	light.rotation_degrees = Vector3(-42.0, -38.0, 0.0)
+	light.light_energy = 1.2
+	add_child(light)
+	var env := WorldEnvironment.new()
+	var e := Environment.new()
+	e.background_mode = Environment.BG_COLOR
+	e.background_color = Color(0.14, 0.16, 0.18)
+	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	e.ambient_light_color = Color(0.5, 0.52, 0.55)
+	e.ambient_light_energy = 0.8
+	env.environment = e
+	add_child(env)
+	var camera := Camera3D.new()
+	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+	camera.keep_aspect = Camera3D.KEEP_WIDTH
+	camera.size = float(zs.size() - 1) * FIST_SPREAD + FIST_FRAME
+	add_child(camera)
+	camera.look_at_from_position(centre + eye * 10.0, centre, Vector3.UP)
+
+
+## `_fist_centre` without the skin cache, for the picture: the same average, read
+## off whatever the skeleton is posed as, built on demand because `fist` is a
+## render mode and does not run `_build_skin`.
+func _fist_middle(skeleton: Skeleton3D, hand: int) -> Vector3:
+	if _fist_rest.is_empty():
+		var gub := get_child(0) as Gub
+		_build_skin(gub, skeleton)
+	return _fist_centre(skeleton, hand)
 
 
 ## The elevation table as a picture: one Gub per carried clip, in a row, with

@@ -8844,3 +8844,191 @@ of its own: `GubBackdrop._equip` sets `Gub.weapon` and calls
 `GubCombat.refresh_hand`, which calls `GubAnimator.set_carry_pose`, which is the
 same path and the same `carry_pick` input a match uses (D-069) — the ring is real
 `gub.tscn` instances and there is no second opinion for it to hold.
+
+---
+
+## D-074 — The spear was checked against the wrist and held by the fist, and four green lines could not tell
+
+The user, on D-072's cocked-to-throw carry: *"its just that the spear visually is
+just outside the hand, it doesnt appear to be in the palm. The spear need to just
+move towards the inside of the arm a little more, right now is appears as if its
+attached to the back of the hand when in idle."* And, in the same breath, the
+constraint that is half the brief: *"dont risk breaking anything else because the
+horzonital and stuff all works great, i would want this to ideally be a small and
+precise fix."*
+
+**So this moved one component of one vector.** `HeldGear.GRIP_PALM.z`, from
+-0.04 to **-0.01**: three centimetres along the palm normal, into the fist.
+`GRIP_ROTATION` is byte-identical, and that is not a courtesy — the −60° bearing
+and the level shaft are the part the user says works, and D-072 spent 288
+candidates finding them.
+
+### The 4 cm was real, and here is where it came from
+
+`GRIP_PALM`'s comment said the grip was *"5 cm off the axis and 6 cm up toward
+the knuckles, inside the fist with room to spare"*, and it justified that against
+the `RightHand`-**weighted** skin at rest: x -0.083..0.085, z -0.065..0.065.
+
+That is the wrist. It is not the fist. **918 of the mitten's 1,030 vertices hang
+off the three finger chains**, and not one of them is inside that span — the same
+mitten measured whole runs x -0.127..0.218 at rest. Worse, the rest pose is an
+open hand, and a Gub carrying a spear is in a closed one.
+
+Measured as the whole mitten, skinned in the pose the spear is actually carried
+in, the centre of the fist is at hand-local **`(0.002, 0.062, 0.029)`**:
+
+| | shipped `GRIP_PALM` | centre of the fist | out by |
+|---|---:|---:|---:|
+| x, across the palm | -0.030 | +0.002 | 0.032 |
+| y, up the arm | +0.060 | +0.062 | **0.002** |
+| z, the palm normal | **-0.040** | +0.029 | **0.069** |
+
+The `y` was right to two millimetres. The `z` was on the far side of the hand.
+
+And that shows, because this spear is not thin. Where the shaft passes the fist —
+0.68 m up its own length, at `GRIP_FRACTION` — the carved staff is 0.040 m in
+radius and 0.056 at its widest knots, while the mitten's back surface lay
+**0.018 m** from the shaft's axis. Three centimetres of shaft stood out through
+the back of the hand while the palm half of the fist held nothing. The user was
+describing geometry, exactly, by eye.
+
+### What it cost, which is the only thing this step spends
+
+The palm normal points out of the palm and `Idle`'s raised guard has that palm
+turned inward, so **moving the shaft into the fist moves it toward the body**.
+What that spends is D-072's trunk clearance, and it is a straight line at about
+7.5 mm a centimetre:
+
+| palm z | the move | nearest trunk | axis to the fist's centre | worst carried end | letter card |
+|---:|---:|---:|---:|---:|---:|
+| **-0.040** (D-072) | — | 0.165 | 0.076 | +0.272 | 0.117 |
+| -0.030 | 1 cm | 0.157 | 0.067 | +0.275 | 0.114 |
+| -0.020 | 2 cm | 0.150 | 0.059 | +0.278 | 0.111 |
+| **-0.010** (taken) | **3 cm** | **0.142** | **0.050** | **+0.281** | **0.108** |
+| 0.000 | 4 cm | 0.135 | 0.042 | +0.284 | 0.105 |
+
+**-0.01 is where the shaft's own body comes flush with the back of the hand and
+not one centimetre further.** It is not the centre of the fist: centring the axis
+would be a 9 cm move and would put the butt through the ribs, which is the same
+wall D-072's bearing sweep hit from the other side. It is the smallest move that
+stops the shaft breaking out of the back of the hand, and the table above is what
+each larger one would have cost.
+
+Everything else on the page is unmoved or better. The floor **improves** — the
+worst carried end goes +0.272 to +0.281 — because sliding the grip toward the
+body lifts the butt out of the grass rather than dropping it. The letter card
+keeps 0.108 m of air under it, against 0.117. All twelve carried clips still
+clear trunk, floor and level, and the shaft is still never more than 25° off
+horizontal against 30 allowed, which is the same 25 D-072 measured: a translation
+along the palm cannot tilt a shaft, and the table proves it rather than asserting
+it. `GRIP_OFFSET` re-derived itself, which is D-072's own `derived` check doing
+the job it was written for one commit earlier.
+
+**The honest cost line: 0.165 m was better than the 0.146 m two-handed carry it
+replaced, and 0.142 m is not.** D-072 said so in as many words and the sentence
+is now false, which is worth writing down rather than quietly dropping. It is
+still 2.4x `SKIN_MIN`, and the great sword and the bow sit at 0.164 and 0.121, so
+the spear is no longer the roomiest prop and is not the tightest either.
+
+### One palm, three props — and that is why `SWORD_GRIP_OFFSET` moved too
+
+**The brief for this step said one component of one vector, and it asked for the
+derivation to be confirmed rather than assumed. Confirming it turned up a second
+derived constant.** `HeldGear.fist_offset()` *is* `GRIP_PALM` — the palm point
+reconstructed from `GRIP_OFFSET` — and D-068 made it static and public on
+purpose: *"a hand holds a hilt where it holds a shaft, and a second palm measured
+separately would be a second opinion about where this fist is."* So
+`sword_offset()` reads it, `preview_sword -- measure` reads it, and the Elder's
+crackle is positioned at it.
+
+Which means the palm cannot move for one prop. `derived FAIL` said so on the
+first gate run after the change — `SWORD_GRIP_OFFSET` 0.030 m off its own
+derivation, the same 3 cm — which is D-073's check catching exactly the accident
+it was written for, one prop over from where D-072 caught it. It is re-pasted:
+z -0.8164 → **-0.7864**. Neither `SWORD_SCALE` nor `SWORD_GRIP_ROTATION` moved,
+because neither is a function of the palm — the scale is the fists' separation
+over the model's hilt span and the rotation is the line between the fists. The
+offset is the rigid translation that hangs the sword below the fist, and that is
+the only part of the fit a palm can touch.
+
+So the great sword moved 3 cm into the hand as well, and it is measured:
+
+| | before | after | |
+|---|---:|---:|---|
+| pommel to the joining fist, carried | 0.116 m | **0.089 m** | better |
+| lowest the point dips in the swing | -0.437 m | **-0.409 m** | better |
+| the point at the release | 1.434 m | 1.412 m | against a 1.430 m dial, ±0.10 |
+| worst pommel miss across the swing | 0.150 m | **0.154 m** | against 0.16 allowed |
+
+Three of the four improve. The fourth is `preview_sword`'s own `fit` residual and
+it loses 3.6 mm of a 10 mm margin — worth saying out loud, because it is the one
+number in this step that got worse and it belongs to a weapon nobody complained
+about. That residual is the two fists *separating* through the swing, which no
+translation can remove; moving the grip trades the swing's worst sample against
+the carried pose's, and D-073's `carried` — *"how far past the pommel the joining
+fist closes in the pose the sword is carried in"*, which it called the question a
+two-handed carry lives on — is the half that improved by 27 mm.
+
+**It would have been smaller to freeze the sword on its own palm constant and
+leave this one to the spear.** It would also have been enshrining a number now
+known to be 0.069 m wrong, in the file whose last four records are all about
+constants left behind by the thing they were derived from. One fist, one point.
+
+### The part that outlives the fix: four green lines could not see this
+
+`carry`, `card`, `level` and `derived` all passed, every run, on a grip whose
+shaft passed **outside the mitten altogether**. They had to. Every one of them
+asks where the spear is relative to the *Gub* — its trunk, its floor, the horizon
+— and a shaft riding the knuckles is exactly as far from the trunk, exactly as
+level and exactly as high off the grass as one in the fist. The hand was the one
+thing on this rig that nothing measured, and `preview_carry._build_skin` had been
+throwing its vertices away by construction since D-070, because `TRUNK_BONES`
+deliberately keeps the torso and nothing else.
+
+So `palm` is the fifth line, and it is the same move D-072 and D-073 each made
+one layer up: the thing a human noticed becomes a number that fails on the commit
+that breaks it. It measures the whole mitten — `FIST_BONES`, the hand and all
+twelve finger bones — skinned by the formula the GPU runs, averaged in the hand's
+own frame, and requires the shaft's axis to pass within `PALM_MAX` of it.
+
+`PALM_MAX` is **0.066**, which is half the mitten's own thickness across the
+palm, so the threshold says "the axis is inside the hand" and nothing more
+opinionated than that. It reads 0.050 now. **D-072's grip reads 0.076 and fails
+it**, which was run to prove it — a threshold whose own motivating case still
+passes is not a threshold.
+
+It costs nothing to run. Every bone the mitten hangs off is in
+`GubAnimator.UPPER_BODY_BONES`, so the fist's shape *in the hand's own frame*
+belongs to the carry clip and the locomotion underneath cannot move it — the same
+fact that makes the trunk column of every table on that page read one number in
+all twelve clips. Twelve moments of the carry loop are sampled anyway, because
+the clip breathes, and the worst is reported.
+
+Gate **117 → 118**. The new one is `palm PASS`, an `also` on the forty-second
+`measure` run rather than a mode of its own, because it needs exactly the skin
+scan that run already does.
+
+### The picture, because this is a judgement made by eye
+
+`preview_carry -- fist` is new and is the deliverable as much as the number: one
+Gub per palm point asked for, all in the carried `Idle`, framed on the hand.
+`out/carry_spear_palm.png` is D-072's -0.04 beside the shipped -0.01, and the
+difference is not subtle — the old one has daylight between the mitten and the
+shaft, the new one has the fist on it.
+
+**From behind the Gub's right shoulder, which is a choice and not a default.**
+Head-on, the shaft crosses the fist in the screen plane and passing *in front of*
+a hand looks identical to passing *through* it; the palm normal has to lie across
+the screen before the eye can tell, and from that quarter it does. It is the same
+argument `elevations plan` makes for the great sword's bearing, one axis over.
+
+`out/carry_spear.png` and `out/carry_spear_elevations.png` are re-rendered in
+their own framings so a ruler crosses all three.
+
+One bug fell out of writing the mode, and it is worth a line because the same
+expression is three other places in that file: `gub.global_transform *
+skeleton.global_transform * bone_pose` counts the Gub's own placement **twice**,
+because `Skeleton3D.global_transform` already carries it. Every table on the page
+gets away with it — they pose one Gub at the origin, where the doubling is the
+identity — and the first mode to stand Gubs in a row and read a world position
+back off them put its labels a metre wide of the hands they belonged to.

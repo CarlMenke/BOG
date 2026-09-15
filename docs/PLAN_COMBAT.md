@@ -995,6 +995,45 @@ code (D-069).
 
 ## Step 16 — The spear rides the back of the hand, not the palm
 
+**Done, as D-074.** `GRIP_PALM.z` went -0.04 to -0.01 — three centimetres along
+the palm normal, into the fist — and nothing else in `HeldGear` moved.
+`GRIP_ROTATION` is byte-identical.
+
+The 4 cm the user could see was real and had a cause: the palm point had only
+ever been checked against the `RightHand`-**weighted** skin at rest, which is the
+wrist. 918 of the mitten's 1,030 vertices hang off the finger chains, and
+measured whole, in the pose the spear is carried in, the fist's centre is at
+hand-local `(0.002, 0.062, 0.029)` — the `y` right to two millimetres and the
+`z` 0.069 out. Where the shaft crosses the fist it is 0.040 m in radius against a
+back-of-hand surface 0.018 m from its axis, so three centimetres of it stood
+through the back of the hand.
+
+-0.01 is where the shaft comes flush with that surface and no further. It costs
+trunk clearance **0.165 m → 0.142 m**, which is the whole price; the floor
+*improves* (+0.272 → +0.281, sliding toward the body lifts the butt), the letter
+card keeps 0.108 m, and the shaft is still 25° off horizontal at worst against
+30 allowed, because a translation along the palm cannot tilt a shaft. The honest
+line D-074 writes down: 0.165 was better than the two-handed carry's 0.146 and
+0.142 is not.
+
+**One thing was not in the brief and could not be avoided.**
+`HeldGear.fist_offset()` *is* `GRIP_PALM`, and the great sword and the Elder's
+crackle both read it (D-068: *"a hand holds a hilt where it holds a shaft"*). So
+`SWORD_GRIP_OFFSET` is derived from the palm too, `derived FAIL` caught it on the
+first run, and it is re-pasted — z -0.8164 → -0.7864. The scale and the rotation
+are untouched, because neither is a function of the palm. The sword moved 3 cm
+into the hand with the spear: its second fist closes 0.089 m past the pommel
+instead of 0.116, the point dips -0.409 instead of -0.437, the release reads
+1.412 m against the 1.430 dial, and the one number that got worse is
+`preview_sword`'s fit residual, 0.150 → 0.154 of a 0.16 tolerance.
+
+What outlives it is `palm`, the fifth check on that run and the first that asks
+about the **hand**. The four that existed all passed on a grip whose shaft went
+outside the mitten altogether, and they had to — a shaft on the knuckles is
+exactly as far from the trunk, as level and as high off the grass as one in the
+fist. Gate **117 → 118**. `preview_carry -- fist` is its picture, and
+`out/carry_spear_palm.png` is the before beside the after.
+
 *Added 2026-09-14. The user, on D-072's cocked-to-throw carry: "its just that the
 spear visually is just outside the hand, it doesnt appear to be in the palm. The
 spear need to just move towards the inside of the arm a little more, right now is
