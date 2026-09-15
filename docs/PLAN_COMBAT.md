@@ -859,6 +859,18 @@ Gate **107 → 113**; `net_test.sh` green.
 
 ## Step 13 — Does a horizontal spear survive the original Idle?
 
+***Done, as D-072 — and the answer was "not the way it was asked".*** Removing the
+carry pose entirely fails: six of twelve clips put the shaft in the grass or
+through the trunk, `StrafeRight` within 2 mm of the chest. But pointing the carry
+layer at **`Idle` itself** gives the original pose and holds it steady, and a
+one-handed horizontal grip under it clears everything. The user chose that, on
+the reasoning that *"this spear is only thrown so 2 hands doesnt make sense... it
+looks like hes holding it up with one hand ready to throw"* — which moved the
+target from "level" to "level **and leading**". Bearing −60°, the peak of the
+clearance curve rather than the nearest row to forward: forward-right does not
+exist on this rig, because `Idle` puts the fist 0.30 m in front of the chest and
+0.68 m of butt has to go somewhere.
+
 *Added 2026-09-14, after D-070 shipped the spear on the great sword's carry pose.
 The user, on seeing it: "the idle for the spear seems to be using the greatsword
 idle, when it should be using the original idle that we had, this should be true
@@ -905,3 +917,54 @@ measurement fails, say so and put the options back to the user: a spear-specific
 carry pose (one Mixamo download), or the original Idle with the shaft vertical
 again. Falling back silently to either is the wrong answer; the user asked for a
 number and the number is the deliverable.
+
+---
+
+## Step 15 — The great sword sits wrong in the hands at Idle
+
+*Added 2026-09-14. The user: "the great sword needs to be angeled better in idle.
+In idle it seems like its coming out of the hands at a 35 ish degree angle to the
+characters right. both in the lobby and in game."*
+
+### The diagnosis, to be confirmed rather than assumed
+
+`SWORD_GRIP_ROTATION`, `SWORD_GRIP_OFFSET` and `SWORD_SCALE` in `held_gear.gd`
+are **one rigid transform, fitted to one clip's fists**. D-068 derived them by
+fitting the hilt line between `SWORD_FORE_HAND` (0.850) and `SWORD_REAR_HAND`
+(0.980), with the scale taken from the Gub's fist *span* — and it did that
+against the **swing**, because `GreatSwordHighSpinAttack` was the only sword clip
+that existed.
+
+D-070 then introduced `GreatSwordIdle` as the carry pose and **kept the swing's
+grip**. A rigid transform fitted to one hand arrangement, asked to serve a second
+one, skews. That is what ~35° to the Gub's right looks like.
+
+Confirm this before fixing it: measure the fist separation and the hilt line in
+both clips and say how far apart they actually are. If the numbers do not explain
+35°, the cause is something else and the fix above is wrong.
+
+### The fix that is probably right
+
+**Blend the grip on the carry layer's own weight.** This is not new machinery —
+D-070 already does it for the bow, whose `CARRY_TILT` is *"blended away on the
+same weight the draw pose rises on"*. So: fit the grip to `GreatSwordIdle` for
+the carried case, keep D-068's fit for the swing, and interpolate on the weight
+that is already driving the pose.
+
+Two things that must survive it:
+
+- **The reach and the hit geometry are measured off the blade** (D-068): the
+  sweep reads the `BoneAttachment3D`, not the Gub's basis, and `sword_reach`
+  1.43 m was measured *with* the animation. A grip that moves at the release
+  moves the reach. Re-run `preview_sword -- measure` and `combat_range -- sword`,
+  which already fails past 0.10 m of drift.
+- **Ground clearance.** D-070 deleted `SWORD_CARRY_TILT` because the real pose
+  made it unnecessary, and the carried sword now clears by +0.187 m — the worst
+  of the three props and the one the gate watches. A re-fitted grip must not eat
+  that.
+
+*Done when:* the blade leaves the fists along the hands' own line in `Idle` —
+measured, with the before and after angle stated — the swing's release point and
+reach are unmoved, all three props still clear the ground, and the lobby ring
+shows it as well as the match, since both read the same pose through the same
+code (D-069).
