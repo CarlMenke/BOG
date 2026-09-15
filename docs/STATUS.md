@@ -22,11 +22,11 @@ island and out to a results screen, and two automated checks now walk that path:
 one in a single process, one across two processes over a real socket.
 
 ```
-bash tools/smoke_test.sh        # 113 checks, ~6 minutes, finds Godot by itself
+bash tools/smoke_test.sh        # 115 checks, ~6 minutes, finds Godot by itself
 bash tools/net_test.sh          # two processes, one socket; ~45 s, run by hand
 ```
 
-`smoke_test.sh` is the gate and it passes, 113 of 113. `net_test.sh` is kept out
+`smoke_test.sh` is the gate and it passes, 115 of 115. `net_test.sh` is kept out
 of it to keep the gate fast; run it by hand after touching networking, the lobby
 or the results screen. It passes all twelve stages (200 + 34 assertions), ten of
 which end in a rematch, with the engine quiet in both processes — the error it
@@ -287,7 +287,7 @@ Three tiers, because three different kinds of claim need three different proofs
 
 | tool | proves |
 |---|---|
-| `tools/smoke_test.sh` | **the gate** — import, and one hundred and thirteen checks |
+| `tools/smoke_test.sh` | **the gate** — import, and one hundred and fifteen checks |
 | `tools/cursor_flow.tscn` | entering a match takes the mouse, and leaving gives it back |
 | `tools/playthrough.tscn` | the whole path, menu to results; 50 assertions on the island, 58 on Rust. Takes a map id after a `--` |
 | `tools/match_rules.tscn` | 888 assertions across 20 scoring scenarios, the last of them three Gubs carrying three different weapons (D-069) |
@@ -298,7 +298,7 @@ Three tiers, because three different kinds of claim need three different proofs
 | `tools/combat_range.tscn bow` | the bow, in numbers (D-065): a letter hold refuses the draw and empties the bow hand, a snap shot let go one frame after the key went down takes exactly `bow_damage_snap` and flies the snap dials, and a full draw takes `bow_damage_full` and flies the full ones. Neither flight is read off the arrow — the speed and the drop are fitted off six ticks of its own positions. **In the gate**, headless |
 | `tools/combat_range.tscn draw` | the charge as a *tell*: one float published onto a **remote** Gub, and the two skeletons agreeing about how far the string is back to within a centimetre at five charge levels — with the control that the draw moved the hands 0.41 m, so agreeing means something (D-065). Also prints how far off the Gub's facing the composed bow points, which was **91°** when this weapon shipped and is 1° now that `GubAim` turns the torso onto the crosshair (D-066). **In the gate**, headless; through `snapshot.gd` it renders the two Gubs side by side |
 | `tools/preview_bow.tscn` | the bow in the hand across the charge: `-- measure` solves the grip off the draw clip and prints the three constants `HeldGear` carries, and the default sheet is six Gubs from brace to full draw with the string bending under the blend shape (D-065). `-- measure` also checks what the **carry tilt** buys on its own: the lowest limb tip over the twelve clips a Gub walks around in, which has to stay 0.15 m off the ground and reaches 0.284 m where `Run` used to plough by 0.158 (D-066). That is half the answer since D-070 — a carried bow wears a *pose* as well now, and `preview_carry` is what composes it — and it is kept because it is the half that says the tilt is still earning its keep. **In the gate**, headless |
-| `tools/combat_range.tscn strafe` | the feet, round the compass (D-066): eight bearings at walking and running speed on a Gub held facing one way, with the slower of its two toes measured every tick. Forward and backward plant at 0.28 of body speed or better and no leg passes 1.25, against 1.36 for the one-dimensional space this replaced — and the crouch, which is still one clip behind a line, is the control that spreads 0.21 to 1.41. **In the gate**, headless with `--fixed-fps 60`; `-- strafing` is the picture |
+| `tools/combat_range.tscn strafe` | the feet, round the compass (D-066): eight bearings at walking and running speed on a Gub held facing one way, with the slower of its two toes measured every tick. Forward and backward plant at 0.28 of body speed or better and no leg passes 1.25, against 1.36 for the one-dimensional space this replaced — and the crouch, which is still one clip behind a line, is the control that spreads 0.21 to 1.41. Since D-071 it also holds the **strafe axis** itself: the four sideways legs plant at 0.85 or better (running sideways is 0.43 and 0.30 where it was 0.98 and 0.93), and the two halves of that axis have to be the **same move**, within 0.20 of each other. The second of those is the one that earns its place — Mixamo's aim-strafe families are handed, so a downloaded right strafe passes the first line by a hundredth and fails the second at 0.54. **In the gate**, headless with `--fixed-fps 60`; `-- strafing` is the picture |
 | `tools/combat_range.tscn spine` | the torso that aims (D-066), swept round the whole horizon and through the camera's whole pitch range at a full draw: the bow holds within 3° of bearing and 5° in space of the crosshair (against D-065's **91°**), tracks 123° of elevation, and two arrows fired from one spot at the two ends of that range leave from the *same point* 122° apart — D-025 and D-045 asserted against the thing most likely to break them. **In the gate**, headless; `-- aiming` is the picture |
 | `tools/combat_range.tscn sword` | the great sword, end to end (D-068). It opens with a **rehearsal** — one swing at nobody, with the blade read off the bone attachment at the release — because nothing in the mode can be placed until that number exists: `Swing` turns the body through a revolution inside the skeleton, and at the release the blade is **55–66° off the Gub's own facing**, so a sweep along `-basis.z` would point at empty grass. Then the fists are checked on all 112 ticks of a swing, the kill is required to land `SWING_RELEASE_TIME` after the click and *within three ticks of the blade's own full extension*, 0.35 m inside the reach dies and 0.35 m outside lives, and an Elder takes nothing and wards. **In the gate**, headless |
 | `tools/combat_range.tscn chain` | the swing as a movement tech, measured the way D-052 measured the hop and against the same ceiling (D-068). A Gub at a dead stop chains seven swings — 0.00, then 2.00 after the first, then **7.02** from the last, which is 1.30x run and is exactly `HOP_SPEED_CAP` — and a Gub that builds 7.02 with ten timed hops first has to *keep* it when it swings. Neither may pass the cap. **In the gate**, headless and deliberately **not** `--fixed-fps`: the spin and the recharge are wall-clock deadlines |
@@ -441,6 +441,14 @@ constant and 0.0 turns it off.
   `game / authored` in its own custom timeline, which is what keeps the feet
   planted. Change a game speed freely; only re-measure an authored one if the
   clip itself changes (D-029).
+- **One clip in `gub.glb` has no file behind it.** `StrafeRight` is `StrafeLeft`
+  reflected in the rig's own sagittal plane, built by `build_gub.py`'s
+  `mirror_of` and measured, locked, aligned and exported like any other clip
+  (D-071). It exists because **Mixamo's aim-strafe families are handed** — every
+  right strafe in every pack is a −37 to −47 degree diagonal, while its left twin
+  can be a true lateral — so a right-hand strafe pole cannot be downloaded, only
+  mirrored. If you are ever tempted by the undeclared `StandingRunRight.fbx` in
+  `5_Locomotion/`, the gate's `mirror` check is what will stop you.
 - **Nothing in the animation tree runs a clock it does not own.** Every node is
   either a looping cycle, a OneShot that restarts on fire, or scrubbed every
   frame — because an `AnimationNodeAnimation` sitting in a blend runs from tree

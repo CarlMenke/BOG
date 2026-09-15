@@ -8082,3 +8082,428 @@ genuinely improves: the spear's worst goes −0.534 → +0.190 and the sword's
 `PACKS`. They are the three downloads step 8 asked for — the true lateral family
 whose one member measured 76.5° against `LeftStrafe`'s 27.5 — and closing the
 strafe axis with them is somebody's step, not this one's.
+
+## D-071 — The strafe axis closes on a mirror, because Mixamo's strafes are handed
+
+D-066 built a `BlendSpace2D` whose sideways poles were served by clips that were
+not sideways, said so, and named the fix: three downloads, `Standing Run Right`,
+`Standing Walk Left` and `Standing Walk Right`, to go with the `Standing Run
+Left` already on disk at a true **+76.5°** against `LeftStrafe`'s +27.5. It
+called that family a set of one and left closing it as the one thing for the
+user to decide.
+
+The three arrived. **Measuring them is what this record is**, because they are
+not the family D-066 predicted, and the reason they are not is not a bad
+download. It is a property of the animation that no download fixes.
+
+### What the three clips measure, against the 76.5° they were expected at
+
+Travel in degrees off the body's own forward, positive to its left, read off the
+chest line the four strafes are aligned by — the same number, from the same
+`measure_clip`, that D-066's table is made of:
+
+    clip                          expected   measured
+    StandingRunLeft.fbx (already here)          +76.5
+    StandingRunRight.fbx            -76.5      **-45.9**
+    StandingWalkLeft.fbx            +76.5     **+126.5**
+    StandingWalkRight.fbx           -76.5      **-46.3**
+
+Not one of the three is a lateral. Two are ordinary forward diagonals, no better
+than the `RightStrafe` and `RightStrafeWalking` already at those poles (-37.4 and
+-46.5). The third is 36° **past** lateral — `StandingWalkLeft` travels
+back-and-left relative to its own chest.
+
+Declared anyway and measured on D-066's own harness, that set does what those
+numbers say it will: running left plants at **0.30** of body speed and running
+right at **0.84**, five of the sixteen legs get worse, and the Gub strafes left
+almost three times better than it strafes right. A plane that is wrong
+symmetrically is a plane; a plane that is wrong on one side is a limp.
+
+### They are the wrong pack, and — much more to the point — the right pack would not have helped
+
+`_rejected/MANIFEST.md` measures every file of the three locomotion packs this
+project downloaded and threw away, and it identifies these three exactly. Frame
+counts and speeds match to three decimals:
+
+    file in 5_Locomotion/        frames  speed    the pack it came from
+    StandingRunLeft.fbx              46  2.580    Magic Locomotion Pack
+    StandingRunRight.fbx             46  2.385    **Longbow** Locomotion Pack
+    StandingWalkLeft.fbx             73  1.072    **Longbow** Locomotion Pack
+    StandingWalkRight.fbx            73  1.148    **Longbow** Locomotion Pack
+
+So the good clip and the three new ones are from two different `Standing *`
+families. That is a real mistake and it would be an easy record to write: three
+more downloads, from the Magic pack this time, and the axis closes.
+
+**It does not close.** The rejected files are unskinned and cannot be built from,
+but they can still be *measured* — the bearing is a relation between a clip's
+travel and its own chest line, so a rebuilt rest pose moves both halves of it
+together. **Eight** files exist in this tree twice over, skinned in
+`5_Locomotion/` and skinless in `_rejected/`, and every one of the eight
+reproduces to **0.1°** either way. So the rest of the table is worth reading:
+
+    travel off the chest line, + to the left
+    pack                        run left  run right   walk left  walk right
+    Locomotion (lowercase)         +27.5      -37.4       +35.3      -46.5
+    Longbow Locomotion            +116.0      -45.8      +126.5      -46.3
+    Magic Locomotion               +76.5      -37.6       +94.4      -38.8
+
+Read the two right-hand columns. **Every right strafe in every pack Mixamo has is
+a -37 to -47 degree diagonal**, while its left twin ranges from +27 to +126.
+These families are authored around a character holding its chest turned to its
+own right — a bow arm, a casting hand, the thing that makes them aim clips in the
+first place. Stepping right barely turns that torso; stepping left turns it a
+long way. The handedness is the *point* of the family, and it means a pole that
+has to mean -90° has nothing anywhere to be served by.
+
+So D-066's "three downloads" was the wrong shape of answer, and finding that out
+cost three downloads. It is written down here at length so that the next person
+who sees `StandingRunRight.fbx` sitting in the folder undeclared knows it was
+measured and rejected rather than missed.
+
+### The right pole is built, not downloaded
+
+`build_gub.py` gained `mirror_of`. A clip that names one has no file: it is the
+left-to-right reflection of another clip in the table, built in Blender after the
+rig is scaled and **before anything is measured**, so it is measured, root-motion
+locked, facing-aligned, loop-trimmed and exported exactly like a downloaded one
+and its numbers appear in every table beside theirs.
+
+`StrafeRight` is now `StrafeLeft` reflected, and `StrafeLeft` is
+`StandingRunLeft.fbx`.
+
+Three things in `mirror_action` are the whole of why it works.
+
+**The plane is fitted, not assumed.** It is the rig's own sagittal plane: normal
+the rest hip line — the same line `align_facing` reads a clip's facing off, and
+for the same reason — through the rest Hips head. This rig's forward is -86° in
+armature XY, so mirroring about world X would have been four degrees wrong, and
+four degrees of wrong mirror is a strafe that walks slowly into the crosshair.
+
+**It is baked in armature space rather than transformed curve by curve.** A
+bone's rotation curves are written in its *own* rest frame, and a mirrored bone's
+rest frame is a reflection of its partner's rather than a rotation of it; Blender
+carries the difference in the bone roll and on this rig the pairs are up to
+thirteen degrees apart. Working in armature space and letting Blender solve each
+`pose_bone.matrix` back into a local rotation keeps all of that out of the
+arithmetic. The matrix each bone gets is
+
+    N(b, f) = S . M(b', f) . M(b', rest)^-1 . S . M(b, rest)
+
+— the mirror of the partner's pose, carried out of the partner's rest frame and
+into this bone's own. Everything right of the first term is a constant, and it is
+what makes the identity that matters hold: **feed it the rest pose and every bone
+gets its own rest matrix back, exactly, however out of square the rig is.** A
+reflection can therefore never introduce a standing offset. An asymmetric rig
+costs a little accuracy in the motion and nothing at all in the pose that motion
+starts from.
+
+**The quaternions are unwound.** A baked quaternion is read off a matrix and
+`to_quaternion` may return either of the two that mean the same rotation; one
+sign flip mid-cycle is a bone taking the long way round between two frames a
+degree apart, which on a run cycle is a leg through the body. This build reports
+**0 flips**, which is the number to watch rather than a number to be pleased
+about.
+
+### How square this rig is, and what the reflection costs
+
+Printed every build. The worst mirror pair sits **0.0214 m** off the plane
+(`Toe_End` — the Gub was scanned standing with one foot slightly forward) and the
+worst centre bone **0.0097 m** (`Neck`). `MIRROR_LIMIT` is 0.03 m and stops the
+build if that grows.
+
+What those centimetres turn into, from `check_mirrored_clip`, which compares the
+mirror against its source on every number the build takes:
+
+    StrafeRight vs StrafeLeft   bearing  -75.3 vs +76.5   sum 1.18°
+                                speed    2.580 vs 2.580   0.0000 m/s
+                                hips     0.658 vs 0.658   0.0000 m
+                                pitch      6.4 vs   8.4   2.02°
+
+The two that come out at **exactly zero** are the two that have to: travel speed
+and hip height are reflections of quantities the plane does not touch. The two
+that do not are the two the plane's fit shows up in — 1.18° of bearing from the
+toes' 21 mm, and 2.0° of torso pitch from the Neck's 9.7 mm turned into an angle
+by a 0.28 m torso. The four limits are set just over each, which still leaves them
+catching what they are for: a plane fitted to the wrong axis, or a bone pair that
+did not swap, moves these by tens of degrees and not by one.
+
+### The feet, before and after, on D-066's harness
+
+`combat_range -- strafe`, unchanged, sixteen legs. The "before" column is this
+same harness at `1781a59`.
+
+    bearing        walk before  walk after   run before  run after
+    forward             0.15        0.15         0.28       0.28
+    fwd-right           0.47        0.47         0.50     **0.31**
+    right               0.80        0.80         0.98     **0.43**
+    back-right          1.14        1.14         1.00       0.89
+    back                0.16        0.16         0.23       0.23
+    back-left           1.13        1.13         0.96       0.78
+    left                0.80        0.80         0.93     **0.30**
+    fwd-left            0.46        0.46         0.67    **0.83 worse**
+    mean                0.64        0.64         0.69       0.51
+    worst               1.14        1.14         1.00       0.89
+
+**Running sideways is the thing this step was for and it is fixed**: 0.98 to 0.43
+and 0.93 to 0.30, which is the pole finally meaning what its position says. Both
+back diagonals come down with it, because the hole D-066 described — 149° of
+backward quadrant with a clip at each end — is now 95°.
+
+**One leg got worse: running forward-and-left, 0.67 to 0.83.** It is worth saying
+why rather than rounding it into the mean. `GUB_2/Run` is authored travelling
+**10.2° to its own right**, so it agrees with the right-hand lateral and fights
+the left one: the same blend that took fwd-right from 0.50 to 0.31 takes fwd-left
+the other way. That is a property of the forward run the decisions table keeps on
+purpose, and the lever on it is a different clip for `Run`, not a number here.
+
+**The whole walk ring is unchanged, to the hundredth.** That is not an oversight,
+it is the rescale below doing its job: a walk-speed request never reaches the run
+poles, so moving them could not have moved it. The walk poles are still the
+lowercase diagonals and closing them is the one download at the end of this
+record.
+
+### The blend position was re-derived, and the answer is that it stays — for now
+
+D-066 puts the blend position at the velocity **rescaled so its L1 norm is its
+own speed**, because with no diagonal clips the rings are diamonds and a
+diagonal written in straight lands in the band where the run cycles carry weight.
+A true lateral pole changes the shape of those diamonds, so the rule was
+re-derived rather than assumed.
+
+The derivation says the rescale is right exactly while the poles do **not** point
+where their positions say. A pole at `(RUN_SPEED, 0)` whose clip travels 90° off
+forward produces the velocity its own position *is*; with four such poles the
+blend position would simply be the velocity, and the rescale would be throwing
+away a third of every diagonal.
+
+Two of the four are now that. The other two are not. Measured, with the rescale
+removed:
+
+    bearing        walk with  walk without
+    fwd-right          0.47      **0.77**
+    fwd-left           0.46      **0.72**
+    back-right         1.14          1.01
+    back-left          1.13          1.08
+    mean               0.64          0.69
+
+— worse, and every run leg unchanged, because at run speed the request is on the
+hull either way. So it stays, and `_body_relative` now carries the derivation and
+the number that will flip it: the day the walk poles are laterals too, that
+function should return `move` unrescaled and this harness should say so.
+
+### The rate, which is the thing that got worse on paper
+
+`StandingRunLeft` is authored at **2.580 m/s** where `LeftStrafe` was 3.250, so
+against a 5.4 m/s run the run-strafe pole now plays at **2.09x** where it played
+at 1.66x.
+
+`PLAN_COMBAT.md` costs this as "1.67x against `LeftStrafe`'s 1.33x", and that
+pair is worth disentangling because it is not a playback rate: it is
+`AUTHORED_RUN / authored strafe speed` — 4.314/2.580 and 4.314/3.250 — a ratio of
+one clip's authored speed to another's. What a blend point actually plays at is
+`game speed / authored speed`, and `Gub.RUN_SPEED` is 5.4 rather than `Run`'s own
+4.314. So the real pair is 2.09 against 1.66, and the increase is the same 26%
+either way.
+
+It reads, and the reason is that it is not the fastest thing on screen or even
+close. Every cycle's rate in the finished plane:
+
+    Run        1.25x      StrafeWalkLeft/Right  1.85x
+    Walk       2.13x      StrafeLeft/Right    **2.09x**
+    RunBack    2.37x      WalkBack              2.64x
+
+The new strafe plays **slower than the forward `Walk` clip has played since the
+day the game shipped**, and a long way under `WalkBack`, which D-066 already
+looked at and kept. What is actually being swapped is a sprint-cadence diagonal
+for a jog-cadence lateral, and the lateral is the one whose feet are on the
+ground.
+
+### Posture across the boundaries, against the same benchmark
+
+Measured the same way D-066 measured it — hip height is the pelvis above the
+floor and torso pitch the Hips→Neck line off vertical, both averaged over the
+clip — and compared against `Walk ↔ Run`, which is 82 mm and 41.0° and has been
+on screen every time anybody accelerates since the first build.
+
+    Run <-> StrafeLeft                    83 mm   36.7°
+    Run <-> StrafeRight                   83 mm   38.7°
+    Run <-> RunBack                       72 mm   38.0°
+    StrafeWalk <-> WalkBack               18 mm    9.8°
+    Walk <-> StrafeWalk                    8 mm    1.4°
+    StrafeLeft <-> RunBack                11 mm    1.3°
+    **StrafeWalkLeft <-> StrafeLeft**    **7 mm**  **2.9°**
+    **StrafeWalkRight <-> StrafeRight**  **6 mm**  **0.8°**
+
+The worst new boundary is `Run ↔ StrafeLeft` at 83 mm and 36.7°, which is a
+millimetre over the shipped benchmark on hip height and four degrees under it on
+pitch. It grew from D-066's 70 mm because the new pole is a `Standing *` clip
+carried 13 mm higher than `LeftStrafe` was; `Run`, at 0.575 m and a 45.1° lean,
+is the far end of it and always was.
+
+The two in bold are **the family boundary inside the strafe axis** that D-066
+refused to create — a lateral run against a diagonal walk on the same pole pair.
+It is created here, deliberately, and it is created on a measurement rather than
+a guess: 7 mm and 2.9°, which is a twelfth of the boundary the game already ships
+in the middle of its forward axis. The thing D-066 was protecting against turns
+out not to be there, and saying so needed the clip in the build.
+
+### The carry layer still clears
+
+D-070 found `StrafeWalkRight` putting the spear's butt 12 mm off the floor
+because a new clip had arrived and nobody re-measured, so re-measuring is the
+rule now. `preview_carry -- measure`, on the two new poles:
+
+    weapon        StrafeLeft   StrafeRight     worst clip in the set
+    spear          +0.967 m      +0.336 m      +0.341 m (Run)
+    bow            +0.266 m      +0.502 m      +0.251 m (Idle)
+    great sword    +0.597 m      +0.628 m      +0.187 m (Run)
+
+Neither new clip is the worst case for any weapon and all three stay well over
+the 0.15 m floor — `carry PASS`, `derived PASS`, `card PASS` unchanged.
+
+### What proves it
+
+Two new checks in the gate (113 → 115), both on `combat_range -- strafe`, which
+already walks the legs they read.
+
+`sideways` is `straight`'s sibling for the axis this step went after: the four
+lateral legs plant at 0.85 of body speed or better. It is a line drawn between
+the two builds — over the walk legs this step did not move (0.80) and under the
+two run legs it did (0.93 and 0.98) — and the band is narrow and stays narrow
+until the walk poles are closed.
+
+`mirror` is the one that matters, and it exists because `sideways` on its own
+cannot see the fault this record is about. The two halves of the strafe axis must
+agree within **0.20** of body speed. Today they agree within 0.13. Declaring
+`StandingRunRight.fbx` at the right pole — which is sitting on disk, and is the
+obvious next thing for somebody to try — measures 0.30 left against 0.84 right,
+**passes `sideways` by a hundredth**, and fails `mirror` at 0.54. That pair of
+outcomes is the whole argument for having two lines instead of one.
+
+Held on the lateral legs only. The diagonals are allowed to disagree and do, for
+`Run`'s 10.2° above.
+
+Run against the code without the things they check (D-015): with the mirror
+replaced by the downloaded `StandingRunRight.fbx`, `mirror` fails at 0.54 as
+above; with the old `RightStrafe.fbx`/`LeftStrafe.fbx` at the run poles,
+`sideways` fails twice at 0.93 and 0.98. In the build itself, `check_mirror`
+stops a rig more than 0.03 m out of square and `check_mirrored_clip` stops a
+reflection that is not one. The second of those fired for real on the first
+mirrored build, at a 1.18° bearing residual and a 2.02° pitch residual against
+limits of 1.0 — and the right answer was to find out where those two numbers come
+from (the toes' 21 mm and the Neck's 9.7 mm) and set the limits from the rig,
+rather than to loosen them until it went quiet. That is the only reason those
+four constants have a paragraph over them.
+
+### And the tool that should have said so first
+
+`tools/audit_source_packs.py` exists to measure files `PACKS` has never heard of,
+"before anybody picks one". It printed travel and speed and **not bearing** — the
+one number that decides whether a sideways clip belongs at a sideways pole — so
+three files whose names say `Left` and `Right` could be dropped in the folder and
+declared with nothing to contradict the assumption. It has the column now, off
+both body lines, and it reproduces `build_gub.py`'s figures exactly.
+
+The part of that worth keeping is why the column works on a **rejected** file.
+Everything else this tool reports is ruined by a missing skin, because the rest
+pose is rebuilt wrong — but a bearing is a clip's travel against its *own* chest
+line, and a wrong rest pose moves both halves of it together. Eight files exist
+in this tree twice over, skinned in `5_Locomotion/` and skinless in `_rejected/`,
+and all eight read the same either way to **0.1°**. That is what made the
+handedness table above measurable at all without downloading anything, and it is
+the difference between three speculative downloads and one measured one.
+
+### The pictures
+
+    bash tools/preview_clips.sh 5_Locomotion/StandingRunLeft.fbx \
+        5_Locomotion/StandingRunRight.fbx 5_Locomotion/StandingWalkLeft.fbx \
+        5_Locomotion/StandingWalkRight.fbx \
+        --out out/standing_family.png --align mean --azimuth 0 --yaw
+
+    GODOT --path . --script tools/snapshot.gd -- \
+        res://tools/combat_range.tscn out/strafe_lineup_mirrored.png 60 strafing
+
+    GODOT --path . --resolution 1600x700 --script tools/snapshot.gd -- \
+        res://tools/preview_anim.tscn out/anim_StrafeLeft.png 30 StrafeLeft
+    GODOT --path . --resolution 1600x700 --script tools/snapshot.gd -- \
+        res://tools/preview_anim.tscn out/anim_StrafeRight.png 30 StrafeRight
+
+The first is the four `Standing *` files with the floor compass on under each, so
+the handedness above is a thing to look at rather than a table to believe: the
+arrow under row 1 points sideways and the arrows under the other three do not.
+The second is the eight-bearing in-game lineup, to set beside D-066's
+`out/strafe_lineup.png` — same mode, same dummies, same replicated floats, with
+the two run poles changed underneath.
+
+The last two are the pair, off the **built** asset rather than off an FBX, and
+they are the only check in this record that a number could not have made. Six
+sampled moments each, and the two sheets are the same six poses reversed — same
+stride phase at the same time, feet on the line, and nothing through the body. A
+baked mirror's characteristic failure is a limb taking the long way round between
+two keys (see `unwind_quaternions`), and that is a thing you look at rather than
+measure.
+
+### Rejected
+
+**The three downloads at the poles.** Measured, built and walked round the
+compass before being taken out again; the numbers are in the second section. This
+is the thing the step was for and it is the thing that did not work.
+
+**Re-referencing the strafes off the head instead of the chest**, which the step
+brief asked to be asked afresh. It is very nearly free on the feet and it cannot
+ship. Read off the `Head` bone every strafe in every pack is already a true
+lateral — `LeftStrafe` measures **+83.0°** by the head against +27.5 by the chest
+— because what these clips are is a body that spirals into the step with the head
+counter-rotating to hold the target. Aligning by the head would put the travel on
+the pole by construction and take sideways skate to about 0.07.
+
+What it would also do is turn the **chest** 55-63° off the crosshair while
+strafing, and the chest is where the aim rides: `GubAim` turns `Spine`, `Spine1`
+and `Spine2` by a **constant** -92° measured off the draw clip (D-066), and
+`Spine` is below `UPPER_BODY_BONES` so the locomotion clip's own yaw of it goes
+straight into where the bow points. A strafing archer would shoot 63° wide. The
+chest reference is load-bearing, which is the answer to the brief's question and
+is why the mirror had to carry the whole fix.
+
+**The mirrored clip at all four strafe poles**, walks included, at 0.891x. It
+models best of anything available and it puts two copies of one cycle, running at
+two rates, on the same axis with nothing phase-locking them — `sync` keeps an
+unweighted input alive but does not lock its phase, and blending a cycle against
+itself out of phase averages to a half-lifted foot. Two different clips
+disagreeing reads as a transition; one clip disagreeing with itself reads as
+mush.
+
+**Mirroring `StandingWalkLeft.fbx`** for the walk poles. It is on disk and it is
+symmetric once reflected, but it is +126.5° — 36° past lateral — and it is carried
+65 mm lower and 14° more bent than the run pole it would sit beside. The
+lowercase walk pair is 7 mm and 2.9° from that pole. Keeping them is the smaller
+boundary by an order of magnitude.
+
+**A backward speed penalty**, again, and for D-066's reasons.
+
+### What this leaves open
+
+**The walk half of the strafe axis, and it is one download.** The **Magic
+Locomotion Pack's** `Standing Walk Left`, With Skin, one clip from its own page —
+not the Longbow one now on disk. Measured on the unskinned copy by
+`audit_source_packs`, which grew a bearing column for exactly this, it travels
+**+94.4°** off its chest. Mirrored the way the
+run pole is, that is both walk poles, symmetric, in the same authoring family as
+the run poles above them, and it takes walking sideways off 0.80 for the first
+time. `Standing Walk Right` is not on that list and must not be: it measures
+-38.8, which is the handedness this record is about.
+
+That download also flips the blend position rule — see `_body_relative` — and
+widens `STRAFE_SIDEWAYS_LIMIT`, which is at 0.85 only because the walk legs are
+still where D-066 left them.
+
+**`GUB_2/Run` is 10.2° off straight**, and it is now the largest single source of
+asymmetry left in the plane: it is what makes running forward-left measure 0.83
+against forward-right's 0.31. It is the clip the decisions table keeps on purpose
+and this is not an argument for changing it — only a note that if the forward run
+is ever revisited, this is a number that moves with it.
+
+**The four lowercase strafe files all stay on disk.** Two are still built;
+`LeftStrafe.fbx` and `RightStrafe.fbx` are now the alternates, and the build
+reports them as files `PACKS` does not name, which is exactly right.

@@ -71,8 +71,19 @@ const AUTHORED_CROUCH_WALK := 1.273
 
 ## The same measurement for the six directions `GUB_2` never had (D-066). Left
 ## and right are separate numbers rather than one shared one because they are
-## two files and two measurements — they happen to agree to three decimals on
-## this pack and that is a fact about Mixamo's mirroring, not a promise.
+## two separate measurements. On the walk pair that is still two files that
+## happen to agree; on the **run** pair the two numbers are now equal for a
+## reason rather than by luck, because `StrafeRight` is `StrafeLeft` reflected
+## in the rig's own sagittal plane (D-071) and a reflection cannot change a
+## speed. They are kept as two constants anyway: the day one of them stops
+## being a mirror, this is where that has to be written down.
+##
+## The run strafes got **slower** at D-071, 3.250 down to 2.580, because the
+## pole moved from `left strafe` — a 27.5 deg forward diagonal — to `Standing
+## Run Left`, which is a 76.5 deg lateral and is a jog rather than a sprint.
+## That costs playback rate: against a 5.4 m/s run it plays at **2.09x** where
+## the old pole played at 1.66x. See `GubAnimator` for what that reads as; the
+## short version is that it is under `WalkBack`'s 2.64x, which ships.
 ##
 ## The two backward clips are the slow ones and that is what makes them the
 ## interesting pair: 0.871 m/s of authored walk has to carry a 2.3 m/s
@@ -81,8 +92,8 @@ const AUTHORED_CROUCH_WALK := 1.273
 ## backing away at walking pace is visibly scampering, and the lever if that
 ## ever needs to come down is a backward speed penalty in `target_speed` rather
 ## than a number here.
-const AUTHORED_STRAFE_LEFT := 3.250
-const AUTHORED_STRAFE_RIGHT := 3.250
+const AUTHORED_STRAFE_LEFT := 2.580
+const AUTHORED_STRAFE_RIGHT := 2.580
 const AUTHORED_STRAFE_WALK_LEFT := 1.245
 const AUTHORED_STRAFE_WALK_RIGHT := 1.245
 const AUTHORED_RUN_BACK := 2.278

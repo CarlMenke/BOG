@@ -307,10 +307,11 @@ LOOP_MEAN = None
 
 class Clip(collections.namedtuple(
         "Clip", "file name loop align face rise_kept floor_limit authored_as "
-                "advance_as")):
+                "advance_as mirror_of")):
     """One source file, the name it takes in Godot, and its per-clip rules.
 
-    `file`         the FBX, inside its pack's folder.
+    `file`         the FBX, inside its pack's folder. **None** on a clip that
+                   names a `mirror_of`, which has no file of its own.
     `name`         the animation's name in `gub.glb`, and so in
                    `gub_animator.gd`'s REQUIRED_CLIPS. One namespace across every
                    pack, because every clip lands in one AnimationPlayer.
@@ -349,19 +350,35 @@ class Clip(collections.namedtuple(
                    a second one has to be written down here rather than
                    discovered in a match.
 
-                   The two are mutually exclusive and `check_declarations` says
-                   so: `authored_as` is a *cycle's* speed, matched by a playback
-                   rate that runs for ever, and `advance_as` is a *one-shot's*
-                   distance, produced once by the body. A clip claiming both
-                   would be claiming to be both kinds of thing.
+                   `authored_as` and this are mutually exclusive and
+                   `check_declarations` says so: `authored_as` is a *cycle's*
+                   speed, matched by a playback rate that runs for ever, and
+                   `advance_as` is a *one-shot's* distance, produced once by the
+                   body. A clip claiming both would be claiming to be both kinds
+                   of thing.
+
+    `mirror_of`    **the synthesised clip** (D-071): the name of another clip in
+                   this table that this one is the left-right reflection of.
+                   Such a clip has no `file` — it is built by `mirror_action`
+                   from its source after the rig is scaled and before anything
+                   is measured, so it is measured, locked, aligned, trimmed and
+                   exported exactly like a downloaded one and its numbers appear
+                   in every table beside theirs.
+
+                   It exists because Mixamo's aim-strafe families are **handed**
+                   and no download fixes that; see the note over the strafe poles
+                   in PACKS for the three packs that were measured to establish
+                   it. A mirror is the only way this rig gets a left and a right
+                   strafe that are the same move.
     """
     __slots__ = ()
 
     def __new__(cls, file, name, loop, align, face=None,
                 rise_kept=None, floor_limit=None, authored_as=None,
-                advance_as=None):
+                advance_as=None, mirror_of=None):
         return super().__new__(cls, file, name, loop, align, face,
-                               rise_kept, floor_limit, authored_as, advance_as)
+                               rise_kept, floor_limit, authored_as, advance_as,
+                               mirror_of)
 
     def rise(self):
         """The fraction of the rise to keep — 1.0, untouched, when unset."""
@@ -370,6 +387,10 @@ class Clip(collections.namedtuple(
     def facing_joints(self):
         """The joint pair this clip's facing is read off — hips unless said."""
         return HIP_JOINTS if self.face is None else self.face
+
+    def synthesised(self):
+        """True for a clip built in Blender rather than imported from an FBX."""
+        return self.mirror_of is not None
 
 
 class Pack(collections.namedtuple("Pack", "folder what clips")):
@@ -562,22 +583,57 @@ PACKS = (
     # `LeftStrafe` moving 8.6° off forward instead of the 27.5° it is actually
     # authored at. See CHEST_JOINTS, and D-066 for what it is worth in skate.
     #
-    # **`StandingRunLeft.fbx` is deliberately not declared**, the way
-    # `2_Spear_Suite/SpearThrow.fbx` and three of the bow's five are not. It is
-    # the *better* lateral — see D-066 for the bearings — and it is a set of
-    # one: there is no `Standing Run Right` and no `Standing Walk Left/Right`
-    # With Skin anywhere in `_rejected/`, so taking it would put the family
-    # boundary inside the strafe axis instead of between forward and sideways.
-    # It stays on disk as the alternate, and the build reports it as a file
-    # PACKS does not name, which is exactly right.
+    # **The two run poles are `StandingRunLeft.fbx` and its own reflection**
+    # (D-071), which is the one arrangement that gives this rig a left and a
+    # right strafe that are the same move.
+    #
+    # D-066 left `StandingRunLeft.fbx` on disk undeclared and called it a set of
+    # one, with three downloads named as what would close it. The three arrived,
+    # and measuring them is what this pack entry is now built on. They are the
+    # **Longbow** pack's clips, not the Magic pack's that `StandingRunLeft.fbx`
+    # came from — frame counts and speeds identify them exactly against
+    # `_rejected/MANIFEST.md` — and, much more to the point, re-measuring every
+    # `Standing *` strafe in both rejected packs says the download was never the
+    # answer. See the table over `mirror_action`: every *right* strafe in every
+    # pack Mixamo has is a -37 to -47 degree diagonal, because the family is
+    # authored around a chest held turned to the character's own right. A pole
+    # meaning -90 has nothing to be served by, in any pack, at any price.
+    #
+    # So the right-hand run pole is built rather than downloaded, and the two
+    # poles are a mirror pair to four decimal places by construction.
+    # `check_mirrored_clip` proves it every build.
+    #
+    # **The walk poles stay on the lowercase pair**, which is the family
+    # boundary D-066 refused to put inside the strafe axis — and it is here on a
+    # measurement rather than on a guess. What it costs is carriage, and the
+    # carriage is 7 mm of hip height and 2.9 deg of torso pitch between
+    # `StrafeWalkLeft` (0.665 m, 5.5 deg) and `StrafeLeft` (0.658 m, 8.4 deg).
+    # `Walk <-> Run`, which this game has shipped from the first day and which is
+    # on screen every time anybody accelerates, is 82 mm and 41.0 deg. The
+    # boundary inside the axis is a twelfth of the one already in it.
+    #
+    # Closing the walk half is **one** download and it is named precisely: the
+    # **Magic Locomotion Pack's** `Standing Walk Left`, With Skin, one clip from
+    # its own page. Measured on the unskinned copy in `_rejected/` against the
+    # skinned `StandingRunLeft.fbx` as the control — the control reproduces to
+    # 0.1 deg, so the number is good — it travels **+94.4 deg** off its chest.
+    # Mirrored the way the run pole is, that is the walk pole this table wants.
+    # `Standing Walk Right` is not on that list and must not be: it measures
+    # -38.8, which is the handedness above.
+    #
+    # The four lowercase strafe files all stay on disk. Two are still built
+    # (the walks); `LeftStrafe.fbx` and `RightStrafe.fbx` are the alternates the
+    # run poles used to be, and the build reports them as files PACKS does not
+    # name, which is exactly right.
     Pack("5_Locomotion",
          "strafe left, strafe right and run backward, and their walk equivalents: "
          "the set that stops the feet skating sideways",
          (
-             Clip("LeftStrafe.fbx",         "StrafeLeft",      True, LOOP_MEAN,
+             Clip("StandingRunLeft.fbx",    "StrafeLeft",      True, LOOP_MEAN,
                   CHEST_JOINTS, authored_as="AUTHORED_STRAFE_LEFT"),
-             Clip("RightStrafe.fbx",        "StrafeRight",     True, LOOP_MEAN,
-                  CHEST_JOINTS, authored_as="AUTHORED_STRAFE_RIGHT"),
+             Clip(None,                     "StrafeRight",     True, LOOP_MEAN,
+                  CHEST_JOINTS, authored_as="AUTHORED_STRAFE_RIGHT",
+                  mirror_of="StrafeLeft"),
              Clip("LeftStrafeWalking.fbx",  "StrafeWalkLeft",  True, LOOP_MEAN,
                   CHEST_JOINTS, authored_as="AUTHORED_STRAFE_WALK_LEFT"),
              Clip("RightStrafeWalking.fbx", "StrafeWalkRight", True, LOOP_MEAN,
@@ -889,7 +945,7 @@ def resolve_packs():
         folder = pack_folder(pack)
         here = sorted(f for f in os.listdir(folder)
                       if f.lower().endswith(".fbx")) if os.path.isdir(folder) else []
-        declared = set(c.file for c in pack.clips)
+        declared = set(c.file for c in pack.clips if c.file is not None)
         extra = [f for f in here if f not in declared]
 
         if not pack.clips:
@@ -911,7 +967,8 @@ def resolve_packs():
                              "is" if len(pack.clips) == 1 else "are"))
             continue
         missing = [c.file for c in pack.clips
-                   if not os.path.isfile(os.path.join(folder, c.file))]
+                   if c.file is not None
+                   and not os.path.isfile(os.path.join(folder, c.file))]
         if missing:
             broken.append("%s/ is missing %d of the %d files it declares: %s"
                           % (pack.folder, len(missing), len(pack.clips),
@@ -921,7 +978,9 @@ def resolve_packs():
         log("  %-15s %d clip%s: %s"
             % (pack.folder + "/", len(pack.clips),
                "" if len(pack.clips) == 1 else "s",
-               ", ".join(c.name for c in pack.clips)))
+               ", ".join(c.name + (" (mirror of %s)" % c.mirror_of
+                                   if c.synthesised() else "")
+                         for c in pack.clips)))
         if extra:
             log("  %-15s   %d FBX here that PACKS does not name: %s"
                 % ("", len(extra), ", ".join(extra)))
@@ -959,10 +1018,15 @@ def import_sources(selection):
 
     # One column width for the whole run, so a long pack name does not stagger
     # the block and the numbers stay in line whatever is being built.
-    width = max(len(source_name(p, c)) for p in selection for c in p.clips)
+    width = max(len(source_name(p, c)) for p in selection for c in p.clips
+                if not c.synthesised())
     imported = []
     for pack in selection:
         for clip in pack.clips:
+            # A mirrored clip is built from another clip's action once the rig
+            # is scaled, not read off a file; see `mirror_action`.
+            if clip.synthesised():
+                continue
             where = source_name(pack, clip)
             path = os.path.join(pack_folder(pack), clip.file)
             if not os.path.isfile(path):
@@ -1467,6 +1531,286 @@ def measure_clip(arm, action, clip, reference=LOOP_MEAN, joints=HIP_JOINTS):
     info["off_hand_high"] = lefts[highest].z
     info["off_hand_high_at"] = seconds[highest]
     return info
+
+
+
+# ---------------------------------------------------------------------------
+# 5b. The mirror: a left strafe reflected into a right one (D-071)
+# ---------------------------------------------------------------------------
+#
+# Mixamo's strafes are **handed**, and that is a property of the animation and
+# not of any one download. Measured on this rig, travel in degrees off the
+# chest line, positive to the character's left:
+#
+#     pack                        run left  run right   walk left  walk right
+#     Locomotion (lowercase)         +27.5      -37.4       +35.3      -46.5
+#     Longbow Locomotion            +116.0      -45.8      +126.5      -46.3
+#     Magic Locomotion               +76.5      -37.6       +94.4      -38.8
+#
+# Every *right* strafe in every pack lands between -37 and -47, because the
+# character holds its chest turned to its own right — a bow arm, a casting hand
+# — so stepping right barely turns the torso and stepping left turns it a long
+# way. There is therefore **no right-hand strafe to download** that would serve
+# a pole meaning -90: not in the pack this project already has, and not in
+# either of the two it rejected. The only symmetric pair this rig can be given
+# is a left strafe and its own reflection.
+#
+# What that costs is measured rather than assumed. The rest pose this rig was
+# auto-rigged onto is square to about a centimetre in the plane's position but
+# its limbs are a few degrees out of it, so `check_mirror` prints the residual
+# every build and stops if it grows.
+
+## How far off square the rest pose may be before a mirrored clip is a different
+## move from the one it reflects, in metres on the finished 1.80 m rig.
+MIRROR_LIMIT = 0.03
+
+## The bones that residual is measured over. The fingers are excluded because
+## they are 0.2-0.4 m out of square on this rig *and* carry no tracks at all —
+## the exporter drops constant channels (D-023) — so including them would hold
+## the build to a number about geometry that nothing animates and nothing sees.
+MIRROR_BONES = ("Hips", "Spine", "Spine1", "Spine2", "Neck", "Head",
+                "HeadTop_End", "Shoulder", "Arm", "ForeArm", "Hand",
+                "UpLeg", "Leg", "Foot", "ToeBase", "Toe_End")
+
+
+def mirror_bone(name):
+    """The bone on the other side, or the same bone for one on the centre line."""
+    if name.startswith("Left"):
+        return "Right" + name[4:]
+    if name.startswith("Right"):
+        return "Left" + name[5:]
+    return name
+
+
+def mirror_plane(arm):
+    """The rig's own sagittal plane, as a 4x4 reflection in armature space.
+
+    The normal is the **rest hip line** — the same line `align_facing` reads a
+    clip's facing off, and for the same reason: it is the one pair of joints
+    that gives the body's lateral axis with no arm swing in it. The plane passes
+    through the rest Hips head.
+
+    Fitted rather than assumed to be a world axis. This rig's forward is -86 deg
+    in armature XY, so mirroring about X would be four degrees wrong, and four
+    degrees of wrong mirror is a strafe that walks slowly into the crosshair.
+    """
+    left = arm.data.bones[HIP_JOINTS[0]].head_local
+    right = arm.data.bones[HIP_JOINTS[1]].head_local
+    normal = Vector((right.x - left.x, right.y - left.y, 0.0)).normalized()
+    origin = arm.data.bones[HIPS].head_local
+    basis = Matrix.Identity(3)
+    for i in range(3):
+        for j in range(3):
+            basis[i][j] = (1.0 if i == j else 0.0) - 2.0 * normal[i] * normal[j]
+    plane = basis.to_4x4()
+    plane.translation = origin - basis @ origin
+    return plane, normal, origin
+
+
+def check_mirror(arm):
+    """How square this rig is about its own sagittal plane, and stop if it is not.
+
+    Reported as the worst mirror-pair midpoint off the plane and the worst centre
+    bone off it. Both are distances on the finished rig, so they read as what
+    they are: how far the reflection moves a bone that should not move at all.
+    """
+    plane, normal, origin = mirror_plane(arm)
+    log("  sagittal plane: normal %+.2f deg in armature XY, through the rest "
+        "Hips at z=%.3f m" % (math.degrees(math.atan2(normal.y, normal.x)), origin.z))
+    worst_pair = (0.0, "-")
+    worst_centre = (0.0, "-")
+    for bone in arm.data.bones:
+        if not any(bone.name.endswith(b) for b in MIRROR_BONES):
+            continue
+        other = mirror_bone(bone.name)
+        if other == bone.name:
+            off = abs((bone.head_local - origin).dot(normal))
+            if off > worst_centre[0]:
+                worst_centre = (off, bone.name)
+        elif bone.name.startswith("Left"):
+            mid = (bone.head_local + arm.data.bones[other].head_local) / 2.0
+            off = abs((mid - origin).dot(normal))
+            if off > worst_pair[0]:
+                worst_pair = (off, bone.name[4:])
+    log("  worst mirror pair %.4f m off it (%s), worst centre bone %.4f m (%s)"
+        % (worst_pair[0], worst_pair[1], worst_centre[0], worst_centre[1]))
+    worst = max(worst_pair[0], worst_centre[0])
+    if worst > MIRROR_LIMIT:
+        raise SystemExit(
+            "this rig is %.4f m out of square about its own sagittal plane, past "
+            "the %.3f m\nMIRROR_LIMIT allows. A mirrored clip would be a "
+            "different move from the one it\nreflects, which is the opposite of "
+            "what a mirrored pole is for." % (worst, MIRROR_LIMIT))
+    return plane
+
+
+def mirror_action(arm, source, name, plane):
+    """`source` reflected left-to-right, as a new baked action called `name`.
+
+    Baked pose by pose rather than transformed curve by curve, because a bone's
+    rotation curves are written in its **own** rest frame, and a mirrored bone's
+    rest frame is a reflection of its partner's rather than a rotation of it.
+    Blender carries that difference in the bone roll, and on this rig the pairs
+    are up to thirteen degrees apart. Working in armature space and letting
+    Blender solve each `matrix` back into a local rotation keeps all of that out
+    of the arithmetic here.
+
+    The matrix each bone is given is
+
+        N(b, f) = S . M(b', f) . M(b', rest)^-1 . S . M(b, rest)
+
+    — the mirror of the partner's pose, carried out of the partner's rest frame
+    and into this bone's own. Everything right of the first term is a constant,
+    and it is what makes the identity hold that matters: hand this the rest pose
+    and every bone gets its own rest matrix back exactly, however out of square
+    the rig is. A reflection can therefore never introduce a standing offset. An
+    asymmetric rig costs a little accuracy in the *motion* and nothing at all in
+    the pose that motion starts from.
+    """
+    bones = [b.name for b in arm.data.bones]
+    rest = dict((b, arm.data.bones[b].matrix_local.copy()) for b in bones)
+
+    # Parents before children: `pose_bone.matrix` is solved against the parent's
+    # already-evaluated pose, so a child written before its parent is placed
+    # against the arm the previous frame left behind.
+    order = []
+
+    def walk(bone):
+        order.append(bone.name)
+        for child in bone.children:
+            walk(child)
+
+    for bone in arm.data.bones:
+        if bone.parent is None:
+            walk(bone)
+
+    use_action(arm, source)
+    first, last = action_frame_span(source)
+    frames = list(range(first, last + 1))
+    scene = bpy.context.scene
+    sampled = []
+    for frame in frames:
+        scene.frame_set(frame)
+        sampled.append(dict((b, arm.pose.bones[b].matrix.copy()) for b in bones))
+
+    action = bpy.data.actions.new(name)
+    layer = action.layers.new("Layer")
+    strip = layer.strips.new(type='KEYFRAME')
+    slot = action.slots.new(id_type='OBJECT', name=arm.name)
+    strip.channelbags.new(slot)
+    use_action(arm, action)
+
+    constant = dict((b, rest[mirror_bone(b)].inverted() @ plane @ rest[b])
+                    for b in bones)
+
+    for index, frame in enumerate(frames):
+        scene.frame_set(frame)
+        poses = sampled[index]
+        for bone in order:
+            pose_bone = arm.pose.bones[bone]
+            pose_bone.matrix = plane @ poses[mirror_bone(bone)] @ constant[bone]
+            bpy.context.view_layer.update()
+        for bone in bones:
+            pose_bone = arm.pose.bones[bone]
+            pose_bone.keyframe_insert("location", frame=frame)
+            pose_bone.keyframe_insert("rotation_quaternion", frame=frame)
+            pose_bone.keyframe_insert("scale", frame=frame)
+
+    flips = unwind_quaternions(action)
+    log("  %-11s mirrored from %-11s %d bones over %d frames, %d curves, "
+        "%d sign flips unwound"
+        % (name, source_of(source), len(bones), len(frames),
+           len(list(iter_fcurves(action))), flips))
+    return action
+
+
+def source_of(action):
+    """A readable name for an imported action, whose own is `Armature|mixamo...`."""
+    return action.name.split("|")[0]
+
+
+def unwind_quaternions(action):
+    """Keep every quaternion key on the near side of the one before it.
+
+    A baked quaternion is read off a matrix, and `to_quaternion` is free to
+    return either of the two that mean the same rotation. Left alone, one sign
+    flip mid-cycle is a bone taking the long way round between two frames that
+    are a degree apart — on a mirrored run cycle, a leg through the body.
+    Flipping is exact: q and -q are the same pose, so this changes nothing but
+    the path between two keys.
+    """
+    tracks = {}
+    for fcurve in iter_fcurves(action):
+        if not fcurve.data_path.endswith("rotation_quaternion"):
+            continue
+        tracks.setdefault(fcurve.data_path, {})[fcurve.array_index] = fcurve
+    flips = 0
+    for curves in tracks.values():
+        if len(curves) != 4:
+            continue
+        keys = [curves[i].keyframe_points for i in range(4)]
+        count = min(len(k) for k in keys)
+        for i in range(1, count):
+            dot = sum(keys[c][i].co.y * keys[c][i - 1].co.y for c in range(4))
+            if dot < 0.0:
+                flips += 1
+                for c in range(4):
+                    point = keys[c][i]
+                    point.co.y = -point.co.y
+                    point.handle_left.y = -point.handle_left.y
+                    point.handle_right.y = -point.handle_right.y
+    return flips
+
+
+## What a mirrored clip may differ from its source by, once the sign is taken
+## off the bearing. These are not taste: they are what this rig's own 21 mm of
+## out-of-square (`check_mirror`, above) *produces*, rounded up.
+##
+## The two that come out at zero are the two that have to: travel speed and hip
+## height are reflections of quantities the plane does not touch, and they match
+## to four decimals. The two that do not are the two the plane's fit shows up in
+## — the bearing, which moves by 1.2 deg because the toe pair sits 21 mm off the
+## plane, and the torso pitch, which moves by 2.0 deg because the Neck sits
+## 9.7 mm off it and a 0.28 m torso turns that into two degrees. A limit set
+## just over each is a limit that still catches the faults worth catching: a
+## plane fitted to the wrong axis, or a bone pair that did not swap, moves these
+## by tens of degrees, not by one.
+MIRROR_BEARING_LIMIT = 2.0
+MIRROR_SPEED_LIMIT = 0.01
+MIRROR_HIPS_LIMIT = 0.005
+MIRROR_PITCH_LIMIT = 2.5
+
+
+def check_mirrored_clip(rows, clip):
+    """A mirrored clip has to be its source's reflection in every number we take.
+
+    The build measures both of them anyway, so this costs nothing and catches the
+    whole class of ways a reflection can go quietly wrong — a plane a few degrees
+    off, a bone pair that did not swap, a quaternion that took the long way. A
+    mirror that is right has the *opposite* bearing and the *same* everything
+    else; one that is wrong fails here rather than in a match.
+    """
+    mine, theirs = rows[clip.name], rows[clip.mirror_of]
+    bearing = abs(mine["bearing"] + theirs["bearing"])
+    speed = abs(mine["speed"] - theirs["speed"])
+    hips = abs(mine["hip_height"] - theirs["hip_height"])
+    pitch = abs(mine["torso_pitch"] - theirs["torso_pitch"])
+    log("  %-11s vs %-11s bearing %+.1f vs %+.1f (sum %.2f deg), speed %.3f vs "
+        "%.3f (%.4f m/s)" % (clip.name, clip.mirror_of, mine["bearing"],
+                             theirs["bearing"], bearing, mine["speed"],
+                             theirs["speed"], speed))
+    log("  %-11s    %-11s hips %.3f vs %.3f m (%.4f), pitch %.1f vs %.1f deg (%.2f)"
+        % ("", "", mine["hip_height"], theirs["hip_height"], hips,
+           mine["torso_pitch"], theirs["torso_pitch"], pitch))
+    if (bearing > MIRROR_BEARING_LIMIT or speed > MIRROR_SPEED_LIMIT
+            or hips > MIRROR_HIPS_LIMIT or pitch > MIRROR_PITCH_LIMIT):
+        raise SystemExit(
+            "%s is not the reflection of %s it claims to be: bearings sum to "
+            "%.2f deg\n(should be 0), speeds differ by %.4f m/s, hips by %.4f m, "
+            "torso pitch by %.2f deg.\nA mirrored pole whose move is not the "
+            "same move is worse than no pole at all."
+            % (clip.name, clip.mirror_of, bearing, speed, hips, pitch))
+
 
 
 def report_measurements(rows):
@@ -2107,7 +2451,12 @@ def check_declarations():
         raise SystemExit("%s declares no clips, but it is the pack every other "
                          "pack is measured against" % PACKS[0].folder)
     names = {}
+    mirrors = {}
     folders = set()
+    for pack in PACKS:
+        for clip in pack.clips:
+            if clip.synthesised():
+                mirrors[clip.name] = clip.mirror_of
     for pack in PACKS:
         if pack.folder in folders:
             raise SystemExit("two packs share the folder %s" % pack.folder)
@@ -2121,9 +2470,13 @@ def check_declarations():
                     "namespace across every pack, because every clip lands in "
                     "one AnimationPlayer." % (clip.name, names[clip.name], where))
             names[clip.name] = where
-            if clip.file in files:
-                raise SystemExit("%s is declared twice in its pack" % where)
-            files.add(clip.file)
+            # Only files can collide. Two synthesised clips in one pack both
+            # carry `file=None`, and a set of Nones would call the second one a
+            # duplicate of the first.
+            if clip.file is not None:
+                if clip.file in files:
+                    raise SystemExit("%s is declared twice in its pack" % where)
+                files.add(clip.file)
             if clip.rise_kept is not None:
                 if not 0.0 <= clip.rise_kept <= 1.0:
                     raise SystemExit("%s: rise_kept=%.2f is outside 0..1"
@@ -2160,6 +2513,34 @@ def check_declarations():
             if clip.face is not None and clip.face not in (HIP_JOINTS, CHEST_JOINTS):
                 raise SystemExit("%s: face must be None, HIP_JOINTS or "
                                  "CHEST_JOINTS, not %r" % (clip.name, clip.face))
+            # A clip is either read off a file or reflected out of another one,
+            # and it has to be exactly one of the two: a mirror with a file would
+            # build the file and silently ignore the reflection, and a clip with
+            # neither is a name with nothing behind it.
+            if clip.synthesised() and clip.file is not None:
+                raise SystemExit(
+                    "%s is the mirror of %s and also names the file %s. A "
+                    "mirrored clip is built from its source, so the file would "
+                    "never be read." % (clip.name, clip.mirror_of, clip.file))
+            if not clip.synthesised() and clip.file is None:
+                raise SystemExit("%s names no file and no mirror_of" % clip.name)
+    # A reflection of a clip nobody builds, or of another reflection, is a
+    # declaration that cannot be carried out. Both are checked here rather than
+    # in `main` so that `--list-packs` says so without opening Blender.
+    for pack in PACKS:
+        for clip in pack.clips:
+            if not clip.synthesised():
+                continue
+            if clip.mirror_of not in names:
+                raise SystemExit("%s is the mirror of %r, which no pack builds"
+                                 % (clip.name, clip.mirror_of))
+            source_clip = mirrors.get(clip.mirror_of)
+            if source_clip is not None:
+                raise SystemExit(
+                    "%s is the mirror of %s, which is itself the mirror of %s.\n"
+                    "Reflecting a reflection is the original clip with two "
+                    "builds' worth of error on it."
+                    % (clip.name, clip.mirror_of, source_clip))
     source = CROUCH_IDLE[0]
     if source not in names:
         raise SystemExit("CrouchIdle is cut from %r, which no pack builds" % source)
@@ -2198,11 +2579,26 @@ def main():
     scale_to_height(arm, mesh, actions)
     report_rest_pose(arm, mesh)
 
+    # Before the measurement and not after it: a mirrored clip is a clip, and
+    # every number this build takes — bearing, speed, carriage, the loop trim,
+    # the facing alignment — has to come off it the same way it comes off a
+    # file. The one clip in the set nobody measured is the one the feet skate on
+    # (D-071).
+    mirrored = [c for c in clips if c.synthesised()]
+    if mirrored:
+        log("\n-- mirrors")
+        plane = check_mirror(arm)
+        for clip in mirrored:
+            actions[clip.name] = mirror_action(arm, actions[clip.mirror_of],
+                                               clip.name, plane)
+
     log("\n-- authored motion (measured before anything is locked or clamped)")
     rows = dict((c.name, measure_clip(arm, actions[c.name], c.name, c.align,
                                       c.facing_joints()))
                 for c in clips)
     report_measurements([rows[c.name] for c in clips])
+    for clip in mirrored:
+        check_mirrored_clip(rows, clip)
 
     log("\n-- root motion")
     ground = {}

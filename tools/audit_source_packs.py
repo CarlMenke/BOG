@@ -53,6 +53,26 @@ is its authored speed. A one-shot that ends where it began — a turn in place, 
 react, most attacks — has no speed but may still lunge, and the peak is what says
 how far.
 
+*Bearing.* Where those metres go, in degrees off the body's own forward, positive
+to its left — read off the hip line and off the chest line, because on a sidestep
+those two disagree by more than twenty degrees and the game's strafes are aligned
+by the chest (D-066). This is the column that decides whether a sideways clip
+belongs at a sideways pole, and it is **not knowable from the filename**:
+`StandingRunLeft.fbx` and `StandingRunRight.fbx` sound like a pair and measure
++76.5 and −45.9, which cost three downloads to find out (D-071).
+
+It is also the one measurement here that a **skinless** file does not ruin, and
+that is worth more than it sounds. A missing skin rebuilds the rest pose, so
+absolute positions and the bind delta are worthless — but this is a clip's travel
+against its *own* chest line, and both halves move together. **Eight** files
+exist in this tree twice over, skinned in `5_Locomotion/` and skinless in
+`_rejected/`, and every one of the eight reproduces to 0.1° either way.
+
+So a rejected pack can be shopped from on this column alone, without
+re-downloading anything first. That is what `_rejected/MANIFEST.md`'s handedness
+table was built from, and it is the difference between three speculative
+downloads and one measured one (D-071).
+
 *Bind pose.* Reported twice: raw, which is what `assert_same_character` actually
 tests, and again after normalising out a uniform scale difference. Two numbers
 rather than one because they mean opposite things. If the raw delta is large and
@@ -83,6 +103,12 @@ TARGET_HEIGHT = 1.80
 # is why build_gub.py measures facing between them and why a scale ratio is
 # measured between them here.
 HIP_JOINTS = (PREFIX + "LeftUpLeg", PREFIX + "RightUpLeg")
+
+# The other line a clip's facing can be read off — the two clavicle roots. Both
+# are printed because on a sidestep they disagree by more than twenty degrees and
+# the strafes in the game are aligned by the chest (D-066), so the hip figure
+# alone would not be the number a blend point is placed from.
+CHEST_JOINTS = (PREFIX + "LeftShoulder", PREFIX + "RightShoulder")
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SOURCE_ROOT = os.path.join(REPO, "assets", "source")
@@ -247,16 +273,44 @@ def audit_file(path, ref):
     metres = ref["factor"] * row.get("ratio", 1.0)
     scene = bpy.context.scene
     points = []
+    yaws = {HIP_JOINTS: [], CHEST_JOINTS: []}
     for frame in range(first, last + 1):
         scene.frame_set(frame)
         points.append((arm.matrix_world @ arm.pose.bones[HIPS].matrix)
                       .translation.copy())
+        for pair in yaws:
+            left = (arm.matrix_world @ arm.pose.bones[pair[0]].matrix).translation
+            right = (arm.matrix_world @ arm.pose.bones[pair[1]].matrix).translation
+            yaws[pair].append(math.atan2(right.y - left.y, right.x - left.x))
     row["travel"] = math.hypot(points[-1].x - points[0].x,
                                points[-1].y - points[0].y) * metres
     row["peak"] = max(math.hypot(p.x - points[0].x, p.y - points[0].y)
                       for p in points) * metres
     row["rise"] = (max(p.z for p in points) - points[0].z) * metres
     row["speed"] = (row["travel"] / row["seconds"]) if row["seconds"] else 0.0
+
+    # Where those metres go, off each of the two body lines (D-071). This is the
+    # column that decides whether a sideways clip belongs at a sideways pole, and
+    # it is not knowable from the filename: `StandingRunLeft.fbx` and
+    # `StandingRunRight.fbx` sound like a pair and measure +76.5 and -45.9.
+    #
+    # It is also the one measurement here that survives a **skinless** file
+    # intact, which is what makes it worth printing for everything. A missing
+    # skin rebuilds the rest pose, so absolute positions and the bind delta are
+    # ruined — but this is a clip's travel against *its own* chest line, and both
+    # halves move together. Measured against the skinned copies of two files that
+    # are in `_rejected/` twice over, the skinless reading reproduces to 0.1°, so
+    # a rejected pack can be shopped from on this column without re-downloading
+    # it first.
+    if row["travel"] > STILL:
+        travel = math.atan2(points[-1].y - points[0].y, points[-1].x - points[0].x)
+        for pair, key in ((HIP_JOINTS, "hip_bearing"), (CHEST_JOINTS, "chest_bearing")):
+            mean = math.atan2(sum(math.sin(y) for y in yaws[pair]) / len(yaws[pair]),
+                              sum(math.cos(y) for y in yaws[pair]) / len(yaws[pair]))
+            # Forward is the body line turned a quarter turn, the construction
+            # `measure_clip` and `align_facing` both use.
+            row[key] = math.degrees(
+                (travel - (mean + math.pi / 2.0) + math.pi) % (2.0 * math.pi) - math.pi)
     return row
 
 
@@ -287,20 +341,23 @@ def main():
 
     width = max(len(os.path.relpath(p, SOURCE_ROOT)) for p in paths)
     width = min(width, 62)
-    log("  %-*s  skin  frames  length  travel    peak   speed" % (width, "file"))
+    log("  %-*s  skin  frames  length  travel    peak   speed   bearing: hips  chest"
+        % (width, "file"))
     rows = []
     for path in paths:
         rel = os.path.relpath(path, SOURCE_ROOT).replace("\\", "/")
         row = audit_file(path, ref)
         row["file"] = rel
         rows.append(row)
-        log("  %-*s  %-4s  %6s  %6s  %6s  %6s  %6s"
+        log("  %-*s  %-4s  %6s  %6s  %6s  %6s  %6s   %12s %6s"
             % (width, rel[-width:], "no" if row.get("skinless") else "yes",
                row.get("frames", "-"),
                "%.3f" % row["seconds"] if "seconds" in row else "-",
                "%.3f" % row["travel"] if "travel" in row else "-",
                "%.3f" % row["peak"] if "peak" in row else "-",
-               "%.3f" % row["speed"] if "speed" in row else "-"))
+               "%.3f" % row["speed"] if "speed" in row else "-",
+               "%+.1f" % row["hip_bearing"] if "hip_bearing" in row else "-",
+               "%+.1f" % row["chest_bearing"] if "chest_bearing" in row else "-"))
 
     # The verdict, grouped: a hand-downloaded batch goes wrong the same way for
     # every file in it, so saying it once per file would bury it.

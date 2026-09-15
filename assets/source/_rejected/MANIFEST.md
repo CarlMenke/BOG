@@ -119,6 +119,8 @@ Mixamo's basic **Locomotion Pack** — the lowercase-named family. Its four stra
 
 Mixamo's **Longbow Locomotion Pack**. Kept as an upper-body overlay source per the plan's locomotion decision: a longbow walk's spine-up content is the bow carry pose. Nothing in it survived the download settings, so the overlay has to be re-fetched clip by clip if step 8 wants it.
 
+⚠️ **Three of these have been re-fetched already, and into the wrong slot.** `5_Locomotion/StandingRunRight.fbx`, `StandingWalkLeft.fbx` and `StandingWalkRight.fbx` are this pack's clips, not the Magic pack's — frame counts and speeds identify them exactly against the rows below — and they were fetched as the three downloads meant to close the strafe axis beside the Magic pack's `Standing Run Left`. They are on disk, undeclared, and measured in `5_Locomotion/README.md`; declaring them makes five of the sixteen compass legs worse and fails the gate's `mirror` check (D-071). Nothing is wrong with the files. They are a different family, and its right-hand strafes are diagonals like everyone else's.
+
 | file on disk | Mixamo name | frames | length s | travel m | peak m | speed m/s | skin |
 |---|---|---:|---:|---:|---:|---:|:--:|
 | `CrouchWalking.fbx` | CrouchWalking | 69 | 1.133 | 1.443 | 1.443 | 1.273 | **yes** |
@@ -138,7 +140,21 @@ Mixamo's **Longbow Locomotion Pack**. Kept as an upper-body overlay source per t
 
 ### `5_Locomotion/Magic Locomotion Pack/` — 17 files
 
-Mixamo's **Magic Locomotion Pack** — the `Standing *` family. `Standing Run Left` has been re-downloaded on its own into `5_Locomotion/`; **`Standing Run Back` and `Standing Walk Back` are the two clips step 8 is still missing** and the first two lines of any re-download.
+Mixamo's **Magic Locomotion Pack** — the `Standing *` family, and the pack that matters. `Standing Run Left` has been re-downloaded on its own into `5_Locomotion/` and is the game's run-strafe pole (D-071); its right-hand twin there is that clip *reflected*, not a download.
+
+**The one clip still worth fetching out of this pack is `Standing Walk Left`.** Measured on the unskinned copy here by `tools/audit_source_packs.py`, which reports a bearing for every file it sees — eight files in this tree exist both skinned and skinless and all eight reproduce to 0.1°, so the number is good — it travels **+94.4°** off its own chest line: a true lateral, and mirrored the way the run pole is it is both walk poles of the locomotion plane. One clip, from its own page, With Skin.
+
+**Do not fetch `Standing Walk Right` or `Standing Run Right`.** They measure −38.8° and −37.6°, which are ordinary forward diagonals and no better than what the game already has. That is not a defect in this pack: **every right strafe in every locomotion pack below is a −37 to −47 degree diagonal**, because these families are authored around a character holding its chest turned to its own right. Travel off the chest line, + to the character's left:
+
+| pack | run left | run right | walk left | walk right |
+|---|---:|---:|---:|---:|
+| Locomotion Pack | +27.5° | −37.4° | +35.3° | −46.5° |
+| Longbow Locomotion | +116.0° | −45.8° | +126.5° | −46.3° |
+| Magic Locomotion | **+76.5°** | −37.6° | **+94.4°** | −38.8° |
+
+A right-hand strafe pole cannot be bought. It has to be mirrored, and `build_gub.py`'s `mirror_of` is how (D-071).
+
+(`Standing Run Back` and `Standing Walk Back` were this entry's old shopping list. They are no longer wanted: `RunningBackward.fbx` and `WalkingBackward.fbx` closed the backward axis at D-066 and plant at 0.16 and 0.23 of body speed.)
 
 | file on disk | Mixamo name | frames | length s | travel m | peak m | speed m/s | skin |
 |---|---|---:|---:|---:|---:|---:|:--:|

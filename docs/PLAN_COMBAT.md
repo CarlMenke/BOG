@@ -421,6 +421,15 @@ a soft lateral, or three more downloads** (`Standing Run Right`, `Standing Walk
 Left`, `Standing Walk Right`) and a true one. Put the numbers to the user and let
 them choose.
 
+> **Settled at D-071, and the third option was the one that existed.** Step 8
+> took the four diagonals (D-066); the three downloads were then fetched and
+> measured and turned out not to be laterals at all, because the family is
+> handed and no pack has a right-hand one. `StandingRunLeft` stopped being a set
+> of one by being *reflected* rather than by being joined. Note also that the
+> "1.67x" above is a ratio of two authored speeds and not a playback rate — at
+> the pole the clip plays at `RUN_SPEED / 2.580` = **2.09x**, which is under the
+> 2.13x the forward `Walk` has always played at.
+
 **There is no spine aim.** `UPPER_BODY_BONES` deliberately excludes Hips and
 Spine, with a comment explaining that the throw's own rotation would fight the
 run cycle's weight shift. That is right for a throw and wrong for a bow: a bow
@@ -584,12 +593,25 @@ as the draw comes up — so it meets no string and D-065's grip is untouched.
 
 Four things, none of them blocking and all of them the user's call.
 
-**The strafe axis, which is step 8's and is the oldest of the four.** See the
-paragraph below: four lowercase diagonals are standing in for a lateral, and
-closing it is three downloads — **which are now on disk.**
-`5_Locomotion/StandingRunRight.fbx`, `StandingWalkLeft.fbx` and
-`StandingWalkRight.fbx` arrived alongside step 11's two clips and are not in
-`PACKS`; nothing has measured them and no step has claimed them.
+**~~The strafe axis, which is step 8's and is the oldest of the four.~~** The
+three downloads arrived, were measured, and are **not** the family this plan
+predicted (D-071). `StandingRunRight.fbx` measures −45.9° where it was expected
+at −76.5, `StandingWalkLeft.fbx` +126.5°, `StandingWalkRight.fbx` −46.3° — and
+re-measuring every `Standing *` strafe in both rejected packs says why: **Mixamo's
+aim-strafe families are handed.** Every right strafe in every pack is a −37 to
+−47 degree diagonal, because the family is authored around a chest held turned to
+the character's own right. There is no right-hand strafe to download at any
+price.
+
+So the right-hand run pole is **built** rather than downloaded: `build_gub.py`
+gained `mirror_of`, and `StrafeRight` is `StandingRunLeft.fbx` reflected in the
+rig's own sagittal plane. Running sideways went 0.98 and 0.93 to **0.43 and
+0.30** of body speed, symmetric within 0.13, and the gate grew two checks for it.
+
+What is left of this item is the **walk** half of the axis and it is now *one*
+download rather than three: the **Magic Locomotion Pack's** `Standing Walk Left`,
+With Skin — +94.4°, mirrored the same way, both walk poles. `Standing Walk Right`
+must not be fetched; it is −38.8. See `assets/source/5_Locomotion/README.md`.
 
 **A playtest of the four weapons against each other**, which is the one thing
 none of this could settle. Three of the nine steps end with a note saying so and
@@ -832,3 +854,54 @@ functions are all called on the press and refuse themselves, and `release_draw()
 is already a no-op for a Gub that was not drawing — **the gates are the branch**.
 
 Gate **107 → 113**; `net_test.sh` green.
+
+---
+
+## Step 13 — Does a horizontal spear survive the original Idle?
+
+*Added 2026-09-14, after D-070 shipped the spear on the great sword's carry pose.
+The user, on seeing it: "the idle for the spear seems to be using the greatsword
+idle, when it should be using the original idle that we had, this should be true
+for in game and the lobby."*
+
+**Put the spear back on `GUB_2`'s original `Idle` — `Loadout.CARRY_CLIPS[SPEAR]`
+becomes `""` — and then measure whether a horizontal shaft survives it.** The
+bow and the great sword keep their poses; only the spear changes.
+
+### Why this is a measurement and not an edit
+
+D-070 laid the spear flat by borrowing `SwordCarry`, and the reason it worked is
+stated in that record: `GreatSwordIdle` is the only genuine **two-handed** pose in
+the project — fists 0.22 m apart at waist height — which is what lets 1.24 m of
+shaft lie *across* the body where hip pitch cannot tilt it.
+
+The original `Idle` is the opposite shape: a hunched boxer's guard with the right
+fist **up beside the head**. `held_gear.gd`'s original derivation chose a
+near-vertical carry partly to keep the shaft off a head that is *"0.5 m of blob
+0.25 m thick"*.
+
+So there are two ways this fails, and both must be measured rather than argued:
+
+1. **Idle itself.** A horizontal shaft out of a raised fist sits at head height
+   and crosses the face. Score it against the **real skinned mesh**, the way the
+   original derivation did and the way `preview_carry -- measure` does now.
+2. **Everything that is not Idle, which is the likelier failure.** The grip is a
+   single rigid attachment, and `held_gear.gd` states the trap: *"the hand's
+   world orientation differs by more than 100° between a raised guard and a
+   hanging arm."* D-070's own table shows the old spread — Idle +84°, Walk −32°,
+   Run −49°. A rotation that brings Idle to 0° very likely takes Run to about
+   −133°: tip driven down and back, through the leg. **Measure all twelve carried
+   clips, not just Idle.**
+
+### Done when
+
+Either a per-clip elevation and clearance table showing a horizontal shaft that
+clears the head, the trunk and the ground across all twelve clips — set beside
+D-070's table so the trade is visible — **or a clear report that it does not,
+with the numbers, and a stop.**
+
+**Do not ship a spear that crosses the face or ploughs the ground.** If the
+measurement fails, say so and put the options back to the user: a spear-specific
+carry pose (one Mixamo download), or the original Idle with the shaft vertical
+again. Falling back silently to either is the wrong answer; the user asked for a
+number and the number is the deliverable.

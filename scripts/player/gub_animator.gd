@@ -1501,6 +1501,27 @@ func _process(delta: float) -> void:
 ## speed. Every ring is then a constant-speed ring at every bearing, which is
 ## what the blend points were placed to mean.
 ##
+## **Re-derived at D-071, when the two run poles became true laterals, and it
+## still holds — but only just, and for a reason that is about to expire.** The
+## rescale is right exactly while the poles do *not* point where their positions
+## say. A pole at `(RUN_SPEED, 0)` whose clip travels 90° off forward produces
+## the velocity its own position is, so with four such poles the blend position
+## would simply *be* the velocity and this rescale would be throwing away a third
+## of every diagonal. The run poles are now that, at 76.5°; the **walk** poles
+## are still the lowercase 35.3° and 46.5° diagonals, and the walk ring is the
+## one this rescale governs — a walk-speed request never reaches the run poles at
+## all, because the rescale is what keeps it on the walk diamond.
+##
+## Measured rather than reasoned, on the sixteen-leg harness: with the rescale
+## removed, walking a forward diagonal goes 0.47 to **0.77** of body speed and
+## the other forward diagonal 0.46 to **0.72**, while the two back diagonals
+## improve by about a tenth and every run leg is unchanged. Worse overall, so it
+## stays.
+##
+## What flips it is the one download named in `build_gub.py`'s strafe block. The
+## day the walk poles are laterals too, this function should return `move`
+## unrescaled and the harness should say so.
+##
 ## The component clamp that survives is for the Elder: a boosted Gub runs at
 ## 7.3 m/s (D-040) and there is no clip out there, so it sits on the run ring
 ## and plays the run cycles slightly slow, which is the trade `Gub.target_speed`

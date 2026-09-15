@@ -919,6 +919,48 @@ const STRAFE_PLANT_HEIGHT := 0.08
 const STRAFE_STRAIGHT_LIMIT := 0.40
 const STRAFE_LIMIT := 1.25
 
+## `STRAFE_SIDEWAYS_LIMIT` covers the four legs that are the strafe axis itself —
+## left and right, at both speeds — and it is `STRAFE_STRAIGHT_LIMIT`'s sibling
+## for the axis D-071 went after. Running sideways measures 0.43 and 0.30 where
+## it measured 0.98 and 0.93 before the run poles became a lateral and its own
+## reflection; walking sideways is untouched at 0.80 both ways, because the walk
+## poles are still the lowercase diagonals.
+##
+## 0.85 is therefore drawn *between the two builds* the way `compass` is: over
+## the walk legs that this step did not move, under the two run legs that it
+## did. The old build fails it twice. The band is narrow — 0.80 under it and
+## 0.93 over it — and it stays narrow until the walk poles are closed too; the
+## one download that would widen it is named in `build_gub.py`'s strafe block.
+##
+## What this line is **not** able to do on its own is worth writing down, because
+## it is why there are two of them. Declaring the handed `StandingRunRight.fbx`
+## at the right pole measures 0.84 running right and *passes* here by a
+## hundredth, with the left leg at 0.30. A pass on the worst of the four says
+## nothing about whether the four are the same move; `mirror`, below, is what
+## says that.
+const STRAFE_SIDEWAYS_LIMIT := 0.85
+
+## How far the left half of the compass may disagree with the right half, as a
+## fraction of body speed, on the strafe axis.
+##
+## This is the check that the run poles are the *same move* — which is the whole
+## of what a mirrored pole buys and the one thing no download could have given
+## (D-071). Mixamo's aim-strafe families are handed: every right strafe in every
+## pack measures a -37 to -47 degree diagonal while its left twin can be a true
+## lateral, so a set built out of a downloaded left and a downloaded right plants
+## one side and skates the other. Declaring `5_Locomotion/StandingRunRight.fbx`
+## — which is sitting on disk, and which is the obvious next thing for somebody
+## to try — measures 0.30 running left against 0.84 running right, and fails this
+## at 0.54.
+##
+## Held on the lateral legs only. The *diagonals* are allowed to disagree and do:
+## `GUB_2/Run` is authored travelling 10.2° to its own right, so it agrees with
+## the right-hand lateral and fights the left one, and run fwd-right measures
+## 0.31 against fwd-left's 0.83. That is a property of the forward run the
+## decisions table keeps on purpose, not of the strafe axis, and a limit that
+## covered it would have to be so loose it checked nothing.
+const STRAFE_MIRROR_LIMIT := 0.20
+
 ## How much worse the crouch's *worst* bearing has to be than its best, for the
 ## control to have shown anything.
 ##
@@ -3814,6 +3856,11 @@ func _report_strafe() -> void:
 	var any_where := ""
 	var crouch_best := INF
 	var crouch_worst := 0.0
+	var worst_sideways := 0.0
+	var sideways_where := ""
+	# Keyed "<gait> <side>", so the two halves of the strafe axis can be put
+	# beside each other however the compass is ordered above.
+	var lateral := {}
 	for row: Dictionary in _strafe_rows:
 		var speed: float = row["speed"]
 		var ratio: float = float(row["skate"]) / maxf(speed, 0.01)
@@ -3832,6 +3879,11 @@ func _report_strafe() -> void:
 			if ratio > worst_straight:
 				worst_straight = ratio
 				straight_where = where
+		if row["heading"] == "left" or row["heading"] == "right":
+			lateral["%s %s" % [row["gait"], row["heading"]]] = ratio
+			if ratio > worst_sideways:
+				worst_sideways = ratio
+				sideways_where = where
 
 	var legs := STRAFE_GAITS.size() * STRAFE_COMPASS.size()
 	if _strafe_rows.size() < legs:
@@ -3855,6 +3907,38 @@ func _report_strafe() -> void:
 	else:
 		_strafe_fail("compass", "%s slid %.2f of its own speed, past the %.2f limit"
 			% [any_where, worst_any, STRAFE_LIMIT])
+
+	# The strafe axis itself — the four legs D-066 improved by a third and left
+	# open, and the two of them D-071 closed.
+	if worst_sideways <= STRAFE_SIDEWAYS_LIMIT:
+		print("combat_range: the four sideways legs plant at %.2f of body speed or better (%s) — sideways PASS"
+			% [worst_sideways, sideways_where])
+	else:
+		_strafe_fail("sideways", "%s slid %.2f of its own speed, past the %.2f limit"
+			% [sideways_where, worst_sideways, STRAFE_SIDEWAYS_LIMIT])
+
+	# And that the two halves of it are the same move, which is what the mirror
+	# is for. A downloaded right strafe passes `sideways` on one side and fails
+	# here, because Mixamo's aim-strafe families are handed; see the constant.
+	var worst_mirror := 0.0
+	var mirror_where := ""
+	for gait: String in ["walk", "run"]:
+		var left: Variant = lateral.get("%s left" % gait)
+		var right: Variant = lateral.get("%s right" % gait)
+		if left == null or right == null:
+			continue
+		var gap: float = absf(float(left) - float(right))
+		if gap > worst_mirror:
+			worst_mirror = gap
+			mirror_where = "%s, %.2f left against %.2f right" % [gait, left, right]
+	if mirror_where == "":
+		_strafe_fail("mirror", "neither gait walked both sideways legs")
+	elif worst_mirror <= STRAFE_MIRROR_LIMIT:
+		print("combat_range: left and right strafe within %.2f of each other (%s) — mirror PASS"
+			% [worst_mirror, mirror_where])
+	else:
+		_strafe_fail("mirror", "%s — %.2f apart, past the %.2f limit"
+			% [mirror_where, worst_mirror, STRAFE_MIRROR_LIMIT])
 
 	# The control, and it is one that has to come out *badly*. A crouching Gub
 	# is still on one clip behind a one-dimensional space, which is what every

@@ -244,12 +244,28 @@ check "a remote Gub draws the same bow" "draw PASS" \
 # facing one way, as it is held while aiming, through eight bearings at walking
 # and at running speed, and takes the slower of its two toes every tick.
 #
-# Three verdicts, and the order is the usual one of each being the control for
+# Five verdicts, and the order is the usual one of each being the control for
 # the last. `straight` is the two axes the new clips *solve* — forward and
 # backward plant at 0.28 of body speed or better, where before this step the two
 # backward legs measured 0.83 and 1.03 and that line fails on the old build.
 # `compass` is all sixteen legs against a limit drawn between the plane's own
 # worst (1.14, a walking back-diagonal) and the one-dimensional space's (1.36).
+#
+# `sideways` and `mirror` are the strafe axis itself, and they are D-071's
+# (D-066 left this axis open and improved by a third). `sideways` is the four
+# lateral legs at 0.85 of body speed or better — running sideways is 0.43 and
+# 0.30 where it was 0.98 and 0.93, and the old build fails this twice.
+#
+# `mirror` is the one that earns its place, because `sideways` alone cannot see
+# the fault it is about. Mixamo's aim-strafe families are **handed**: every right
+# strafe in every pack is a -37 to -47 degree diagonal while its left twin can be
+# a true lateral, so a set built from a downloaded left and a downloaded right
+# plants one side and skates the other. The right pole is therefore the left one
+# *reflected*, and this requires the two halves of the axis to stay within 0.20
+# of each other. Declaring `5_Locomotion/StandingRunRight.fbx` instead — which is
+# on disk, and is the obvious next thing for somebody to try — measures 0.30 left
+# against 0.84 right: it **passes `sideways` by a hundredth** and fails this at
+# 0.54, which is the whole argument for there being two lines here.
 #
 # `crouch` is the control in D-039's sense and it is one that has to come out
 # *badly*: a crouching Gub still has one clip behind a line, so its bearings
@@ -261,6 +277,8 @@ check "feet planted in eight directions" "strafe PASS" \
     "$GODOT" --headless --fixed-fps 60 --path "$GODOT_ROOT" tools/combat_range.tscn -- strafe
 also "feet planted in eight directions" "straight PASS"
 also "feet planted in eight directions" "compass PASS"
+also "feet planted in eight directions" "sideways PASS"
+also "feet planted in eight directions" "mirror PASS"
 also "feet planted in eight directions" "crouch PASS"
 # The torso that aims (D-066), swept through everything a player can point it
 # at. D-065 shipped a bow pointing **91 degrees off the Gub's own facing** —
