@@ -1349,7 +1349,8 @@ func _tick_hand() -> void:
 	if _gub.held_gear.is_carried() == want \
 			and _gub.held_gear.has_bow() == _wants_bow() \
 			and _gub.held_gear.has_arrow() == _wants_arrow() \
-			and _gub.held_gear.has_sword() == _wants_sword():
+			and _gub.held_gear.has_sword() == _wants_sword() \
+			and _gub.held_gear.has_potion() == _wants_potion():
 		return
 	_refresh_hand()
 	cooldowns_changed.emit()
@@ -1627,6 +1628,27 @@ func _wants_bow() -> bool:
 ## you this second. Off the replicated draw, like the bow above.
 func _wants_arrow() -> bool:
 	return not is_elder() and not is_holding_letter() and _gub.is_drawing()
+
+
+## Should the bow fist be holding a bottle right now (D-075)?
+##
+## `_wants_bow`'s twin in the same hand, and the two are exact opposites through
+## a channel: a drink is the one thing that empties this fist, so it is also the
+## one thing that fills it. `is_channelling()` is the whole of it, because that
+## flag is already the answer to every question this one could ask separately —
+## it runs on every peer's copy of every Gub (D-067), it goes false the instant
+## the bottle is empty or the drink is broken, and `_end_channel` calls
+## `_refresh_hand` on that frame rather than on the next (D-069).
+##
+## The other two clauses are the hand rule rather than the gate, and they are
+## the same two `_wants_bow` carries. They are also, strictly, already true:
+## `_host_drink_potion` refuses an Elder and a letter-holder, and picking a card
+## up mid-drink breaks the channel. They are written out anyway, because the
+## four `_wants_*` above are four statements of one sentence about what may be
+## in a fist, and a fifth that quietly relied on somebody else having checked
+## would be the one that is wrong the day the channel gate moves.
+func _wants_potion() -> bool:
+	return not is_elder() and not is_holding_letter() and is_channelling()
 
 
 ## Should the fists be holding a great sword right now (D-068, D-069)?
@@ -2267,6 +2289,13 @@ func _refresh_hand() -> void:
 	# than a rule spread over two files (D-065, D-068): the same call that puts
 	# the sword in the right fist is the call that takes the bow out of the left.
 	_gub.held_gear.set_sword(_wants_sword())
+	# And the **fifth**, which is the bow fist's other object (D-075). It is
+	# the line that makes "a drink empties both hands" visible rather than
+	# merely true: `_wants_bow()` has answered no through a channel since
+	# D-067, and until this there was nothing to put in the hand it emptied.
+	# Decided here with the other four and in the same breath, so a bottle
+	# and a bow can no more be out together than a bow and a great sword.
+	_gub.held_gear.set_potion(_wants_potion())
 	# Runs on every peer's copy of every Gub, which is the point: a Gub ten
 	# seconds from a letter has to be readable from across the clearing by the
 	# people who might stop it, not only by the player holding the card. The

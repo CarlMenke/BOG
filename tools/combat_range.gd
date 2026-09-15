@@ -1207,6 +1207,14 @@ var _potion_health: float = 0.0
 var _potion_mid: float = 0.0
 var _potion_owed: float = 0.0
 var _potion_stock: int = 0
+## What was in the drinking Gub's two fists half way through the first
+## channel, read there and asserted in the next step (D-075). Carried rather
+## than asserted where it is read for one reason and it is a real one:
+## `_potion_verdict` **clears** the problem list, so a failure appended in
+## step 4 is reported under `channel` — the verdict that happens to come
+## next — and the line that says which thing broke names the wrong one. It is
+## `_potion_mid`'s own shape, one question over.
+var _potion_hands: Array[bool] = []
 var _potion_problems: Array[String] = []
 var _potion_failures: int = 0
 ## Ward flashes counted before the Elder was hit, so the verdict is about the
@@ -2541,6 +2549,19 @@ func _drive_potion(player: Gub, combat: GubCombat) -> void:
 					- POTION_EPSILON,
 				"half way through, the whole potion had already arrived (%.1f)"
 					% _potion_mid)
+			# **And the hands, which is what D-075 put a bottle in** (D-067).
+			# Half way through is the one moment worth asking at: the arm is up,
+			# the channel has been running for the better part of a second, and
+			# anything `_tick_hand` was going to disagree with `_refresh_hand`
+			# about has had every frame since the keypress to do it in. Read
+			# here and asserted in the next step; `_potion_hands` says why.
+			var fist := player.held_gear
+			_potion_expect(fist != null, "the Gub has no HeldGear at all")
+			_potion_hands.clear()
+			if fist != null:
+				_potion_hands.append_array([fist.has_potion(),
+					fist.is_carried(), fist.has_bow(), fist.has_arrow(),
+					fist.has_sword()])
 			_potion_step = 5
 		5:
 			if combat.is_channelling():
@@ -2553,6 +2574,40 @@ func _drive_potion(player: Gub, combat: GubCombat) -> void:
 				"%.0f health over %.1f s: %.0f at the click, %.0f half way, %.0f at the end"
 				% [Net.config.heal_amount, Net.config.heal_channel, _potion_health,
 					_potion_mid, player.health])
+
+			# **A drink empties both hands, with a bottle in one of them.**
+			# D-067 put `not is_channelling()` into `has_spear()` and `has_bow()`
+			# so that the *hand* obeys a drink, and proved it with a sheet of a
+			# Gub raising nothing. Two of these four were true of empty fists
+			# already; what D-075 adds is the first one, and the first one is
+			# what makes the other four a measurement rather than an absence.
+			if not _potion_hands.is_empty():
+				_potion_expect(_potion_hands[0],
+					"half way through the drink there was no bottle in the fist")
+				_potion_expect(not _potion_hands[1],
+					"the spear stayed in the fist through the drink")
+				_potion_expect(not _potion_hands[2],
+					"the bow stayed in the drinking fist")
+				_potion_expect(not _potion_hands[3], "an arrow stayed nocked")
+				_potion_expect(not _potion_hands[4],
+					"the great sword stayed in the fists")
+			# And the other half of the sentence, one frame after the arm came
+			# down: the bottle goes and the weapon comes back, off the *same*
+			# call — `_end_channel` asks `_refresh_hand` on this frame rather
+			# than leaving it to the next frame's poll (D-069). `has_spear()`
+			# and not `true`, because whether there is a spear to come back is
+			# the recharge's business; what is asserted is that the fist and the
+			# gate agree about it.
+			var after := player.held_gear
+			if after != null:
+				_potion_expect(not after.has_potion(),
+					"the bottle was still in the fist after the drink ended")
+				_potion_expect(after.is_carried() == combat.has_spear(),
+					"the fist and the gate disagree after the drink: fist %s, gate %s"
+						% [after.is_carried(), combat.has_spear()])
+			_potion_verdict("hands",
+				"a bottle in the drinking fist, nothing in either of them, and the "
+				+ "weapon back on the frame the drink ended")
 
 			# The interrupt. Hurt back down, and drink the second potion.
 			_hit(player, POTION_WOUND)

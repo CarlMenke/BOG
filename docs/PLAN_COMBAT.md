@@ -1088,3 +1088,67 @@ beside the current one, because this is a judgement the user makes by eye — th
 rotation is byte-identical, all twelve clips still clear trunk, floor and level,
 the letter card still clears, and the report says what the trunk margin went from
 and to.
+
+---
+
+## Step 17 — The heal potion goes in the hand it is drunk with
+
+**Done, as D-075.** `HeldGear` has a fifth prop and `GubCombat._refresh_hand`
+has a fifth call. The bottle is `art/generated/heal_potion.glb` at 0.30 in the
+**left** fist — the drinking hand D-067 measured off the clip — for exactly the
+length of the channel, and it is the same GLB `Pickup` puts on the ground, still
+purple, not re-tinted and not rebuilt.
+
+D-067 left this deliberately and said why: *"rejected for now: a potion model in
+the fist. It is the right end state and it is a step of its own — the bow's grip
+took a dedicated `preview_bow -- measure` to solve (D-065) and the drinking hand
+would need the same. What is shipping is a mime with empty hands."* The tool it
+was waiting for is D-074's `palm`, one hand over.
+
+**The shared palm point does not survive the trip and that is the finding.**
+D-068 made `HeldGear.fist_offset()` static so three props could not have three
+opinions about one fist, and D-074 moved it three centimetres and all three
+moved with it. In the left hand it lands **0.133 m** from the middle of the
+drinking mitten, twice `PALM_MAX` — and only half of that is the mirror. The
+bigger half is D-074's own lesson: a palm point means nothing except in the pose
+the prop is held in, and `Drink` opens the fingers round a bottle where
+`SpearCarry` closes them round a shaft, which moves the same mitten's centre from
+0.062 m out along the hand's +Y to **0.157**. So the *method* is shared —
+`preview_carry._fist_centre`, the same half-share rule, `LEFT_FIST_BONES` instead
+of `FIST_BONES` — and the constant is not. Nothing about `fist_offset()` moved:
+the sword's fit residual is 0.154 against 0.160 as D-074 left it, the spear reads
+0.050 palm / +0.281 floor / 0.142 trunk, the bow +0.251 / 0.121, the great sword
++0.205 / 0.142.
+
+`POTION_PALM` is that centre **plus five centimetres out of the Gub**, which is
+D-074's move run backwards: it took a shaft 3 cm *in* off the knuckles, and this
+takes a bottle 5 cm *out*, because a Gub is a pear and its drinking arm rests on
+its own stomach. `bottle` reads 0.050 of `PALM_MAX`'s 0.066.
+
+The grip is one frame of one clip and the clip does the rest. Stood upright at
+the frame the drink window **opens**, the bottle reads +90° at the Gub's side,
+−47° mouth-down into the face for the 0.7 s the head is back, and +78° as the arm
+falls. Stood upright at the **lips** instead it reads −51 and −49 at the two
+edges of the window, so a Gub picks the bottle up upside down and pours it out
+before it drinks.
+
+Gate **118 → 120**: `bottle PASS` is `palm` asked of the other hand, and
+`hands PASS` re-verifies D-067's *"a drink empties both fists"* with something
+in one of them — a bottle in the drinking fist and no spear, bow, arrow or great
+sword in either, half way through, and the bottle gone with the fist agreeing
+with `has_spear()` one frame after the arm comes down. `preview_carry -- potion`
+is the fit and `-- drink fist|body` is the picture;
+`out/carry_potion_palm.png` and `out/carry_potion.png` are the sheets.
+
+**No crosshair and no HUD treatment** (D-036, D-054). The bottle in the hand is
+the tell, which is the same sentence the spear and the bow already make.
+
+*What it leaves open:* `POTION_SCALE` has no check, and D-075 says plainly why —
+*does the lip reach the mouth* was written, measured and deleted, because it
+reads 0.005–0.015 m at every scale from 0.20 to 0.50 on a Gub whose head is a
+0.40 m blob and whose drinking hand is at its face by the middle of the clip. It
+is an eye call off the sheet. And the bottle is now a tell: a Gub drinking in the
+open is 0.30 m of bright purple held up beside its head, which is the argument
+for having drawn it and is also the first time this game has made *being
+mid-action* visible from across a clearing. Only a playtest says whether that is
+too much.

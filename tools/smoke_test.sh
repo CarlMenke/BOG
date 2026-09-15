@@ -430,6 +430,19 @@ also "damage leaves a Gub standing" "spear PASS"
 # fraction of it. Headless, and it quits itself in about four seconds.
 check "a potion heals over two seconds" "drop PASS"     "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- potion
 also "a potion heals over two seconds" "channel PASS"
+# `hands PASS` is the fists, with something in one of them (D-075). D-067 made a
+# drink empty both of them — `has_spear()` and `has_bow()` each grew a
+# `not is_channelling()` clause, put in the **gate** so that the hand obeys a
+# drink rather than only the throw refusing one — and proved it with a contact
+# sheet of a Gub raising nothing. An empty hand is a weak thing to assert: it is
+# also what a broken attachment, a missing model and a Gub that never started
+# drinking all look like. So this reads the fists half way through the channel
+# and requires a **bottle in the drinking one** and the spear, the bow, the arrow
+# and the great sword all out of both, and then requires, one frame after the arm
+# comes down, that the bottle is gone and the fist agrees with `has_spear()`
+# again — which is `_end_channel` calling `_refresh_hand` on that frame rather
+# than leaving it to the next frame's poll (D-069).
+also "a potion heals over two seconds" "hands PASS"
 also "a potion heals over two seconds" "interrupt PASS"
 also "a potion heals over two seconds" "moved PASS"
 also "a potion heals over two seconds" "death PASS"
@@ -503,10 +516,14 @@ also "the great sword fits both fists" "blade PASS"
 # ellipsoids an earlier pass stood in for a Gub with are what let a shaft ship
 # through the chin.
 #
-# `derived PASS` is the second line and is about a **constant**:
+# `derived PASS` is the second line and is about **constants**:
 # `HeldGear.GRIP_OFFSET` has to equal `grip_offset(GRIP_ROTATION)`, and GDScript
 # cannot call a static to initialise a const, so this recomputes it and fails if
 # the two have drifted. D-065's own comment asked a human to do that by hand.
+# `POTION_GRIP_OFFSET` is the second one to hang off it (D-075) and the first
+# whose derivation carries a **scale** as well as a rotation, so it is the one
+# that goes stale if somebody decides the bottle looked chunky. One verdict for
+# both, because they are one statement.
 #
 # Headless, about forty seconds — the skin scan is 3,587 vertices a sample.
 check "every carried weapon clears the ground" "carry PASS" \
@@ -549,6 +566,26 @@ also "every carried weapon clears the ground" "level PASS"
 # requires the shaft's axis to pass inside it (`PALM_MAX`). It reads 0.050 m now
 # and D-072's grip reads 0.076 and fails it.
 also "every carried weapon clears the ground" "palm PASS"
+# And `bottle PASS`, which is the **sixth** and is `palm` asked of the other
+# hand (D-075). The heal potion is the first thing this game puts in a fist that
+# is not a weapon, and D-067 shipped the drink as a mime with empty hands and
+# said so: *"rejected for now: a potion model in the fist... the bow's grip took
+# a dedicated `preview_bow -- measure` to solve and the drinking hand would need
+# the same."* That tool is `palm`, and this is it run over `LEFT_FIST_BONES` in
+# the pose `Drink` puts the hand in.
+#
+# It is also the line that would have caught the thing that went wrong while it
+# was being fitted. `HeldGear.fist_offset()` — the shared palm point D-068 made
+# static so that three props could not have three opinions about one fist — lands
+# **0.133 m** from the centre of the drinking mitten, twice `PALM_MAX`, because
+# the hand `Drink` opens round a bottle is 9.5 cm further out along its own axis
+# than the fist `SpearCarry` closes on a shaft. The rule survives and the number
+# does not; `HeldGear.POTION_PALM` is the argument and this is the check.
+#
+# It reads 0.050 m of 0.066 allowed, and the 0.050 is spent rather than wasted:
+# a bottle centred in that mitten spends half its belly inside the Gub's own
+# stomach, because the drinking arm rests against a body that is a pear.
+also "every carried weapon clears the ground" "bottle PASS"
 # **A grip is still the grip its own clips solve for** (D-073), which is the
 # general form of the fault the four steps above kept hitting one at a time.
 #

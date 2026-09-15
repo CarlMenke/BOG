@@ -19,6 +19,16 @@ extends Node3D
 ##       res://tools/preview_carry.tscn out/carry_spear_palm.png 25 \
 ##       fist -0.04 -0.01
 ##
+##   # the bottle's whole fit: the drinking fist, the two rotations, the scale
+##   Godot --headless --path . --script tools/snapshot.gd -- \
+##       res://tools/preview_carry.tscn out/none.png 4 potion
+##
+##   # the bottle in the hand across the channel, close or whole-body (D-075)
+##   Godot --path . --resolution 2400x900 --script tools/snapshot.gd -- \
+##       res://tools/preview_carry.tscn out/carry_potion_palm.png 25 drink fist
+##   # ... and the same with a scale, a grip fraction and an outward offset
+##   #     swept:  ... 25 drink fist 0.30 0.65 0.05
+##
 ##   # the same three from overhead, which is where a bearing is an angle
 ##   Godot --path . --resolution 2400x900 --script tools/snapshot.gd -- \
 ##       res://tools/preview_carry.tscn out/carry_sword_bearings.png 25 \
@@ -144,6 +154,73 @@ const FIST_BONES := ["RightHand",
 	"RightHandMiddle1", "RightHandMiddle2", "RightHandMiddle3",
 	"RightHandMiddle4"]
 
+## The **left** mitten, which is the bow fist and is the hand a Gub drinks with
+## (D-067, D-075). `FIST_BONES` one hand over, letter for letter, because the
+## question `bottle` asks about the bottle is the question `palm` asks about the
+## shaft and a second list that had drifted by one finger would be a second
+## opinion about where this hand is.
+const LEFT_FIST_BONES := ["LeftHand",
+	"LeftHandThumb1", "LeftHandThumb2", "LeftHandThumb3", "LeftHandThumb4",
+	"LeftHandIndex1", "LeftHandIndex2", "LeftHandIndex3", "LeftHandIndex4",
+	"LeftHandMiddle1", "LeftHandMiddle2", "LeftHandMiddle3",
+	"LeftHandMiddle4"]
+
+## The head alone, out of `TRUNK_BONES`, cached for the table `-- potion`
+## prints and for nothing else — which is worth a paragraph, because it is the
+## one number here that was measured, looked at, and then deliberately **not**
+## made a check (D-075).
+##
+## The obvious second clause for a bottle is *does the lip reach the mouth*: a
+## grip can sit perfectly in a fist and still be a mime, which is D-074's own
+## lesson one hand over, and `POTION_SCALE` is exactly the lever that would
+## break it. Measured, it does not discriminate. The drinking hand is at the
+## face by the middle of the clip and a Gub's head is a 0.40 m blob, so the lip
+## comes within 0.015 m of it at **every** scale from 0.20 to 0.50 — 0.010 at
+## the shipped 0.30 and 0.006 at half a metre of bottle. A threshold that
+## passes every value of the lever it is supposed to police is not a threshold,
+## which is D-074's own sentence about `PALM_MAX` turned on a candidate of its
+## own: *a threshold whose own motivating case still passes is not a
+## threshold.*
+##
+## So the scale is judged by eye off `out/carry_potion_palm.png`, the table is
+## printed so that judgement has its evidence beside it, and this file does not
+## pretend to cover it.
+const HEAD_BONES := ["Head", "HeadTop_End"]
+
+## How many moments of the drink window `bottle` and the sheets sample.
+##
+## More than `CARRY_SAMPLES`' twelve, because this window is not a loop that
+## breathes — it is a gesture with a beginning, a middle and an end, and the
+## three parts want telling apart. Twenty-five is one sample every 0.12 s of
+## clip, which resolves the 0.7 s the head is back into six of them.
+const DRINK_SAMPLES := 25
+
+## Which moments of the channel the two drink sheets stand a Gub at, as
+## fractions of the window.
+##
+## The whole-body sheet takes six evenly, which at the default two-second
+## channel is one every 0.4 s and resolves the arm going up, the head going
+## back and the arm coming down into separate pictures. The close one takes
+## **three**, and 0.55 rather than 0.50 for the middle of them, because the
+## clip does not arrive at the lips halfway — it arrives at 55% and stays
+## there, which is the swallow D-067 had to teach `measure_clip` about.
+const DRINK_BODY_FRACTIONS := [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+const DRINK_FIST_FRACTIONS := [0.0, 0.55, 1.0]
+
+## Where the close drink sheet stands, in degrees round the Gub.
+##
+## Not `FIST_AZIMUTH` mirrored, which is what it started as and is what D-074's
+## argument would predict. That sheet is seen from **behind** the shoulder
+## because a shaft crossing a fist in the screen plane cannot be told from one
+## passing through it, and the palm normal has to lie across the screen first.
+## A bottle is not a line through a fist, it is a volume beside one, and the
+## question it raises is the other kind — *is any of it inside the Gub* — which
+## is answered from the **front** quarter, where the body's own silhouette is
+## behind the bottle rather than in front of it. Rendered from behind the
+## shoulder the bottle is occluded by the mitten at both ends of the window and
+## the sheet says nothing; from -25 it is the whole argument.
+const DRINK_AZIMUTH := -25.0
+
 ## Every clip a Gub carries a weapon *around* in.
 ##
 ## `preview_bow._carried_clips` and `preview_sword.CARRY_SKIP`'s list, kept
@@ -212,6 +289,17 @@ var _fist_rest: PackedVector3Array = PackedVector3Array()
 var _fist_bones: PackedInt32Array = PackedInt32Array()
 var _fist_weights: PackedFloat32Array = PackedFloat32Array()
 
+## The **drinking** hand's mitten and the head, cached in the same pass and
+## for the same reason (D-075). The left fist is where the bottle goes and
+## the head is what it has to arrive at; neither is in `TRUNK_BONES` or in
+## `FIST_BONES`, so neither existed until a prop was put in the other hand.
+var _left_rest: PackedVector3Array = PackedVector3Array()
+var _left_bones: PackedInt32Array = PackedInt32Array()
+var _left_weights: PackedFloat32Array = PackedFloat32Array()
+var _head_rest: PackedVector3Array = PackedVector3Array()
+var _head_bones: PackedInt32Array = PackedInt32Array()
+var _head_weights: PackedFloat32Array = PackedFloat32Array()
+
 
 func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
@@ -223,6 +311,16 @@ func _ready() -> void:
 	if mode == "poses":
 		_poses()
 		get_tree().quit()
+		return
+	if mode == "potion":
+		_potion()
+		get_tree().quit()
+		return
+	if mode == "drink":
+		_drink(args[4] if args.size() > 4 else "fist",
+			Vector3(float(args[5]), float(args[6]),
+			float(args[7]) if args.size() > 7 else 0.0) if args.size() > 6
+			else Vector3.ZERO)
 		return
 	if mode == "hilt":
 		_hilt()
@@ -276,6 +374,7 @@ func _measure(everything: bool) -> void:
 
 	failures += _report_card(gub, skeleton, player, clips)
 	failures += _report_palm(skeleton, player)
+	failures += _report_bottle(skeleton, player)
 
 	# The spear lies level, and this is the line that keeps that a fact rather
 	# than a sentence somebody wrote on a day it was true (`LEVEL_MAX` says why).
@@ -297,13 +396,24 @@ func _measure(everything: bool) -> void:
 	# stopping passing through the palm.
 	var derived := HeldGear.grip_offset(HeldGear.GRIP_ROTATION)
 	var drift := derived.distance_to(HeldGear.GRIP_OFFSET)
-	if drift <= 0.0005:
-		print("preview_carry: GRIP_OFFSET is %v, %.4f m off its own derivation "
-			% [HeldGear.GRIP_OFFSET, drift] + "— derived PASS")
+	# The bottle's is the same constant one hand over and carries a scale as
+	# well as a rotation (D-075), so it is the one of the two that goes
+	# stale if somebody decides the potion looked chunky. One verdict for
+	# both, because they are one statement: a derivation written down as a
+	# number has to still equal the function it came from.
+	var potion := HeldGear.potion_offset()
+	var potion_drift := potion.distance_to(HeldGear.POTION_GRIP_OFFSET)
+	if drift <= DERIVED_MAX and potion_drift <= DERIVED_MAX:
+		print("preview_carry: GRIP_OFFSET is %v, %.4f m off its own derivation, "
+			% [HeldGear.GRIP_OFFSET, drift] + "and POTION_GRIP_OFFSET is %v, "
+			% HeldGear.POTION_GRIP_OFFSET + "%.4f m off its own — derived PASS"
+			% potion_drift)
 	else:
-		print("preview_carry: derived FAIL — GRIP_OFFSET is %v and "
-			% HeldGear.GRIP_OFFSET + "grip_offset(GRIP_ROTATION) is %v, %.4f m apart"
-			% [derived, drift])
+		print("preview_carry: derived FAIL — GRIP_OFFSET is %v against "
+			% HeldGear.GRIP_OFFSET + "grip_offset(GRIP_ROTATION) %v (%.4f m "
+			% [derived, drift] + "apart), and POTION_GRIP_OFFSET is %v against "
+			% HeldGear.POTION_GRIP_OFFSET + "potion_offset() %v (%.4f m apart)"
+			% [potion, potion_drift])
 		failures += 1
 
 	if failures == 0:
@@ -434,7 +544,8 @@ func _report_palm(skeleton: Skeleton3D, player: AnimationPlayer) -> int:
 	for i in CARRY_SAMPLES:
 		_pose(player, skeleton, "Idle", 0.0, carry,
 			length * float(i) / float(CARRY_SAMPLES))
-		var centre := _fist_centre(skeleton, hand)
+		var centre := _fist_centre(skeleton, hand, _fist_rest,
+			_fist_bones, _fist_weights)
 		# Perpendicular to the shaft, because sliding the grip *along* the shaft
 		# is `GRIP_FRACTION`'s business and is not what is being asked here.
 		var to_fist := centre - HeldGear.GRIP_PALM
@@ -460,7 +571,9 @@ func _report_palm(skeleton: Skeleton3D, player: AnimationPlayer) -> int:
 ## the skeleton is currently in — the mitten skinned by the formula the GPU runs
 ## and averaged, which is `_nearest_skin`'s method asked for a centre instead of
 ## a minimum.
-func _fist_centre(skeleton: Skeleton3D, hand: int) -> Vector3:
+func _fist_centre(skeleton: Skeleton3D, hand: int,
+		rest: PackedVector3Array, of_bone: PackedInt32Array,
+		share: PackedFloat32Array) -> Vector3:
 	var bones: Array[Transform3D] = []
 	for i in _skin_binds.size():
 		var bone := _skin_bone_of_bind[i]
@@ -468,19 +581,119 @@ func _fist_centre(skeleton: Skeleton3D, hand: int) -> Vector3:
 			else skeleton.get_bone_global_pose(bone) * _skin_binds[i])
 	var to_hand := skeleton.get_bone_global_pose(hand).affine_inverse()
 	var sum := Vector3.ZERO
-	for v in _fist_rest.size():
+	for v in rest.size():
 		var out := Vector3.ZERO
 		for j in 4:
-			var w := _fist_weights[v * 4 + j]
+			var w := share[v * 4 + j]
 			if w <= 0.0:
 				continue
-			var bind := _fist_bones[v * 4 + j]
+			var bind := of_bone[v * 4 + j]
 			if bind < 0 or bind >= bones.size():
 				continue
-			out += (bones[bind] * _fist_rest[v]) * w
+			out += (bones[bind] * rest[v]) * w
 		sum += to_hand * out
-	return sum / float(maxi(_fist_rest.size(), 1))
+	return sum / float(maxi(rest.size(), 1))
 
+
+
+## The bottle against the **left** hand, which is `_report_palm`'s question
+## asked of the one prop in this game that is not a weapon (D-075).
+##
+## The same number and the same method: how far the bottle's axis passes from
+## the centre of the mitten, in the hand's own frame, measured off the whole
+## mitten rather than off the `LeftHand`-weighted skin at rest. D-074's finding
+## is not about the spear, it is about hands — 918 of the right mitten's 1,030
+## vertices hang off the finger chains and the left one's 1,073 do the same, so
+## a bone's own vertices are the wrist either way.
+##
+## **Sampled across the whole drink window and reported at its worst**, because
+## a bottle has to be in the hand for the whole two seconds and not only at the
+## lips. It costs nothing: every bone the mitten hangs off is in
+## `UPPER_BODY_BONES` and the drink layer owns all of them, so the fist's shape
+## in the hand's own frame is the clip's alone and moves 0.0002 m across the
+## window — the same fact that makes the trunk column of every table above read
+## one number in all twelve clips.
+##
+## The pose is `Drink` layered over `Idle`, which is what the graph composes: a
+## `OneShot` filtered to `UPPER_BODY_BONES` over whatever the locomotion plane
+## is doing, at weight 1 (D-067). `Idle` underneath because a Gub that is
+## moving is a Gub that is not drinking — `CHANNEL_MOVE_SPEED` says so — which
+## makes this the one measurement on this page with nothing to average over.
+##
+## **What it does not check is `POTION_SCALE`**, and `HEAD_BONES` carries why.
+func _report_bottle(skeleton: Skeleton3D, player: AnimationPlayer) -> int:
+	if _left_rest.is_empty():
+		push_warning("preview_carry: no left hand mesh; the bottle is not measured")
+		return 0
+	var hand := skeleton.find_bone(HeldGear.BOW_HAND_BONE)
+	var dir := HeldGear.potion_direction()
+	var worst := 0.0
+	var at_worst := Vector3.ZERO
+	for i in DRINK_SAMPLES:
+		_pose(player, skeleton, "Idle", 0.0, "Drink", _drink_time(i))
+		var centre := _fist_centre(skeleton, hand, _left_rest, _left_bones,
+			_left_weights)
+		# Perpendicular to the bottle, because sliding the grip *along* it is
+		# `POTION_GRIP_FRACTION`'s business and is not what is being asked.
+		var to_fist := centre - HeldGear.POTION_PALM
+		var off := (to_fist - dir * to_fist.dot(dir)).length()
+		if off > worst:
+			worst = off
+			at_worst = centre
+	if worst <= PALM_MAX:
+		print("preview_carry: the bottle's axis passes %.3f m from the centre "
+			% worst + "of the drinking fist, which is at %v in the hand's own "
+			% at_worst + "frame, against %.3f allowed — bottle PASS" % PALM_MAX)
+		return 0
+	print("preview_carry: bottle FAIL — the bottle's axis passes %.3f m from "
+		% worst + "the centre of the drinking fist (%v in the hand's own frame) "
+		% at_worst + "against %.3f allowed, so it is beside the hand rather than "
+		% PALM_MAX + "in it. Move `HeldGear.POTION_PALM`, which is what that "
+		+ "constant is for, and re-run `-- potion` for the centre it should be.")
+	return 1
+
+
+## Which moment of the drink window sample `i` is, in the clip's own seconds.
+##
+## The **window** and not the clip, because the clip is 6.117 s of which
+## `GubAnimator` plays 2.933 (D-067): the 1.267 s of stillness before the arm
+## starts and the 1.917 s after it stops are frames no player ever sees, and a
+## bottle measured through them would be measured mostly against a Gub standing
+## still with its arms down.
+func _drink_time(i: int) -> float:
+	return GubAnimator.DRINK_CLIP_START \
+		+ (GubAnimator.DRINK_CLIP_END - GubAnimator.DRINK_CLIP_START) \
+		* float(i) / float(maxi(DRINK_SAMPLES - 1, 1))
+
+
+## How near a world point comes to the Gub's own skinned head.
+##
+## `_nearest_skin`'s method with two differences and both are the question:
+## `HEAD_BONES` rather than the trunk, and one point rather than a segment. The
+## thing being asked is whether the bottle's **lip** arrived at the face, and a
+## segment would be answered by whichever part of the bottle happened to be
+## nearest the chin.
+func _nearest_head(skeleton: Skeleton3D, p: Vector3) -> float:
+	if _head_rest.is_empty() or _skin_binds.is_empty():
+		return INF
+	var bones: Array[Transform3D] = []
+	for i in _skin_binds.size():
+		var bone := _skin_bone_of_bind[i]
+		bones.append(Transform3D.IDENTITY if bone < 0
+			else skeleton.get_bone_global_pose(bone) * _skin_binds[i])
+	var nearest := INF
+	for v in _head_rest.size():
+		var out := Vector3.ZERO
+		for j in 4:
+			var w := _head_weights[v * 4 + j]
+			if w <= 0.0:
+				continue
+			var bind := _head_bones[v * 4 + j]
+			if bind < 0 or bind >= bones.size():
+				continue
+			out += (bones[bind] * _head_rest[v]) * w
+		nearest = minf(nearest, p.distance_to(skeleton.global_transform * out))
+	return nearest
 
 ## The lowest end of `weapon`'s prop above the floor through one locomotion
 ## clip, the mean elevation of its long axis, and how near it gets to the Gub's
@@ -1206,6 +1419,8 @@ func _build_skin(gub: Gub, skeleton: Skeleton3D) -> void:
 	var skin := mesh_node.skin
 	var trunk := {}
 	var fist := {}
+	var left := {}
+	var head := {}
 	for i in skin.get_bind_count():
 		_skin_binds.append(skin.get_bind_pose(i))
 		var bone := skin.get_bind_bone(i)
@@ -1216,6 +1431,10 @@ func _build_skin(gub: Gub, skeleton: Skeleton3D) -> void:
 			trunk[i] = true
 		if bone >= 0 and skeleton.get_bone_name(bone) in FIST_BONES:
 			fist[i] = true
+		if bone >= 0 and skeleton.get_bone_name(bone) in LEFT_FIST_BONES:
+			left[i] = true
+		if bone >= 0 and skeleton.get_bone_name(bone) in HEAD_BONES:
+			head[i] = true
 
 	var arrays := mesh_node.mesh.surface_get_arrays(0)
 	var rest: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
@@ -1224,11 +1443,17 @@ func _build_skin(gub: Gub, skeleton: Skeleton3D) -> void:
 	for v in rest.size():
 		var share := 0.0
 		var in_fist := 0.0
+		var in_left := 0.0
+		var in_head := 0.0
 		for j in 4:
 			if trunk.has(bones[v * 4 + j]):
 				share += weights[v * 4 + j]
 			if fist.has(bones[v * 4 + j]):
 				in_fist += weights[v * 4 + j]
+			if left.has(bones[v * 4 + j]):
+				in_left += weights[v * 4 + j]
+			if head.has(bones[v * 4 + j]):
+				in_head += weights[v * 4 + j]
 		# The same half-share rule and for the same reason: a vertex belongs to
 		# one side of the wrist, so the seam is not counted twice.
 		if in_fist >= TRUNK_SHARE:
@@ -1236,6 +1461,19 @@ func _build_skin(gub: Gub, skeleton: Skeleton3D) -> void:
 			for j in 4:
 				_fist_bones.append(bones[v * 4 + j])
 				_fist_weights.append(weights[v * 4 + j])
+		# The same half-share again, twice, which is what keeps the drinking
+		# fist and the head measured by the rule the trunk and the spear
+		# hand are measured by rather than by a second one (D-075).
+		if in_left >= TRUNK_SHARE:
+			_left_rest.append(rest[v])
+			for j in 4:
+				_left_bones.append(bones[v * 4 + j])
+				_left_weights.append(weights[v * 4 + j])
+		if in_head >= TRUNK_SHARE:
+			_head_rest.append(rest[v])
+			for j in 4:
+				_head_bones.append(bones[v * 4 + j])
+				_head_weights.append(weights[v * 4 + j])
 		if share < TRUNK_SHARE:
 			continue
 		_skin_rest.append(rest[v])
@@ -1243,7 +1481,9 @@ func _build_skin(gub: Gub, skeleton: Skeleton3D) -> void:
 			_skin_bones.append(bones[v * 4 + j])
 			_skin_weights.append(weights[v * 4 + j])
 	print("preview_carry: %d of %d vertices are trunk or head, and %d are the "
-		% [_skin_rest.size(), rest.size(), _fist_rest.size()] + "spear hand")
+		% [_skin_rest.size(), rest.size(), _fist_rest.size()] + "spear hand, "
+		+ "%d the drinking hand and %d the head alone"
+		% [_left_rest.size(), _head_rest.size()])
 
 
 ## How near the segment `a`..`b` comes to the skinned body, in metres.
@@ -1469,7 +1709,8 @@ func _fist_middle(skeleton: Skeleton3D, hand: int) -> Vector3:
 	if _fist_rest.is_empty():
 		var gub := get_child(0) as Gub
 		_build_skin(gub, skeleton)
-	return _fist_centre(skeleton, hand)
+	return _fist_centre(skeleton, hand, _fist_rest, _fist_bones,
+		_fist_weights)
 
 
 ## The elevation table as a picture: one Gub per carried clip, in a row, with
@@ -1559,6 +1800,7 @@ func _elevations(weapon_name: String, view: String = "side") -> void:
 
 ## How many bodies the stage has to frame. The sheet knows its own width from
 ## `SHEET_CLIPS`; the elevation row does not, so it says.
+var _sheet_width: float = 0.0
 var _sheet_columns: int = 0
 
 
@@ -1632,6 +1874,10 @@ func _build_stage(eye: Vector3, up: Vector3 = Vector3.UP) -> void:
 	var width := (float(SHEET_CLIPS.size() * 2 - 1) + SHEET_GAP) * SHEET_SPREAD
 	if _sheet_columns > 0:
 		width = float(_sheet_columns) * ELEVATION_SPREAD
+	# And an outright override, for the one sheet whose row is neither the
+	# comparison's six-plus-a-gap nor the elevation row's wide slots (D-075).
+	if _sheet_width > 0.0:
+		width = _sheet_width
 	var camera := Camera3D.new()
 	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
 	camera.keep_aspect = Camera3D.KEEP_WIDTH
@@ -1650,3 +1896,309 @@ func _build_stage(eye: Vector3, up: Vector3 = Vector3.UP) -> void:
 	mat.albedo_color = Color(0.22, 0.30, 0.18)
 	floor_mesh.material_override = mat
 	add_child(floor_mesh)
+
+
+# --------------------------------------------------------------- the drink ---
+
+## The bottle's whole fit, printed: the palm point, the two rotations worth
+## arguing about, what each does across the window, and the scale (D-075).
+##
+## `-- solve`'s opposite number for a prop that is not carried. `_solve` sweeps
+## 24 bearings by 3 elevations and scores each against the floor and the trunk,
+## because a carried weapon may point anywhere round a Gub and the question is
+## which of those directions is not occupied by the Gub. A bottle has no such
+## freedom: it is held for 2.9 s of one clip whose hand does one thing, so there
+## are not 288 candidates, there are **two** — stand the bottle up at the start
+## of the drink, or stand it up at the lips — and the whole of the argument is
+## which of the two the rest of the clip then does something sensible with.
+##
+## So this prints both, in full, across the window. It is a table rather than a
+## verdict for D-072's reason: the answer is obvious once the two are beside
+## each other and is not obvious before, and a tool that printed only the winner
+## would be asking to be believed.
+func _potion() -> void:
+	var gub := _bare_gub()
+	var skeleton := gub.find_child("Skeleton3D", true, false) as Skeleton3D
+	var player := gub.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	_build_skin(gub, skeleton)
+	var hand := skeleton.find_bone(HeldGear.BOW_HAND_BONE)
+
+	# The palm point, which is the measurement and not a choice: the centre of
+	# the mitten, in the hand's own frame, in the pose the bottle is held in.
+	var centre := Vector3.ZERO
+	var spread := 0.0
+	var first := Vector3.ZERO
+	for i in DRINK_SAMPLES:
+		_pose(player, skeleton, "Idle", 0.0, "Drink", _drink_time(i))
+		var at := _fist_centre(skeleton, hand, _left_rest, _left_bones,
+			_left_weights)
+		if i == 0:
+			first = at
+		spread = maxf(spread, at.distance_to(first))
+		centre += at
+	centre /= float(DRINK_SAMPLES)
+	print("preview_carry: the drinking fist's centre is %v in the hand's own "
+		% centre + "frame and moves %.4f m across the whole window; "
+		% spread + "POTION_PALM is %v" % HeldGear.POTION_PALM)
+	# The spear's point, carried over unmoved, which is the thing D-068's rule
+	# would have had this prop do and is why D-075 says it cannot.
+	var shared := HeldGear.fist_offset()
+	var to_shared := centre - shared
+	var along := HeldGear.potion_direction()
+	print("  `fist_offset()` is %v, which is %.3f m from that centre (%.3f m "
+		% [shared, centre.distance_to(shared),
+			(to_shared - along * to_shared.dot(along)).length()]
+		+ "off the bottle's axis) against %.3f allowed" % PALM_MAX)
+
+	print("  %-22s %-28s" % ["fitted at", "POTION_GRIP_ROTATION"]
+		+ "  the bottle's tilt off horizontal, across the window")
+	for spec: Array in [["the window opens", GubAnimator.DRINK_CLIP_START],
+			["the lips", _lips_time(player, skeleton)]]:
+		var rot := _upright_at(gub, skeleton, player, float(spec[1]))
+		var line := ""
+		for i in 13:
+			_pose(player, skeleton, "Idle", 0.0, "Drink",
+				GubAnimator.DRINK_CLIP_START
+				+ (GubAnimator.DRINK_CLIP_END - GubAnimator.DRINK_CLIP_START)
+				* float(i) / 12.0)
+			line += "%+4.0f " % _bottle_tilt(skeleton, hand, rot)
+		print("  %-22s Vector3(%7.2f,%8.2f,%8.2f)  %s"
+			% [spec[0], rot.x, rot.y, rot.z, line])
+
+	# Which way is **out of the Gub**, in the hand's own frame, at the frame
+	# the window opens on: horizontally away from `Spine1`, with the component
+	# along the bottle projected out because sliding a prop along its own axis
+	# is the grip fraction's business. It is the axis the palm point is fitted
+	# along (`HeldGear.POTION_PALM` says what it bought), derived rather than
+	# guessed at, because the drinking hand is at a different attitude from the
+	# spear hand and "the palm normal" is not the same direction twice.
+	#
+	# **Printed and not scored**, which is this mode's one honest limitation.
+	# The thing five centimetres out of the fist buys is that the bottle is not
+	# inside the Gub's stomach, and the measurement that ought to say so —
+	# `_nearest_skin` against the trunk — cannot: the drink puts a bottle at a
+	# face on purpose, so the minimum over the window is nearly zero at every
+	# offset and says nothing about the half of it that happens at the hip.
+	# `-- drink fist <scale> <fraction> <out>` renders the comparison instead,
+	# and D-075 has the three pictures.
+	_pose(player, skeleton, "Idle", 0.0, "Drink", GubAnimator.DRINK_CLIP_START)
+	var spine := skeleton.get_bone_global_pose(
+		skeleton.find_bone("Spine1")).origin
+	var hand_at := skeleton.get_bone_global_pose(hand)
+	var out_world := hand_at.origin - spine
+	out_world.y = 0.0
+	var outward := hand_at.basis.orthonormalized().inverse() \
+		* out_world.normalized()
+	outward = (outward - along * outward.dot(along)).normalized()
+	var out_by := HeldGear.POTION_PALM - centre
+	print("  out of the Gub is %v in the hand's own frame, and POTION_PALM is "
+		% outward + "%.3f m along it — %.3f m of %.3f allowed"
+		% [out_by.dot(outward), (out_by - along * out_by.dot(along)).length(),
+		PALM_MAX])
+
+	# The scale, which is the one lever no check on this page can see;
+	# `HEAD_BONES` carries the measurement that says why.
+	print("  %6s %8s %8s %9s %9s" % ["scale", "tall", "belly", "neck", "lip to face"])
+	for model_scale: float in [0.20, 0.24, 0.26, 0.30, 0.34, 0.40, 0.50]:
+		var lip := HeldGear.potion_transform(model_scale) \
+			* Vector3(0.0, HeldGear.POTION_HEIGHT, 0.0)
+		var near := INF
+		for i in DRINK_SAMPLES:
+			_pose(player, skeleton, "Idle", 0.0, "Drink", _drink_time(i))
+			near = minf(near, _nearest_head(skeleton,
+				skeleton.global_transform
+				* skeleton.get_bone_global_pose(hand) * lip))
+		print("  %6.2f %8.3f %8.3f %9.3f %9.3f%s"
+			% [model_scale, model_scale * HeldGear.POTION_HEIGHT,
+				model_scale * 0.652, model_scale * 0.322, near,
+				"   <= shipped" if is_equal_approx(model_scale,
+					HeldGear.POTION_SCALE) else ""])
+
+	print("  POTION_GRIP_OFFSET := Vector3(%.4f, %.4f, %.4f)"
+		% [HeldGear.potion_offset().x, HeldGear.potion_offset().y,
+			HeldGear.potion_offset().z])
+
+
+## The grip rotation that stands the bottle up in the world at `at` seconds of
+## the drink clip.
+##
+## `_grip_for`'s shape with the sweep taken out of it: read the hand's world
+## basis at one moment of the layered pose, ask which hand-local direction is
+## world up there, and complete an orthonormal frame round it. The roll is free
+## for the reason `HeldGear.POTION_GRIP_ROTATION` gives — the bottle is a
+## surface of revolution — so any completion will do and the seed is the same
+## one `_grip_for` uses.
+func _upright_at(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
+		at: float) -> Vector3:
+	_pose(player, skeleton, "Idle", 0.0, "Drink", at)
+	var to_world := (gub.global_transform * skeleton.global_transform
+		* skeleton.get_bone_global_pose(skeleton.find_bone(
+			HeldGear.BOW_HAND_BONE))).basis.orthonormalized()
+	var axis := (to_world.inverse() * Vector3.UP).normalized()
+	var seed := Vector3.RIGHT if absf(axis.dot(Vector3.RIGHT)) < 0.9 \
+		else Vector3.FORWARD
+	var x := (seed - axis * seed.dot(axis)).normalized()
+	return Basis(x, axis, x.cross(axis)).get_euler() * (180.0 / PI)
+
+
+## Which moment of the window the bottle is at the Gub's mouth — the sample at
+## which the drinking hand is highest, which is D-067's own detector and finds
+## the same 2.6-3.0 s three other tools do.
+func _lips_time(player: AnimationPlayer, skeleton: Skeleton3D) -> float:
+	var hand := skeleton.find_bone(HeldGear.BOW_HAND_BONE)
+	var best := -INF
+	var at := GubAnimator.DRINK_CLIP_START
+	for i in DRINK_SAMPLES:
+		var t := _drink_time(i)
+		_pose(player, skeleton, "Idle", 0.0, "Drink", t)
+		var y := (skeleton.global_transform
+			* skeleton.get_bone_global_pose(hand)).origin.y
+		if y > best:
+			best = y
+			at = t
+	return at
+
+
+## How far off horizontal the bottle's own axis lies, in the pose the skeleton
+## is currently in: +90 is standing up, -90 is pouring straight down.
+func _bottle_tilt(skeleton: Skeleton3D, hand: int,
+		rotation_degrees: Vector3) -> float:
+	var grip := HeldGear.potion_transform(HeldGear.POTION_SCALE, rotation_degrees)
+	var world := skeleton.global_transform \
+		* skeleton.get_bone_global_pose(hand) * grip
+	var base: Vector3 = world * Vector3.ZERO
+	var lip: Vector3 = world * Vector3(0.0, HeldGear.POTION_HEIGHT, 0.0)
+	return rad_to_deg(asin(clampf((lip - base).normalized().y, -1.0, 1.0)))
+
+
+## The bottle in the hand, through the drink (D-075).
+##
+## Two framings, and the brief is that both are needed — which is the pair D-074
+## landed on one hand over. `fist` is close on the mitten, because "is the
+## bottle in the hand" is a question about twenty centimetres of Gub; `body` is
+## the whole Gub, because "does this read as drinking" is a question about all
+## of it and about the empty other fist in particular.
+##
+## **The close one lines the fists up and lets the bodies fall where they
+## like.** That is the one liberty this sheet takes and it is worth stating: the
+## drinking hand travels 0.6 m across the window, so a row of Gubs planted on
+## one floor puts their fists on a diagonal and a frame tight enough to see any
+## of them contains one. Each Gub is translated so its own hand lands on the row
+## line instead. Nothing about the grip is changed by translating a whole body,
+## which is exactly why it is safe to do — what is being judged is a hand-local
+## transform. It is three columns rather than six for the same reason it is
+## close: at `FIST_SPREAD` six fists are a five-metre frame and each mitten is a
+## hundred pixels, and the three that carry the argument are the bottle upright
+## at the side, the bottle at the lips, and the bottle upright again.
+##
+## From the Gub's front-left quarter and **not** from behind the shoulder,
+## which is where this parts company with `_fist`; `DRINK_AZIMUTH` carries the
+## argument.
+##
+## **`Combat` is taken off these Gubs and that is not tidiness.** `_tick_hand`
+## polls four — five, now — questions every frame and repaints any hand that
+## disagrees with its gates, and `is_channelling()` is false on a Gub nobody is
+## driving. Left on, it takes the bottle back out of the fist and puts the
+## default weapon in it somewhere around the twentieth warmup frame, which is
+## before the shutter. Every other picture on this page gets away with leaving
+## it: they set `gub.weapon` and then show that weapon, so the poll agrees with
+## them. This is the first mode whose hand the poll would disagree with, and it
+## is the first one that has to say so.
+func _drink(view: String, tune: Vector3 = Vector3.ZERO) -> void:
+	var close := view != "body"
+	var fractions: Array = DRINK_BODY_FRACTIONS
+	if close:
+		fractions = DRINK_FIST_FRACTIONS
+	var azimuth := deg_to_rad(DRINK_AZIMUTH if close else VIEW_AZIMUTH)
+	var elevation := deg_to_rad(FIST_ELEVATION if close else VIEW_ELEVATION)
+	var eye := Vector3(sin(azimuth) * cos(elevation), sin(elevation),
+		-cos(azimuth) * cos(elevation))
+	var row := -Vector3(cos(azimuth), 0.0, sin(azimuth))
+	var spread: float = FIST_SPREAD if close else SHEET_SPREAD
+	var centre := Vector3.ZERO
+
+	for i in fractions.size():
+		var gub := _bare_gub()
+		var combat := gub.get_node_or_null("Combat")
+		if combat != null:
+			combat.queue_free()
+		var skeleton := gub.find_child("Skeleton3D", true, false) as Skeleton3D
+		var player := gub.find_child("AnimationPlayer", true, false) as AnimationPlayer
+		var fraction: float = fractions[i]
+		var t := GubAnimator.DRINK_CLIP_START + fraction 			* (GubAnimator.DRINK_CLIP_END - GubAnimator.DRINK_CLIP_START)
+		# Nothing in the fists but the bottle, which is D-067's "the drink
+		# empties both hands" as a picture: `_show` with no weapon is exactly
+		# what `_refresh_hand` produces for a channelling Gub.
+		_show(gub, -1)
+		# `set_potion_grip` is the escape hatch the constants were swept
+		# through before they were pasted: `tune` is a scale and a grip
+		# fraction, and zero means whatever ships.
+		if tune != Vector3.ZERO:
+			var dir := HeldGear.potion_direction()
+			var spine := skeleton.get_bone_global_pose(
+				skeleton.find_bone("Spine1")).origin
+			var hand_at := skeleton.get_bone_global_pose(
+				skeleton.find_bone(HeldGear.BOW_HAND_BONE))
+			var out_world := hand_at.origin - spine
+			out_world.y = 0.0
+			var outward := hand_at.basis.orthonormalized().inverse() \
+				* out_world.normalized()
+			outward = (outward - dir * outward.dot(dir)).normalized()
+			var palm := HeldGear.POTION_PALM + outward * tune.z
+			gub.held_gear.set_potion_grip(tune.x,
+				palm - dir * (tune.y * HeldGear.POTION_HEIGHT
+					* tune.x), HeldGear.POTION_GRIP_ROTATION)
+		gub.held_gear.set_potion(true)
+		_pose(player, skeleton, "Idle", 0.0, "Drink", t)
+		var slot := row * (float(i) - float(fractions.size() - 1) * 0.5) * spread
+		# `Skeleton3D.global_transform` already carries the Gub's own placement,
+		# so this is the world hand and not the hand times the Gub twice — the
+		# bug D-074 found the first time a mode stood Gubs in a row.
+		var hand := (skeleton.global_transform * skeleton.get_bone_global_pose(
+			skeleton.find_bone(HeldGear.BOW_HAND_BONE))).origin
+		gub.position = slot - (hand if close else Vector3.ZERO)
+		hand = slot if close else hand + slot
+		centre += hand if close else Vector3(slot.x, 1.1, slot.z)
+
+		var stamp := Label3D.new()
+		stamp.text = "%.0f%% of the drink" % (fraction * 100.0)
+		stamp.font_size = 44 if close else 56
+		stamp.pixel_size = 0.0004 if close else 0.0016
+		stamp.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		stamp.no_depth_test = close
+		if close:
+			# Hung in the world rather than parented, because the Gub carries a
+			# scale and a label placed in its local space lands a metre off.
+			add_child(stamp)
+			stamp.global_position = hand + Vector3(0.0, FIST_FRAME * 0.6, 0.0)
+		else:
+			gub.add_child(stamp)
+			stamp.position = Vector3(0.0, 2.30, 0.0)
+	centre /= float(fractions.size())
+
+	if not close:
+		_sheet_width = float(fractions.size() - 1) * spread
+		_build_stage(eye)
+		return
+
+	var light := DirectionalLight3D.new()
+	# Mirrored with the camera: the key light has to come from the side the
+	# bottle is on or the mitten shades the one thing this picture is about.
+	light.rotation_degrees = Vector3(-42.0, 38.0, 0.0)
+	light.light_energy = 1.2
+	add_child(light)
+	var env := WorldEnvironment.new()
+	var e := Environment.new()
+	e.background_mode = Environment.BG_COLOR
+	e.background_color = Color(0.14, 0.16, 0.18)
+	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	e.ambient_light_color = Color(0.5, 0.52, 0.55)
+	e.ambient_light_energy = 0.8
+	env.environment = e
+	add_child(env)
+	var camera := Camera3D.new()
+	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+	camera.keep_aspect = Camera3D.KEEP_WIDTH
+	camera.size = float(fractions.size() - 1) * spread + FIST_FRAME
+	add_child(camera)
+	camera.look_at_from_position(centre + eye * 10.0, centre, Vector3.UP)

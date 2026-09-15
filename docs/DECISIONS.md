@@ -9032,3 +9032,244 @@ because `Skeleton3D.global_transform` already carries it. Every table on the pag
 gets away with it — they pose one Gub at the origin, where the doubling is the
 identity — and the first mode to stand Gubs in a row and read a world position
 back off them put its labels a metre wide of the hands they belonged to.
+
+## D-075 — The bottle in the hand: one fist, one point, and the one prop that had to have its own
+
+D-067 shipped the drink as a mime and said so in as many words: *"rejected for
+now: a potion model in the fist. It is the right end state and it is a step of
+its own — the bow's grip took a dedicated `preview_bow -- measure` to solve
+(D-065) and the drinking hand would need the same. What is shipping is a mime
+with empty hands."* The tool it was waiting for is `palm`, which D-074 built for
+the other hand one step ago. This is that step spent.
+
+**It is the left fist, and it is `Drink`'s left fist.** D-067 measured the
+drinking hand off the clip — *"the right hangs at the side for the whole clip and
+never moves 12 cm"* — and `HeldGear` has had a second `BoneAttachment3D` on
+`LeftHand` since D-065. What is new is a prop on it that is not a bow.
+
+### The rule holds and the number does not, and that is the finding
+
+D-068 made `HeldGear.fist_offset()` static and public on the argument that *"a
+hand holds a hilt where it holds a shaft, and a second palm measured separately
+would be a second opinion about where this fist is."* Three props read it: the
+great sword's grip, the Elder's crackle, and `preview_sword -- measure`. D-074
+moved it three centimetres and all three moved with it — which is the whole case
+for one point.
+
+So this started from it. Measured:
+
+| | in its own hand's frame | |
+|---|---|---:|
+| `fist_offset()` — the spear's palm point | `(-0.030, 0.060, -0.010)` | |
+| the spear fist's centre, in `SpearCarry` | `(0.002, 0.062, 0.029)` | 0.030 m from it |
+| the **drinking** fist's centre, in `Drink` | `(-0.003, 0.157, 0.077)` | **0.133 m from it** |
+
+`PALM_MAX` is 0.066. Carried over unchanged, the shared point lands **twice the
+threshold** from the middle of the hand it is supposed to be inside, and it is
+not close enough for a nudge — it is the wrist.
+
+**Two things are wrong with it and only one of them is the mirror.** The frames
+are mirrored, yes. The bigger half is that D-074's finding was never about the
+spear: *a palm point means nothing except in the pose the prop is held in.*
+`SpearCarry` closes the fingers round a shaft and the mitten's centre sits
+0.062 m out along the hand's own +Y; `Drink` opens them round a bottle and the
+same centre is at **0.157 m**, 9.5 cm further out on the same axis. Obeying
+D-068 literally would have put the bottle at the Gub's wrist and `bottle` would
+have failed on the commit that did it.
+
+So what is shared is the **method** and not the constant.
+`preview_carry._fist_centre` is one function run over `FIST_BONES` or
+`LEFT_FIST_BONES` — 1,030 vertices or 1,073, the same half-share rule, skinned by
+the formula the GPU runs — in whichever pose the prop is actually held in.
+`POTION_PALM` is the fourth constant on this page to be a measurement rather than
+a guess, and the first that is allowed to disagree with `fist_offset()` because
+it was measured the same way and came out somewhere else.
+
+**Nothing about `fist_offset()` moved**, which was the other half of the brief.
+The sword's fit residual is 0.154 against 0.160 after D-074 and is 0.154 now; the
+spear reads 0.050 of palm, +0.281 m of floor and 0.142 m of trunk; the bow
++0.251 m and 0.121 m; the great sword +0.205 m and 0.142 m. Byte for byte, the
+only constants this step adds are `POTION_*`.
+
+### Five centimetres out of the Gub, which is D-074's move run backwards
+
+The fist's centre is not where the bottle went either, and the reason is the
+opposite of the spear's. D-074 moved a shaft 3 cm **in**, because it was riding
+the outside of the knuckles. This moves a bottle 5 cm **out**, because a Gub is a
+pear and its drinking arm rests against its own stomach: an axis through the
+middle of that mitten puts half the belly inside the body for the third of the
+channel the arm is down.
+
+`-- potion` derives the direction rather than guessing it — horizontally away
+from `Spine1` at the frame the window opens, with the component along the bottle
+projected out, which in this hand is `(0.246, 0.348, -0.905)`. Rendered, at
+`POTION_GRIP_FRACTION` 0.65 and `POTION_SCALE` 0.30:
+
+| out by | what the bottle does at the Gub's side |
+|---:|---|
+| -0.05 | swallowed — a purple sliver under a mitten, and no bottle at all |
+| 0.00 | the belly half inside the stomach, cut off by the body |
+| **+0.05** | the whole bottle, cork clear of the fist, belly clear of the Gub |
+
+**The honest cost line is that it spends 0.050 of `PALM_MAX`'s 0.066.** That is
+most of the allowance, it is spent on purpose, and the 16 mm left is what stops
+the next person going further: at 0.067 the check says the bottle is beside the
+hand rather than in it, and the threshold is not a number to widen — it is half
+the mitten's own thickness, which is a fact about the rig.
+
+**This is the one number on the page no check can see, and it is worth saying
+why.** `_nearest_skin` is what ought to say "the bottle is not in the stomach",
+and it cannot: a drink puts a bottle at a face on purpose, so the minimum over
+the window is within 2 cm at every offset and says nothing about the half of the
+window that happens at the hip. So `-- drink fist <scale> <fraction> <out>`
+renders the comparison, the table above is it, and this record is where the
+judgement lives. It is the same shape as D-074's own admission one hand over:
+four green lines could not see a shaft outside a mitten either.
+
+### The grip is one frame of one clip, and the clip does the rest
+
+`-- solve` sweeps 24 bearings by 3 elevations for a carried weapon, because a
+weapon may point anywhere round a Gub and the question is which directions are
+not occupied by the Gub. A bottle has no such freedom. It is held for 2.9 s of
+one clip whose hand does one thing, so there are two candidates — stand the
+bottle up at the **start** of the drink, or stand it up at the **lips** — and the
+argument is which of the two the rest of the clip does something sensible with.
+Both are printed in full:
+
+| fitted at | the bottle's tilt off horizontal, across the window |
+|---|---|
+| **the window opens** | **+90 +86 +54 +34 −3 −31 −48 −47 −32 +13 +59 +72 +78** |
+| the lips | −51 −46 −18 −3 +32 +59 +81 +86 +68 +19 −26 −48 −49 |
+
+The first is a drink: upright at the Gub's side, tipping as the arm comes up,
+mouth-down into the face for the whole 0.7 s the head is back, and very nearly
+upright again as the arm falls. The second is the same argument backwards and is
+worse in the way that matters — it reads −47° at **both edges of the window**, so
+a Gub picks the bottle up upside down, pours it out for half a second, and then
+rights it at its own mouth.
+
+That is the whole point of fitting at the start rather than at the lips.
+`Drinking.fbx` is a Gub raising something to its mouth; a bottle stood upright in
+the hand *before* the lift is tipped into the face *by* the lift, for free, with
+one rigid transform and no second pose to blend. The roll about the bottle's own
+axis is unconstrained and left wherever the solve's seed put it, because the
+model is a surface of revolution and there is nothing for a roll to get wrong.
+
+### Where the fist closes on it, which is the other thing the clip decides
+
+`POTION_GRIP_FRACTION` is 0.65 and two arguments land on it. The bottle's radius
+by twentieths of its own height reads
+
+    .23 .27 .30 .31 .32 .33 .32 .31 .30 .27 .23 .19 .17 .16 .16 .20 .20 .20 .14 .16
+     <----------- the belly ------------>  <--- the neck --->  <- the cork ->
+
+so 0.65 is the narrowest part — a fist closing on something a fist could close
+on, rather than on a 0.20 m sphere. And it puts two thirds of the bottle on the
+far side of the fist from the lip, which at the lips is the side **away from the
+Gub's face**. That second one is not a preference, it is a rendered result: at
+0.25 the lip end is 0.225 m past the palm, the clip tips it −47° into a 0.40 m
+head, and **the bottle disappears inside the Gub entirely** — there is no bottle
+in the picture. At 0.65 it is 0.105 m past, which is a lip at a face, and the
+belly rides clear above it where it can be seen.
+
+`GRIP_FRACTION` is 0.55 because a spear's butt has to clear the grass. This one
+is 0.65 because a bottle's neck is where a bottle's neck is, and because a drink
+is poured from the end nearest the mouth.
+
+### The scale is judged by eye, and the check that would have judged it is a lie
+
+`POTION_SCALE` is 0.30 against the 0.50 `Pickup` draws the same GLB at on the
+ground, and the model is not re-tinted or rebuilt — it is the same 6,000
+triangles at 512, still purple, which is the plan's decisions table and D-067's.
+A drop is read across a clearing and stands in a band with the lure and the
+letters; a held bottle is read against the mitten it is in, and that mitten is
+0.22 m across and solid. It cuts both ways:
+
+| scale | |
+|---:|---|
+| 0.20 | the bottle is 0.20 m, the mitten is 0.22, and the fist swallows it |
+| **0.30** | belly 0.20 m, neck 0.10 m — the cork clears the top of the fist and the belly clears the bottom |
+| 0.50 | as tall as the Gub's own head, held by a neck wider than the mitten |
+
+**The obvious check for this was written, measured, and deleted.** *Does the lip
+reach the mouth* is exactly the clause `palm` has no equivalent of, and it is the
+one a wrong scale should fail. Measured against the skinned head it reads 0.005
+to 0.015 m at **every** scale in that table, because the drinking hand is at the
+face by the middle of the clip and the head is a 0.40 m blob. A threshold that
+passes every value of the lever it polices is not a threshold, which is D-074's
+own sentence about `PALM_MAX` — *a threshold whose own motivating case still
+passes is not a threshold* — turned on a candidate of its own. So `HEAD_BONES`
+is cached for the table `-- potion` prints and for nothing else, `preview_carry`
+does not pretend to cover the scale, and `out/carry_potion_palm.png` is what
+settles it.
+
+### The hand rule, re-verified with something in the hand
+
+D-067 made a drink empty **both** fists — `has_spear()` and `has_bow()` each grew
+a `not is_channelling()` clause, put in the *gate* so that the hand obeys a drink
+rather than only the throw refusing one — and proved it with a contact sheet of a
+Gub raising nothing.
+
+An empty hand is a weak thing to assert. It is also what a broken attachment, a
+missing model and a Gub that never started drinking all look like. So
+`combat_range -- potion` grew a sixth verdict, and it is the one that could only
+be written once there was a bottle: half way through the channel there is a
+**bottle in the drinking fist** and no spear, no bow, no arrow and no great sword
+in either; and one frame after the arm comes down the bottle is gone and the fist
+agrees with `has_spear()` again, which is `_end_channel` asking `_refresh_hand`
+on that frame rather than leaving it to the next frame's poll (D-069). Run with
+`_wants_potion()` forced false it fails on the first clause, which is what makes
+it a check.
+
+`_refresh_hand` is still the only place that decides, and it is now five calls
+rather than four, set together and every time. `_tick_hand`'s poll is five
+comparisons rather than four for the reason D-065 gave when it became four: a
+poll with a hole in it is a poll that catches three bugs out of four.
+
+**One real bug came out of writing that verdict and it is worth a line.** The
+first version read the fists in step 4 and asserted there. `_potion_verdict`
+*clears* the problem list, so the failure was reported under `channel` — the
+verdict that happened to come next — and the line naming what broke named the
+wrong thing. It is recorded in step 4 and asserted in step 5 now, which is
+`_potion_mid`'s own shape one question over.
+
+### Two smaller things the pictures found
+
+**`_tick_hand` will undo a tool that sets a hand by hand.** Every other picture
+on this page gets away with leaving `Combat` on its Gubs because it sets
+`gub.weapon` and then shows that weapon, so the poll agrees with it. `-- drink`
+is the first mode whose hand the poll disagrees with — nobody is driving a
+channel on a posed Gub — and it took the bottle back out of the fist and put a
+spear in it somewhere around the twentieth warmup frame, which is before the
+shutter. The mode frees `Combat`, and says so.
+
+**`set_potion_grip` ignored its own offset for one commit**, copied from
+`set_bow_grip` whose `_orient_bow` writes only a basis. `_orient_potion` writes a
+whole transform, so the offset a sweep handed in was overwritten by the
+derivation of the shipped constants and every cell of a grip-fraction sweep was
+the shipped grip. It is `_orient_sword`'s shape now — the stored offset, not the
+recomputed one — which is the same trap D-073 found in `-- sweep sword`, in a
+tool then and in the game node now. A sweep that lies is worse than no sweep.
+
+### The sheets, because this is judged by eye
+
+`out/carry_potion_palm.png` is the close one, three fists across the channel in
+`-- fist`'s framing mirrored to the other shoulder: the bottle upright and whole
+in the mitten at both ends, and tipped up at the face in the middle. The middle
+column is the weakest of the three and it is honest to say which — from behind
+the left shoulder the belly reads as a purple ball beside the head and the lip is
+behind the mitten. `out/carry_potion.png` is the whole-body row of six, and it is
+where the drink reads: 80% of the channel is a Gub with a bottle at its mouth.
+
+Gate **118 → 120**. `bottle PASS` on the forty-second `measure` run, and
+`hands PASS` on the potion round.
+
+### What this leaves open
+
+The same balance question D-067 left — 40 health for two seconds of standing
+still — and one new one that only a playtest answers: the bottle is now a tell,
+and a Gub drinking in the open is 0.30 m of bright purple held up beside its
+head. That is the argument for having drawn it, and it is also the first time
+this game has made *being mid-action* visible from across a clearing. No
+crosshair and no HUD treatment (D-036, D-054): the bottle in the hand is the
+tell, which is the sentence the spear and the bow already make.

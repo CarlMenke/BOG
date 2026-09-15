@@ -19,7 +19,14 @@ extends Node3D
 ##                Elder's crackle, which is what an Elder has instead of a
 ##                spear (D-038); the nocked arrow, while the bow is drawn; or
 ##                the great sword, for the length of a swing (D-068)
-##   left hand    the bow
+##   left hand    the bow; or the heal potion, for the length of a drink
+##                (D-075)
+##
+## **The left hand's two are exclusive and it is `GubCombat` that says so**, not
+## this file and not the fact that they share an attachment. A drink empties
+## both fists — `has_bow()` and `has_spear()` have carried `not is_channelling()`
+## since D-067 — so a bottle and a bow can no more be out together than a bow
+## and a great sword can.
 ##
 ## **A great sword is two-handed and still hangs off one attachment** (D-068).
 ## The rule is one *object* per hand, not one hand per object: the sword is
@@ -47,6 +54,12 @@ const MODEL := preload("res://art/generated/spear.glb")
 const BOW_MODEL := preload("res://art/generated/bow.glb")
 const ARROW_MODEL := preload("res://art/generated/arrow.glb")
 const SWORD_MODEL := preload("res://art/generated/greatsword.glb")
+## The same GLB `Pickup` puts on the ground (D-067), not a second one built for
+## the hand: a potion the player picked up and a potion the player is drinking
+## have to be recognisably the same bottle, and the one thing a second model
+## could buy — a lower triangle budget for the one that is 30 cm from the camera
+## — is the wrong way round.
+const POTION_MODEL := preload("res://art/generated/heal_potion.glb")
 
 const HAND_BONE := "RightHand"
 const BOW_HAND_BONE := "LeftHand"
@@ -319,6 +332,17 @@ var _bow_model_scale: float = BOW_SCALE
 var _bow_grip_rotation: Vector3 = BOW_GRIP_ROTATION
 var _carry: float = 1.0
 var _bow_string: MeshInstance3D
+## The heal potion, in the bow fist for the length of a drink (D-075). Same
+## attachment as the bow and the same argument as the card and the shaft one
+## hand over: one node owns this fist, so a bottle and a bow cannot end up in it
+## together and there is no second attachment to keep in step with the first.
+var _potion: Node3D
+## The grip `set_potion_grip` was last handed. Three fields, like the sword's:
+## the bottle is scaled as well as placed, so a tool sweeping it has to be able
+## to move all three at once.
+var _potion_model_scale: float = POTION_SCALE
+var _potion_grip_offset: Vector3 = POTION_GRIP_OFFSET
+var _potion_grip_rotation: Vector3 = POTION_GRIP_ROTATION
 ## The nocked arrow, in the right fist while the bow is drawn.
 var _arrow: Node3D
 ## The Elder's crackle, while the bolt is ready (D-038). On the same attachment
@@ -397,6 +421,16 @@ func _attach_bow(skeleton: Skeleton3D) -> void:
 	_bow_attachment.add_child(_bow)
 	set_bow_grip(BOW_SCALE, BOW_GRIP_OFFSET, BOW_GRIP_ROTATION)
 	_bow.visible = false
+
+	# The second thing this fist can hold (D-075), built here with the bow and
+	# for the bow's reason: a drink happens several times a life, and a bottle
+	# rebuilt for each of them buys nothing a `visible` flag does not. It is
+	# kept hidden, like the bow and the arrow and the sword — `_refresh_hand`
+	# decides, and it decides on the first frame.
+	_potion = POTION_MODEL.instantiate() as Node3D
+	_bow_attachment.add_child(_potion)
+	set_potion_grip(POTION_SCALE, POTION_GRIP_OFFSET, POTION_GRIP_ROTATION)
+	_potion.visible = false
 
 	_bow_string = _bow.find_child(STRING_NODE, true, false) as MeshInstance3D
 	if _bow_string == null or _bow_string.mesh == null \
@@ -1078,3 +1112,236 @@ func set_arrow_grip(model_scale: float, offset: Vector3, rotation_degrees: Vecto
 	_arrow.scale = Vector3.ONE * model_scale
 	_arrow.position = offset
 	_arrow.rotation_degrees = rotation_degrees
+
+
+# ------------------------------------------------------------- the potion ---
+
+## How tall `art/generated/heal_potion.glb` is in its own units, and where up
+## the bottle the fist closes on it.
+##
+## The model's origin is the **base** and it runs exactly 1.000 m along its own
+## +Y to the lip, which is `Pickup`'s own "the source bottle is exactly a metre
+## tall" read off the built file rather than taken on trust. Its radius by
+## twentieths of that height is
+##
+##     .23 .27 .30 .31 .32 .33 .32 .31 .30 .27 .23 .19 .17 .16 .16 .20 .20 .20 .14 .16
+##      <----------- the belly ------------>  <--- the neck --->  <- the cork ->
+##
+## **0.65 is the neck, and it is also the only fraction that survives both ends
+## of the clip** (D-075). Two arguments land on the same number:
+##
+## * It is the narrowest part of the bottle — 0.16 of model radius against the
+##   belly's 0.33 — so the fist closes on something a fist could close on rather
+##   than on a 0.20 m sphere.
+## * It puts **two thirds of the bottle on the far side of the fist from the
+##   lip**, and at the lips that is the side away from the Gub's face. The clip
+##   tips the bottle to -47 deg there, so whatever is past the lip end goes into
+##   the head: at 0.25 the bottle is 0.225 m past it and **vanishes inside the
+##   Gub entirely** — rendered, and it is not subtle, there is no bottle in the
+##   picture at all. At 0.65 it is 0.105 m past, which is a lip at a face, and
+##   the belly rides clear above it where it can be seen.
+##
+## `GRIP_FRACTION`'s opposite number twice over: that one is 55% because a
+## spear's butt has to clear the grass, and this one is 65% because a bottle's
+## neck is where a bottle's neck is and because a drink is poured from the end
+## that is nearest the mouth.
+const POTION_HEIGHT := 1.000
+const POTION_GRIP_FRACTION := 0.65
+
+## How big the bottle is in the fist.
+##
+## `Pickup` draws the same model at 0.50 on the ground and this is smaller,
+## which is the one place the two disagree and is deliberate. A drop is read
+## from across a clearing and stands in a band with the lure and the letters; a
+## held bottle is read against the mitten it is in, and this mitten is 0.22 m
+## across and **solid**. That cuts both ways and it is why the number is not
+## free at either end:
+##
+##     0.20   the whole bottle is 0.20 m, the mitten is 0.22, and the fist
+##            swallows it — rendered, there is a purple sliver and no bottle
+##     0.30   belly 0.20 m, neck 0.10 m: the cork clears the top of the fist
+##            and the belly clears the bottom, which is a bottle in a hand
+##     0.50   as tall as the Gub's own head, held by a neck wider than the
+##            mitten
+##
+## **There is no check on this and `preview_carry.HEAD_BONES` says why**: the
+## obvious one — does the lip reach the mouth — reads 0.005 to 0.015 m at every
+## scale in that table, because the drinking hand is at the face by the middle
+## of the clip and the head is a 0.40 m blob. It is judged by eye off
+## `out/carry_potion_palm.png`, and `-- potion` prints the table so the
+## judgement has its evidence beside it.
+const POTION_SCALE := 0.30
+
+## The point of the **left** palm the bottle's axis passes through, in
+## hand-local metres — `GRIP_PALM`'s opposite number, one hand over.
+##
+## **It is not `fist_offset()`, and this is the one prop that asks for its own
+## palm point** (D-075). D-068's rule is that *"a hand holds a hilt where it
+## holds a shaft"*, and it is why the great sword and the Elder's crackle read
+## the spear's point rather than measuring a second opinion about the same fist.
+## The rule survives here; the *number* cannot, and for two reasons that are
+## both measurements rather than preferences:
+##
+## * **It is the other hand.** `fist_offset()` is in `RightHand`'s frame and the
+##   two hands are mirrored, so the number is not even in the right units of
+##   direction.
+## * **It is the other pose, and that is the bigger half.** D-074's whole
+##   finding is that a palm point means nothing except in the pose the prop is
+##   held in. The spear's is a closed fist in `SpearCarry`, where the mitten's
+##   centre sits 0.062 m out along the hand's +Y. `Drink`'s hand is a different
+##   shape — the fingers open round a bottle — and the mitten's centre is
+##   **0.157 m** out, 9.5 cm further along the same axis. Carried over
+##   unchanged, `fist_offset()` lands 0.133 m from the centre of the drinking
+##   fist, which is twice `preview_carry.PALM_MAX` and is the wrist rather than
+##   the hand: the exact failure D-074 was written about, reproduced by obeying
+##   the rule too literally.
+##
+## So what is shared is the **method** and not the constant.
+## `preview_carry._fist_centre` is the same function run over the same mitten
+## one hand over, in the pose this prop is actually held in, and the centre it
+## reports is `(-0.003, 0.157, 0.077)` — flat to 0.0002 m across the whole
+## window, because every bone the mitten hangs off is in
+## `GubAnimator.UPPER_BODY_BONES` and the drink layer owns all of them.
+##
+## **This is that centre plus five centimetres out of the Gub, and the five
+## centimetres are the whole of the fitting.** It is D-074's own move, made for
+## the opposite reason and in the opposite direction: there a shaft was riding
+## the *outside* of the fist and had to come 3 cm in; here a bottle centred in
+## the fist spends half its belly inside the Gub's own stomach, because the
+## drinking hand rests against a body that is a pear. `-- potion` derives the
+## direction rather than guessing it — horizontally away from `Spine1` at the
+## frame the window opens, with the component along the bottle projected out,
+## which in this hand's frame is `(0.246, 0.348, -0.905)` — and the sheet is the
+## argument:
+##
+##     out by   what the bottle does at the Gub's side
+##     -0.05    swallowed: a purple sliver under a mitten, no bottle at all
+##      0.00    the belly half inside the stomach, cut off by the body
+##     +0.05    the whole bottle, cork clear of the fist, belly clear of the Gub
+##
+## It costs 0.05 m of `PALM_MAX`'s 0.066, which is the one number this spends
+## and it is spent deliberately: `bottle` reads **0.050 against 0.066**, so the
+## axis is still inside the mitten — that threshold is half the mitten's own
+## thickness — with 16 mm to spare. Further out is a bottle floating beside a
+## hand, and the check would say so at 0.067.
+const POTION_PALM := Vector3(0.0089, 0.1741, 0.0317)
+
+## Which way the bottle stands in the fist.
+##
+## **Solved, and solved at one frame of one clip.** `preview_carry -- potion`
+## aims the bottle's +Y at world up in the hand's own frame at
+## `GubAnimator.DRINK_CLIP_START` — the frame the drink window opens on, and the
+## frame the arm has not started to move on yet. Everything after that is the
+## clip's, and that is the whole point of fitting it there rather than at the
+## lips: `Drinking.fbx` is a Gub raising something to its mouth, so a bottle
+## stood upright in the hand *before* the lift is tipped into the face *by* the
+## lift, for free, with one rigid transform and no second pose to blend.
+##
+## Measured, across the window:
+##
+##     the window opens   +90 deg   upright, at the Gub's side
+##     the lift           +34 deg   coming up, starting to tip
+##     at the lips        -47 deg   mouth down, into the face, and it stays
+##                                  there for the whole 0.7 s the head is back
+##     the arm down       +78 deg   very nearly upright again
+##
+## which is a drink. **A grip fitted at the lips instead is the same argument
+## backwards, and it is worse**: it reads -51 and -49 deg at the two edges of
+## the window, so a Gub picks the bottle up upside down, pours it out for half a
+## second and then rights it at its own mouth. The tool prints both tables and
+## D-075 has them side by side.
+##
+## The roll about the bottle's own axis is unconstrained and is whatever the
+## solve's seed produced, because the model is very nearly a surface of
+## revolution. There is nothing for a roll to get wrong.
+const POTION_GRIP_ROTATION := Vector3(-71.859, 90.000, -7.883)
+
+## Where the base of the bottle sits in the left fist, in hand-local metres.
+##
+## **Derived, exactly as `GRIP_OFFSET` and `SWORD_GRIP_OFFSET` are** — it is
+## `potion_offset()`, and it is a `const` for their reason: GDScript cannot call
+## a static to initialise one. `preview_carry -- measure` recomputes it every run
+## and fails the gate if the two have drifted, which is the same `derived` line
+## that caught the sword 0.030 m stale the moment D-074 moved the shared palm
+## point.
+##
+## It is the third constant to hang off that check and the first whose
+## derivation carries a **scale** as well as a rotation: the bottle is shrunk
+## into the hand, so the distance from its base to its neck is
+## `POTION_GRIP_FRACTION * POTION_HEIGHT * POTION_SCALE`, and moving the scale
+## alone moves the offset. That is the sword's shape rather than the spear's,
+## and it is why `potion_offset` takes both.
+const POTION_GRIP_OFFSET := Vector3(0.1925, 0.1140, 0.0584)
+
+
+## Which way the bottle's neck points out of the fist, in hand-local space: the
+## model's own +Y turned by the grip. `shaft_direction` and `sword_direction`'s
+## third sibling, and it exists for their reason — two files ask where this prop
+## points and one of them is a tool.
+static func potion_direction(rotation_degrees: Vector3 = POTION_GRIP_ROTATION) -> Vector3:
+	return Basis.from_euler(rotation_degrees * (PI / 180.0)) * Vector3.UP
+
+
+## Where the model's origin — its **base** — sits for a given grip rotation and
+## scale: `POTION_GRIP_OFFSET`'s own derivation, as a function.
+##
+## Slide the bottle down its own axis from the palm point until the fist is
+## `POTION_GRIP_FRACTION` of the way up it. `grip_offset`'s shape with the scale
+## put back in, because unlike the spear this prop is not drawn at the size it
+## was modelled at.
+static func potion_offset(rotation_degrees: Vector3 = POTION_GRIP_ROTATION,
+		model_scale: float = POTION_SCALE) -> Vector3:
+	return POTION_PALM - potion_direction(rotation_degrees) \
+		* (POTION_GRIP_FRACTION * POTION_HEIGHT * model_scale)
+
+
+## Where the bottle sits in the fist, as a whole transform. `spear_transform`
+## and `sword_transform`'s third, and whole rather than a basis for the sword's
+## reason: the tool that fits this hands in a scale as well.
+static func potion_transform(model_scale: float = POTION_SCALE,
+		rotation_degrees: Vector3 = POTION_GRIP_ROTATION) -> Transform3D:
+	var grip := Basis.from_euler(rotation_degrees * (PI / 180.0))
+	return Transform3D(grip.scaled(Vector3.ONE * model_scale),
+		potion_offset(rotation_degrees, model_scale))
+
+
+func _orient_potion() -> void:
+	if _potion == null:
+		return
+	# The stored offset and not `potion_transform`'s derivation of it, which
+	# is `_orient_sword`'s shape and is the difference between this and
+	# `_orient_bow`: a tool sweeping a grip hands in an offset that is
+	# deliberately *not* the one the constants derive, and a function that
+	# recomputed it would quietly throw the sweep away.
+	var grip := Basis.from_euler(_potion_grip_rotation * (PI / 180.0))
+	_potion.transform = Transform3D(
+		grip.scaled(Vector3.ONE * _potion_model_scale), _potion_grip_offset)
+
+
+## Put a bottle in the bow fist, or take it away.
+##
+## **This does not touch the bow**, exactly as `set_sword` does not touch the
+## spear and `set_letter` touches neither. Which of this fist's two is in it
+## belongs to `GubCombat._refresh_hand`, which asks `is_channelling()` — the
+## same question `has_bow()` is refused by (D-067) — and a second opinion here
+## is how the hand and the gate end up disagreeing.
+func set_potion(carried: bool) -> void:
+	if _potion != null:
+		_potion.visible = carried
+
+
+func has_potion() -> bool:
+	return _potion != null and _potion.visible
+
+
+## Exposed for `tools/preview_carry.tscn -- potion`, which sweeps these before
+## they are pasted into the constants above — the same escape hatch `set_grip`
+## and `set_sword_grip` are.
+func set_potion_grip(model_scale: float, offset: Vector3,
+		rotation_degrees: Vector3) -> void:
+	if _potion == null:
+		return
+	_potion_model_scale = model_scale
+	_potion_grip_offset = offset
+	_potion_grip_rotation = rotation_degrees
+	_orient_potion()
