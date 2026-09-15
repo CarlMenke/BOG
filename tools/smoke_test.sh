@@ -533,6 +533,32 @@ also "every carried weapon clears the ground" "card PASS"
 # the shaft past it fails here on the commit that lands it instead of being found
 # two steps later by somebody measuring something else.
 also "every carried weapon clears the ground" "level PASS"
+# **A grip is still the grip its own clips solve for** (D-073), which is the
+# general form of the fault the four steps above kept hitting one at a time.
+#
+# `level` made the spear's flatness a check instead of a sentence. This makes the
+# *derivation itself* one, for the prop whose constants are not a function of
+# each other but of a clip: `SWORD_SCALE`, `SWORD_GRIP_OFFSET` and
+# `SWORD_GRIP_ROTATION` are seventeen poses of `Swing` averaged, so the only
+# honest way to ask whether they are current is to average them again and
+# compare. That is what `hilt` does, and it costs seventeen poses and no skin
+# scan, which is why it can be its own tiny mode rather than a second forty-
+# second run.
+#
+# Three ways to fail and they are three different accidents: `fit`, the clip or
+# the window moved under the constants; `derived`, somebody re-aimed the rotation
+# and left the offset behind, which is precisely what D-072 caught one prop over;
+# and `carried`, the pose the sword is *carried* in no longer closes its second
+# fist on the hilt. It found a live one on the commit it was written: the tool
+# had been printing `1.2585` and `(0.6117, 0.4203, -0.8164)` against a shipped
+# `1.2586` and `(0.6116, 0.4206, -0.8159)` for four steps, and nothing compared
+# them because nothing could.
+#
+# The same run prints the two hilt lines and where the blade actually points,
+# which is D-073's whole argument in four rows. Headless, about four seconds.
+check "the great sword's grip still fits its clips" "hilt PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" --script tools/snapshot.gd -- \
+    res://tools/preview_carry.tscn "$GODOT_LOG_DIR/carry_hilt.png" 4 hilt
 # **One button, four weapons** (D-070), pressed on a keyboard rather than called.
 #
 # `throw_spear`, `draw_bow` and `swing_sword` are one `primary_attack` on the

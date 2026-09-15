@@ -6,9 +6,18 @@ extends Node3D
 ##   Godot --headless --path . --script tools/snapshot.gd -- \
 ##       res://tools/preview_carry.tscn out/none.png 4 measure
 ##
+##   # is the great sword's grip still the grip its own clips solve for (D-073)
+##   Godot --headless --path . --script tools/snapshot.gd -- \
+##       res://tools/preview_carry.tscn out/none.png 4 hilt
+##
 ##   # the sheet: one weapon in Idle, Walk and Run, with and without the layer
 ##   Godot --path . --resolution 2400x900 --script tools/snapshot.gd -- \
 ##       res://tools/preview_carry.tscn out/carry_spear.png 25 sheet spear
+##
+##   # the same three from overhead, which is where a bearing is an angle
+##   Godot --path . --resolution 2400x900 --script tools/snapshot.gd -- \
+##       res://tools/preview_carry.tscn out/carry_sword_bearings.png 25 \
+##       elevations sword plan
 ##
 ## **One tool for three props, which is the opposite of how this repo has done
 ## it so far** — `preview_grip`, `preview_bow` and `preview_sword` are three
@@ -154,9 +163,14 @@ func _ready() -> void:
 		_poses()
 		get_tree().quit()
 		return
+	if mode == "hilt":
+		_hilt()
+		get_tree().quit()
+		return
 	if mode == "solve":
 		_solve(args[4] if args.size() > 4 else "spear",
-			args[5] if args.size() > 5 else "")
+			args[5] if args.size() > 5 else "",
+			args[6] if args.size() > 6 else "")
 		get_tree().quit()
 		return
 	if mode == "sweep":
@@ -167,7 +181,8 @@ func _ready() -> void:
 		get_tree().quit()
 		return
 	if mode == "elevations":
-		_elevations(args[4] if args.size() > 4 else "spear")
+		_elevations(args[4] if args.size() > 4 else "spear",
+			args[5] if args.size() > 5 else "side")
 		return
 	_sheet(args[4] if args.size() > 4 else "spear",
 		args[5] if args.size() > 5 else "",
@@ -337,6 +352,11 @@ func _clearance(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
 	var nearest := INF
 	var reach := INF
 	var elevation := 0.0
+	# Where the business end points round the Gub, summed as a **vector** rather
+	# than as degrees (D-073): a bearing is an angle on a circle, and 24 samples
+	# either side of the -180/+180 seam average to zero if they are added as
+	# numbers. Every other column here is a min or a scalar mean and can be.
+	var bearing := Vector2.ZERO
 	var count := 0
 	for i in samples:
 		var time := length * float(i) / float(samples)
@@ -356,6 +376,7 @@ func _clearance(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
 		lowest = minf(lowest, minf(a.y, b.y))
 		elevation += rad_to_deg(asin(clampf((b.y - a.y)
 			/ maxf(a.distance_to(b), 0.0001), -1.0, 1.0)))
+		bearing += Vector2(b.x - a.x, b.z - a.z).normalized()
 		count += 1
 		nearest = minf(nearest, _nearest_skin(gub, skeleton, ba, bb))
 		# How near the *other* fist comes to the weapon, which is the question
@@ -363,7 +384,8 @@ func _clearance(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
 		# whose second hand closes on air is worse than no carry pose at all.
 		var second := gub.global_transform * skeleton.global_transform 			* skeleton.get_bone_global_pose(off_hand)
 		reach = minf(reach, _point_to_segment(second.origin, a, b))
-	return [lowest, elevation / float(maxi(count, 1)), nearest, reach]
+	return [lowest, elevation / float(maxi(count, 1)), nearest, reach,
+		rad_to_deg(atan2(bearing.x, -bearing.y))]
 
 
 ## Where this weapon's prop sits in its hand, and which two points of it can
@@ -387,8 +409,15 @@ func _prop_transform(weapon: int, tune: Vector3 = Vector3.INF) -> Transform3D:
 			# whether something should be rotated out of it.
 			if tune == Vector3.INF:
 				return HeldGear.sword_transform()
+			# **The offset follows the rotation** (D-073). It did not until then,
+			# and every cell of a `sweep sword` table printed before that was a
+			# sword sliding out of the palm rather than turning in it —
+			# `HeldGear.sword_offset`'s header says how that happened. The scale
+			# is held at the shipped one on purpose: it *is* the reach (D-068),
+			# and a sweep that moved it would be sweeping the weapon's range
+			# along with its angle.
 			return HeldGear.sword_transform(HeldGear.SWORD_SCALE,
-				HeldGear.SWORD_GRIP_OFFSET, tune)
+				HeldGear.sword_offset(tune), tune)
 		_:
 			# The spear has no tilt and never had one: its lever is the grip, and
 			# `HeldGear.spear_transform` is the derivation that carries the butt
@@ -618,11 +647,254 @@ func _poses() -> void:
 				rad_to_deg(atan2(line.y, maxf(flat, 0.0001)))])
 
 
+## The hilt line, in the gripping fist's own frame, in the **swing** and in the
+## **carry** — and how far apart the two are (D-073).
+##
+## This is `preview_sword._measure`'s equation asked of both clips instead of one.
+## A great sword is two-handed, so the direction it has to lie in is not a
+## choice: it is the line from the fist that holds it to the fist that joins it,
+## `hand^-1 * left.origin`, which `preview_sword` solves against `Swing` and which
+## the carry pose answers differently because it is a different pose.
+##
+## **Under the layer the answer is one number, not twelve.** Every bone of both
+## arms is in `GubAnimator.UPPER_BODY_BONES` and they all hang off `Spine1`, so
+## the carry clip owns the whole chain and the left fist's position *in the right
+## fist's frame* is the carry clip's alone — the locomotion underneath moves both
+## fists together and cancels out. That is why a carried grip can be fitted
+## exactly while the swing's can only be fitted on average.
+func _hilt() -> void:
+	var gub := _bare_gub()
+	var skeleton := gub.find_child("Skeleton3D", true, false) as Skeleton3D
+	var player := gub.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	var swing := _hilt_in_swing(player, skeleton)
+	var carry := _hilt_in_carry(player, skeleton, "SwordCarry")
+	print("preview_carry: the great sword's hilt line, fist to fist, in the right fist's frame")
+	print("  %-22s %24s %8s %9s" % ["fitted against", "mean P(t)", "apart", "scale"])
+	for row: Array in [["Swing (D-068, shipped)", swing], ["SwordCarry (carried)", carry]]:
+		var p: Vector3 = row[1]
+		print("  %-22s %24s %7.3f m %8.4f"
+			% [row[0], "%+.4f,%+.4f,%+.4f" % [p.x, p.y, p.z], p.length(),
+				p.length() / (HeldGear.SWORD_REAR_HAND - HeldGear.SWORD_FORE_HAND)])
+	print("  the two hilt lines are %.1f deg apart"
+		% rad_to_deg(swing.normalized().angle_to(carry.normalized())))
+	_hilt_spread(gub, skeleton, player, [
+		["Swing fit (shipped)", HeldGear.sword_transform()],
+		["SwordCarry fit", _sword_grip_from(carry)]])
+	_hilt_verdict(swing, carry)
+
+
+## Whether the shipped grip is still the grip its own clips solve for (D-073).
+##
+## **This is `derived PASS` for the great sword, and it is the check the last
+## four steps of this session kept needing and not having.** D-066 added six
+## clips and left the spear's floor stale; D-070 found it. D-071 remirrored the
+## strafes and left the spear's flatness stale; D-072 found it, and made the
+## flatness a check. Every one of those is the same fault: *a fit against a clip
+## set that has since changed*, discovered two steps later by somebody measuring
+## something else.
+##
+## The spear's version compares one constant against a function of another. The
+## sword's has to go further, because its three constants are not a function of
+## each other — they are a function of **`Swing`**, through the seventeen poses
+## `preview_sword -- measure` averages. So this re-runs that solve and compares.
+## It costs seventeen poses and no skin scan, which is why it can live in a mode
+## the gate already pays for.
+##
+## Three ways to fail, and they are three different accidents:
+##
+##   fit       `Swing` or the window `GubAnimator` plays of it has moved, so the
+##             constants describe a clip that is no longer there. Re-run
+##             `preview_sword -- measure` and paste its three lines.
+##   derived   somebody re-aimed `SWORD_GRIP_ROTATION` and left
+##             `SWORD_GRIP_OFFSET` at its old value, which is exactly what D-072
+##             caught one prop over. Paste `sword_offset()`.
+##   carried   the **carry** pose's fists no longer close on this sword's hilt.
+##             That one cannot be fixed by pasting anything — see D-073.
+func _hilt_verdict(swing: Vector3, carry: Vector3) -> void:
+	var solved := _sword_grip_from(swing)
+	var scale: float = solved.basis.get_scale().x
+	var rotation := solved.basis.orthonormalized().get_euler() * (180.0 / PI)
+	var turn := absf(rad_to_deg(Basis.from_euler(rotation * (PI / 180.0))
+		.get_rotation_quaternion().angle_to(
+			Basis.from_euler(HeldGear.SWORD_GRIP_ROTATION * (PI / 180.0))
+				.get_rotation_quaternion())))
+	var grew := absf(scale - HeldGear.SWORD_SCALE)
+	if turn <= FIT_DEGREES and grew <= FIT_SCALE:
+		print("preview_carry: Swing still solves SWORD_SCALE %.4f and a grip "
+			% scale + "%.1f deg off the shipped one — fit PASS" % turn)
+	else:
+		print("preview_carry: fit FAIL — Swing now solves SWORD_SCALE %.4f and "
+			% scale + "a grip %.1f deg off SWORD_GRIP_ROTATION. The clip has "
+			% turn + "moved under the constants: re-run `preview_sword -- "
+			+ "measure` and paste its three lines.")
+		_failed += 1
+
+	var derived := HeldGear.sword_offset()
+	var drift := derived.distance_to(HeldGear.SWORD_GRIP_OFFSET)
+	if drift <= DERIVED_MAX:
+		print("preview_carry: SWORD_GRIP_OFFSET is %v, %.4f m off its own "
+			% [HeldGear.SWORD_GRIP_OFFSET, drift] + "derivation — derived PASS")
+	else:
+		print("preview_carry: derived FAIL — SWORD_GRIP_OFFSET is %v and "
+			% HeldGear.SWORD_GRIP_OFFSET + "sword_offset() is %v, %.4f m apart"
+			% [derived, drift])
+		_failed += 1
+
+	# How far past the pommel the joining fist closes, in the pose the sword is
+	# *carried* in. `preview_sword.FIT_TOLERANCE` is the yardstick and its header
+	# says what it is: the size of the mitten, 0.16 m of `RightHand`-weighted
+	# skin, rather than a residual to drive to zero.
+	var pommel := HeldGear.sword_direction() \
+		* (HeldGear.SWORD_SCALE * HeldGear.SWORD_REAR_HAND) \
+		+ HeldGear.sword_offset()
+	var miss := pommel.distance_to(carry)
+	if miss <= FIT_TOLERANCE:
+		print("preview_carry: in SwordCarry the joining fist closes %.3f m past "
+			% miss + "the pommel, against %.2f of mitten — carried PASS"
+			% FIT_TOLERANCE)
+	else:
+		print("preview_carry: carried FAIL — in SwordCarry the joining fist "
+			+ "closes %.3f m past the pommel, against %.2f of mitten. The carry "
+			% [miss, FIT_TOLERANCE] + "pose and the sword's size disagree; see "
+			+ "D-073 before changing either, because the size is the reach.")
+		_failed += 1
+
+	if _failed == 0:
+		print("preview_carry: the great sword's grip is still the one its own "
+			+ "clips solve for — hilt PASS")
+	else:
+		print("preview_carry: hilt FAIL — %d of the three are out" % _failed)
+
+
+## Rows that are out, so `hilt` can end with one verdict line the gate greps for
+## without the three checks above having to hand a count back through two
+## returns.
+var _failed: int = 0
+
+## How far the re-solved grip may sit from the shipped one before `fit` calls it
+## a different grip: a degree of rotation and a thousandth of scale. Tight,
+## because nothing is *supposed* to move this — it is not a tolerance on a fit,
+## it is a tolerance on arithmetic being re-run on the same clip.
+const FIT_DEGREES := 1.0
+const FIT_SCALE := 0.001
+
+## How far `SWORD_GRIP_OFFSET` may sit from `sword_offset()`. The spear's own
+## 0.0005 m, for the spear's own reason: these are two spellings of one number
+## and the gap is rounding in the paste.
+const DERIVED_MAX := 0.0005
+
+## How far past the pommel a joining fist may close. `preview_sword`'s own
+## `FIT_TOLERANCE`, copied rather than imported for the reason `_bare_gub` is a
+## copy: the number means "the size of this rig's mitten" and a tool that
+## measured a different prop with a silently shared constant would be worse than
+## two tools that disagree loudly.
+const FIT_TOLERANCE := 0.16
+
+
+## Where the blade actually points, in the Gub's own frame, under the carry
+## layer — averaged over the carry clip's loop, in `Idle`.
+##
+## The angle above is the one the *fit* is wrong by; this is the one a **player**
+## sees, and they are not the same question. Bearing is degrees round from the
+## Gub's forward, positive to its right, of the direction the point sticks out
+## in; elevation is degrees above horizontal; "off fists" is how far the blade's
+## own axis lies from the line between the two fists, which is the one a
+## re-fitted grip can move.
+func _hilt_spread(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
+		grips: Array) -> void:
+	var hand := skeleton.find_bone(HeldGear.HAND_BONE)
+	var off_hand := skeleton.find_bone(HeldGear.BOW_HAND_BONE)
+	var length := player.get_animation("SwordCarry").length
+	print("  %-22s %8s %8s %10s" % ["the point, in Idle", "bearing", "elev",
+		"off fists"])
+	for row: Array in grips:
+		var grip: Transform3D = row[1]
+		var point := Vector3.ZERO
+		var off := 0.0
+		for i in CARRY_SAMPLES:
+			_pose(player, skeleton, "Idle", 0.0, "SwordCarry",
+				length * float(i) / float(CARRY_SAMPLES))
+			var pose := skeleton.get_bone_global_pose(hand)
+			var at := gub.global_transform * skeleton.global_transform * pose * grip
+			# Guard to point, which is the way the blade sticks out of the fists.
+			point += at.origin - at * Vector3(0.0, HeldGear.SWORD_GUARD, 0.0)
+			var fists := (pose.basis.orthonormalized().inverse()
+				* (skeleton.get_bone_global_pose(off_hand).origin
+					- pose.origin)).normalized()
+			off += rad_to_deg((grip.basis.orthonormalized() * Vector3.UP)
+				.angle_to(fists))
+		point /= float(CARRY_SAMPLES)
+		var flat := Vector2(point.x, -point.z).length()
+		print("  %-22s %+7.0f %+8.0f %9.1f" % [row[0],
+			rad_to_deg(atan2(point.x, -point.z)),
+			rad_to_deg(atan2(point.y, maxf(flat, 0.0001))),
+			off / float(CARRY_SAMPLES)])
+
+
+## The great sword's whole grip, given the hilt line it has to lie along —
+## `preview_sword._measure`'s last three lines as a function, so that the swing's
+## fit and the carry's are produced by one piece of arithmetic rather than two.
+static func _sword_grip_from(mean: Vector3) -> Transform3D:
+	var hilt := mean.normalized()
+	var span := HeldGear.SWORD_REAR_HAND - HeldGear.SWORD_FORE_HAND
+	var model_scale := mean.length() / span
+	var across := Vector3.RIGHT
+	var x := (across - hilt * across.dot(hilt)).normalized()
+	var basis := Basis(x, hilt, x.cross(hilt))
+	var euler := basis.get_euler() * (180.0 / PI)
+	return Transform3D(basis.scaled(Vector3.ONE * model_scale),
+		HeldGear.sword_offset(euler, model_scale))
+
+
+## The joining fist in the gripping fist's frame, averaged across the window of
+## `Swing` the animator plays — `preview_sword._measure`'s own `mean P(t)`,
+## re-derived here off the animator's constants so a window that moves moves both.
+func _hilt_in_swing(player: AnimationPlayer, skeleton: Skeleton3D) -> Vector3:
+	var right := skeleton.find_bone(HeldGear.HAND_BONE)
+	var left := skeleton.find_bone(HeldGear.BOW_HAND_BONE)
+	var mean := Vector3.ZERO
+	for i in SWING_CHECKS:
+		var time := lerpf(GubAnimator.SWING_CLIP_START, GubAnimator.SWING_CLIP_END,
+			float(i) / float(SWING_CHECKS - 1))
+		_pose(player, skeleton, "Swing", time, "", 0.0)
+		var fist := skeleton.get_bone_global_pose(right).affine_inverse()
+		mean += fist * skeleton.get_bone_global_pose(left).origin
+	return mean / float(SWING_CHECKS)
+
+
+## The same, under a carry layer — averaged across the carry clip's own loop,
+## because the pose breathes even though the locomotion under it cancels.
+func _hilt_in_carry(player: AnimationPlayer, skeleton: Skeleton3D,
+		carry: String) -> Vector3:
+	var right := skeleton.find_bone(HeldGear.HAND_BONE)
+	var left := skeleton.find_bone(HeldGear.BOW_HAND_BONE)
+	var length := player.get_animation(carry).length
+	var mean := Vector3.ZERO
+	for i in CARRY_SAMPLES:
+		_pose(player, skeleton, "Idle", 0.0, carry,
+			length * float(i) / float(CARRY_SAMPLES))
+		var fist := skeleton.get_bone_global_pose(right).affine_inverse()
+		mean += fist * skeleton.get_bone_global_pose(left).origin
+	return mean / float(CARRY_SAMPLES)
+
+
+## How many samples of the swing the hilt fit averages. `preview_sword.CHECKS`,
+## kept the same so the two tools' `mean P(t)` is the same number.
+const SWING_CHECKS := 17
+
+
 # ---------------------------------------------------------------- the solve ---
 
 ## How many bearings round the Gub the solve tries, and what elevations.
 const SOLVE_BEARINGS := 24
 const SOLVE_ELEVATIONS := [0.0, 10.0, 20.0]
+
+## The same for the great sword, which is a different question (D-073). A spear
+## is asked to lie flat, so the band that matters is the one just off horizontal;
+## a carried sword's own pose already holds the blade at +38, and what is being
+## asked of it is where a blade *may* point without going through the Gub or into
+## the grass. So the band is the whole upper half, in twenty-degree steps.
+const SWORD_ELEVATIONS := [0.0, 20.0, 40.0, 60.0, 80.0]
 
 ## Aim the shaft where it is wanted and read the grip back off it, rather than
 ## nudging three Euler angles until the picture looks right (D-070).
@@ -651,8 +923,19 @@ const SOLVE_ELEVATIONS := [0.0, 10.0, 20.0]
 ## where round the Gub a flat shaft may point without going through the Gub. So
 ## every bearing is solved and then **scored against the real skinned trunk**,
 ## which is D-065's own method and the reason its table is believable.
-func _solve(weapon_name: String, carry_override: String = "") -> void:
+func _solve(weapon_name: String, carry_override: String = "",
+		elevations_override: String = "") -> void:
 	var weapon := Loadout.sanitize(Loadout.from_name(weapon_name))
+	# The great sword takes its own band (`SWORD_ELEVATIONS` says why), and any
+	# weapon takes a comma-separated one from the command line — which is how
+	# D-072 ran its 288 candidates and had to edit a constant to do it.
+	var elevations: Array = SOLVE_ELEVATIONS
+	if weapon == Loadout.Weapon.SWORD:
+		elevations = SWORD_ELEVATIONS
+	if not elevations_override.is_empty():
+		elevations = []
+		for part: String in elevations_override.split(","):
+			elevations.append(float(part))
 	var gub := _bare_gub()
 	var skeleton := gub.find_child("Skeleton3D", true, false) as Skeleton3D
 	var player := gub.find_child("AnimationPlayer", true, false) as AnimationPlayer
@@ -668,10 +951,11 @@ func _solve(weapon_name: String, carry_override: String = "") -> void:
 	print("  %5s %5s  %-26s %8s %8s %7s %7s"
 		% ["elev", "brng", "GRIP_ROTATION", "floor", "trunk", "Idle", "flattest"]
 		+ "  2nd fist")
-	for elevation: float in SOLVE_ELEVATIONS:
+	for elevation: float in elevations:
 		for b in SOLVE_BEARINGS:
 			var bearing := 360.0 * float(b) / float(SOLVE_BEARINGS) - 180.0
-			var grip := _grip_for(gub, skeleton, player, carry, elevation, bearing)
+			var grip := _grip_for(gub, skeleton, player, carry, elevation,
+				bearing, weapon)
 			var worst := INF
 			var skin := INF
 			var idle := 0.0
@@ -692,8 +976,8 @@ func _solve(weapon_name: String, carry_override: String = "") -> void:
 					idle, lowest_elev, off_hand, "   <= OK" if ok else ""])
 
 
-## The grip rotation that points the shaft `elevation` degrees up at `bearing`
-## degrees round from the Gub's forward, under the carry layer.
+## The grip rotation that points the **business end** `elevation` degrees up at
+## `bearing` degrees round from the Gub's forward, under the carry layer.
 ##
 ## Read at one representative frame — the carry clip's own first key over `Idle`
 ## — because that is what "under the layer" means: `UPPER_BODY_BONES` takes its
@@ -701,8 +985,15 @@ func _solve(weapon_name: String, carry_override: String = "") -> void:
 ## the plane underneath only moves the hips and the spine it rides on. The scores
 ## in `_solve` are what check that the remaining variation is small enough; this
 ## only has to pick a candidate.
+##
+## **The grip's +Y is not the business end for every prop** (D-073). The spear's
+## model runs butt-to-tip, so aiming +Y aims the tip; the great sword's runs
+## **point-to-pommel**, so aiming +Y at a bearing would aim the *pommel* there
+## and put the blade out the back. Asked the wrong way round, `solve sword` reads
+## as a perfectly plausible table in which every row is 180 degrees wrong.
 func _grip_for(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
-		carry: String, elevation: float, bearing: float) -> Vector3:
+		carry: String, elevation: float, bearing: float,
+		weapon: int = Loadout.Weapon.SPEAR) -> Vector3:
 	_pose(player, skeleton, "Idle", 0.0, carry, 0.0)
 	var hand := skeleton.find_bone(HeldGear.HAND_BONE)
 	var to_world := (gub.global_transform * skeleton.global_transform
@@ -711,10 +1002,13 @@ func _grip_for(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
 	var e := deg_to_rad(elevation)
 	var a := deg_to_rad(bearing)
 	var want := Vector3(sin(a) * cos(e), sin(e), -cos(a) * cos(e))
+	if weapon == Loadout.Weapon.SWORD:
+		want = -want
 	var axis := (to_world.inverse() * want).normalized()
 	# Any orthonormal pair completing it. `RIGHT` unless the shaft is already
 	# along it, which would make the cross product meaningless.
-	var seed := Vector3.RIGHT if absf(axis.dot(Vector3.RIGHT)) < 0.9 		else Vector3.FORWARD
+	var along_right := absf(axis.dot(Vector3.RIGHT)) < 0.9
+	var seed := Vector3.RIGHT if along_right else Vector3.FORWARD
 	var x := (seed - axis * seed.dot(axis)).normalized()
 	return Basis(x, axis, x.cross(axis)).get_euler() * (180.0 / PI)
 
@@ -929,8 +1223,17 @@ func _sheet(weapon_name: String, carry_override: String = "",
 ## horizontal is an angle on the screen and the reader can put a ruler on it —
 ## which is the opposite of `_sheet`'s oblique camera, and for the opposite
 ## reason: that sheet is about a pose and this one is about a line.
-func _elevations(weapon_name: String) -> void:
+## `view` is `"plan"` for the same row seen from **above** (D-073), which is a
+## different claim and needs a different camera. A spear's grip is judged by
+## whether the shaft lies flat, so its picture is side-on and its stamp is an
+## elevation. The great sword's complaint was *"coming out of the hands at a 35
+## ish degree angle to the characters right"* — an angle round the Gub, not above
+## the horizon — and side-on that is the one component you cannot see, because a
+## blade swung out to the right leaves the screen plane and only looks short.
+## From overhead it is an angle on the screen and a protractor settles it.
+func _elevations(weapon_name: String, view: String = "side") -> void:
 	var weapon := Loadout.sanitize(Loadout.from_name(weapon_name))
+	var plan := view == "plan"
 	var carry := Loadout.carry_clip(weapon)
 	# The row runs across the frame and the camera stands **in front**, which is
 	# forced rather than chosen: the shaft lies across the Gub's body, along its
@@ -944,6 +1247,16 @@ func _elevations(weapon_name: String) -> void:
 	var probe := gub0.find_child("AnimationPlayer", true, false) as AnimationPlayer
 	var clips := _carried_clips(probe, false)
 	gub0.queue_free()
+	# Three clips from overhead rather than twelve, and it is not a preference:
+	# seen from above a Gub is a metre across, so a twelve-wide row is framed on
+	# twenty metres and every body in it is too small to put a protractor on. The
+	# side-on row gets away with twelve because a 1.24 m shaft lying across the
+	# body is most of a column. `SHEET_CLIPS` is the same three the before/after
+	# sheet draws, which is the comparison this one is read beside.
+	if plan:
+		clips = []
+		for clip: String in SHEET_CLIPS:
+			clips.append(clip)
 
 	for i in clips.size():
 		var clip: String = clips[i]
@@ -951,7 +1264,7 @@ func _elevations(weapon_name: String) -> void:
 		var skeleton := gub.find_child("Skeleton3D", true, false) as Skeleton3D
 		var player := gub.find_child("AnimationPlayer", true, false) as AnimationPlayer
 		gub.position = row * (float(i) - float(clips.size() - 1) * 0.5) \
-			* SHEET_SPREAD
+			* (ELEVATION_SPREAD if plan else SHEET_SPREAD)
 		gub.weapon = weapon
 		_show(gub, weapon)
 		var at := _worst_moment(gub, skeleton, player, clip, carry, weapon)
@@ -960,6 +1273,8 @@ func _elevations(weapon_name: String) -> void:
 
 		var stamp := Label3D.new()
 		stamp.text = "%s\n%+.0f deg  %+.2f m" % [clip, measured[1], measured[0]]
+		if plan:
+			stamp.text = "%s\n%+.0f deg right" % [clip, measured[4]]
 		stamp.font_size = 52
 		stamp.pixel_size = 0.0016
 		stamp.position = Vector3(0.0, 2.30, 0.0)
@@ -971,7 +1286,16 @@ func _elevations(weapon_name: String) -> void:
 	# it visibly. Three degrees of lift rather than none, so the floor is a band
 	# under the feet instead of an invisible edge-on plane — which is the other
 	# number every stamp carries.
+	#
+	# From overhead the same argument runs one axis over, and the camera's own
+	# "up" has to become the Gub's **forward**: looking straight down, `UP` is
+	# parallel to the view and `look_at_from_position` has no frame to build. With
+	# `FORWARD` as up, the Gub's forward points up the screen, so a blade at +44°
+	# draws a line 44° clockwise off vertical and the stamp is the protractor.
 	_sheet_columns = clips.size()
+	if plan:
+		_build_stage(Vector3.UP, Vector3.FORWARD)
+		return
 	_build_stage(Vector3(0.0, 0.05, -1.0).normalized())
 
 
@@ -1025,7 +1349,7 @@ func _show(gub: Gub, weapon: int) -> void:
 	gub.held_gear.set_carry(1.0)
 
 
-func _build_stage(eye: Vector3) -> void:
+func _build_stage(eye: Vector3, up: Vector3 = Vector3.UP) -> void:
 	var light := DirectionalLight3D.new()
 	light.rotation_degrees = Vector3(-42.0, -38.0, 0.0)
 	light.light_energy = 1.2
@@ -1056,7 +1380,7 @@ func _build_stage(eye: Vector3) -> void:
 	camera.size = maxf(FRAME_MIN, width + FRAME_MARGIN)
 	add_child(camera)
 	var centre := Vector3(0.0, (FRAME_LOW + FRAME_HIGH) * 0.5, 0.0)
-	camera.look_at_from_position(centre + eye * 14.0, centre, Vector3.UP)
+	camera.look_at_from_position(centre + eye * 14.0, centre, up)
 
 	# The floor, because every number in the tables above is a height above it
 	# and a picture of a weapon in grass needs the grass line in it.

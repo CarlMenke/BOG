@@ -922,6 +922,28 @@ number and the number is the deliverable.
 
 ## Step 15 — The great sword sits wrong in the hands at Idle
 
+***Done, as D-073 — and the diagnosis below is wrong, which is what the step was
+told to check.*** The angle is real and the user's eye was good: the blade leaves
+the fists at **+45° to the Gub's right in `Idle`**, +42 in `Walk`, +35 in `Run`.
+But the two hilt lines are only **10.5°** apart, so the stale fit accounts for a
+quarter of it. The bearing is `SwordCarry`'s own fist line, and re-fitting the
+grip to that clip takes the blade to **+51°** — further right, not less — while
+implying a sword **37% longer** (the carry pose's fists are 0.224 m apart against
+the swing's 0.164), which cannot be blended on the carry weight without the sword
+changing size at every swing. A tilt cannot rescue it either: `-- solve sword`
+says a forward-pointing blade only clears the grass at +60° or steeper and leaves
+the second fist 0.18 m off the hilt, against 0.10 where it is now. **The pose is
+holding the sword out to the forward-right at a low ready and the user does not
+like the pose**, so the angle goes back to them with a price list — a With-Skin
+re-download of one of `GreatSwordIdle2..5`, a carry tilt, or leave it.
+
+What shipped is the check, which D-073 argues is worth more than the fix: `hilt`
+re-runs the seventeen-pose solve against `Swing` every gate run and fails if the
+constants have drifted from it. It found a live 0.6 mm drift four steps old on
+the commit it was written, plus two tools that were quietly lying — a `sweep`
+that slid the sword out of the palm instead of turning it in it, and a `solve`
+that aimed the wrong end of it. Gate **116 → 117**.
+
 *Added 2026-09-14. The user: "the great sword needs to be angeled better in idle.
 In idle it seems like its coming out of the hands at a 35 ish degree angle to the
 characters right. both in the lobby and in game."*
@@ -968,3 +990,62 @@ measured, with the before and after angle stated — the swing's release point a
 reach are unmoved, all three props still clear the ground, and the lobby ring
 shows it as well as the match, since both read the same pose through the same
 code (D-069).
+
+---
+
+## Step 16 — The spear rides the back of the hand, not the palm
+
+*Added 2026-09-14. The user, on D-072's cocked-to-throw carry: "its just that the
+spear visually is just outside the hand, it doesnt appear to be in the palm. The
+spear need to just move towards the inside of the arm a little more, right now is
+appears as if its attached to the back of the hand when in idle."*
+
+And the constraint, which is half the brief: *"dont risk breaking anything else
+because the horzonital and stuff all works great, i would want this to ideally be
+a small and precise fix."*
+
+**So this step moves one component of one vector and proves nothing else moved.**
+
+### The one thing that changes
+
+`GRIP_PALM` — the point of the palm the shaft passes through, in hand-local
+metres, named in D-070 and currently `Vector3(-0.03, 0.06, -0.04)`.
+`held_gear.gd` states the frame: `+X` runs across the palm toward the fingertips,
+`+Y` up the arm and out through the fingers, and **`+Z` is the palm normal**. At
+`z = -0.04` the shaft sits four centimetres on the back-of-hand side, which is
+exactly the complaint.
+
+`GRIP_OFFSET` is **derived** from it —
+`GRIP_PALM - GRIP_FRACTION * SHAFT_LENGTH * shaft_direction` — and D-072 added a
+`derived` check that fails the build when the two disagree, because re-aiming the
+grip left a stale offset and put 53 mm of letter card underground. So moving
+`GRIP_PALM` re-derives the offset for free and the gate already watches it.
+
+### What must not move
+
+- **`GRIP_ROTATION` stays exactly as D-072 left it.** The −60° bearing and the
+  level shaft are what the user says works; this step has no business touching
+  them. If a palm move seems to want a rotation change, stop — that is no longer
+  the small precise fix that was asked for.
+- **The letter card rides the same line** (D-035) and D-072 caught it going
+  underground the last time this line moved. `card` is a gate check now; it must
+  stay passing rather than be re-baselined.
+
+### The margin being spent, and it is the whole risk
+
+The palm normal points out of the palm, and the raised guard has that palm turned
+inward — so **moving the shaft into the palm moves it toward the body.** What it
+spends is D-072's trunk clearance: **0.165 m**, the peak of the clearance curve
+and better than the two-handed carry it replaced.
+
+So: find the **smallest** move along the palm normal that puts the shaft visibly
+in the fist, and report what it cost in trunk clearance. Do not take the largest
+move that still passes. `preview_carry -- measure` reports trunk, floor and level
+across all twelve carried clips and `-- solve` sweeps the grid; this is a nudge
+and a re-measure, not a re-solve.
+
+*Done when:* the shaft reads as held in the palm in `Idle` — shown in a sheet
+beside the current one, because this is a judgement the user makes by eye — the
+rotation is byte-identical, all twelve clips still clear trunk, floor and level,
+the letter card still clears, and the report says what the trunk margin went from
+and to.

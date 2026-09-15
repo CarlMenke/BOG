@@ -8669,3 +8669,178 @@ run of a forty-second skin scan.
 Sheets in `out/`: `carry_spear.png` — Idle, Walk and Run with the layer off and
 on — and `carry_spear_elevations.png`, the table above as a picture, head-on so
 that a level shaft draws a level line and a ruler settles it.
+
+## D-073 — The great sword's 35° is the carry pose's own fists, and a grip going stale becomes a check
+
+The user, on the great sword: *"the great sword needs to be angeled better in
+idle. In idle it seems like its coming out of the hands at a 35 ish degree angle
+to the characters right. both in the lobby and in game."*
+
+**They are right about the angle and it is not the grip.** Measured, the blade
+leaves the fists at **+45° to the Gub's right in `Idle`**, +42 in `Walk` and +35
+in `Run` — the user's "35 ish", found by eye, to within a few degrees. But that
+bearing is not a fitting error. It is the line between the two fists of
+`SwordCarry`, and no grip that stays in both hands can point anywhere else.
+
+*Written 2026-09-14, one commit after D-072. The plan's own step 15 said the
+cause was a rigid transform fitted to `Swing` and asked to serve `GreatSwordIdle`
+as well, and said in as many words that if the numbers did not explain 35° the
+diagnosis was wrong and the fix was wrong. The numbers do not explain it.*
+
+### What was measured, and what it says
+
+`preview_carry -- hilt` asks `preview_sword`'s own equation of **both** clips.
+A great sword is two-handed, so the direction it has to lie in is not a choice —
+it is `hand^-1 * left_fist`, the line from the fist that holds it to the fist
+that joins it:
+
+| fitted against | mean P(t), in the right fist's frame | fists apart | scale it implies |
+|---|---|---:|---:|
+| `Swing` (D-068, shipped) | −0.0981, −0.0551, +0.1187 | 0.164 m | **1.2585** |
+| `SwordCarry` (the carry) | −0.1207, −0.0430, +0.1836 | 0.224 m | **1.7223** |
+
+**The two hilt lines are 10.5° apart.** That is the whole of the fitting error
+and it is a quarter of what was being looked for. The stale fit is real and it is
+small.
+
+Under the layer this is *one* number and not twelve, which is worth saying
+because it is what makes the measurement exact. Both arms are in
+`UPPER_BODY_BONES` and both hang off `Spine1`, so the carry clip owns the whole
+chain and the left fist's position **in the right fist's frame** is the carry
+clip's alone — the locomotion underneath moves both fists together and cancels.
+
+### Where the 35° actually comes from
+
+The same mode then asks where the point ends up, in the Gub's own frame, under
+the carry layer in `Idle`:
+
+| | bearing | elevation | off the fists |
+|---|---:|---:|---:|
+| `Swing` fit (shipped) | **+44°** | +38° | 10.5° |
+| `SwordCarry` fit | **+51°** | +29° | 0.3° |
+
+**Re-fitting the grip to the carry pose moves the blade seven degrees further
+right.** The complaint gets worse, not better. It has to: the fit's whole job is
+to lay the sword along the fists, and the fists are what point it there. D-070's
+own `-- poses` table already carried the answer — `SwordCarry`'s fist line reads
+bearing −137°, which is a blade at +43 — and nobody read it as an answer, because
+nobody had yet asked this question.
+
+The rest of step 15's fix does not survive either. The carry pose's fists are
+**0.224 m apart against the swing's 0.164** — so a grip genuinely fitted to it
+is a sword **37% longer**, 1.72x instead of 1.26x. Blending that on the carry
+weight is a sword that grows 0.46 m every time a swing ends. Hold the scale still
+to protect the reach, and what is left is not a fit at all; it is a tilt.
+
+### A tilt cannot rescue it either, and the solve says why
+
+`preview_carry -- solve sword` aims the **blade** at every bearing round the Gub
+at five elevations, derives the whole grip from that direction, and scores each
+against the floor, the skinned trunk, and **how far the second fist ends up from
+the weapon** — which is the question a two-handed carry lives on. Along the
+sagittal plane, blade straight forward:
+
+| elevation | +0 | +20 | +40 | +60 | +80 |
+|---|---:|---:|---:|---:|---:|
+| lowest end | −0.558 m | −0.311 m | +0.015 m | **+0.344 m** | +0.282 m |
+| second fist off the sword | 0.17 m | 0.14 m | 0.15 m | **0.18 m** | 0.22 m |
+
+A forward-pointing blade only clears the grass at **+60° or steeper**, and there
+it leaves the left fist 0.18 m off the weapon. The shipped angle sits at the
+bottom of that column: over the whole 120-row table the second fist is nearest
+the sword — 0.08 to 0.13 m — in a basin at **bearing +30..+60, elevation
++20..+40**, which is where the sword already is. Every degree toward forward is a
+centimetre of daylight between the hilt and the hand that is supposed to be on
+it, on a rig whose mitten is 0.17 m across.
+
+So the honest summary is: **the pose is holding the sword out to the
+forward-right at a low ready, and the user does not like the pose.** That is not
+a thing a transform can fix, and the three ways out belong to the user:
+
+1. **A different great-sword idle.** `GreatSwordIdle2`..`5` are on disk in
+   `_rejected/`, all four skinless and therefore unusable as they stand — each is
+   one With-Skin re-download from its own Mixamo page, and `_rejected/MANIFEST.md`
+   is the shopping list. This is the only option that keeps the blade in both
+   fists, and it is the same option D-070 left open and D-072 closed for the
+   spear.
+2. **A carry tilt**, reinstating what D-069 had and D-070 deleted, blended away
+   on the carry weight the way `CARRY_TILT` is for the bow. It costs the second
+   fist 0.08 to 0.12 m of extra air, and the table above is its price list.
+3. **Leave it.** It is what a Gub drawn holding a great sword does with one.
+
+**Nothing was changed about where the sword points.** The angle is a taste call
+with a measured price beside it, which is D-072's own shape: there a sweep table
+went to the user and the user picked −60°.
+
+### What did change, and it is the part worth more than the fix
+
+This is the **fifth** time this session a grip fitted against one clip set was
+left behind by another: D-066 added six clips and left `StrafeWalkRight` 12 mm
+off the floor; D-070 found it; D-071 remirrored the strafes and left the spear
+stale; D-072 found that, and also found `GRIP_OFFSET` stale the moment it
+re-aimed the grip, and D-035's 0.44 m comment false since D-070.
+
+D-072's answer was to make the number printed every run and checked in the gate.
+`preview_carry -- hilt` is that answer generalised to **a fit against a clip set
+that has since changed**, and it fails three different ways:
+
+* **`fit`** — re-runs `preview_sword`'s seventeen-pose solve against `Swing` and
+  requires `SWORD_SCALE` and `SWORD_GRIP_ROTATION` to still be what it produces,
+  within a degree and a thousandth. The spear's `derived` check compares one
+  constant against a function of another; the sword's three constants are not
+  functions of each other, they are functions of a **clip**, so the only honest
+  way to ask is to average it again.
+* **`derived`** — `SWORD_GRIP_OFFSET` against `HeldGear.sword_offset()`, new here
+  and `grip_offset`'s twin, so re-aiming the sword cannot leave its offset behind
+  the way re-aiming the spear did in D-072.
+* **`carried`** — how far past the pommel the joining fist closes in the pose the
+  sword is *carried* in, against `preview_sword`'s own 0.16 m of mitten. It reads
+  **0.116 m**, which passes, and it is the number that would have said out loud
+  that D-070's borrowed fit was a compromise rather than a free lunch.
+
+**It found a live one on the commit it was written.** `preview_sword -- measure`
+had been printing `SWORD_SCALE := 1.2585` and
+`SWORD_GRIP_OFFSET := Vector3(0.6117, 0.4203, -0.8164)` against a shipped
+`1.2586` and `(0.6116, 0.4206, -0.8159)` — 0.6 mm of sword, four steps stale,
+printed in the gate log every run since D-068 with nothing to compare it to. It
+is re-pasted. `combat_range -- sword` reads the point 1.439 m out at the release
+against the 1.430 m dial, unmoved; the carried worst end is +0.187 m, unmoved.
+
+Two smaller faults fell out of writing it, and both were tools quietly lying:
+
+* **`-- sweep sword` was sliding the sword out of the palm rather than turning it
+  in it.** It swept `SWORD_GRIP_ROTATION` with `SWORD_GRIP_OFFSET` held at its
+  constant — precisely D-072's spear fault, one prop over, in the tool instead of
+  the game. Every cell of the table in D-070's `SWORD_CARRY_TILT` note was
+  measured that way. The offset follows the rotation now.
+* **`-- solve` aimed the wrong end of a sword.** It points the grip's +Y where it
+  is told, and the spear's model runs butt-to-tip so that is the tip — but the
+  great sword's runs **point-to-pommel**, so asked for a blade at +45 it would
+  have produced a perfectly plausible table in which every row was 180° wrong.
+
+### Ground clearance, unmoved
+
+| | carried worst end | nearest trunk |
+|---|---:|---:|
+| spear | +0.272 m | 0.165 m |
+| bow | +0.251 m | 0.121 m |
+| great sword | **+0.187 m** | 0.164 m |
+
+`level PASS` at 25° against 30 allowed, and the threshold is untouched: the sword
+is not held to it and does not want to be, for the reason `LEVEL_MAX` gives — it
+is carried hilt-down at the waist and reads +42 in `Drink` by design.
+
+Gate **116 → 117**. The new one is `hilt PASS`, its own four-second headless run
+rather than an `also` on the forty-second skin scan, because it needs seventeen
+poses of `Swing` and that mode does not pose `Swing` at all.
+
+Sheets in `out/`: `carry_sword.png` — Idle, Walk and Run with the layer off and
+on, in `carry_spear.png`'s framing so a ruler crosses both — and
+`carry_sword_bearings.png`, the same three **from overhead**, which is the only
+view this complaint can be seen in. Side-on, a blade swung out to the right
+leaves the screen plane and merely looks short; from above it is an angle on the
+screen and the stamp under each body is the protractor. The lobby needs no sheet
+of its own: `GubBackdrop._equip` sets `Gub.weapon` and calls
+`GubCombat.refresh_hand`, which calls `GubAnimator.set_carry_pose`, which is the
+same path and the same `carry_pick` input a match uses (D-069) — the ring is real
+`gub.tscn` instances and there is no second opinion for it to hold.

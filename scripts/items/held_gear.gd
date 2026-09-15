@@ -621,8 +621,15 @@ const SWORD_REAR_HAND := 0.980
 ##
 ## Move `SWING_CLIP_START`/`SWING_CLIP_END` in `GubAnimator` and all three go
 ## stale together. Re-run the tool rather than nudging one of them.
-const SWORD_SCALE := 1.2586
-const SWORD_GRIP_OFFSET := Vector3(0.6116, 0.4206, -0.8159)
+## Re-pasted at D-073, unchanged in everything but the fourth decimal. The tool
+## above had been printing `1.2585` and `(0.6117, 0.4203, -0.8164)` for some time
+## against the `1.2586` and `(0.6116, 0.4206, -0.8159)` that shipped — 0.6 mm of
+## sword, which is nothing, found by a check rather than by a person because
+## there was no check and nobody re-reads a paste. `preview_carry -- hilt` is
+## that check now, and it is the general form of the fault this session kept
+## hitting: **a fit against a clip set that has since changed**. See its header.
+const SWORD_SCALE := 1.2585
+const SWORD_GRIP_OFFSET := Vector3(0.6117, 0.4203, -0.8164)
 const SWORD_GRIP_ROTATION := Vector3(65.102, -180.000, -143.141)
 
 
@@ -651,6 +658,34 @@ const SWORD_GRIP_ROTATION := Vector3(65.102, -180.000, -143.141)
 ##
 ## `CARRY_TILT` below is the opposite call, made on the same evidence, and the
 ## difference is which clip each prop's pose was authored for. See its header.
+
+## Which way the hilt runs out of the fist, in hand-local space: the model's own
+## +Y turned by the grip, which is point-to-pommel — so the **blade** is `-Y`
+## (D-073). `shaft_direction`'s opposite number, and it exists for the same
+## reason: two files ask where this prop points and one of them is a tool.
+static func sword_direction(rotation_degrees: Vector3 = SWORD_GRIP_ROTATION) -> Vector3:
+	return Basis.from_euler(rotation_degrees * (PI / 180.0)) * Vector3.UP
+
+
+## Where the model's origin — its **point** — sits for a given grip rotation and
+## scale: `SWORD_GRIP_OFFSET`'s own derivation, as a function (D-073).
+##
+## `grip_offset` for the great sword, and added for the fault that one was added
+## for. D-072 re-aimed `GRIP_ROTATION` and left `GRIP_OFFSET` behind, which put
+## 0.053 m of letter card in the ground; the same trap is here, one prop over,
+## and it had already been sprung — `preview_carry -- sweep sword` swept this
+## rotation with the offset held at its constant, so every cell of that table was
+## a sword sliding out of the palm rather than turning in it. A sweep that lies
+## is worse than no sweep.
+##
+## The fist holds the hilt at `SWORD_FORE_HAND`, so the point is that far back
+## down the hilt line from the palm, scaled: exactly what `preview_sword`'s
+## `offset` line computes, named once so the tool and the game cannot disagree.
+static func sword_offset(rotation_degrees: Vector3 = SWORD_GRIP_ROTATION,
+		model_scale: float = SWORD_SCALE) -> Vector3:
+	var down_the_hilt := model_scale * SWORD_FORE_HAND
+	return fist_offset() - sword_direction(rotation_degrees) * down_the_hilt
+
 
 ## Where the sword sits in the fist.
 ##
