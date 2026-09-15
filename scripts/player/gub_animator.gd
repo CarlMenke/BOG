@@ -24,6 +24,8 @@ extends AnimationTree
 ##     slide      OneShot        the low part of Slide, full body
 ##     land       OneShot        JumpOne's touchdown and absorb, full body
 ##     roll       OneShot        JumpTwo's ground roll, full body
+##     carry_pick Transition     BowCarry / SwordCarry, by the lobby pick
+##     carry      Blend2         the carry pose over the plane, upper body only
 ##     draw_clip  Animation(Draw) behind draw_seek, scrubbed by the charge
 ##     draw       Blend2         the draw pose over everything, upper body only
 ##     loose      OneShot        Loose, upper body only
@@ -60,6 +62,23 @@ extends AnimationTree
 ## "the sword works in the air": the air pose is one of the things it replaces,
 ## which costs nothing and is why there is no second clip for the airborne case.
 ##
+## **`carry` is the one node in this graph that asks which weapon a Gub has**
+## (D-070), and it is a `Transition` rather than a branch anywhere in code. Every
+## other layer here is an event with a clip of its own; this one is a *pose*, and
+## a bow is not held the way a great sword is, so one clip cannot serve. What
+## keeps that from becoming the `match` on a loadout D-069 spent a whole record
+## avoiding is that the difference is a **table** — `Loadout.CARRY_CLIPS`, beside
+## the names and the blurbs — read once in `_ready` and handed to a node. Nothing
+## downstream knows which arm of it is playing.
+##
+## It sits above the landing, the roll and the slide and below the drink and the
+## three attacks, which is the same place in the stack every other upper-body
+## layer occupies and is decided the same way: what the player is *doing* beats
+## what they are *holding*, and a carry pose is the weakest claim in the file.
+## Above the full-body one-shots rather than below them because those three are
+## whole poses — a landing absorb that flailed the arms of a Gub holding two
+## metres of blade would be the prop, not the pose, that the eye followed.
+##
 ## **`stand` is a plane and not a line, which is the whole of D-066.** A Gub
 ## aiming holds its facing at the crosshair (`Gub._face_view`) and moves
 ## wherever the keys say, so "how fast" stopped being enough to pick a pose
@@ -91,6 +110,11 @@ const REQUIRED_CLIPS: Array[String] = [
 	"JumpOne", "JumpTwo", "Slide", "Throw", "Cast", "Draw", "Loose",
 	"StrafeLeft", "StrafeRight", "StrafeWalkLeft", "StrafeWalkRight",
 	"RunBack", "WalkBack", "Drink", "Swing",
+	# The two carry poses (D-070). Named here rather than left to
+	# `Loadout.CARRY_CLIPS` alone so that a rebuild which dropped one is an error
+	# on the frame the animator is built, on every Gub, instead of a Gub carrying
+	# a great sword in a boxer's guard on two players in three.
+	"BowCarry", "SwordCarry",
 ]
 
 # -------------------------------------------------------- the airborne arc ---
@@ -315,6 +339,18 @@ const THROW_RELEASE_TIME := THROW_WINDOW / THROW_RATE
 ## out one frame later anyway.
 const DRAW_CLIP_START := 0.567
 const DRAW_CLIP_FULL := 1.0167
+
+## How fast the carry layer comes up over the body, in blend per second
+## (D-070).
+##
+## Slower than the draw's twelfth of a second and for the opposite reason. A draw
+## has to be *there* early because the charge is already running and a tell
+## arriving late is a tell; a carry has nowhere to be — it is what the arms do
+## when nothing is happening, and the only moments its weight moves are the ones
+## where an attack has just finished and the arms are coming back to rest. A
+## fifth of a second is about how long a recovery takes to hand over, and it is
+## also what keeps the carry from snapping in under a one-shot's own fade-out.
+const CARRY_BLEND_SPEED := 5.0
 
 ## How fast the draw layer comes up over the body, in blend per second.
 ##
@@ -764,6 +800,8 @@ const P_ROLL := "parameters/roll/request"
 const P_THROW := "parameters/throw/request"
 const P_THROW_ACTIVE := "parameters/throw/active"
 const P_THROW_RATE := "parameters/throw_rate/scale"
+const P_CARRY := "parameters/carry/blend_amount"
+const P_CARRY_PICK := "parameters/carry_pick/transition_request"
 const P_DRAW := "parameters/draw/blend_amount"
 const P_DRAW_SEEK := "parameters/draw_seek/seek_request"
 const P_LOOSE := "parameters/loose/request"
@@ -790,6 +828,13 @@ var _dive_blend: float = 0.0
 ## numbers because they answer two questions, exactly as `_airborne` and
 ## `arc_time` do.
 var _draw_blend: float = 0.0
+## How far the carry pose is over the body (D-070). 1 while the weapon is simply
+## in the hand, 0 while something is being done with it — which is the *same*
+## number `HeldGear.set_carry` is handed for the bow's tilt, deliberately: the
+## pose and the prop's own lever have to agree about whether this Gub is carrying
+## or shooting, and two numbers that could disagree is exactly the fault
+## `_aim_blend` exists to describe.
+var _carry_blend: float = 0.0
 ## How far the *aim* is over the body, which is a third number beside those two
 ## and answers a third question (D-066). `draw_time` is where the string is,
 ## `_draw_blend` is whether the bow pose is being shown, and this is whether the
@@ -871,6 +916,11 @@ func _ready() -> void:
 	# reason, and a number put here would be one the dial had never been asked
 	# about, sitting where it could be played.
 	set(P_THROW_RATE, THROW_RATE)
+	# The carry pose, chosen once (D-070). `Gub.weapon` is fixed before the body
+	# exists and cannot change while it lives, so this is the only place the
+	# graph ever asks which weapon a Gub has — and `set_carry_pose` is public
+	# for the one caller that can change it anyway, which is the lobby ring.
+	set_carry_pose()
 	# The swing's own authored speed, for the throw's reason: it has one, and
 	# unlike the cast and the drink no dial anywhere moves it (D-068).
 	set(P_SWING_RATE, SWING_RATE)
@@ -955,6 +1005,16 @@ func _build_graph(player: AnimationPlayer) -> AnimationNodeBlendTree:
 	tree.add_node("drink_rate", AnimationNodeTimeScale.new(), Vector2(740, 1000))
 	tree.add_node("drink", _upper_body_shot(DRINK_FADE_IN, DRINK_FADE_OUT),
 		Vector2(960, 460))
+	# One clip node per weapon and a Transition to pick between them. Three
+	# nodes for two clips, because two weapons share a pose
+	# (`Loadout.CARRY_CLIPS` says why) and an input per weapon is what makes the
+	# selection a plain index instead of a lookup that has to be inverted.
+	for i in Loadout.CARRY_CLIPS.size():
+		tree.add_node(_carry_input(i),
+			_cycle(player, Loadout.CARRY_CLIPS[i], 0.0, 0.0),
+			Vector2(560, 1150 + 120 * i))
+	tree.add_node("carry_pick", _carry_pick(), Vector2(800, 1210))
+	tree.add_node("carry", _upper_body_blend(), Vector2(1060, 430))
 	tree.add_node("draw_clip", _scrubbed("Draw"), Vector2(760, 860))
 	tree.add_node("draw_seek", AnimationNodeTimeSeek.new(), Vector2(940, 860))
 	tree.add_node("draw", _upper_body_blend(), Vector2(1160, 460))
@@ -999,15 +1059,28 @@ func _build_graph(player: AnimationPlayer) -> AnimationNodeBlendTree:
 	tree.connect_node("roll", 0, "land")
 	tree.connect_node("roll", 1, "roll_clip")
 	tree.connect_node("drink_rate", 0, "drink_clip")
-	# The drink is the **bottom** of the four layered one-shots, and that is the
-	# one place its order is decided (D-067). Nothing can start a drink while an
-	# attack is running and nothing can start an attack while a drink is running
-	# — `GubCombat` gates both ways — so the only overlap there can be is the
-	# drink's own 0.18 s fade-out, which a cancelled channel leaves running while
-	# the Gub is free to act again on the same frame. In that window what the
-	# player has just done has to win over what they have just stopped doing, and
-	# every weapon above this line is what they have just done.
-	tree.connect_node("drink", 0, "roll")
+	# The drink is the **lowest of the four layered one-shots**, and that is the
+	# one place its order among them is decided (D-067). Nothing can start a
+	# drink while an attack is running and nothing can start an attack while a
+	# drink is running — `GubCombat` gates both ways — so the only overlap there
+	# can be is the drink's own 0.18 s fade-out, which a cancelled channel leaves
+	# running while the Gub is free to act again on the same frame. In that
+	# window what the player has just done has to win over what they have just
+	# stopped doing, and every weapon above this line is what they have just
+	# done.
+	#
+	# The **carry pose goes under even that** (D-070), which is the one place
+	# *its* order is decided. A drink empties both fists — `has_spear()` says so
+	# and `_refresh_hand` obeys it — so there is no weapon for a carry pose to be
+	# the pose of while a channel is running, and the two seconds of one must not
+	# be a Gub holding a bottle in a stance built round a longbow. It is the
+	# weakest claim in this graph and sits at the bottom of every layer: it is
+	# what the arms do when nothing else is happening to them.
+	for i in Loadout.CARRY_CLIPS.size():
+		tree.connect_node("carry_pick", i, _carry_input(i))
+	tree.connect_node("carry", 0, "roll")
+	tree.connect_node("carry", 1, "carry_pick")
+	tree.connect_node("drink", 0, "carry")
 	tree.connect_node("drink", 1, "drink_rate")
 	tree.connect_node("draw_seek", 0, "draw_clip")
 	tree.connect_node("draw", 0, "drink")
@@ -1246,6 +1319,50 @@ func _shot(fade_in: float, fade_out: float) -> AnimationNodeOneShot:
 	return shot
 
 
+## The two carry poses, and the node that picks between them (D-070).
+##
+## An `AnimationNodeTransition` rather than a `BlendSpace1D` with the two poses
+## at either end, which is the shape this graph reaches for everywhere else: a
+## blend space is for a quantity, and "which weapon did this player bring" is not
+## one. Half a bow carry blended into half a sword carry is a pose nobody ever
+## stands in, and a space whose interior is meaningless is a space that will
+## eventually be asked for its interior.
+##
+## `xfade_time` is zero and `allow_transition_to_self` is off for the same
+## reason: `Gub.weapon` is set before the body exists and cannot change while it
+## lives (D-069), so this node is written exactly once per Gub, in `_ready`, and
+## a cross-fade would be a fade out of a pose nothing had ever been in. The
+## exception is the lobby ring, where `GubBackdrop` does change `Gub.weapon` on a
+## standing Gub — and there a hard cut is right as well, because the strip is a
+## picker and what it is showing is the weapon under the caret.
+##
+## Both inputs keep running whatever is selected, for `_blend2`'s reason: an
+## unweighted input that Godot froze would be a carry pose entering on a static
+## frame the first time a Gub in the ring was arrowed onto.
+func _carry_pick() -> AnimationNodeTransition:
+	var pick := AnimationNodeTransition.new()
+	pick.xfade_time = 0.0
+	pick.allow_transition_to_self = false
+	pick.input_count = Loadout.CARRY_CLIPS.size()
+	pick.sync = true
+	for i in Loadout.CARRY_CLIPS.size():
+		pick.set_input_name(i, _carry_input(i))
+		# No auto-advance and no reset. The first is obvious — these are poses
+		# and there is nowhere to advance to; the second matters, because a reset
+		# would restart the pose's own loop every time the lobby's caret moved
+		# and the ring's Gubs would all breathe in step with the arrow keys.
+		pick.set("input_%d/auto_advance" % i, false)
+		pick.set("input_%d/reset" % i, false)
+	return pick
+
+
+## The input name `carry_pick` knows a weapon by. The ordinal and not the clip
+## name, because two weapons share a clip (`Loadout.CARRY_CLIPS` says why) and a
+## `Transition` cannot have two inputs called the same thing.
+static func _carry_input(weapon: int) -> String:
+	return "w%d" % weapon
+
+
 ## The draw is a layer for the same reason the two windups are, and it is a
 ## `Blend2` rather than a OneShot because it is *held*: a one-shot has a length
 ## and this has a duration nobody knows until the archer lets go. Filtered to
@@ -1333,15 +1450,24 @@ func _process(delta: float) -> void:
 	# come up, which is this graph's own blend and is not knowable anywhere else
 	# (D-066). It runs on every peer's copy of every Gub, so a remote archer
 	# brings its bow up out of the carry exactly as the local one does.
+	# **One number for the pose and for the prop's own lever** (D-070). A Gub is
+	# carrying when there is something in its hands, and it is not shooting and
+	# not spinning, and that single fact drives three things: how far the carry layer is over the body, how much of
+	# the bow's `CARRY_TILT` is on, and — through the layer — where the hand the
+	# spear and the sword hang off actually is. Two numbers here is how a bow
+	# comes out of its tilt on a different frame from the arm that is raising it,
+	# which is the fault `_aim_blend`'s own header describes one weapon over.
+	#
+	# It runs on every peer's copy of every Gub, so a remote archer brings its
+	# bow up out of the carry exactly as the local one does, and a remote
+	# swordsman lifts its blade out of it on the same frame as well.
+	var carrying := 1.0 - _aim_blend
+	if _body.is_spinning() or not _armed():
+		carrying = 0.0
+	_carry_blend = move_toward(_carry_blend, carrying, CARRY_BLEND_SPEED * delta)
+	set(P_CARRY, _carry_blend)
 	if _body.held_gear != null:
-		_body.held_gear.set_carry(1.0 - _aim_blend)
-		# And the sword's, from the same line for the same reason (D-069). Its
-		# weight is the spin rather than a blend, because `Swing` is a full-body
-		# state that replaces the pose outright instead of coming up over one
-		# (D-068) — but where it is read from matters as much as what it is: on
-		# every peer's copy of every Gub, so a remote swordsman lifts its blade
-		# out of the carry exactly as the local one does.
-		_body.held_gear.set_sword_carry(0.0 if _body.is_spinning() else 1.0)
+		_body.held_gear.set_carry(carrying)
 
 	set(P_STANCE, _stance)
 	set(P_AIRBORNE, _airborne)
@@ -1695,6 +1821,43 @@ func is_throwing() -> bool:
 ## one frame.
 func aim_blend() -> float:
 	return _aim_blend
+
+
+## Is there actually a weapon in this Gub's hands (D-070)?
+##
+## **The carry pose is a weapon pose, so a Gub with no weapon must not be in
+## one.** Four things take a Gub's weapon away and all four matter here: an Elder
+## has lightning instead (D-038), a letter hold disarms you (D-035), a drink
+## needs both fists (D-067), and a recharge is a fist that is genuinely empty
+## until the shaft grows back. A Gub standing in a two-handed guard with nothing
+## in its hands is the worst lie this rig can tell — `HeldGear`'s own header says
+## why: *"seeing an empty pair of them across the clearing is how you know it is
+## safe to approach"*. A letter hold is ten seconds of being deliberately
+## vulnerable, and a combat stance through it would undo the whole of D-035.
+##
+## Asked of the **hands** and not of `GubCombat`'s gates, which is the point.
+## `_refresh_hand` is the one place that decides what is in a fist, off those
+## gates, on every peer — so this is that decision read back rather than a second
+## copy of it, and it is already true on the seven Gubs you are watching.
+func _armed() -> bool:
+	var gear := _body.held_gear
+	return gear != null 		and (gear.is_carried() or gear.has_bow() or gear.has_sword())
+
+
+## Point the carry layer at this Gub's own weapon (D-070).
+##
+## Called from `_ready`, and by `GubCombat.refresh_hand` for the one case where
+## the answer can change under a Gub that already exists: `GubBackdrop` moves
+## `Gub.weapon` on a ring Gub as the lobby's caret moves, and the pose has to
+## follow the prop. In a match nothing calls it twice, because the pick locks at
+## Start (D-069).
+##
+## A no-op on a tree that has not been built, which is `play_throw`'s guard and
+## is what lets the lobby set a weapon before the animator is ready.
+func set_carry_pose() -> void:
+	if tree_root == null or _body == null:
+		return
+	set(P_CARRY_PICK, _carry_input(Loadout.sanitize(_body.weapon)))
 
 
 ## Airborne, in an airtime a dive was spent in.

@@ -511,15 +511,38 @@ func _process(_delta: float) -> void:
 		_stow_aim_marker()
 		return
 	_tick_aim_marker()
-	if Input.is_action_just_pressed("throw_spear"):
+	# **One button for every weapon** (D-070). `throw_spear`, `draw_bow` and
+	# `swing_sword` were three actions on three keys, which was three things to
+	# learn for a game in which a player has exactly one weapon — and two of the
+	# three were on keys nobody would find. They are one `primary_attack` on the
+	# left mouse button, which is where the spear already was, so the default
+	# pick plays the match it played yesterday.
+	#
+	# **The press and the release are both polled, unconditionally, and neither
+	# asks what this Gub is carrying.** That is D-069's property held onto: *"the
+	# input poll asks all three actions unconditionally while the `try_`
+	# functions refuse themselves"*, and it survives consolidation because the
+	# three weapons disagree about *which edge* they fire on rather than about
+	# whether they may be asked.
+	#
+	# The press starts a throw, a cast, a swing **or** a draw. All three `try_`
+	# functions below are called and at most one accepts, because `carries()`
+	# makes the three gates mutually exclusive and `is_busy()` covers the rest —
+	# and the Elder's cast is a fourth outcome reached *inside*
+	# `try_throw_spear`, which is where D-038 put it and not a fourth call here.
+	# The release ends a draw and is `release_draw`'s own no-op for every Gub
+	# that was not drawing (`_draw_started_at <= 0.0`). So the branch on the
+	# loadout that "one action, two meanings" seemed to need does not exist:
+	# **the gates are the branch**, in the place every other reason a weapon says
+	# no already lives, and this poll asks two questions where it asked four.
+	if Input.is_action_just_pressed("primary_attack"):
 		try_throw_spear()
-	# Pressed *and* released, because this is the one attack in the game whose
-	# input has two ends. The release goes through `release_draw` rather than
-	# being read inside `_tick_windup`, so that a testbed can let go of a string
-	# without a keyboard (`tools/combat_range.gd`).
-	if Input.is_action_just_pressed("draw_bow"):
 		try_draw_bow()
-	if Input.is_action_just_released("draw_bow"):
+		try_swing_sword()
+	# The release goes through `release_draw` rather than being read inside
+	# `_tick_windup`, so that a testbed can let go of a string without a keyboard
+	# (`tools/combat_range.gd`).
+	if Input.is_action_just_released("primary_attack"):
 		release_draw()
 	if Input.is_action_just_pressed("place_mushroom"):
 		try_place_mushroom()
@@ -527,8 +550,6 @@ func _process(_delta: float) -> void:
 		try_throw_lure()
 	if Input.is_action_just_pressed("drink_potion"):
 		try_drink_potion()
-	if Input.is_action_just_pressed("swing_sword"):
-		try_swing_sword()
 
 
 func spear_cooldown() -> float:
@@ -2214,8 +2235,21 @@ func _on_elder_changed(peer_id: int) -> void:
 ## A one-line forwarder rather than making `_refresh_hand` public, so that the
 ## underscore keeps meaning what it means in this file: the hand is this node's
 ## business, and the one outside caller is asking rather than reaching.
+##
+## It re-points the **carry pose** as well since D-070, and that is not a second
+## job — it is the same job one node down. `GubBackdrop` changes `Gub.weapon` on
+## a ring Gub as the lobby's caret moves, and a Gub whose fists had swapped to a
+## great sword while its shoulders stayed in an archer's stance is exactly the
+## disagreement this forwarder exists to prevent on the other side of the
+## skeleton. In a match neither half is ever called twice: the pick locks at
+## Start (D-069) and `GubAnimator._ready` has already asked.
 func refresh_hand() -> void:
 	_refresh_hand()
+	if _gub == null:
+		return
+	var animator := _gub.get_node_or_null("AnimationTree") as GubAnimator
+	if animator != null:
+		animator.set_carry_pose()
 
 
 func _refresh_hand() -> void:

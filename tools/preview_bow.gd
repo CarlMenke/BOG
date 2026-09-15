@@ -33,6 +33,21 @@ const GUB := preload("res://scenes/player/gub.tscn")
 ## this is that number, held to by a prop nearly half a metre longer. The tilt
 ## `HeldGear.CARRY_TILT` was swept to actually reaches 0.284, so this is a floor
 ## with nearly a hand's width under it rather than a record of today.
+##
+## **What this table measures stopped being what the game composes** (D-070).
+## A bow is carried in `BowIdle` now, layered over the whole locomotion plane, so
+## the limb tip's height is a function of the composed pose and this tool does
+## not compose it — `tools/preview_carry.tscn -- measure` does, for all three
+## props at once, and that is the check the gate takes its verdict from.
+##
+## It is kept rather than deleted because it measures the thing D-070 had to
+## decide: **what the tilt buys on its own.** The sword's equivalent was deleted
+## along with `SWORD_CARRY_TILT`, because a carry clip drawn around a great sword
+## left its tilt nothing to do; the bow's clip was drawn around a *bow* and the
+## grip it hangs in is an equation about a *string*, so the tilt survives and
+## this is the table that says why. Layered as well, the worst comes out at
+## +0.251 m; the layer alone, with no tilt, leaves a limb tip +0.032 m off the
+## floor in `Idle`, which is in the grass.
 const CARRY_CLEARANCE_MIN := 0.15
 
 ## Model-space landmarks, in the props' own units, measured off the built GLBs.
@@ -225,8 +240,14 @@ func _carried_clips(player: AnimationPlayer) -> Array[String]:
 		# is measuring a prop that is not in the world. It was measured anyway
 		# for one run, and reported a limb tip 0.111 m up where every clip a bow
 		# is really carried in clears 0.284.
+		# The two carry poses joined `REQUIRED_CLIPS` in D-070 and are skipped
+		# for a sharper version of `Swing`'s reason: they are not clips a Gub
+		# walks around in, they are the *layer* that rides over the ones it does
+		# — and one of them is the great sword's, which a bow Gub can never be in
+		# at all. Measured anyway for one run, `SwordCarry` reported a limb tip
+		# +0.113 m and dragged the whole verdict under the floor.
 		if clip in ["JumpOne", "JumpTwo", "Slide", "Throw", "Cast", "Draw",
-				"Loose", "Swing"]:
+				"Loose", "Swing", "BowCarry", "SwordCarry"]:
 			continue
 		if player.has_animation(clip):
 			out.append(clip)

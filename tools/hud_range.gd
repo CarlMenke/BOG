@@ -177,6 +177,9 @@ func _stage() -> void:
 		"weapon_tiles":
 			_stage_kills()
 			_run_weapon_tiles()
+		"controls":
+			_stage_kills()
+			_run_controls()
 		"dead":
 			_stage_kills()
 			var dying: Dictionary = MatchState.stats.get(1, {})
@@ -431,6 +434,115 @@ func _stage_elder() -> void:
 ## is the one kind that must *keep* the spear's button, so a `set_kind` that
 ## updated the cap unconditionally would break it and a check that only looked at
 ## glyphs would not notice.
+# ----------------------------------------------------------- the input map ---
+
+## Actions a player is expected to press in a match, and what they must be bound
+## to. `""` means "this check does not care which key, only that it is not
+## somebody else's".
+##
+## `primary_attack` is named because it is the one D-070 created and the one the
+## whole weapon set now depends on; the rest are named because a clash is only
+## interesting between two things a player might press in the same second.
+const CONTROL_BINDINGS := {
+	"primary_attack": "LMB",
+	"aim": "RMB",
+	"drink_potion": "F",
+	"place_mushroom": "Q",
+	"throw_lure": "E",
+	"respawn": "R",
+	"jump": "",
+	"sprint": "",
+	"crouch": "",
+	"scoreboard": "",
+	"chat": "",
+}
+
+## Actions that were deleted by D-070 and must stay deleted. An action left in
+## the map with nothing polling it is a key that does nothing, which is worse
+## than a key that is not bound: a player presses it, and the game's silence is
+## indistinguishable from a bug in the weapon.
+const CONTROL_RETIRED := ["throw_spear", "draw_bow", "swing_sword"]
+
+
+## The input map, checked rather than read (D-070).
+##
+## **This mode exists because of a bug nobody saw.** D-068 put `swing_sword` on
+## physical keycode 82 and `respawn` was already there — the potion step had
+## specifically steered away from `R` for that reason a step earlier — so for two
+## decision records the sword and the respawn were the same key, and nothing
+## anywhere could say so. A binding table is data; a clash between two rows of it
+## is arithmetic; and the reason it was invisible is only that nobody was doing
+## the arithmetic.
+##
+## Three things, in the order they would go wrong:
+##
+## * every action the settings panel's controls reference names exists, because
+##   `SettingsPanel.primary_key` answers "Unbound" for one that does not and a
+##   reference page full of "Unbound" is a page nobody reads twice;
+## * no two of them share a key, which is the check that was missing;
+## * and the three actions D-070 retired are gone rather than orphaned.
+func _run_controls() -> void:
+	var failures := PackedStringArray()
+	var owner_of := {}
+
+	for action: String in SettingsPanel.CONTROL_REFERENCE.map(
+			func(row: Array) -> String: return row[1]):
+		if not InputMap.has_action(action):
+			failures.append("the controls reference names %s, which is not in "
+				% action + "the input map")
+
+	for action: String in CONTROL_BINDINGS:
+		if not InputMap.has_action(action):
+			failures.append("%s is not in the input map at all" % action)
+			continue
+		var want: String = CONTROL_BINDINGS[action]
+		var got := SettingsPanel.primary_key(action)
+		if not want.is_empty() and got != want:
+			failures.append("%s is on %s, wanted %s" % [action, got, want])
+		print("  %-16s %s" % [action, got])
+
+	# **Every action this project declares, not only the ones named above**, and
+	# every *event* of each rather than the first. The table above is a list of
+	# things this check has an opinion about; a clash is interesting between any
+	# two keys a player can press, including the pair nobody thought to list —
+	# which is exactly the pair that went wrong. `ui_*` is Godot's own and is
+	# meant to overlap (Space is `ui_accept` and is also `jump`).
+	for action: StringName in InputMap.get_actions():
+		if String(action).begins_with("ui_"):
+			continue
+		for event: InputEvent in InputMap.action_get_events(action):
+			var key := _control_key(event)
+			if key.is_empty():
+				continue
+			if owner_of.has(key):
+				failures.append("%s and %s are both on %s"
+					% [owner_of[key], action, key])
+			else:
+				owner_of[key] = String(action)
+
+	for action: String in CONTROL_RETIRED:
+		if InputMap.has_action(action):
+			failures.append("%s is still in the input map; D-070 retired it"
+				% action)
+
+	for line: String in failures:
+		print("hud_range: %s" % line)
+	print("hud_range: %d bindings, %d shared keys — controls %s"
+		% [owner_of.size(), failures.size(),
+			"PASS" if failures.is_empty() else "FAIL"])
+
+
+## One event as a comparable string, or "" for an event this check has no
+## opinion about. Physical keycodes and mouse buttons only, which is everything
+## `project.godot` actually binds.
+func _control_key(event: InputEvent) -> String:
+	if event is InputEventKey:
+		return "key %d" % (event as InputEventKey).physical_keycode
+	if event is InputEventMouseButton:
+		return "mouse %d" % (event as InputEventMouseButton).button_index
+	return ""
+
+
 func _run_weapon_tiles() -> void:
 	var slot := _hud.get_node("%SpearSlot") as AbilitySlot
 	var combat := _local_combat()
@@ -441,9 +553,9 @@ func _run_weapon_tiles() -> void:
 
 	var failures := PackedStringArray()
 	var want := [
-		[Loadout.Weapon.SPEAR, AbilitySlot.Kind.SPEAR, "Spear", "throw_spear"],
-		[Loadout.Weapon.BOW, AbilitySlot.Kind.BOW, "Bow", "draw_bow"],
-		[Loadout.Weapon.SWORD, AbilitySlot.Kind.SWORD, "Sword", "swing_sword"],
+		[Loadout.Weapon.SPEAR, AbilitySlot.Kind.SPEAR, "Spear", "primary_attack"],
+		[Loadout.Weapon.BOW, AbilitySlot.Kind.BOW, "Bow", "primary_attack"],
+		[Loadout.Weapon.SWORD, AbilitySlot.Kind.SWORD, "Sword", "primary_attack"],
 	]
 	for row: Array in want:
 		gub.weapon = row[0]
@@ -469,8 +581,9 @@ func _run_weapon_tiles() -> void:
 	await RenderingServer.frame_pre_draw
 	if slot.kind != AbilitySlot.Kind.LIGHTNING:
 		failures.append("an Elder's tile is %d, wanted the bolt" % slot.kind)
-	if slot.action != "throw_spear":
-		failures.append("an Elder's bolt fires %s, wanted throw_spear" % slot.action)
+	if slot.action != "primary_attack":
+		failures.append("an Elder's bolt fires %s, wanted primary_attack"
+			% slot.action)
 	print("  %-6s glyph %d, caption %s, key %s"
 		% ["Elder", slot.kind, slot.label_text,
 			SettingsPanel.primary_key(slot.action)])

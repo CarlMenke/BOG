@@ -63,60 +63,103 @@ const BOW_HAND_BONE := "LeftHand"
 ## and +Z is the palm normal. A shaft near local +Y is therefore a shaft along
 ## the forearm, which is why the rotation below is a small tilt off identity.
 ##
-## **A near-vertical carry, decided in `Idle`.** The Gub's `Idle` is a hunched
-## boxer's guard: the right fist is up beside a head that is thrust forward, and
-## the head is 0.5 m of blob 0.25 m thick. The first pass aimed the tip
-## forward-and-up (a 21 deg tilt off the forearm) and scored it against three
-## small ellipsoids standing in for the body — which under-measured the Gub
-## badly, and the shipped result ran the shaft in under the chin and out above
-## the crown. So this pass scored candidates against the **real skinned mesh**:
-## every head- and torso-weighted vertex, skinned at 27 poses spread over the
-## six clips the spear is carried in, with the shaft's distance to the nearest
-## one as the constraint.
-## The target — chosen because `Idle` is the pose read across a clearing, and a
-## Gub in a guard stance with a spear held upright reads as armed — is a shaft
-## 75-85 deg above horizontal, leaning slightly forward and outward to the
-## Gub's own right, away from the head. What the numbers below deliver:
+## **The shaft lies flat, and it lies flat in every clip** (D-070). The user:
+## *"for the spear idle, the spear should be horizontal not vertical."*
 ##
-##   clip        shaft elevation      lowest end   nearest skin
-##   Idle        +81 to +86 deg         0.33 m        0.11 m
-##   Walk        -42 to -14 deg         0.23 m        0.15 m
-##   Run         -59 to -43 deg         0.15 m        0.26 m
-##   CrouchWalk  +70 to +75 deg         0.59 m        0.19 m
-##   CrouchIdle  +72 deg                0.59 m        0.19 m
-##   Throw       -10 to +59 deg         0.43 m        0.06 m
+## That reverses D-065's own target, which was a shaft 75-85 deg **up** —
+## *"a Gub in a guard stance with a spear held upright reads as armed"* — and it
+## reverses it on the strength of the very thing D-065 said made it impossible:
 ##
-## The mean `Idle` carry is 86 deg up and 53 deg round from forward toward the
-## Gub's right: a near-vertical shaft leaning as much outward as forward.
-## Nothing touches the skin anywhere; the tightest is the throw follow-through
-## at 6 cm.
+##     the hand's world orientation differs by more than 100 deg between a
+##     raised guard and a hanging arm, so a grip that stands the shaft up in
+##     one lays it over in the other
 ##
-## `Walk` and `Run` still point the tip *down*, and that is not fixable with a
-## rigid attachment: the hand's world orientation differs by more than 100 deg
-## between a raised guard and a hanging arm, so a grip that stands the shaft up
-## in one lays it over in the other. What was fixable is the tip ploughing the
-## ground — it used to reach +0.01 m in `Walk` — and both ends now stay at least
-## 0.15 m up in every ground clip.
+## That sentence is true of a grip fitted against **twelve** hand orientations,
+## which is what a rigid attachment on a fist the locomotion throws about is.
+## The carry layer removes the premise: `UPPER_BODY_BONES` takes its pose from
+## one looping carry clip in every clip a Gub walks around in, so there is one
+## hand orientation to fit, and "lay the shaft flat" stops being a compromise and
+## becomes an equation with one answer. `tools/preview_carry.tscn -- solve`
+## solves it — aim the shaft where it is wanted in the Gub's own frame, read the
+## grip back off the hand — and then **scores every bearing against the real
+## skinned trunk**, which is D-065's own method and is the half no equation
+## answers: where a flat shaft may point without going through the Gub.
 ##
-## **`GRIP_OFFSET` is derived, not free.** It is
+## The answer is **across the body, dead level, at waist height**: the tip out to
+## the Gub's left, the butt to its right, both fists on the shaft. Port arms,
+## which is the horizontal reading of exactly the stance D-065 was after. What it
+## delivers over the twelve clips a spear is carried in, beside what the old grip
+## delivered over the same twelve, measured by the same tool on the same day:
 ##
-##     (-0.03, 0.06, -0.04) - 0.55 * 1.236 * shaft_direction
+##   clip              shaft elevation      lowest end
+##   Idle              +84  ->    +0        0.31 -> 0.71
+##   Walk              -32  ->    +1        0.21 -> 0.71
+##   Run               -49  ->    -1        0.15 -> 0.34
+##   CrouchIdle        +72  ->    -5        0.59 -> 0.43
+##   CrouchWalk        +73  ->    -5        0.54 -> 0.35
+##   StrafeLeft        -25  ->    -2        0.22 -> 0.65
+##   StrafeRight       -24  ->    +2        0.03 -> 0.65
+##   StrafeWalkLeft    -36  ->    -1        0.08 -> 0.75
+##   StrafeWalkRight   -33  ->    +1        0.01 -> 0.75
+##   RunBack            -4  ->    -1        0.15 -> 0.72
+##   WalkBack          -30  ->    +1        0.08 -> 0.84
+##   Drink             -18  ->    -1        0.31 -> 0.83
 ##
-## where the first term is the point of the palm the shaft passes through and
-## the second puts the fist 55% of the way up the shaft (which is what lifts the
-## butt clear of the ground when the arm hangs in `Walk`). That palm point is
-## deliberately *off* the wrist bone's axis, because a hand holds a stick in its
-## palm rather than through its own bones: the `RightHand`-weighted skin spans
-## x -0.083..0.085, z -0.065..0.065, y -0.025..0.103 in hand-local rest space,
-## so 5 cm off the axis and 6 cm up toward the knuckles is inside the fist with
-## room to spare — and moving the shaft those 5 cm is what takes it from 6 cm
-## off the face to 11 cm. Change `GRIP_ROTATION` and recompute this, or the
-## shaft stops passing through the hand.
+##   worst end over the set     +0.012 m -> +0.341 m
+##   nearest trunk               0.050 m ->  0.146 m
 ##
-## Swept with `tools/preview_grip.tscn` (which takes both vectors on the command
-## line) at 2400x700 in all five clips, plus the `Throw` window 1.40-1.75.
-const GRIP_OFFSET := Vector3(-0.206, -0.582, 0.097)
-const GRIP_ROTATION := Vector3(-12.0, 0.0, -15.0)
+## Every clip was between 4 and 84 degrees off horizontal and is now within
+## **5**, which is the ask answered. The two totals underneath are the part that
+## was not asked for: the old grip's own record promised *"both ends now stay at
+## least 0.15 m up in every ground clip"*, and that was true of the **six** clips
+## a spear was carried in when D-065 measured it. D-066 added six more — the four
+## strafes and the two backpedals — and nothing re-ran the spear against them.
+## Measured now, `StrafeWalkRight` put the butt **0.012 m** off the floor and the
+## shaft **0.050 m** off the chest, which is a centimetre of grass and half the
+## clearance that record believed it had shipped.
+##
+## `tools/preview_carry.tscn -- measure` prints the whole table and is in the
+## gate, and `-- sweep spear none 0 -12,0,-15` is how the left-hand column above
+## was re-measured rather than copied.
+##
+## The axes are unchanged and worth restating, because the numbers moved a long
+## way: `RightHand`'s local +Y runs up the arm and out through the fingers, +X
+## across the palm toward the fingertips and +Z is the palm normal. The old grip
+## was a small tilt off identity because the shaft ran along the forearm; this
+## one is most of a right angle because it does not.
+const GRIP_ROTATION := Vector3(51.77, 0.00, 19.68)
+
+## The point of the palm the shaft passes through, in hand-local metres — the
+## first term of `GRIP_OFFSET`'s derivation above, named since D-070 because
+## that derivation is now code rather than a comment.
+##
+## Deliberately *off* the wrist bone's axis: a hand holds a stick in its palm
+## rather than through its own bones. The `RightHand`-weighted skin spans
+## x -0.083..0.085, z -0.065..0.065, y -0.025..0.103 in hand-local rest space, so
+## 5 cm off the axis and 6 cm up toward the knuckles is inside the fist with room
+## to spare.
+const GRIP_PALM := Vector3(-0.03, 0.06, -0.04)
+
+## Where the butt of the shaft sits in the fist, in hand-local metres.
+##
+## **Derived, and since D-070 derived by a function rather than by prose.** It is
+## exactly `grip_offset(GRIP_ROTATION)`:
+##
+##     GRIP_PALM - GRIP_FRACTION * SHAFT_LENGTH * shaft_direction
+##
+## which slides the shaft down through the palm until the fist is 55% of the way
+## up it — and that 55% is what keeps the butt clear of the ground when the arm
+## hangs. Written only as a constant it was a number that went stale the moment
+## anybody touched `GRIP_ROTATION`: D-065's own comment said *"change
+## GRIP_ROTATION and recompute this, or the shaft stops passing through the
+## hand"*, which is a warning where a function is an answer — and D-070 moved the
+## rotation by eighty degrees, precisely the change that warning was about.
+##
+## It stays a `const` as well, because GDScript cannot call a static function to
+## initialise one and half this file's readers want a constant. What closes the
+## gap is `tools/preview_carry.tscn -- measure`, which recomputes it from the
+## rotation on every run and fails the gate if the two have drifted apart.
+const GRIP_OFFSET := Vector3(0.1990, -0.3361, -0.5428)
 
 ## The two numbers the offset above was derived from, named so the letter card
 ## can be placed off the same measurement instead of guessed at again. The mesh
@@ -205,17 +248,18 @@ var _card: Node3D
 ## `GubCombat._refresh_hand` put it there, and there is nowhere for a second
 ## opinion to live.
 ##
-## Carried at rest since D-069 rather than only during a swing, which is why the
-## two fields below exist: the grip the swing is fitted to is not a grip a Gub
-## can walk around in, exactly as the bow's drawing grip was not (D-066).
+## Carried at rest since D-069 rather than only during a swing. That cost a
+## carry tilt then and costs nothing now (D-070): the grip the swing is fitted to
+## turned out to be a grip a Gub can walk around in perfectly well, once the
+## fists it hangs off are in a pose that was drawn holding a great sword.
 var _sword: Node3D
-## The grip `set_sword_grip` was last handed, and how much of `SWORD_CARRY_TILT`
-## is over it. Composed rather than set one after the other — see
-## `_orient_sword`. A sword nobody is swinging is being carried.
+## The grip `set_sword_grip` was last handed. Three fields and no fourth for a
+## carry weight, because since D-070 the carried sword and the swinging sword are
+## the *same* grip: what changes between them is the pose the fists are in, which
+## is `GubAnimator`'s business and not this node's.
 var _sword_model_scale: float = SWORD_SCALE
 var _sword_grip_offset: Vector3 = SWORD_GRIP_OFFSET
 var _sword_grip_rotation: Vector3 = SWORD_GRIP_ROTATION
-var _sword_carry: float = 1.0
 
 
 func attach_to(skeleton: Skeleton3D) -> bool:
@@ -314,7 +358,7 @@ func set_letter(letter: int) -> void:
 		return
 	_card = Pickup.build_card(letter)
 	_attachment.add_child(_card)
-	_card.position = _card_offset()
+	_card.position = card_offset()
 	_card.scale = Vector3.ONE * CARD_SCALE
 
 	# Parented to the card rather than to the attachment, so it goes when the
@@ -336,7 +380,7 @@ func has_letter() -> bool:
 ## Keep the letter upright in the world and turned the way the Gub is facing.
 ##
 ## Only the orientation is taken back off the hand. The *position* is untouched
-## and goes on coming from `_card_offset()` through the bone, so the card still
+## and goes on coming from `card_offset()` through the bone, so the card still
 ## rides the one line around this fist that has been measured clear of the Gub's
 ## own skin in every clip it is carried through.
 ##
@@ -403,8 +447,7 @@ func is_charged() -> bool:
 ## same point: a hand holds a hilt where it holds a shaft, and a second palm
 ## measured separately would be a second opinion about where this fist is.
 static func fist_offset() -> Vector3:
-	var shaft := Basis.from_euler(GRIP_ROTATION * (PI / 180.0)) * Vector3.UP
-	return GRIP_OFFSET + shaft * (GRIP_FRACTION * SHAFT_LENGTH)
+	return GRIP_OFFSET + shaft_direction() * (GRIP_FRACTION * SHAFT_LENGTH)
 
 
 ## Where the card sits in hand-local metres: up the shaft from the butt, past
@@ -414,9 +457,40 @@ static func fist_offset() -> Vector3:
 ## that re-aiming the grip carries the card with it. Get this wrong by hand and
 ## the card floats beside the Gub instead of in its hand, which is the one thing
 ## about the hold that has to be unambiguous from a distance.
-func _card_offset() -> Vector3:
-	var shaft := Basis.from_euler(GRIP_ROTATION * (PI / 180.0)) * Vector3.UP
-	return GRIP_OFFSET + shaft * (GRIP_FRACTION * SHAFT_LENGTH + CARD_ABOVE_FIST)
+##
+## **Static since D-070, because that inheritance finally cost something.** The
+## grip moved by eighty degrees, so the 0.22 m this slides the card along the
+## shaft stopped pointing up the forearm and started pointing across the body —
+## which moves the card, in a pose (`Idle`'s guard) that a Gub holding a letter
+## is back in, because a hold disarms it and the carry layer is off for the whole
+## of one. `tools/preview_carry.tscn -- measure` asks this function where the
+## card is and checks the bottom of it is out of the grass, which is the number
+## D-035 wrote down by hand and nothing re-checked when the grip moved.
+static func card_offset() -> Vector3:
+	return GRIP_OFFSET + shaft_direction() \
+		* (GRIP_FRACTION * SHAFT_LENGTH + CARD_ABOVE_FIST)
+
+
+## Which way the shaft points out of the fist, in hand-local space: the model's
+## own +Y turned by the grip.
+static func shaft_direction(rotation_degrees: Vector3 = GRIP_ROTATION) -> Vector3:
+	return Basis.from_euler(rotation_degrees * (PI / 180.0)) * Vector3.UP
+
+
+## Where the butt of the shaft sits for a given grip rotation — `GRIP_OFFSET`'s
+## own derivation, as a function, so that sweeping the rotation cannot leave the
+## shaft passing somewhere other than through the palm.
+static func grip_offset(rotation_degrees: Vector3 = GRIP_ROTATION) -> Vector3:
+	return GRIP_PALM - shaft_direction(rotation_degrees) 		* (GRIP_FRACTION * SHAFT_LENGTH)
+
+
+## Where the spear sits in the fist, as a whole transform — the pair above,
+## composed. `sword_transform`'s opposite number, and the reason both exist is
+## the same: a tool that sweeps a grip and a game that draws one have to be
+## asking the same function.
+static func spear_transform(rotation_degrees: Vector3 = GRIP_ROTATION) -> Transform3D:
+	return Transform3D(Basis.from_euler(rotation_degrees * (PI / 180.0)),
+		grip_offset(rotation_degrees))
 
 
 ## World transform of the spear tip, used as the spawn point for a throw so the
@@ -497,96 +571,55 @@ const SWORD_GRIP_OFFSET := Vector3(0.6116, 0.4206, -0.8159)
 const SWORD_GRIP_ROTATION := Vector3(65.102, -180.000, -143.141)
 
 
-## The carried sword's rotation out of the swinging grip, in degrees about the
-## sword's own axes (D-069).
+## **There is no carried-sword tilt any more, and that is D-070.**
 ##
-## **The same lever the bow's `CARRY_TILT` is, for the same reason and measured
-## the same way.** Every number in the block above is a measurement of `Swing`
-## and none of them may move: the scale is what puts the pommel in the left fist
-## and the offset is what puts the fore-grip in the right, and a millimetre of
-## either is a two-handed weapon held in one and a half hands on the one frame
-## everybody is looking at it. But a tilt applied only while the sword is
-## **carried**, and taken off as the swing starts, moves nothing the second fist
-## has to meet — and the sword badly needs one, because 2.1 m of blade rigidly
-## attached to a fist that `Run` swings down to knee height is 2.1 m of blade in
-## the grass.
+## D-069 put a -62 degree rotation on the swinging grip because 2.11 m of blade
+## rigidly attached to a fist that `Run` swings to knee height is 2.11 m of blade
+## in the grass — the point reached **0.351 m under the floor** — and it said so
+## while describing itself as a stopgap: *"it is a rigid prop on an `Idle`
+## authored for empty fists. A Mixamo shoulder-carry is the real answer."*
 ##
-## Swept by `tools/preview_sword.tscn -- carry`, which prints the neighbourhood
-## the same way `preview_bow` prints the bow's, so this is a measurement and not
-## a guess. What it buys, over the twelve clips a sword is carried in:
+## `7_GreatSword_Suite/GreatSwordIdle.fbx` is that answer and it is in the build
+## as `SwordCarry`, layered over the whole locomotion plane (D-070). With it the
+## fists are posed **for a great sword** rather than for boxing, so the grip
+## `preview_sword -- measure` solved against `Swing` is the grip the idle's own
+## hands are already holding, and the worst end over the twelve carried clips
+## comes out at **+0.187 m** with no tilt at all.
 ##
-##   untilted   the point **0.351 m under the floor** through `Run` and
-##              `StrafeRight` — the swinging grip aims a 2.11 m blade down
-##   at -62     every clip 0.353 m clear at worst, `RunBack` the tightest
+## The tilt is deleted rather than kept on top, and the reason is not tidiness.
+## It would still *help* — `preview_carry -- sweep sword` puts the layered worst
+## at +0.350 m at the old -62 — but a tilt is a rotation **away from where the
+## clip's hands are drawn holding the thing**. On an `Idle` authored for empty
+## fists there was nothing to move away from; on a clip authored for this exact
+## prop, sixty-two degrees of it is the blade leaving the hands that are gripping
+## it. The pose wins, and what it costs is 0.16 m of the margin the tilt bought.
 ##
-## -62 is the middle of a plateau, not a cliff edge: -65 is the peak at 0.35 and
-## anything from -55 to -70 holds above 0.15, so a clip that moves by a few
-## degrees of wrist does not put the blade back in the grass. The second axis is
-## zero because it is: the sweep peaks at 0 and every step away from it costs.
-const SWORD_CARRY_TILT := Vector2(-62.0, 0.0)
+## `CARRY_TILT` below is the opposite call, made on the same evidence, and the
+## difference is which clip each prop's pose was authored for. See its header.
 
-## Where the sword sits in the fist, `tilt` degrees out of the swinging grip.
+## Where the sword sits in the fist.
 ##
-## **A whole transform and not just a basis, which is the one place this departs
-## from `bow_basis` and the one place it had to.** A bow's model origin is its
-## middle and it hangs about a palm's width from the grip, so rotating it about
-## its own origin is near enough rotating it about the hand. A great sword's
-## model origin is its **point**, a metre and a half from the fist: rotate that
-## about the origin and the pommel swings round a tip that never moves, which
-## moves the hand rather than the sword. The first sweep of this found the tilt
-## did nothing at all, because the lowest thing on the prop *is* that origin.
+## **No tilt parameter since D-070**, which is the whole of the block above: the
+## carry pose is a clip whose hands are already holding a great sword, so the one
+## grip `preview_sword -- measure` solves against `Swing` is the grip for the
+## swing *and* for the carry, and there is nothing left for a lever to do.
 ##
-## So the carry turns the sword about the point that must not move — the
-## fore-grip, which by the derivation in `SWORD_GRIP_OFFSET` is the palm — and
-## the offset comes back changed along with the basis.
-##
-## The two axes are the two perpendicular to the blade. `Vector3.UP` is the
-## sword's own length here (the model runs +Y from point to pommel), so a
-## rotation about it would spin the edge without moving either end; `RIGHT` and
-## `BACK` are the ones that tip a blade up out of the grass.
-##
-## Composed rather than added, for `bow_basis`'s reason: two Euler triples do not
-## add, and the carry has to mean the same rotation whatever the grip is.
-static func sword_transform(tilt: Vector2, model_scale: float = SWORD_SCALE,
+## It stays a whole `Transform3D` rather than a basis — the one place this
+## departs from `bow_basis` — because the three tools that fit it hand in a scale
+## and an offset as well, and a function that returned only the rotation would
+## leave `_orient_sword` composing the other two by hand in a second place.
+static func sword_transform(model_scale: float = SWORD_SCALE,
 		offset: Vector3 = SWORD_GRIP_OFFSET,
 		grip_rotation: Vector3 = SWORD_GRIP_ROTATION) -> Transform3D:
 	var grip := Basis.from_euler(grip_rotation * (PI / 180.0))
-	if tilt.length_squared() < 0.0001:
-		return Transform3D(grip.scaled(Vector3.ONE * model_scale), offset)
-	var turned := grip * Basis(Vector3.RIGHT, deg_to_rad(tilt.x)) \
-		* Basis(Vector3.BACK, deg_to_rad(tilt.y))
-	# The fore-grip, in the hand's frame, before and after. It is the palm, so
-	# it is the one point on this prop that a carry pose may not move.
-	var hold := Vector3(0.0, SWORD_FORE_HAND, 0.0) * model_scale
-	var pivot := offset + grip * hold
-	return Transform3D(turned.scaled(Vector3.ONE * model_scale),
-		pivot - turned * hold)
-
-
-## How much of `SWORD_CARRY_TILT` the sword is wearing: 1 while it is only being
-## carried, 0 through a swing.
-##
-## Binary where the bow's is continuous, and that is the clip's doing rather than
-## a shortcut. A draw comes up over `DRAW_BLEND_SPEED` and the bow has to travel
-## with the arm, so its carry is the arm's own blend weight. `Swing` does not
-## blend in — it is a full-body state that replaces the pose outright (D-068) —
-## so there is no interval over which a partial tilt would be the truth.
-##
-## Idempotent and cheap for the bow's reason: called every frame on every Gub in
-## the match, and an unchanged value writes nothing.
-func set_sword_carry(amount: float) -> void:
-	var want := clampf(amount, 0.0, 1.0)
-	if _sword == null or is_equal_approx(want, _sword_carry):
-		return
-	_sword_carry = want
-	_orient_sword()
+	return Transform3D(grip.scaled(Vector3.ONE * model_scale), offset)
 
 
 func _orient_sword() -> void:
 	if _sword == null:
 		return
-	_sword.transform = sword_transform(SWORD_CARRY_TILT * _sword_carry,
-		_sword_model_scale, _sword_grip_offset, _sword_grip_rotation)
+	_sword.transform = sword_transform(_sword_model_scale, _sword_grip_offset,
+		_sword_grip_rotation)
 
 
 ## Put a great sword in the right fist, or take it away. A visibility toggle for
@@ -728,6 +761,20 @@ func set_sword_grip(model_scale: float, offset: Vector3,
 ## axis alone cannot do it — tilting about the grip's Z rights `Run` and rolls
 ## `WalkBack` under instead, bottoming out at -0.021 m — because the axis lives
 ## in the fist and the fist is at a different attitude in every clip.
+##
+## **It survives D-070 where the sword's did not, and the difference is which
+## clip each pose was authored for.** `3_Bow_Suite/BowIdle.fbx` is a Gub standing
+## with a longbow, so the carry layer poses the bow arm properly — but the grip
+## the bow hangs in is not a pose, it is the *equation* above, solved against
+## `Draw` so the string's V meets the drawing fingers at every charge. The carry
+## clip's own hand does not know that equation, and measured, the layer alone
+## leaves a limb tip **+0.032 m** off the floor in `Idle` — in the grass by the
+## 0.15 m standard, and worse than the tilt it would be replacing. With both, the
+## worst over the twelve carried clips is **+0.251 m**.
+##
+## The sword's tilt is deleted on exactly this test run the other way: its carry
+## clip *was* authored around its prop, so its grip and its pose agree and a tilt
+## would only pull the blade out of the hands. See `sword_transform`.
 const CARRY_TILT := Vector2(47.5, -25.0)
 
 const BOW_SCALE := 1.7383

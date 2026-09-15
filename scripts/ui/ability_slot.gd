@@ -72,7 +72,7 @@ const SWEEP_ALPHA := 0.26
 
 @export var kind: Kind = Kind.SPEAR
 ## The input action this slot fires, used for the key cap.
-@export var action: String = "throw_spear"
+@export var action: String = "primary_attack"
 @export var label_text: String = "Spear"
 
 ## How many are being carried, or -1 for a slot with no stock to report. The
@@ -102,13 +102,20 @@ func _ready() -> void:
 
 ## Make this slot stand for something else.
 ##
-## The key cap is left alone unless `next_action` says otherwise, and the two
-## cases are the difference between the Elder and a loadout. An Elder's bolt is
-## fired by **the same button the spear was**, which is the point of it replacing
-## the spear rather than being a fourth thing to learn — so that call passes no
-## action and the cap does not move. A bow and a great sword are fired by their
-## own keys (`draw_bow`, `swing_sword`), so the tile that stands for one has to
-## carry that key or it is telling a player to press the wrong thing (D-069).
+## The key cap is left alone unless `next_action` says otherwise, and since
+## D-070 **no caller says otherwise**. The parameter survives rather than being
+## deleted, and that is the interesting part of this comment.
+##
+## D-069 added it because a bow was fired by `draw_bow` and a sword by
+## `swing_sword`, so a tile that stood for one had to carry that key or it was
+## telling a player to press the wrong thing. All four weapons are one
+## `primary_attack` now, so every tile this bar can show — spear, bow, great
+## sword, and the Elder's bolt, which was already on the spear's own button —
+## says LMB, and the cap never moves for anybody.
+##
+## It stays because the *rule* it encodes is still the rule: a caller that
+## changes what a tile fires must change what the tile says it is fired with. The
+## day a fifth thing arrives on a key of its own, the tile is already honest.
 ##
 ## Read out of the input map rather than typed in, exactly as `_ready` does it,
 ## so a rebound key moves both.

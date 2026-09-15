@@ -286,17 +286,24 @@ check "the torso tracks the crosshair" "spine PASS" \
 also "the torso tracks the crosshair" "bow PASS"
 also "the torso tracks the crosshair" "pitch PASS"
 also "the torso tracks the crosshair" "release PASS"
-# The carried bow off the ground (D-066). D-065 measured a 1.71 m longbow
-# ploughing `Run` by 0.158 m and said plainly that no lever on the grip could
-# raise it, because every one of them takes the string's V off the drawing
-# fingers. A tilt that only exists while the bow is *carried* meets no string at
-# all, and this is the table that says so: the worst limb tip over all eleven
-# clips a Gub carries a bow around in, which has to stay 0.15 m clear.
+# What the bow's carry tilt buys on its own (D-066, D-070). D-065 measured a
+# 1.71 m longbow ploughing `Run` by 0.158 m and said plainly that no lever on the
+# grip could raise it, because every one of them takes the string's V off the
+# drawing fingers. A tilt that only exists while the bow is *carried* meets no
+# string at all, and this is the table that says so: the worst limb tip over the
+# twelve clips a Gub carries a bow around in, which has to stay 0.15 m clear.
+#
+# **It stopped being the whole answer in D-070 and is kept because it is the
+# interesting half.** A carried bow wears a *pose* now, and what the game
+# composes is measured by `preview_carry` further down. This run is what says the
+# tilt still earns its keep underneath that pose — the great sword's equivalent
+# was deleted along with the tilt it swept, and why one survived and the other
+# did not is the argument in `HeldGear.CARRY_TILT`.
 #
 # It runs the same `preview_bow -- measure` that solves the grip, so the same
 # run that would notice a grip going stale notices a carry going into the grass.
 # Headless — nothing is rendered, the PNG is thrown away.
-check "the carried bow clears the ground" "carry PASS" \
+check "the bow's carry tilt earns it" "carry PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" --script tools/snapshot.gd -- \
     res://tools/preview_bow.tscn "$GODOT_LOG_DIR/bow_measure.png" 4 measure
 # The Elder's invincibility, asserted against a real spear rather than in logic
@@ -456,16 +463,94 @@ check "the great sword fits both fists" "fit PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" --script tools/snapshot.gd -- \
     res://tools/preview_sword.tscn "$GODOT_LOG_DIR/sword_measure.png" 4 measure
 also "the great sword fits both fists" "blade PASS"
-# And the sword a Gub walks around with, which is a different prop problem from
-# the one above and the same one the carried bow had (D-066, D-069). Since the
-# weapon is a choice a swordsman carries its sword between swings, and the grip
-# the swing is fitted to points 2.11 m of blade at the floor: untilted, the point
-# is 0.351 m *under* the grass through `Run`. `SWORD_CARRY_TILT` is the tilt that
-# fixes it, applied only while carrying so nothing the second fist has to meet
-# moves, and this is that number holding across all twelve clips a sword is
-# carried in. The same run prints the neighbourhood, so a tilt going stale is
-# caught by the run that would have been used to fix it. Headless.
-check "the carried great sword clears the ground" "carry PASS"     "$GODOT" --headless --path "$GODOT_ROOT" --script tools/snapshot.gd --     res://tools/preview_sword.tscn "$GODOT_LOG_DIR/sword_carry.png" 4 carry
+# **Every carried weapon out of the grass and out of the Gub** (D-070), under the
+# layer the game actually composes.
+#
+# This replaces the sword's own carry check and is stronger than it was.
+# `preview_sword -- carry` measured one prop rigidly attached to the locomotion's
+# own bare arms, which is how every weapon in this game was carried until a carry
+# pose existed — and the tilt it swept, `SWORD_CARRY_TILT`, is gone: a clip drawn
+# holding a great sword leaves a tilt nothing to do. Now `UPPER_BODY_BONES` takes
+# its pose from a looping carry clip in every clip a Gub walks around in, so the
+# height of a limb tip or a blade is a function of the *composed* pose, and this
+# is the only tool that composes it — a bone at a time, exactly as the `carry`
+# Blend2 does.
+#
+# Two floors, both of them D-065's: nothing may come within 0.15 m of the ground
+# or 0.06 m of the Gub's own **skinned trunk**, over twelve clips and twenty-four
+# samples of each, with the carry loop walked across its own length underneath so
+# that a row is the worst of two cycles beating rather than one frame held
+# against another. The trunk is the real mesh — every head- and torso-weighted
+# vertex, skinned by the formula the GPU runs — because the three small
+# ellipsoids an earlier pass stood in for a Gub with are what let a shaft ship
+# through the chin.
+#
+# `derived PASS` is the second line and is about a **constant**:
+# `HeldGear.GRIP_OFFSET` has to equal `grip_offset(GRIP_ROTATION)`, and GDScript
+# cannot call a static to initialise a const, so this recomputes it and fails if
+# the two have drifted. D-065's own comment asked a human to do that by hand.
+#
+# Headless, about forty seconds — the skin scan is 3,587 vertices a sample.
+check "every carried weapon clears the ground" "carry PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" --script tools/snapshot.gd -- \
+    res://tools/preview_carry.tscn "$GODOT_LOG_DIR/carry_measure.png" 4 measure
+also "every carried weapon clears the ground" "derived PASS"
+# And `card PASS`, which is about a **third** number the grip carries. The letter
+# card rides `CARD_ABOVE_FIST` along the shaft out of the spear hand, derived
+# from `GRIP_ROTATION` rather than written down, precisely so re-aiming the grip
+# carries the card with it (D-035) — and D-070 re-aimed it by eighty degrees, so
+# the 0.22 m that used to point up the forearm now points across the body. D-035
+# measured the bottom of the letter at 0.23 m off the ground and wrote it into a
+# comment; it is 0.126 m now, it is a check, and the pose it is measured in is
+# the one a Gub holding a letter is actually in — a hold disarms it, so the carry
+# layer is off for the whole of one.
+also "every carried weapon clears the ground" "card PASS"
+# **One button, four weapons** (D-070), pressed on a keyboard rather than called.
+#
+# `throw_spear`, `draw_bow` and `swing_sword` are one `primary_attack` on the
+# left mouse button, and the thing that makes that non-trivial is that the four
+# weapons do not read it the same way: a spear, a swing and the Elder's bolt fire
+# on the **press** and a bow charges while it is **held** and fires on the
+# **release**. So the mode presses the one action on a Gub carrying each in turn
+# — moving the weapon the way the lobby moves it, `Gub.weapon` and then
+# `refresh_hand()` — and requires the right thing to have started on the tick
+# after: a windup, a draw, a spin, and a windup again for the Elder.
+#
+# `Input.action_press` and not `try_throw_spear`, which is the opposite of what
+# every other mode in `combat_range` does and is the whole point of this one. The
+# question is about the poll in `GubCombat._process` — one action, asked
+# unconditionally, four weapons refusing themselves — so the press has to be a
+# real press or the poll is not what is being checked.
+#
+# `hold PASS` is the second meaning of the same button and the half that is easy
+# to fake: the bow's round holds the button for forty ticks, requires the draw to
+# still be running on every one of them and to have reached past half charge, and
+# then requires letting go to have loosed. Written with a one-tick release first,
+# it passed against a Gub that had snap-fired at 0.02 charge and spent the rest
+# of the round on a cooldown. Headless, about four seconds.
+check "one button for every weapon" "primary PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- primary
+also "one button for every weapon" "press PASS"
+also "one button for every weapon" "hold PASS"
+# The input map, checked rather than read (D-070).
+#
+# **This check exists because of a bug nobody could see.** D-068 put
+# `swing_sword` on physical keycode 82 and `respawn` was already there — the
+# potion step had steered away from `R` for that reason one step earlier — so for
+# two decision records the sword and the respawn were the same key and nothing
+# anywhere could say so. A binding table is data and a clash between two rows is
+# arithmetic; all that was missing was somebody doing it.
+#
+# Three things: every action the settings panel's controls reference names is in
+# the map, because `primary_key` answers "Unbound" for one that is not and a
+# reference page full of "Unbound" is a page nobody reads twice; no two actions
+# in the whole project share a key or a mouse button, `ui_*` excepted because
+# Godot's own are meant to overlap; and the three actions D-070 retired are gone
+# rather than orphaned, since a key that is bound to nothing being polled is
+# worse than one that is not bound at all.
+check "no two controls share a key" "controls PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" --script tools/snapshot.gd -- \
+    res://tools/hud_range.tscn "$GODOT_LOG_DIR/controls.png" 40 controls
 # A shaft standing in a Gub who is still alive, and then in the corpse that Gub
 # becomes (D-062). This is the half of the damage model that is not a number:
 # until now a projectile that hit somebody who lived had nowhere to go, because

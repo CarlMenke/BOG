@@ -88,3 +88,63 @@ static func blurb(weapon: Variant) -> String:
 ## call site, so the strip and the harnesses iterate the same list.
 static func all() -> Array[int]:
 	return [Weapon.SPEAR, Weapon.BOW, Weapon.SWORD]
+
+
+## The clip a Gub stands in while it is carrying this weapon and doing nothing
+## else with it (D-070), indexed by the enum.
+##
+## **This is the one table in the game that is indexed by the weapon**, and it is
+## a table rather than a branch on purpose. D-069's own record is emphatic that
+## *"nothing anywhere branches on which weapon a Gub has"* — the three gates are
+## four clauses of one sentence, the input polls all three unconditionally, and
+## the hand is drawn from the gates. A carry pose cannot be any of that: a bow is
+## held differently from a great sword, and no amount of phrasing makes those one
+## pose. So the difference lives here, beside `NAMES` and `BLURBS`, in the file
+## that already exists to say what the three weapons *are* — and every reader of
+## it is a lookup rather than a `match`. `GubAnimator` asks it once a frame and
+## hands the answer to a `Transition` node; nothing else asks it at all.
+##
+## **The spear borrows the great sword's, and that is the answer to "the spear
+## should be horizontal".** There is no spear carry clip on disk — the two that
+## arrived are a bow's and a sword's — so the spear's row is the one that had to
+## be solved rather than downloaded, and the three candidates already built were
+## scored against each other by `tools/preview_carry.tscn -- solve`:
+##
+##   pose over which the grip was solved   flattest   floor    trunk
+##   Idle, the Gub's own boxer's guard       12 deg    0.45 m   0.09 m
+##   BowCarry, a longbow at rest             55 deg    0.12 m   0.25 m
+##   SwordCarry, a great sword at rest      **5 deg**  0.33 m   0.15 m
+##
+## `Idle` cannot be flat because its fist is up beside a head that is 0.5 m of
+## blob: a level shaft from there either crosses the face or points backwards,
+## and the best bearing that misses the Gub still swings 12 degrees across the
+## set. `BowCarry` puts the right fist at the hip, which is where a javelin is
+## really carried, and it reads beautifully in `Idle` — but the shaft then lies
+## in the sagittal plane, so every degree of pelvis pitch is a degree of spear,
+## and `Run` tips it to 55. `SwordCarry` holds both fists together in front at
+## waist height, which puts the shaft **across** the body where no amount of hip
+## pitch can tilt it, and both hands land on it. It is port arms, and it is the
+## horizontal reading of D-065's own target — *"a Gub in a guard stance with a
+## spear held upright reads as armed"* — with the word "upright" answered.
+##
+## A spear Gub and a sword Gub therefore stand identically and are told apart by
+## what is in their hands, which is the read `HeldGear`'s header asks for anyway.
+## A spear idle of its own is one Mixamo download and would close it; nothing
+## waits on it.
+const CARRY_CLIPS := ["SwordCarry", "BowCarry", "SwordCarry"]
+
+
+## The carry clip for `weapon`, or "" for one with none.
+static func carry_clip(weapon: Variant) -> String:
+	return CARRY_CLIPS[sanitize(weapon)]
+
+
+## A weapon named on a command line, for the harnesses. Case-insensitive on the
+## first word of `NAMES`, so `sword` finds "Great sword".
+static func from_name(text: String) -> int:
+	var want := text.strip_edges().to_lower()
+	for weapon in all():
+		if NAMES[weapon].to_lower().begins_with(want) \
+				or NAMES[weapon].to_lower().ends_with(want):
+			return weapon
+	return DEFAULT

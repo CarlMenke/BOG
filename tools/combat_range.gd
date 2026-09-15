@@ -328,7 +328,7 @@ const MODES := ["flight", "hit", "arc", "miss", "aim", "mushroom", "cover",
 	"lure", "lure_self", "letter", "cards", "lightning", "blast", "ward", "recharge",
 	"release", "cast", "bow", "draw", "strafe", "spine", "strafing", "aiming",
 	"respawn", "health", "potion", "embed", "hurt", "walk", "bhop", "leave",
-	"sword", "chain", "free"]
+	"sword", "chain", "primary", "free"]
 
 ## How long after the cast the verdict is taken, in physics ticks. The click
 ## only starts the windup — the bolt leaves at `MatchConfig.lightning_delay`,
@@ -1619,6 +1619,9 @@ func _physics_process(_delta: float) -> void:
 		return
 	if _mode == "draw":
 		_drive_draw(player, combat)
+		return
+	if _mode == "primary":
+		_drive_primary(player, combat)
 		return
 	if _mode == "ward":
 		_drive_ward(combat)
@@ -4695,6 +4698,179 @@ func _drive_sword() -> void:
 			print("combat_range: %s" % ("sword PASS" if _sword_failures == 0
 				else "sword FAIL (%d)" % _sword_failures))
 			get_tree().quit()
+
+
+# ------------------------------------------------------- one attack button ---
+
+## The rounds `primary` plays, in order: a weapon, and what pressing the one
+## button has to have started by the tick after the press.
+##
+## The Elder is last and is the round that would hurt most to lose. It is not a
+## fourth weapon — it is the spear's own click arriving at a Gub whose gate says
+## `has_lightning()` instead of `has_spear()` (D-038), and it goes down the same
+## `try_throw_spear` that branches to `try_cast_lightning` inside itself. If
+## consolidating four weapons onto one action had put a `match` on the loadout
+## anywhere, this is the row that would find it: an Elder's weapon is not in
+## `Loadout` at all.
+const PRIMARY_ROUNDS := [
+	{"weapon": Loadout.Weapon.SPEAR, "elder": false, "started": "windup"},
+	{"weapon": Loadout.Weapon.BOW, "elder": false, "started": "draw"},
+	{"weapon": Loadout.Weapon.SWORD, "elder": false, "started": "spin"},
+	{"weapon": Loadout.Weapon.SPEAR, "elder": true, "started": "windup"},
+]
+
+## How long each round gets, in physics ticks, before its verdict is taken.
+##
+## Long enough for the longest thing one press can start to finish and let go of
+## the body: `SWING_SECONDS` is 1.867 s, which is 112 ticks, and `is_busy()` has
+## to have gone false again before the next round's press or the next round would
+## be measuring a refusal rather than an acceptance.
+const PRIMARY_ROUND_TICKS := 150
+
+## Which tick inside a round the button goes down, and which tick it comes up.
+##
+## The press is late enough for the previous round to have finished and for the
+## hand to have been repainted; the release is **40 ticks** after it, which is
+## two thirds of a second and is the only number in this mode that is about a
+## weapon rather than about the harness — it has to be long enough that a bow
+## reaches a charge worth looking at and short enough that nothing else has
+## finished on its own.
+const PRIMARY_PRESS_AT := 20
+const PRIMARY_RELEASE_AT := 60
+
+var _primary_round: int = -1
+var _primary_failures: int = 0
+var _primary_started: Dictionary = {}
+var _primary_loosed: bool = false
+var _primary_charge: float = 0.0
+
+
+## One button, four weapons, driven through the **keyboard** (D-070).
+##
+## `Input.action_press` and not `try_throw_spear`, which is the opposite of what
+## every other mode in this file does and is the whole point of this one. The
+## other modes are about what happens after a click and go straight at the
+## function so the tick is exact; this one is about the click itself — that one
+## action, polled unconditionally, starts the right thing for whichever weapon a
+## Gub brought, and that its *release* ends a draw and does nothing at all to the
+## other three. The only witness that can say so is the poll in
+## `GubCombat._process`, so the press has to be a real press.
+##
+## The weapon is moved between rounds the way the lobby moves it — `Gub.weapon`
+## and then `refresh_hand()`, which is `GubBackdrop._equip`'s own two lines — so
+## this also exercises the one path in the game that changes a loadout under a
+## Gub that already exists.
+func _drive_primary(player: Gub, combat: GubCombat) -> void:
+	var tick := _frames % PRIMARY_ROUND_TICKS
+	var round_index := _frames / PRIMARY_ROUND_TICKS
+	if round_index >= PRIMARY_ROUNDS.size():
+		_report_primary()
+		return
+	if round_index != _primary_round:
+		_primary_round = round_index
+		_begin_primary_round(player, combat)
+		return
+
+	var row: Dictionary = PRIMARY_ROUNDS[round_index]
+	var holds: bool = row["started"] == "draw"
+	if tick == PRIMARY_PRESS_AT:
+		Input.action_press("primary_attack")
+		return
+	if tick == PRIMARY_PRESS_AT + 1:
+		_check_primary_started(player, combat, row)
+		# **The three press-edge weapons let go here and the bow does not**, and
+		# that asymmetry is the whole of what this mode exists to check. A spear,
+		# a swing and a bolt have already happened by this tick and the button
+		# coming up means nothing to them; a bow is *still being drawn*, and a
+		# release on this tick would loose a one-tick snap shot and leave every
+		# assertion after it satisfied by a Gub on a cooldown. It was written
+		# that way first, and the loose check passed without a string ever having
+		# gone back.
+		if not holds:
+			Input.action_release("primary_attack")
+		return
+	if not holds:
+		return
+
+	# The draw, held. Everything below is the second meaning of the one action.
+	if tick > PRIMARY_PRESS_AT + 1 and tick < PRIMARY_RELEASE_AT:
+		_primary_charge = maxf(_primary_charge, player.draw_fraction())
+		_primary_expect(player.is_drawing(),
+			"the draw ended at %d ticks with the button still down" % tick)
+		return
+	if tick == PRIMARY_RELEASE_AT:
+		# A real draw before the verdict, or "it stopped drawing" is satisfied by
+		# a draw that never started. Forty ticks is two thirds of a second, which
+		# on the default `bow_draw_time` reaches 0.64 — past the half this asks
+		# for and short of a full draw on purpose, because a *held* button that
+		# had run out of charge to add would be indistinguishable from one that
+		# had been let go of early.
+		_primary_expect(_primary_charge > 0.5,
+			"the held button only reached %.2f of a draw" % _primary_charge)
+		Input.action_release("primary_attack")
+		return
+	if tick == PRIMARY_RELEASE_AT + 2:
+		_primary_loosed = not player.is_drawing()
+		_primary_expect(_primary_loosed,
+			"letting the button go did not loose the arrow")
+
+
+## Put the round's weapon on the Gub, the lobby's way, and clear the state the
+## last round left.
+func _begin_primary_round(player: Gub, combat: GubCombat) -> void:
+	var row: Dictionary = PRIMARY_ROUNDS[_primary_round]
+	player.revive_at(_facing(PLAYER_SPOT, Vector3(0.0, 0.1, 0.0)))
+	player.input_direction = Vector2.ZERO
+	player.weapon = row["weapon"]
+	if row["elder"]:
+		MatchState._make_elder(1)
+	combat.refresh_hand()
+	_primary_started = {}
+
+
+## What the press started, read off the body rather than off `GubCombat`'s own
+## private fields: a windup is a spear or a bolt on its way, a draw is the
+## replicated float, a spin is `Gub`'s clock. All three are what every *other*
+## peer would see, which is the right witness for a check about whether a button
+## did anything.
+func _check_primary_started(player: Gub, combat: GubCombat,
+		row: Dictionary) -> void:
+	var started := ""
+	if player.is_spinning():
+		started = "spin"
+	elif player.is_drawing():
+		started = "draw"
+	elif combat.is_winding_up():
+		started = "windup"
+	_primary_started[row["started"]] = started
+	_primary_expect(started == row["started"],
+		"%s%s: one press started '%s', wanted '%s'"
+			% [Loadout.weapon_name(row["weapon"]),
+				" as the Elder" if row["elder"] else "", started,
+				row["started"]])
+
+
+func _primary_expect(ok: bool, complaint: String) -> void:
+	if ok:
+		return
+	print("combat_range: %s" % complaint)
+	_primary_failures += 1
+
+
+func _report_primary() -> void:
+	# The bow's own verdict is separate because it is the only weapon whose
+	# button has a second meaning, and a mode that only proved the four presses
+	# would have proved exactly the half that is easy.
+	_primary_expect(_primary_loosed, "the bow never loosed")
+	print("combat_range: held, the same button drew to %.2f and loosed on the "
+		% _primary_charge + "release — hold %s"
+		% ("PASS" if _primary_loosed and _primary_charge > 0.5 else "FAIL"))
+	print("combat_range: one button started %d of %d weapons — %s"
+		% [PRIMARY_ROUNDS.size() - _primary_failures, PRIMARY_ROUNDS.size(),
+			"press PASS" if _primary_failures == 0 else "press FAIL"])
+	print("combat_range: %s" % ("primary PASS" if _primary_failures == 0
+		else "primary FAIL (%d)" % _primary_failures))
+	get_tree().quit()
 
 
 ## Click, and remember which tick it was on. The rehearsal's click and the three

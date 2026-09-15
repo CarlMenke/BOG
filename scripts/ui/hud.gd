@@ -159,11 +159,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if _pause.visible or _results.visible:
 		return
-	# Dead players have no spear to throw, so the throw and aim buttons are free
-	# and are the two most obvious things to press. They step the spectator
+	# Dead players have no weapon to swing, so the attack and aim buttons are
+	# free and are the two most obvious things to press. They step the spectator
 	# camera forward and back through whoever is still alive.
 	if _spectating:
-		if event.is_action_pressed("throw_spear"):
+		if event.is_action_pressed("primary_attack"):
 			get_viewport().set_input_as_handled()
 			_step_spectator(1)
 			return
@@ -357,7 +357,7 @@ func _refresh_abilities() -> void:
 		# "Bolt" rather than "Lightning": the tile is 62 px wide and the other
 		# three labels are Spear, Shield and Lure. A caption that overhangs its
 		# own square would be the one thing on this bar that does not line up.
-		_spear_slot.set_kind(AbilitySlot.Kind.LIGHTNING, "Bolt", "throw_spear")
+		_spear_slot.set_kind(AbilitySlot.Kind.LIGHTNING, "Bolt")
 		_spear_slot.set_armed(combat.has_lightning(),
 			combat.lightning_cooldown() if spear_timed else 0.0,
 			Net.config.lightning_cooldown)
@@ -369,17 +369,20 @@ func _refresh_abilities() -> void:
 		# looking at a Spear tile that is dark for the whole match and times a
 		# recharge they are not spending — which is the exact misinformation
 		# D-054 cut the old ring out of this bar to avoid.
-		_spear_slot.set_kind(AbilitySlot.Kind.BOW, "Bow", "draw_bow")
+		# No action passed, by any of the four branches, since D-070: there is
+		# one attack button and every weapon is on it, so the cap says LMB
+		# whoever is holding what. See `AbilitySlot.set_kind`.
+		_spear_slot.set_kind(AbilitySlot.Kind.BOW, "Bow")
 		_spear_slot.set_armed(combat.has_bow(),
 			combat.bow_cooldown() if spear_timed else 0.0,
 			Net.config.bow_recharge)
 	elif combat.carries(Loadout.Weapon.SWORD):
-		_spear_slot.set_kind(AbilitySlot.Kind.SWORD, "Sword", "swing_sword")
+		_spear_slot.set_kind(AbilitySlot.Kind.SWORD, "Sword")
 		_spear_slot.set_armed(combat.has_sword(),
 			combat.sword_cooldown() if spear_timed else 0.0,
 			Net.config.sword_recharge)
 	else:
-		_spear_slot.set_kind(AbilitySlot.Kind.SPEAR, "Spear", "throw_spear")
+		_spear_slot.set_kind(AbilitySlot.Kind.SPEAR, "Spear")
 		_spear_slot.set_armed(combat.has_spear(),
 			combat.spear_cooldown() if spear_timed else 0.0,
 			Net.config.spear_recharge)

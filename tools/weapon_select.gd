@@ -360,6 +360,16 @@ func _run_ring() -> void:
 		var hand: HeldGear = gub.held_gear
 		_check("%s was handed the weapon it picked" % gub.display_name,
 			gub.weapon, want[i])
+		# And **stands** in the weapon it picked (D-070). The pose is the other
+		# half of "your character should only show the weapon you have selected":
+		# a Gub holding a great sword in an archer's stance is showing two.
+		#
+		# Read off the graph's own parameter rather than off `Loadout`, so this
+		# is "what the animator is playing" and not "what the table says it
+		# should be" — the second would agree with itself whatever the graph had
+		# been built with.
+		_check("%s stands in its own carry pose" % gub.display_name,
+			_carry_pose(gub), Loadout.CARRY_CLIPS[want[i]])
 		_check("%s: a shaft?" % gub.display_name, hand.is_carried(),
 			want[i] == Loadout.Weapon.SPEAR)
 		_check("%s: a bow?" % gub.display_name, hand.has_bow(),
@@ -389,6 +399,37 @@ func _run_ring() -> void:
 	_check("the archer puts its bow down",
 		(gubs[1] as Gub).held_gear.has_bow(), false)
 	_check("and picks up a shaft", (gubs[1] as Gub).held_gear.is_carried(), true)
+	# The pose follows the prop, on the same frame and through the same call
+	# (D-070). `GubBackdrop._equip` sets `Gub.weapon` and asks
+	# `GubCombat.refresh_hand()`, which repaints the fists *and* re-points the
+	# carry layer — two halves of one answer, so there is no frame on which a
+	# ring Gub is holding one weapon and standing in another's stance.
+	_check("the swordsman's stance came with it",
+		_carry_pose(gubs[0] as Gub),
+		Loadout.CARRY_CLIPS[Loadout.Weapon.SWORD])
+	_check("and the archer's went back",
+		_carry_pose(gubs[1] as Gub),
+		Loadout.CARRY_CLIPS[Loadout.Weapon.SPEAR])
 
 	backdrop.queue_free()
 	print("weapon_select: ring %s" % ("PASS" if _failures == before else "FAIL"))
+
+
+## Which clip this Gub's carry layer is actually playing, off the animator's own
+## `carry_pick` (D-070).
+##
+## The `transition_request` parameter is write-only in the sense that matters —
+## it reports "" once the transition has been taken — so this reads
+## `current_state`, which is the input name the node settled on, and maps it back
+## through `Loadout.CARRY_CLIPS`. The names are ordinals (`GubAnimator`'s own
+## `_carry_input`) rather than clip names precisely because two weapons share a
+## clip, so the round trip has to go through the table.
+func _carry_pose(gub: Gub) -> String:
+	var animator := gub.get_node_or_null("AnimationTree") as GubAnimator
+	if animator == null:
+		return "<no animator>"
+	var state := String(animator.get("parameters/carry_pick/current_state"))
+	for i in Loadout.CARRY_CLIPS.size():
+		if state == "w%d" % i:
+			return Loadout.CARRY_CLIPS[i]
+	return "<%s>" % state

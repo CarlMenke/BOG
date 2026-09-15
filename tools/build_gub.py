@@ -497,11 +497,26 @@ PACKS = (
     #   disappears the way the spear does — as a visibility toggle off the one
     #   gate in `GubCombat` (D-035, D-065). An equip clip for the bow and none
     #   for the spear would be two rules about the same hand.
+    #
+    # `BowIdle.fbx` is the **carry** (D-070), and it is the first clip in this
+    # table that is neither a locomotion cycle nor a one-shot: it is a pose,
+    # looped, whose legs are thrown away by `UPPER_BODY_BONES` and whose spine
+    # and arms are the whole of what a Gub holding a longbow looks like when it
+    # is not shooting. `loop` is True and `align` is LOOP_MEAN for `Idle`'s
+    # reason — it is an idle, it sways, and pinning one frame of a sway bakes
+    # half of it into the rest pose.
+    #
+    # It names no `authored_as` and that is not the omission that field exists to
+    # make visible: an authored speed is what a blend point plays its clip at,
+    # and this clip is never a blend point. It is a layer at weight 1 over
+    # whatever the plane below is doing, at rate 1, for ever.
     Pack("3_Bow_Suite",
-         "the bow the game plays: the pull out of a nock-and-draw, and the loose",
+         "the bow the game plays: the pull out of a nock-and-draw, the loose, "
+         "and the pose a Gub carries the thing in",
          (
-             Clip("StandingDrawArrow.fbx", "Draw",  False, 0.567),
-             Clip("StandingAimRecoil.fbx", "Loose", False, 0.167),
+             Clip("StandingDrawArrow.fbx", "Draw",     False, 0.567),
+             Clip("StandingAimRecoil.fbx", "Loose",    False, 0.167),
+             Clip("BowIdle.fbx",           "BowCarry", True,  LOOP_MEAN),
          )),
     # The Elder's cast, and the second pack with something in it (D-064).
     #
@@ -661,11 +676,20 @@ PACKS = (
     #   Declaring it would be `StandingEquipBow`'s mistake one weapon along: an
     #   equip animation for one prop and none for the other two is two rules
     #   about the same hand.
+    #
+    # `GreatSwordIdle.fbx` is the **carry** (D-070), `BowIdle.fbx`'s twin in this
+    # table and in the graph: a looping pose whose legs nothing reads and whose
+    # shoulders are what two metres of blade hangs off. It answers D-068's own
+    # closing note — *"a shoulder-carry over the locomotion set is the real
+    # answer"* — and it answers D-069's `SWORD_CARRY_TILT`, which said the same
+    # thing about itself in as many words.
     Pack("7_GreatSword_Suite",
-         "the great sword's one swing: a spinning advance that keeps its metres",
+         "the great sword: one spinning advance that keeps its metres, and the "
+         "pose it is carried in between them",
          (
              Clip("GreatSwordHighSpinAttack.fbx", "Swing", False, 0.0,
                   advance_as="SPIN_ADVANCE"),
+             Clip("GreatSwordIdle.fbx", "SwordCarry", True, LOOP_MEAN),
          )),
 )
 

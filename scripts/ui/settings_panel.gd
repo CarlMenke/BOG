@@ -31,14 +31,15 @@ const CONTROL_REFERENCE: Array[Array] = [
 	["Sprint", "sprint"],
 	["Crouch / slide", "crouch"],
 	["Jump", "jump"],
-	# One line per weapon, because a player has one weapon (D-069). Before the
-	# lobby pick this list said "Throw spear" and stopped, which was already
-	# missing the bow and the sword and was merely incomplete; now two players in
-	# three would come here to find out which key their own weapon is on and
-	# find somebody else's. Listed together and in the picker's own order.
-	["Throw spear", "throw_spear"],
-	["Draw bow", "draw_bow"],
-	["Swing great sword", "swing_sword"],
+	# **One line for all three weapons, because there is one button** (D-070).
+	# D-069 put three here — one per weapon, in the picker's order — on the
+	# argument that a player who came looking for their own weapon's key should
+	# not find somebody else's. That was the right fix for three actions and the
+	# wrong shape for the problem, which was that a player has one weapon and had
+	# to learn three keys to find out. There is one key now, and the caption says
+	# what it does for all three rather than naming a weapon this player may not
+	# have brought.
+	["Attack", "primary_attack"],
 	["Aim", "aim"],
 	["Plant mushroom", "place_mushroom"],
 	["Throw lure", "throw_lure"],

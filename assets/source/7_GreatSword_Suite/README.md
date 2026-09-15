@@ -91,6 +91,30 @@ skinless file, where the curves are intact and only the rest pose they are
 relative to is wrong, so the length and the turn are trustworthy and the pose is
 not.
 
+## And the pose it is carried between swings in (D-070)
+
+`GreatSwordIdle.fbx` arrived after the swing and is the clip D-069's closing note
+asked for by name: *"a Mixamo shoulder-carry is the real answer."* It is built as
+`SwordCarry` and played as an upper-body layer over the whole locomotion plane,
+so a swordsman stands like one in every clip it walks around in.
+
+**It deleted `HeldGear.SWORD_CARRY_TILT`.** D-069 rotated the swinging grip by
+−62° to keep 2.11 m of blade out of the grass, because the grip was fitted to
+`Swing` and hung off an `Idle` authored for empty fists: untilted, the point
+reached 0.351 m *under* the floor through `Run`. This clip's fists were drawn
+holding a great sword, so the grip solved against the swing is the grip the idle
+is already gripping, and the worst end over twelve carried clips comes out at
++0.187 m with no tilt at all. The tilt would still help — it measures +0.350 m on
+top of the pose — and it is gone anyway, because a tilt is a rotation *away from
+where the clip's hands are drawn holding the thing*.
+
+**The spear borrows this clip.** There is no spear idle anywhere on disk, and of
+the three poses the build has, this is the only one that is a genuine two-handed
+grip — both fists together in front at waist height, 0.22 m apart — which is what
+lets a 1.24 m shaft lie flat **across** the body where no amount of hip pitch can
+tilt it. See D-070 for the scoring and `Loadout.CARRY_CLIPS` for the table. A
+spear idle of its own is one download and would close it.
+
 ## What every clip in every pack has to be
 
 The same upload. These clips land on **one** skeleton, so each one has to come

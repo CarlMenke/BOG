@@ -4,9 +4,9 @@ extends Node3D
 ## Two jobs, and they are the same job read twice: the numbers that put both
 ## fists on the hilt, and the picture that shows what the swing actually is.
 ##
-##   # what the carried sword clears, and the tilt sweep behind SWORD_CARRY_TILT
-##   Godot --headless --path . --script tools/snapshot.gd -- \
-##       res://tools/preview_sword.tscn out/none.png 4 carry
+##   # the carry lives next door now: `tools/preview_carry.tscn -- measure`
+##   # measures all three props under the layer that actually ships (D-070), and
+##   # this tool's own `carry` mode is gone with the tilt it swept.
 ##
 ##   # the derivation, headless, printed — paste the three lines it ends with
 ##   Godot --headless --path . --script tools/snapshot.gd -- \
@@ -92,40 +92,14 @@ const FRAME_MARGIN := 2.4
 ## about the same picture, with a ground track in it as well.
 const VIEW_ELEVATION := 34.0
 
-## How far above the floor the lowest end of a **carried** sword has to stay
-## (D-069).
-##
-## `BLADE_CLEARANCE_MIN` above is the swing's and is deliberately negative: a
-## sword being swung goes through the space a body stands in and a grip that kept
-## it out of the grass would be a grip that had lifted it out of its own arc.
-## Carrying one is the opposite problem and is the *bow's* problem exactly — a
-## rigid prop on a fist that `Run` swings to knee height — so it takes the bow's
-## own floor, 0.15 m, which is what the spear's grip was tuned to and what
-## `preview_bow` holds the carried bow to (D-066).
-const SWORD_CARRY_MIN := 0.15
-
-## The sweep either side of `SWORD_CARRY_TILT`, and how many samples of it.
-##
-## Six times the span `preview_bow` prints for the bow, because the two carries
-## are not the same size of correction. The bow hangs near its middle and needed
-## a nudge; the sword's swinging grip points a 2.11 m blade at the floor, so the
-## carry is not a nudge at all — it is most of a right angle, and a window that
-## could not reach it would report that nothing helps.
-const SWEEP_DEGREES := 15.0
-const SWEEP_STEPS := 13
-
-## Every clip a Gub carries a sword *around* in.
-##
-## `preview_bow._carried_clips`'s list with one difference, and it is the
-## interesting one: `Swing` is excluded there because a Gub swinging has no bow
-## at all, and it is excluded here because a Gub swinging is not *carrying* — the
-## tilt is off for the whole of `Gub.is_spinning()` and those frames are the
-## measurement `measure` above already makes. `Throw`, `Cast`, `Draw` and `Loose`
-## are excluded for the sharper version of the same thing: a Gub that picked the
-## great sword can never play any of them (D-069), so measuring a sword through
-## them is measuring a prop in a pose that cannot happen.
-const CARRY_SKIP := ["JumpOne", "JumpTwo", "Slide", "Throw", "Cast", "Draw",
-	"Loose", "Swing"]
+## **The carry is measured next door since D-070.** `SWORD_CARRY_MIN`,
+## `SWEEP_DEGREES`, `SWEEP_STEPS` and `CARRY_SKIP` all lived here and all went
+## with `HeldGear.SWORD_CARRY_TILT`, which D-070 deleted: the great sword is
+## carried in `SwordCarry`, a clip drawn holding this exact prop, so the grip
+## solved below is the grip for the swing *and* for the carry and there is
+## nothing left for a tilt to do. `tools/preview_carry.tscn -- measure` is what
+## checks a carried sword is out of the grass, along with the other two props and
+## under the composition the game actually plays.
 
 
 func _ready() -> void:
@@ -135,10 +109,6 @@ func _ready() -> void:
 		samples = maxi(2, int(args[4]))
 	if mode == "measure":
 		_measure()
-		get_tree().quit()
-		return
-	if mode == "carry":
-		_carry()
 		get_tree().quit()
 		return
 	_sheet()
@@ -310,107 +280,6 @@ func _pose(player: AnimationPlayer, skeleton: Skeleton3D, time: float) -> void:
 	player.seek(time, true, true)
 	player.pause()
 	skeleton.force_update_all_bone_transforms()
-
-
-# --------------------------------------------------------------- the carry ---
-
-## How low a carried great sword hangs in every clip a Gub walks around in, and
-## what a tilt buys (D-069).
-##
-## `preview_bow._report_carry` and `_sweep_carry` transposed onto the other
-## prop, because it is the same problem with a longer lever on it: the bow is
-## 1.71 m held near its middle and the sword is 2.11 m held near one end, so the
-## fist's own swing through `Run` is multiplied by more of it. The lever is the
-## same one too — the grip itself may not move, because every millimetre of it is
-## a fist coming off the hilt in the clip the size was solved against, so what
-## moves is a rotation applied only while the sword is carried.
-func _carry() -> void:
-	var gub := _bare_gub()
-	var skeleton := gub.find_child("Skeleton3D", true, false) as Skeleton3D
-	var player := gub.find_child("AnimationPlayer", true, false) as AnimationPlayer
-	var clips := _carry_clips(player)
-
-	print("preview_sword: the carry, lowest sword end above the floor")
-	for clip: String in clips:
-		var row := _carry_clearance(gub, player, skeleton, clip,
-			HeldGear.SWORD_CARRY_TILT)
-		print("  %-16s lowest end %+.3f m at %.2f s" % [clip, row[0], row[1]])
-
-	print("preview_sword: the carry tilt's neighbourhood — worst end over all "
-		+ "%d clips above" % clips.size())
-	for axis in 2:
-		var line := ""
-		for step in SWEEP_STEPS:
-			var tilt := HeldGear.SWORD_CARRY_TILT
-			var nudge := float(step - (SWEEP_STEPS - 1) / 2) * SWEEP_DEGREES
-			if axis == 0:
-				tilt.x += nudge
-			else:
-				tilt.y += nudge
-			line += "%+7.2f" % _worst_carry(gub, player, skeleton, clips, tilt)
-		var centre: float = HeldGear.SWORD_CARRY_TILT.x if axis == 0 \
-			else HeldGear.SWORD_CARRY_TILT.y
-		var reach := float((SWEEP_STEPS - 1) / 2) * SWEEP_DEGREES
-		print("  about %s, %+.0f to %+.0f in %.0fs: %s"
-			% ["X" if axis == 0 else "Z", centre - reach, centre + reach,
-				SWEEP_DEGREES, line])
-
-	var flat := _worst_carry(gub, player, skeleton, clips, Vector2.ZERO)
-	var tilted := _worst_carry(gub, player, skeleton, clips,
-		HeldGear.SWORD_CARRY_TILT)
-	if tilted >= SWORD_CARRY_MIN:
-		print("preview_sword: every carried clip holds the sword %+.3f m clear "
-			% tilted + "(%+.3f m untilted) — carry PASS" % flat)
-	else:
-		print("preview_sword: carry FAIL — the worst carried clip puts an end "
-			+ "%+.3f m against a %+.3f m floor" % [tilted, SWORD_CARRY_MIN])
-
-
-func _carry_clips(player: AnimationPlayer) -> Array[String]:
-	var out: Array[String] = []
-	for clip: String in GubAnimator.REQUIRED_CLIPS:
-		if clip in CARRY_SKIP:
-			continue
-		if player.has_animation(clip):
-			out.append(clip)
-	return out
-
-
-## The lowest the sword's two ends get in one clip with `tilt` degrees of carry
-## rotation on it, as [metres above the floor, the clip second it happens at].
-##
-## The **ends**, off the model's own axis rather than off a bounding box: the
-## mesh runs 0 to `SWORD_LENGTH` along its local +Y with the point at the origin,
-## so those two values are the two things that can touch grass.
-func _carry_clearance(gub: Gub, player: AnimationPlayer, skeleton: Skeleton3D,
-		clip: String, tilt: Vector2) -> Array:
-	var hand := skeleton.find_bone(HeldGear.HAND_BONE)
-	var length := player.get_animation(clip).length
-	var lowest := INF
-	var at := 0.0
-	for i in 24:
-		var time := length * float(i) / 24.0
-		player.play(clip)
-		player.seek(time, true, true)
-		player.pause()
-		skeleton.force_update_all_bone_transforms()
-		var grip := gub.global_transform * skeleton.global_transform \
-			* skeleton.get_bone_global_pose(hand) \
-			* HeldGear.sword_transform(tilt)
-		for end: float in [0.0, HeldGear.SWORD_LENGTH]:
-			var tip: Vector3 = grip * Vector3(0.0, end, 0.0)
-			if tip.y < lowest:
-				lowest = tip.y
-				at = time
-	return [lowest, at]
-
-
-func _worst_carry(gub: Gub, player: AnimationPlayer, skeleton: Skeleton3D,
-		clips: Array[String], tilt: Vector2) -> float:
-	var worst := INF
-	for clip: String in clips:
-		worst = minf(worst, _carry_clearance(gub, player, skeleton, clip, tilt)[0])
-	return worst
 
 
 # ------------------------------------------------------------- the picture ---

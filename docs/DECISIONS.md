@@ -7763,3 +7763,322 @@ answer, and it is the same shopping trip as the sheathe D-068 asked for.
 **The weapon is not in the kill feed or the scoreboard.** "Killed by a bow" is a
 thing a player would now like to know, and `Gub.Cause` already carries it — but
 that is the HUD's step and not this one.
+
+
+## D-070 — A carry pose per weapon, a spear that lies flat, and one attack button
+
+Three things in one step, because all three turn on a question that only started
+existing with D-069: **which weapon is this Gub carrying?**
+
+The user asked for one of them: *"for the spear idle, the spear should be
+horizontal not vertical."* The other two were owed. D-069's own closing note
+called its `SWORD_CARRY_TILT` a stopgap in as many words — *"it is a rigid prop
+on an `Idle` authored for empty fists. A Mixamo shoulder-carry is the real
+answer"* — and D-066 had said the same thing about the bow's tilt one record
+earlier. Two clips arrived, `3_Bow_Suite/BowIdle.fbx` and
+`7_GreatSword_Suite/GreatSwordIdle.fbx`, and the third thing fell out of the
+first two: once every Gub stands in a pose chosen by its weapon, three buttons
+for three weapons is the only place left where the game still asks a player to
+know which one they brought.
+
+### The carry is a filtered layer, not four blend spaces
+
+`Idle` is one point at the origin of a `BlendSpace2D` shared by every Gub
+(D-066), so "a bow idle instead of the idle" would be four blend spaces with
+eight of their nine points identical. It is a **layer** instead: one
+`AnimationNodeBlend2` filtered to `UPPER_BODY_BONES`, sitting over the whole
+locomotion plane, fed by an `AnimationNodeTransition` that picks the pose.
+
+That is the plan's own standing decision — *"one neutral set, with weapons
+layered over it by upper-body mask"*, which is why `longbow/` and `magic/` were
+kept as overlay sources — and it is also what makes the thing work at all. A bow
+idle's *legs* are not wanted; its spine and arms **are** the carry pose. The mask
+throws away exactly the half that would fight the run cycle, and what is left is
+one hand orientation instead of twelve. The second half of this record is what
+that buys.
+
+**It sits above the landing, the roll and the slide and below the drink and the
+three attacks.** The lower boundary is the same argument every other upper-body
+layer here settles: what the player is *doing* beats what they are *holding*, and
+a carry pose is the weakest claim in the file. The upper boundary is the other
+way round — the landing, the roll and the slide are **full-body** one-shots, and
+a landing absorb that flailed the arms of a Gub holding two metres of blade would
+be the prop, not the pose, that the eye followed. Under the drink specifically,
+because a drink empties both fists (`has_spear()` says so and `_refresh_hand`
+obeys it), so there is no weapon for a carry pose to be the pose of while one is
+running.
+
+**The weight and the prop's own lever are one number.** `_process` computes
+"carrying" once — `1 - aim_blend`, floored to zero through a spin — and hands it
+both to the layer's blend and to `HeldGear.set_carry`. Two numbers there is how a
+bow comes out of its tilt on a different frame from the arm raising it, which is
+the fault `_aim_blend`'s own header describes one weapon over.
+
+### The one table indexed by a weapon, and why it is a table
+
+D-069 is emphatic that *"nothing anywhere branches on which weapon a Gub has"*.
+A carry pose cannot honour that literally: a bow is not held the way a great
+sword is, and no phrasing makes those one pose. So the difference is a **table** —
+`Loadout.CARRY_CLIPS`, beside `NAMES` and `BLURBS`, in the file that already
+exists to say what the three weapons are — read once per Gub in
+`GubAnimator._ready` and handed to a `Transition` node. Nothing downstream knows
+which arm of it is playing, and there is no `match` on a loadout anywhere.
+
+A `Transition` and not a `BlendSpace1D` with the poses at either end, which is
+the shape this graph reaches for everywhere else: a blend space is for a
+quantity, and "which weapon did this player bring" is not one. Half a bow carry
+blended into half a sword carry is a pose nobody ever stands in, and a space
+whose interior is meaningless is a space that will eventually be asked for its
+interior. `xfade_time` is zero because `Gub.weapon` cannot change while a body
+lives (D-069) — except in the lobby ring, where a hard cut is right as well,
+because the strip is a picker and what it shows is the weapon under the caret.
+
+`GubCombat.refresh_hand()` re-points the pose as well as repainting the fists.
+That is not a second job, it is the same job one node down: `GubBackdrop._equip`
+already called it, and a ring Gub whose fists had swapped to a great sword while
+its shoulders stayed in an archer's stance is the disagreement that forwarder
+exists to prevent on the other side of the skeleton.
+
+### One tilt deleted, one kept, and the difference is which clip was drawn around which prop
+
+| | worst end above the floor, twelve carried clips |
+|---|---|
+| great sword, the swinging grip, no tilt, no pose | **−0.351 m** — the point through the grass in `Run` |
+| great sword, `SWORD_CARRY_TILT` at −62°, no pose | +0.353 m — what D-069 shipped |
+| **great sword, the pose, no tilt** | **+0.187 m** — what ships now |
+| bow, `CARRY_TILT`, no pose | +0.284 m — what D-066 shipped |
+| bow, the pose, no tilt | **+0.032 m** — in the grass by the 0.15 m standard |
+| **bow, the pose and the tilt** | **+0.251 m** — what ships now |
+
+`SWORD_CARRY_TILT` is **deleted** and `CARRY_TILT` is **kept**, on the same
+evidence, and the rule that separates them is worth stating because it will come
+up again: *a tilt is a rotation away from where the clip's hands are drawn
+holding the thing.*
+
+`GreatSwordIdle` is a Gub holding a great sword, so the grip
+`preview_sword -- measure` solved against `Swing` is the grip its own idle hands
+are already gripping, and sixty-two degrees out of it is the blade leaving the
+fists. The tilt would still *help* — swept with the layer on, −62 is still near a
+peak at +0.350 — and it is deleted anyway, at a cost of 0.16 m of margin, because
+the pose is the truth and the tilt is a correction to a pose that no longer
+exists. `sword_transform` lost its `tilt` parameter, `set_sword_carry` is gone,
+and so is `preview_sword -- carry`.
+
+`BowIdle` is a Gub holding a bow — but the grip a bow hangs in is not a pose, it
+is the *equation* D-065 solved against `Draw` so the string's V meets the drawing
+fingers at every charge level. The carry clip's own hand does not know that
+equation. So the pose fixes the arm and the tilt still fixes the prop, and both
+ship.
+
+### The spear lies flat, which reverses D-065 using D-065's own sentence
+
+D-065 derived a near-vertical carry and scored it properly — against the real
+skinned mesh, every head- and torso-weighted vertex, at 27 poses. Its target was
+*"a Gub in a guard stance with a spear held upright reads as armed"*, and it
+stated the trap plainly:
+
+> the hand's world orientation differs by more than 100 deg between a raised
+> guard and a hanging arm, so a grip that stands the shaft up in one lays it over
+> in the other
+
+**That sentence is true of a grip fitted against twelve hand orientations, and
+the carry layer removes the premise.** With `UPPER_BODY_BONES` taking its pose
+from one looping clip in every clip a Gub walks around in, there is one hand
+orientation to fit, and "lay the shaft flat" stops being a compromise and becomes
+an equation: aim the shaft where it is wanted in the Gub's own frame, and read
+the grip back off the hand. `tools/preview_carry.tscn -- solve` does that for
+twenty-four bearings and three elevations, and then scores every one of them
+against the skinned trunk — which is the half no equation answers, and is
+D-065's own method.
+
+**There is no spear carry clip, so the pose is borrowed.** The user added a bow's
+and a sword's; the spear's row is the one that had to be solved rather than
+downloaded, and the three poses already built were put to the same scorer:
+
+| the grip was solved over | flattest, over 12 clips | floor | trunk |
+|---|---|---|---|
+| `Idle`, the Gub's own boxer's guard | 12° | 0.45 m | 0.09 m |
+| `BowCarry`, a longbow at rest | 55° | 0.12 m | 0.25 m |
+| **`SwordCarry`, a great sword at rest** | **5°** | **0.33 m** | **0.15 m** |
+
+`-- poses` says why, in three numbers: `Idle` puts the gripping fist at 0.98 m,
+beside a head that is half a metre of blob, so a level shaft from there either
+crosses the face or points backwards and the best bearing that misses the Gub
+still swings 12° across the set. `BowCarry` drops both arms and puts the right
+fist **at the right hip** — which is where a javelin is really carried, and it
+reads beautifully standing still — but the shaft then lies in the sagittal plane,
+so every degree of pelvis pitch is a degree of spear and `Run` tips it to 55.
+`SwordCarry` brings both fists together in front at waist height, 0.22 m apart,
+which puts the shaft **across** the body where no amount of hip pitch can tilt
+it, and both hands land on it.
+
+So the spear is carried at **port arms**, and that is the horizontal reading of
+D-065's own target with the word "upright" answered. The new table, against the
+old grip re-measured by the same tool on the same day
+(`-- sweep spear none 0 -12,0,-15`):
+
+| clip | elevation | lowest end |
+|---|---:|---:|
+| Idle | +84 → **+0** | 0.31 → 0.71 |
+| Walk | −32 → **+1** | 0.21 → 0.71 |
+| Run | −49 → **−1** | 0.15 → 0.34 |
+| CrouchIdle | +72 → **−5** | 0.59 → 0.43 |
+| CrouchWalk | +73 → **−5** | 0.54 → 0.35 |
+| StrafeLeft | −25 → **−2** | 0.22 → 0.65 |
+| StrafeRight | −24 → **+2** | 0.03 → 0.65 |
+| StrafeWalkLeft | −36 → **−1** | 0.08 → 0.75 |
+| StrafeWalkRight | −33 → **+1** | 0.01 → 0.75 |
+| RunBack | −4 → **−1** | 0.15 → 0.72 |
+| WalkBack | −30 → **+1** | 0.08 → 0.84 |
+| Drink | −18 → **−1** | 0.31 → 0.83 |
+| **worst end over the set** | | **+0.012 → +0.341 m** |
+| **nearest trunk** | | **0.050 → 0.146 m** |
+
+**A defect nobody had seen is in those two totals.** D-065 promised *"both ends
+now stay at least 0.15 m up in every ground clip"*, and that was true of the
+**six** clips a spear was carried in when it was written. D-066 added six more —
+the four strafes and the two backpedals — and nothing ever re-ran the spear
+against them. `StrafeWalkRight` has been putting the butt 0.012 m off the floor
+and the shaft 0.050 m off the chest ever since.
+
+A spear Gub and a sword Gub now stand identically and are told apart by what is
+in their hands, which is the read `HeldGear`'s header asks for anyway. A spear
+idle of its own is **one Mixamo download** and would close it; nothing waits on
+it.
+
+`GRIP_OFFSET` stopped being prose. D-065 wrote its derivation in a comment and
+added *"change `GRIP_ROTATION` and recompute this, or the shaft stops passing
+through the hand"* — a warning where a function is an answer, and this step moved
+the rotation by eighty degrees. `HeldGear.grip_offset()` is that derivation now;
+the const stays because GDScript cannot call a static to initialise one, and the
+gate recomputes it every run and fails if the two have drifted.
+
+**The letter card moved too, which is what that grip was always going to cost.**
+D-035 put the card `CARD_ABOVE_FIST` along the shaft out of the same fist,
+*derived* rather than written down, precisely so that re-aiming the grip would
+carry the card with it — *"get this wrong by hand and the card floats beside the
+Gub instead of in its hand"*. It worked: nothing had to be edited. But the 0.22 m
+that used to run up the forearm now runs across the body, and D-035's own
+measurement — *"the bottom of the letter stays 23 cm up"* — was a comment, not a
+check. It is **0.126 m** now, still clear, and it is a check.
+
+The pose it is measured in is the one a Gub holding a letter is really in, which
+is the other half of this: **a hold disarms you, so the carry layer is off for
+the whole of one.** `GubAnimator._armed()` asks the *hands* — the decision
+`_refresh_hand` already made on every peer, read back rather than copied — so an
+Elder, a Gub mid-drink, a Gub whose spear has not grown back and a Gub holding a
+card all stand in the plain locomotion pose. A Gub in a two-handed guard with
+nothing in its fists is the worst lie this rig can tell (`HeldGear`'s header says
+why), and a letter hold is ten seconds of being deliberately vulnerable.
+
+### One attack button, and no branch on the loadout to pay for it
+
+`throw_spear` (LMB), `draw_bow` (V / mouse 8) and `swing_sword` (R / mouse 3) are
+one **`primary_attack` on the left mouse button**. `aim` stays RMB,
+`drink_potion` F, `place_mushroom` Q, `throw_lure` E.
+
+Three keys for three weapons was three things to learn in a game where a player
+has exactly one, and two of the three were on keys nobody would find. It is also
+what the settings panel's controls reference had just grown a line each for
+(D-069) — one line now, captioned "Attack", which says what the button does
+instead of naming a weapon this player may not have brought. The ability tile's
+key cap stopped moving for the same reason: `AbilitySlot.set_kind` keeps its
+optional action parameter, and no caller passes one any more.
+
+**⚠️ `swing_sword` and `respawn` were both physical keycode 82.** D-068 took `R`
+without noticing and `respawn` had it first — the potion step had specifically
+steered away from `R` for that reason one step earlier. So for two decision
+records the sword and the respawn were the same key, and nothing anywhere could
+say so. `respawn` has `R` back to itself, and there is a check now: a binding
+table is data, a clash between two rows is arithmetic, and all that was missing
+was somebody doing it. `hud_range -- controls` does it over **every** action the
+project declares, not a listed few, because the pair that goes wrong next is the
+pair nobody thought to list.
+
+**The wrinkle, and how it is paid for without a branch.** The four weapons do not
+read the button the same way: a spear, a swing and the Elder's bolt fire on the
+**press**, and a bow charges while **held** and fires on the **release**. One
+action, two meanings, dispatched on the loadout — except that it is not, because
+D-069's property survives intact:
+
+```gdscript
+if Input.is_action_just_pressed("primary_attack"):
+    try_throw_spear()
+    try_draw_bow()
+    try_swing_sword()
+if Input.is_action_just_released("primary_attack"):
+    release_draw()
+```
+
+All three `try_` functions are called on every press and at most one accepts —
+`carries()` makes the three gates mutually exclusive and `is_busy()` covers the
+rest — and `release_draw()` is already its own no-op for a Gub that was not
+drawing. So **the gates are the branch**, in the place all the other reasons a
+weapon says no already live, and the poll is four unconditional calls where it
+used to be five. Nothing anywhere asks which weapon a Gub has in order to decide
+what a button means.
+
+The Elder is the row that would have found a branch if one had been written: its
+weapon is not in `Loadout` at all, and its click is `try_throw_spear` branching
+to `try_cast_lightning` *inside itself* (D-038). `combat_range -- primary`
+presses the one action on a Gub carrying each of the four in turn — moving the
+weapon the way the lobby moves it, `Gub.weapon` and then `refresh_hand()` — and
+requires a windup, a draw, a spin and a windup.
+
+### Checked
+
+`smoke_test.sh` **107 → 113**, and `net_test.sh` is green (200 + 34, ten
+rematches, the engine quiet).
+
+* **every carried weapon clears the ground** — `preview_carry -- measure`
+  replaces the sword's own carry check and is stronger than it. It composes the
+  layer a bone at a time, exactly as the `carry` Blend2 does, and holds all three
+  props 0.15 m off the floor and 0.06 m off the **skinned trunk** over twelve
+  clips and twenty-four samples of each, with the carry loop walked across its
+  own length underneath so a row is the worst of two cycles beating rather than
+  one frame held against another. `derived PASS` is the second line and is about
+  the constant above; `card PASS` is the third and is about the letter card,
+  measured in the pose a hold actually puts a Gub in.
+* **the bow's carry tilt earns it** — `preview_bow -- measure`, kept and
+  retitled. It measures the tilt *alone*, which is no longer what the game
+  composes and is exactly the question that decided the bow's tilt lives and the
+  sword's dies.
+* **one button for every weapon** — `combat_range -- primary`, through
+  `Input.action_press` rather than `try_throw_spear`, because the witness has to
+  be the poll. `hold PASS` is the second meaning: the bow's round holds the
+  button for forty ticks, requires the draw to still be running on every one of
+  them and past half charge, and requires letting go to loose. Written with a
+  one-tick release first, it passed against a Gub that had snap-fired at 0.02
+  charge and spent the rest of the round on a cooldown.
+* **no two controls share a key** — `hud_range -- controls`, above.
+* **the lobby ring** grew two assertions rather than a check: each of the three
+  **remote** Gubs is standing in its own weapon's pose, read off the graph's own
+  `carry_pick` and not off `Loadout`, and a change of pick moves the stance on
+  the same call that moves the prop.
+
+Sheets in `out/`: `carry_spear.png`, `carry_bow.png`, `carry_sword.png` — one
+weapon in Idle, Walk and Run, with the layer off and on — and
+`carry_spear_elevations.png`, which is the table above as a picture, head-on so
+that a horizontal shaft draws a horizontal line and the reader can put a ruler on
+it.
+
+### What this leaves open
+
+**A spear idle of its own**, one download, above.
+
+**The slide puts every prop through the ground, and always has.** The floor
+checks exclude `JumpOne`, `JumpTwo` and `Slide` because a floor check is
+meaningless in them — a leaping Gub is not standing on the plane, and `Slide`
+puts its hips at 0.165 m by design. Asked anyway (`-- measure --all`), every
+weapon reads below zero in `Slide` both with the layer and without it (spear
+−0.406 → −0.477, bow −0.470 → −0.430, sword −0.079 → −0.075). That is a thing
+this game has always done and not a thing this step did; closing it would be a
+fourth carry pose for a stance that lasts one second. The **jumps** the layer
+genuinely improves: the spear's worst goes −0.534 → +0.190 and the sword's
+−0.701 → −0.160, because the arms stop being thrown about by a somersault.
+
+**`5_Locomotion/` has three new files.** `StandingRunRight.fbx`,
+`StandingWalkLeft.fbx` and `StandingWalkRight.fbx` are on disk and not in
+`PACKS`. They are the three downloads step 8 asked for — the true lateral family
+whose one member measured 76.5° against `LeftStrafe`'s 27.5 — and closing the
+strafe axis with them is somebody's step, not this one's.

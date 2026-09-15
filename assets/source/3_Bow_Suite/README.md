@@ -53,6 +53,25 @@ appears and disappears the way the spear does, as a visibility toggle off the
 one gate in `GubCombat` — and an equip clip for the bow with none for the spear
 would be two rules about the same hand.
 
+## And the pose it is carried in (D-070)
+
+`BowIdle.fbx` arrived after the four above and is a different kind of clip from
+any of them: not an event with a window cut out of it, but a **pose**, looped,
+whose legs nothing ever sees. It is built as `BowCarry` and played as an
+upper-body layer over the whole locomotion plane — `UPPER_BODY_BONES` keeps its
+spine and arms and throws its legs away — so a Gub carrying a bow stands like an
+archer whether it is idling, walking, running or backpedalling, and there are not
+four blend spaces to keep in step.
+
+It does not replace `HeldGear.CARRY_TILT`, which is the interesting half of what
+this clip taught. A carry pose fixes the *arm*; the bow's grip is not a pose at
+all but the equation D-065 solved against `Draw` so the string's V meets the
+drawing fingers at every charge, and this clip's own hand does not know that
+equation. Measured, the pose alone leaves a limb tip 0.032 m off the floor in
+`Idle` — in the grass — and the pose with the tilt holds 0.251 m over all twelve
+carried clips. The great sword's tilt *was* deleted, because its carry clip was
+drawn around its own prop; see that pack's README and D-070.
+
 ## What every clip in every pack has to be
 
 The same upload. These clips land on **one** skeleton, so each one has to come

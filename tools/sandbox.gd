@@ -25,7 +25,7 @@ const DRIVES := {
 	"crouch": {"move_forward": true, "crouch": true},
 	"jump": {"move_forward": true, "sprint": true, "jump": true},
 	"dive": {"move_forward": true, "sprint": true, "dive": true},
-	"throw": {"move_forward": true, "sprint": true, "throw_spear": true},
+	"throw": {"move_forward": true, "sprint": true, "primary_attack": true},
 	"slide": {"move_forward": true, "sprint": true, "slide": true},
 	"ragdoll": {"move_forward": true, "sprint": true, "ragdoll": true},
 }
@@ -86,7 +86,7 @@ func _physics_process(_delta: float) -> void:
 		# be standing on something before a press counts as a ground jump.
 		if _drive.get("dive", false) and (_frames == 30 or _frames == 38):
 			_gub.request_jump()
-		if _drive.get("throw_spear", false) and _frames == 20:
+		if _drive.get("primary_attack", false) and _frames == 20:
 			(_gub.get_node("AnimationTree") as GubAnimator).play_throw()
 		if _drive.get("ragdoll", false) and _frames == 24:
 			_kill_for_test()
@@ -98,7 +98,7 @@ func _physics_process(_delta: float) -> void:
 	_gub.wants_crouch = Input.is_action_pressed("crouch")
 	if Input.is_action_just_pressed("jump"):
 		_gub.request_jump()
-	if Input.is_action_just_pressed("throw_spear"):
+	if Input.is_action_just_pressed("primary_attack"):
 		(_gub.get_node("AnimationTree") as GubAnimator).play_throw()
 
 

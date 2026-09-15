@@ -1,11 +1,12 @@
 # Plan — health, the bow, and a spear you can see leave the hand
 
-> **COMPLETE.** All ten steps are done and the gate is at **107 checks**, green.
-> The plan added **D-062..D-069**: health and one door for every hit, a throw you
-> can see leave the hand, the Elder's own cast, the bow, the locomotion plane and
-> the aiming spine, the heal potion, the great sword, and a weapon you choose in
-> the lobby. What each step left open is written into its own record; what the
-> *plan* leaves open is collected at the bottom of this file.
+> **COMPLETE.** All eleven steps are done and the gate is at **113 checks**,
+> green. The plan added **D-062..D-070**: health and one door for every hit, a
+> throw you can see leave the hand, the Elder's own cast, the bow, the locomotion
+> plane and the aiming spine, the heal potion, the great sword, a weapon you
+> choose in the lobby, and a pose to carry it in. What each step left open is
+> written into its own record; what the *plan* leaves open is collected at the
+> bottom of this file.
 
 *Written 2026-09-14. This is an orchestration plan, not a design document: it
 says what each step is for, what it may touch, what it must not touch, and how
@@ -585,7 +586,10 @@ Four things, none of them blocking and all of them the user's call.
 
 **The strafe axis, which is step 8's and is the oldest of the four.** See the
 paragraph below: four lowercase diagonals are standing in for a lateral, and
-closing it is three downloads.
+closing it is three downloads — **which are now on disk.**
+`5_Locomotion/StandingRunRight.fbx`, `StandingWalkLeft.fbx` and
+`StandingWalkRight.fbx` arrived alongside step 11's two clips and are not in
+`PACKS`; nothing has measured them and no step has claimed them.
 
 **A playtest of the four weapons against each other**, which is the one thing
 none of this could settle. Three of the nine steps end with a note saying so and
@@ -600,12 +604,13 @@ out to be wrong is a slider and not a step.
 `SPEAR_THROW` and `SPEAR_HIT_BODY` borrowed, because `audio/sfx/` has a spear in
 it and nothing else. Three recordings would close it.
 
-**A sheathe for the great sword.** ~~if it is ever meant to be carried~~ — step
-10 happened, so it *is* carried (D-069), and the carry is a −62° tilt on the
-swinging grip rather than a pose: enough to keep 2.11 m of blade out of the grass
-in all twelve clips a Gub walks around in, and measured, but still a rigid prop
-in an `Idle` authored for empty fists. A shoulder-carry over the locomotion set
-is the real answer and it is the same Mixamo trip the sheathe was.
+**~~A sheathe for the great sword.~~** ~~if it is ever meant to be carried~~ —
+step 10 happened, so it *is* carried (D-069), and step 11 made the carry a pose
+rather than a −62° tilt on the swinging grip (D-070). `GreatSwordIdle` is the
+shoulder-carry this paragraph asked for, the tilt is deleted, and the bow got the
+same treatment. What is still open is the **spear's** own idle: it borrows the
+great sword's, which puts the shaft flat across the body at port arms and
+measures well, but it is a borrow — one Mixamo download closes it.
 
 ---
 
@@ -689,3 +694,141 @@ spawn and at a drink — which was invisible while every Gub had a spear and is 
 shaft in a bow Gub's fist once it is not.
 
 Gate **100 → 107**; `net_test.sh` green.
+
+---
+
+## Step 14 — The UI professionalisation pass
+
+*Added 2026-09-14. Queued behind steps 11-13. The user's own words, because this
+is a taste brief and paraphrasing it would lose the constraints:*
+
+> "the in game ui need a professionalization pass. Try to keep it on theme, but
+> it needs some real thought. Also, for the images in the tool bar, use screen
+> shots of the actual assets instead of icons. Try to make sure the fonts and
+> colors and styling stays more on that primitive theming. This goes for both
+> lobby and in game."
+
+Five things, and they are not equally specified. **The first is a judgement call
+the user has explicitly delegated** — "it needs some real thought" is permission
+to exercise taste, not an invitation to ask what professional means. The other
+four are concrete.
+
+### 14.1 The pass itself — both lobby and in-match
+
+Read the theme before changing it: `scripts/ui/ui_theme.gd`,
+`scripts/ui/ui_palette.gd`, `tools/bake_theme.gd`, and the screens in
+`scripts/ui/`. **Write down what the theme currently *is*** — in the record,
+before the diff — because "keep it on theme" is unfalsifiable until somebody has
+said what the theme is. The user calls it *primitive*; that is the word to work
+from and the constraint to hold.
+
+This is a pass over a UI that D-027, D-036, D-046, D-047, D-050 and D-054 have
+each already argued about. **Read those six before moving anything.** Several are
+deletions — the crosshair ring is gone twice over — and a professionalisation
+pass that quietly restores what they removed is a regression wearing a nice font.
+
+### 14.2 Ability tiles are photographs, not glyphs
+
+> "for the images in the tool bar, use screen shots of the actual assets instead
+> of icons"
+
+Every tile subject already exists as a built `.glb` in `art/generated/`: spear,
+bow, arrow, greatsword, mushroom, lure, heal_potion. Render them.
+
+Bake them rather than rendering at runtime — that is D-003's argument and D-016's
+(*"generated means diffable, tunable from a single number, and reproducible on
+any machine"*), and it is how every other generated asset in this repo works.
+`tools/preview_assets.gd` and `tools/snapshot.gd` already render and capture.
+
+The thing that will make or break it: **one camera, one light rig, one framing
+budget for all seven**, so they read as a set rather than seven unrelated
+photographs. A prop's longest axis should occupy the same fraction of the tile
+whether it is a 1.26 m sword or a mushroom. Say what the rule is and check it.
+
+### 14.3 The slider rows are broken and it is a real bug
+
+> "in the match configs, some of the units descriptions are getting so long that
+> the slide bars have no width so they can be adjusted, the units should be under
+> the slider not on the same line"
+
+`scripts/ui/match_settings.gd`. This is not cosmetic: a dial the host cannot drag
+is a setting that cannot be changed. Every step from D-062 onward added fields
+(health, bow, potion, sword, weapon select), and each one made the labels longer.
+Move the unit/description under the slider and give the slider the full row.
+
+### 14.4 Capture a settings config
+
+> "there should be some way to capture a settings config from the menu, it
+> should capture all the settings and open up a little input where i can name the
+> settings and i can put in some notes about that. Ideally there is also a copy to
+> clipboard button that copied everything. its okay if this is not persisted
+> completely."
+
+`MatchConfig._FIELDS` is already the authoritative list of what a config *is* —
+it is what travels on the wire, and anything missing from it is a setting nobody
+else sees. **Capture `_FIELDS`, not a hand-written list**, so a future dial is
+included the day it is added rather than the day somebody remembers.
+
+Name plus free-text notes plus a **copy-to-clipboard** button
+(`DisplayServer.clipboard_set`). The clipboard payload is the point: the reason
+to want this is to hand a config to a playtester or to record what a match was
+actually played on, so it must be **readable pasted into a chat window** — not
+JSON, not an opaque blob. Include the name, the notes and every field.
+
+*"Okay if this is not persisted completely"* is permission to keep it simple.
+**Decision taken rather than asked:** save them for the session and list them in
+the panel, and if applying one back is cheap, do it — "capture a config" implies
+wanting it again. If surviving a restart is expensive, skip it and say so.
+
+*Done when:* every slider in the settings panel can be dragged through its full
+range at the longest label any field has; the tiles are baked from the real
+assets by a reproducible tool and are visibly a set; a config round-trips to the
+clipboard in a form that reads correctly pasted into chat; and the record says
+what the theme is in words before it says what changed.
+
+---
+
+## Step 11 — A pose to carry it in, and one button to use it with
+
+*Added 2026-09-14, after step 10 landed. D-069's own closing note asked for the
+first half and D-066's for a second weapon's worth of it; the user asked for the
+middle one.*
+
+The user's words: *"for the spear idle, the spear should be horizontal not
+vertical."*
+
+Three things, one step, because all three turn on "which weapon is this Gub
+carrying" — a question that only started existing with D-069. **Per-weapon carry
+poses**, from `BowIdle.fbx` and `GreatSwordIdle.fbx`, as upper-body layers over
+the locomotion plane rather than four blend spaces. **The spear laid flat**,
+which reverses a measured decision (D-065) and therefore had to answer it rather
+than delete it. And **one `primary_attack` on the left mouse button** in place of
+`throw_spear`, `draw_bow` and `swing_sword` — which also fixes a live collision
+nobody had seen, `swing_sword` and `respawn` both on physical keycode 82 since
+D-068.
+
+**Done, as D-070.** The carry is one `Blend2` filtered to `UPPER_BODY_BONES` with
+an `AnimationNodeTransition` under it, pointed at `Loadout.CARRY_CLIPS` — the one
+table in the game indexed by a weapon, and a table rather than a `match`
+precisely so D-069's *"nothing branches on which weapon a Gub has"* survives.
+`SWORD_CARRY_TILT` is **deleted** (the pose replaces it: −0.351 m untilted →
++0.187 m posed) and `CARRY_TILT` is **kept** (+0.032 m posed alone, +0.251 m with
+both), on one rule — a tilt is a rotation away from where the clip's hands are
+drawn holding the thing, and only one of the two clips was drawn around its own
+prop.
+
+The spear has no carry clip of its own and **borrows the great sword's**, solved
+rather than nudged: `preview_carry -- solve` aims the shaft where it is wanted
+and reads the grip back off the hand, then scores twenty-four bearings against
+the real skinned trunk. It comes out flat across the body at waist height — port
+arms — **within 5° of horizontal in all twelve carried clips** against 4-84°
+before, with the worst end going **+0.012 m → +0.341 m** and the nearest trunk
+**0.050 m → 0.146 m**. Those last two also turn up a defect nobody had seen:
+D-065 measured six clips, D-066 added six more, and nothing re-ran the spear
+against them.
+
+One button carries two meanings without a branch, because the three `try_`
+functions are all called on the press and refuse themselves, and `release_draw()`
+is already a no-op for a Gub that was not drawing — **the gates are the branch**.
+
+Gate **107 → 113**; `net_test.sh` green.
