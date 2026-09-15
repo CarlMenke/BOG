@@ -85,49 +85,91 @@ const BOW_HAND_BONE := "LeftHand"
 ## skinned trunk**, which is D-065's own method and is the half no equation
 ## answers: where a flat shaft may point without going through the Gub.
 ##
-## The answer is **across the body, dead level, at waist height**: the tip out to
-## the Gub's left, the butt to its right, both fists on the shaft. Port arms,
-## which is the horizontal reading of exactly the stance D-065 was after. What it
-## delivers over the twelve clips a spear is carried in, beside what the old grip
-## delivered over the same twelve, measured by the same tool on the same day:
+## **The pose under it is the Gub's own `Idle` and the shaft is cocked to throw**
+## (D-072). The user, on D-070's two-handed carry: *"This spear is only thrown so
+## 2 hands doesnt make sense. I like the original one because it looks like hes
+## holding it up with one hand ready to throw... a horizontial spear in its right
+## hand."* `Loadout.CARRY_CLIPS` carries why the pose went back; this constant is
+## the half that had to be re-solved when it did, because `Idle`'s right fist is
+## up beside the head and `SwordCarry`'s was at the waist.
+##
+## **Which way a cocked shaft may point is a measurement, and it is not
+## symmetric.** A tip that leads reads as ready; a tip lying across the chin
+## reads as carrying a pole. So the ask was the bearing nearest straight forward
+## that still clears the head, the trunk and the ground — and `-- solve spear
+## Idle` was re-run at 5 deg of bearing and four elevations, 288 candidates, each
+## scored against the real skinned trunk over all twelve carried clips. What it
+## says, at the +10 deg aim that puts `Idle` level, is a single-peaked curve:
+##
+##   bearing   -90   -85   -80   -75   -70   -65  **-60**  -55   -50   -45   -40   -35
+##   trunk    .073  .093  .111  .126  .141  .154  **.165** .158  .142  .126  .108  out
+##   floor    .455  .465  .423  .383  .344  .307  **.272** .240  .210  .183  .159  out
+##   off level  12    14    15    16    17    21   **25**   28    32    35    38    out
+##
+## Forward is 0 and positive is to the Gub's right. **Nothing on the right-hand
+## side clears inside 70 deg**, and the reason is where the fist is: it sits at
+## x +0.15, 0.30 m in front of the chest, so 0.68 m of butt has to go somewhere.
+## Aim the tip right and the butt swings back-left through the ribs — 0.001 to
+## 0.043 m from the skin across the whole sector. Aim it forward-left and the
+## butt trails back past the **right shoulder into open air**, which is the one
+## direction out of that fist that is not occupied by the Gub.
+##
+## **-60 deg is taken, and it is the peak of that curve rather than the nearest
+## row to forward.** -40 is twenty degrees more forward and clears the floor by
+## 9 mm; a 9 mm margin is exactly what D-066 and D-071 each took away from this
+## grip without anybody noticing, and it costs 13 more degrees of swing as well.
+## -60 is the furthest from the Gub's own body any bearing gets, at 0.165 m —
+## better than the two-handed carry it replaces — while still clearly leading.
+## What it delivers over the twelve clips, beside D-070's two-handed carry
+## re-measured on the same day and the same clips:
 ##
 ##   clip              shaft elevation      lowest end
-##   Idle              +84  ->    +0        0.31 -> 0.71
-##   Walk              -32  ->    +1        0.21 -> 0.71
-##   Run               -49  ->    -1        0.15 -> 0.34
-##   CrouchIdle        +72  ->    -5        0.59 -> 0.43
-##   CrouchWalk        +73  ->    -5        0.54 -> 0.35
-##   StrafeLeft        -25  ->    -2        0.22 -> 0.65
-##   StrafeRight       -24  ->    +2        0.03 -> 0.65
-##   StrafeWalkLeft    -36  ->    -1        0.08 -> 0.75
-##   StrafeWalkRight   -33  ->    +1        0.01 -> 0.75
-##   RunBack            -4  ->    -1        0.15 -> 0.72
-##   WalkBack          -30  ->    +1        0.08 -> 0.84
-##   Drink             -18  ->    -1        0.31 -> 0.83
+##   Idle               +0  ->    +1        0.71 -> 0.91
+##   Walk               +1  ->    -1        0.71 -> 0.93
+##   Run                -1  ->   -25        0.34 -> 0.27
+##   CrouchIdle         -5  ->   -22        0.43 -> 0.44
+##   CrouchWalk         -5  ->   -22        0.35 -> 0.40
+##   StrafeLeft        -14  ->   -18        0.51 -> 0.69
+##   StrafeRight       +10  ->    +2        0.49 -> 0.77
+##   StrafeWalkLeft     -1  ->    -2        0.75 -> 0.96
+##   StrafeWalkRight    +1  ->    -0        0.75 -> 0.97
+##   RunBack            -1  ->    -3        0.72 -> 0.93
+##   WalkBack           +1  ->    +3        0.84 -> 1.06
+##   Drink              -1  ->    +3        0.83 -> 1.05
 ##
-##   worst end over the set     +0.012 m -> +0.341 m
-##   nearest trunk               0.050 m ->  0.146 m
+##   worst end over the set     +0.341 m -> +0.272 m
+##   nearest trunk               0.146 m ->  0.165 m
 ##
-## Every clip was between 4 and 84 degrees off horizontal and is now within
-## **5**, which is the ask answered. The two totals underneath are the part that
-## was not asked for: the old grip's own record promised *"both ends now stay at
-## least 0.15 m up in every ground clip"*, and that was true of the **six** clips
-## a spear was carried in when D-065 measured it. D-066 added six more — the four
-## strafes and the two backpedals — and nothing re-ran the spear against them.
-## Measured now, `StrafeWalkRight` put the butt **0.012 m** off the floor and the
-## shaft **0.050 m** off the chest, which is a centimetre of grass and half the
-## clearance that record believed it had shipped.
+## `Idle` and `Walk` are within a degree of level, which is the ask answered in
+## the two poses the question was asked about, and the shaft is 0.91 m up rather
+## than 0.71. What is bought with it is `Run` and the two crouches, which reach
+## 22-25 deg: a forward-leading shaft lies nearer the sagittal plane, so pelvis
+## pitch shows in it, which is the same trade `Loadout` records `BowCarry` losing
+## on at 55. The tip dips as the Gub pitches into a run. That is a spear being
+## carried at speed and it is inside `preview_carry.LEVEL_MAX`.
+##
+## **The left-hand column above is D-070's, re-measured, and it is not what D-070
+## wrote down.** That record promised *"within 5 degrees of horizontal in all
+## twelve clips"* and it was true the day it shipped; D-071 remirrored the four
+## strafes one commit later, nobody re-ran the spear, and `StrafeLeft` reads -14.
+## It is the second time this grip has been left behind by a clip change — D-065
+## promised a 0.15 m floor over six clips, D-066 added six more, and D-070 found
+## the butt 0.012 m off the ground. Both promises were prose. The clearances they
+## sat next to were checks and neither of those ever drifted, so the flatness is
+## a check now too: `preview_carry.LEVEL_MAX`, in the gate, failing on the commit
+## that moves a clip rather than two steps later.
 ##
 ## `tools/preview_carry.tscn -- measure` prints the whole table and is in the
-## gate, and `-- sweep spear none 0 -12,0,-15` is how the left-hand column above
-## was re-measured rather than copied.
+## gate; `-- solve spear Idle` is the 288-candidate scan the bearing came from,
+## and `-- sweep spear SwordCarry 0 51.77,0,19.68` re-runs D-070's own grip
+## through it so the left-hand column is a measurement rather than a copy.
 ##
 ## The axes are unchanged and worth restating, because the numbers moved a long
 ## way: `RightHand`'s local +Y runs up the arm and out through the fingers, +X
 ## across the palm toward the fingertips and +Z is the palm normal. The old grip
 ## was a small tilt off identity because the shaft ran along the forearm; this
 ## one is most of a right angle because it does not.
-const GRIP_ROTATION := Vector3(51.77, 0.00, 19.68)
+const GRIP_ROTATION := Vector3(52.31, 0.00, 53.82)
 
 ## The point of the palm the shaft passes through, in hand-local metres — the
 ## first term of `GRIP_OFFSET`'s derivation above, named since D-070 because
@@ -159,7 +201,7 @@ const GRIP_PALM := Vector3(-0.03, 0.06, -0.04)
 ## initialise one and half this file's readers want a constant. What closes the
 ## gap is `tools/preview_carry.tscn -- measure`, which recomputes it from the
 ## rotation on every run and fails the gate if the two have drifted apart.
-const GRIP_OFFSET := Vector3(0.1990, -0.3361, -0.5428)
+const GRIP_OFFSET := Vector3(0.5187, -0.1854, -0.3576)
 
 ## The two numbers the offset above was derived from, named so the letter card
 ## can be placed off the same measurement instead of guessed at again. The mesh
@@ -181,10 +223,23 @@ const GRIP_FRACTION := 0.55
 ## `Run` lay the shaft over and point the tip down — see the table — and the
 ## card's own half-height is subtracted from wherever it lands, so at the top of
 ## the shaft it would plough the grass in exactly the clips a Gub is most likely
-## to be running a hold out in. Measured with a Gub holding W through a full run
-## cycle in `tools/combat_range.tscn letter`: the card's lowest centre is 0.44 m
-## and its half-height is half of `Pickup.LETTER_HEIGHT` at `CARD_SCALE`, which
-## is 0.21 m, so the bottom of the letter stays 23 cm up.
+## to be running a hold out in.
+##
+## **It is measured in the pose a hold actually puts a Gub in, which is not the
+## carried one**: a letter disarms (D-035), so `_armed()` answers no, the carry
+## layer is off and the arm is back on whatever the locomotion plane is doing.
+## That makes this number a hostage to `GRIP_ROTATION` without sharing any of its
+## pose — which is why it is a **check** and not a note. `preview_carry
+## -- measure` recomputes it every run: the card's lowest centre is 0.327 m in
+## `RunBack` and its half-height is half of `Pickup.LETTER_HEIGHT` at
+## `CARD_SCALE`, which is 0.210 m, so the bottom of the letter stays 11.7 cm up.
+##
+## D-035 wrote 0.44 m and 23 cm into this comment and both are gone: the first
+## moved when D-070 swung the grip eighty degrees and the second when D-072
+## re-aimed it forward. Neither was noticed by a human. The 0.22 itself did not
+## have to change either time — the first thing D-072's re-aim broke was the
+## *stale* `GRIP_OFFSET` beside it, which `derived FAIL` caught in one run, and
+## with the offset right the card cleared on its own.
 const CARD_ABOVE_FIST := 0.22
 
 ## The card in the hand against the card on the ground. Smaller on purpose: the

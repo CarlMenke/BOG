@@ -8507,3 +8507,165 @@ is ever revisited, this is a number that moves with it.
 **The four lowercase strafe files all stay on disk.** Two are still built;
 `LeftStrafe.fbx` and `RightStrafe.fbx` are now the alternates, and the build
 reports them as files `PACKS` does not name, which is exactly right.
+
+---
+
+## D-072 — The spear goes back to the Gub's own idle, cocked to throw, and the flatness becomes a check
+
+D-070 gave every weapon a carry pose and put the spear on the great sword's,
+because `SwordCarry` scored flattest of the three candidates it had. The user,
+shown it: *"the idle for the spear seems to be using the greatsword idle, when it
+should be using the original idle that we had, this should be true for in game
+and the lobby"* — and then, asked what to keep: *"This spear is only thrown so 2
+hands doesnt make sense. I like the original one because it looks like hes
+holding it up with one hand ready to throw. So lets go with the original idle,
+and a horizontial spear in its right hand."*
+
+**The flattest pose and the right pose were not the same pose, and no number in
+D-070's table could have said so.** `SwordCarry` won on 5° of swing because it is
+the only genuine two-handed pose in the project — both fists together at waist
+height, 0.22 m apart, which puts 1.24 m of shaft across the body where hip pitch
+cannot tilt it. Every word of that is still true. It is also port arms, which is
+the stance of somebody carrying a pole rather than somebody about to throw, and
+this spear is only ever thrown. The score measured the shaft; the ask was about
+the weapon.
+
+### The empty row was measured first, and it fails
+
+The obvious reading of "put the original idle back" is
+`Loadout.CARRY_CLIPS[SPEAR] = ""` — no carry layer for the spear, back to
+pre-D-070. That was measured before anything was built, against the real skinned
+mesh, and it is not close:
+
+* **Every one of 72 solved horizontal grips** — 24 bearings by 3 elevations, each
+  aimed level in the Gub's own frame and read back off the hand — puts the shaft
+  inside the Gub's own trunk somewhere in the twelve carried clips. The best of
+  all 72 is **0.011 m**, against a 0.06 m floor.
+* The flattest spread achievable over the set is **22°**, never 5.
+* At the best candidate the shaft swings **64°** (`Drink`), ploughs the grass in
+  six of the twelve clips down to 0.056 m, and passes **0.002 m** from the chest
+  in `StrafeRight`.
+* And it does not run: `_cycle(player, "")` cannot make an
+  `AnimationNodeAnimation` out of an empty clip name, so `_build_graph` throws on
+  every Gub and `carry_pick` is never connected.
+
+`Idle` alone is fine — **+2° and 0.061 m off the skinned head** — which is the
+one thing the original derivation feared and the one thing that turned out not to
+be the problem. What kills it is every clip that is not a stance.
+
+### So the layer stays, pointed at `Idle`, which is not the same thing
+
+`CARRY_CLIPS[SPEAR]` is `"Idle"`. The `Blend2` still holds `UPPER_BODY_BONES` in
+one pose across the whole locomotion plane, so the grip still has a single hand
+orientation to be solved against — in `Run` and `WalkBack` as much as in `Idle` —
+and a Gub standing still is in exactly the clip it would have been in anyway. The
+idle the user asked for is the idle they get, in the ring and in a match, and the
+spear is one-handed in the right fist: the hand `HAND_BONE` already uses and the
+hand the throw comes out of.
+
+### Which way a cocked shaft may point is a measurement, and it is not symmetric
+
+A tip that leads reads as ready; a tip lying across the chin reads as carrying a
+pole. So `-- solve spear Idle` was re-run at **5° of bearing and four elevations,
+288 candidates**, each scored against the skinned trunk over all twelve clips,
+looking for the bearing nearest straight forward that still clears the head, the
+trunk and the ground. At the +10° aim that puts `Idle` level:
+
+| bearing | −90 | −85 | −80 | −75 | −70 | −65 | **−60** | −55 | −50 | −45 | −40 | −35 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| trunk | .073 | .093 | .111 | .126 | .141 | .154 | **.165** | .158 | .142 | .126 | .108 | out |
+| floor | .455 | .465 | .423 | .383 | .344 | .307 | **.272** | .240 | .210 | .183 | .159 | out |
+| off level | 12 | 14 | 15 | 16 | 17 | 21 | **25** | 28 | 32 | 35 | 38 | out |
+
+Forward is 0 and positive is to the Gub's right. **Nothing on the right-hand side
+clears inside 70°**, and the reason is where the fist is: `Idle` puts it at
+x +0.15, 0.30 m in front of the chest, so 0.68 m of butt has to go somewhere. Aim
+the tip right and the butt swings back-left through the ribs — 0.001 to 0.043 m
+from the skin across that whole sector. Aim it forward-left and the butt trails
+back past the **right shoulder into open air**, which is the one direction out of
+that fist the Gub is not occupying.
+
+**−60° is taken, and it is the peak of that curve rather than the nearest row to
+forward.** −40° is twenty degrees more forward and clears the floor by 9 mm. A
+9 mm margin is precisely what D-066 and D-071 each quietly took away from this
+grip, and it costs 13° more swing besides. −60° is the furthest from the Gub's
+own body any bearing gets — 0.165 m, **better than the two-handed carry it
+replaces** — while still clearly leading. `GRIP_ROTATION` is
+`Vector3(52.31, 0.00, 53.82)`, and `GRIP_OFFSET` follows it by derivation.
+
+Over the twelve carried clips, beside D-070's carry re-measured the same day on
+the same clips:
+
+| clip | elevation | lowest end |
+|---|---|---|
+| Idle | +0 → **+1** | 0.71 → 0.91 |
+| Walk | +1 → **−1** | 0.71 → 0.93 |
+| Run | −1 → **−25** | 0.34 → 0.27 |
+| CrouchIdle | −5 → **−22** | 0.43 → 0.44 |
+| CrouchWalk | −5 → **−22** | 0.35 → 0.40 |
+| StrafeLeft | −14 → **−18** | 0.51 → 0.69 |
+| StrafeRight | +10 → **+2** | 0.49 → 0.77 |
+| StrafeWalkLeft | −1 → **−2** | 0.75 → 0.96 |
+| StrafeWalkRight | +1 → **−0** | 0.75 → 0.97 |
+| RunBack | −1 → **−3** | 0.72 → 0.93 |
+| WalkBack | +1 → **+3** | 0.84 → 1.06 |
+| Drink | −1 → **+3** | 0.83 → 1.05 |
+| **worst end** | | +0.341 → **+0.272** |
+| **nearest trunk** | | 0.146 → **0.165** |
+
+`Idle` and `Walk` are within a degree of level — the ask answered in the two
+poses the question was asked about — and the shaft rides 0.91 m up rather than
+0.71. What is paid for it is `Run` and the two crouches at 22-25°: a
+forward-leading shaft lies nearer the sagittal plane, so pelvis pitch shows in
+it, which is the same trade `BowCarry` lost on at 55°. The tip dips as the Gub
+pitches into a run, which is what a carried spear does.
+
+### The part that outlives the grip: flatness stops being prose
+
+**The left-hand column above is D-070's own, re-measured, and it is not what
+D-070 wrote down.** That record promised *"within 5 degrees of horizontal in all
+twelve clips"* and it was true the day it shipped. D-071 remirrored the four
+strafes one commit later, nobody re-ran the spear, and `StrafeLeft` reads −14.
+
+That is the **second** time in seven records this grip has been left behind by a
+clip arriving under it. D-065 promised a 0.15 m floor over the six clips that
+existed; D-066 added six more; D-070 found the butt 0.012 m off the ground and
+the shaft 0.050 m off the chest. Same shape, same cause, two steps apart.
+
+The clearances those promises sat beside have **never** drifted, and the
+difference is the whole lesson: **they were checks and the flatness was a
+comment.** So it is a check now. `preview_carry.LEVEL_MAX` is 30°, `_report`
+returns the worst elevation off horizontal along with its verdict, and `measure`
+prints `level PASS` — or a `level FAIL` that names the number and says to
+re-solve the grip rather than widen the threshold. The gate greps for it. A clip
+that arrives, changes or is remirrored now fails on the commit that lands it,
+instead of being found two steps later by somebody measuring something else,
+which is worth more than the grip the number describes.
+
+Thirty rather than the 25 the shipped grip measures, because a threshold is a
+promise with room in it and not a restatement of today's run. Spear only: the
+bow's two ends are limb tips with no business end, and the great sword is carried
+hilt-up at the waist and reads +42 in `Drink` by design.
+
+**The same mechanism caught the first casualty of this change inside one run.**
+Re-aiming `GRIP_ROTATION` left `GRIP_OFFSET` stale, the letter card rides that
+line (D-035), and `card FAIL` put 0.053 m of letter in the ground in `RunBack`.
+`derived FAIL` named the cause in the same run; with the offset right the card
+cleared on its own and `CARD_ABOVE_FIST` never had to move at all. D-035's own
+comment had said 0.44 m and 23 cm; both had been false since D-070 and no human
+had noticed either.
+
+### What this closes
+
+**A spear idle of its own is no longer waiting on anybody.** D-070 left it open
+as "one Mixamo download". What a download would buy is a pose built around the
+prop, and the user has said in as many words that the pose they want is the one
+already on disk.
+
+Gate **115 → 116**. The new one is `level PASS`, an `also` on the log
+`every carried weapon clears the ground` already writes, so it costs no second
+run of a forty-second skin scan.
+
+Sheets in `out/`: `carry_spear.png` — Idle, Walk and Run with the layer off and
+on — and `carry_spear_elevations.png`, the table above as a picture, head-on so
+that a level shaft draws a level line and a ruler settles it.

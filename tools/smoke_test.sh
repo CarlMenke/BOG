@@ -523,6 +523,16 @@ also "every carried weapon clears the ground" "derived PASS"
 # the one a Gub holding a letter is actually in — a hold disarms it, so the carry
 # layer is off for the whole of one.
 also "every carried weapon clears the ground" "card PASS"
+# And `level PASS`, which is the **fourth** number and the one this file was
+# missing (D-072). The three above are clearances and have never gone stale; the
+# spear's flatness was a sentence in a comment and went stale twice in two steps,
+# both times the same way — a clip arrived or was remirrored and nothing re-ran
+# the spear against it. D-065's floor promise died to D-066's six new clips and
+# D-070's "within 5 degrees" died to D-071's remirrored strafes, which said 5
+# while the rig did 14. It is `LEVEL_MAX` now, it is 30, and a clip that swings
+# the shaft past it fails here on the commit that lands it instead of being found
+# two steps later by somebody measuring something else.
+also "every carried weapon clears the ground" "level PASS"
 # **One button, four weapons** (D-070), pressed on a keyboard rather than called.
 #
 # `throw_spear`, `draw_bow` and `swing_sword` are one `primary_attack` on the

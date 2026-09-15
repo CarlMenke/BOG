@@ -61,6 +61,36 @@ const CARRY_MIN := 0.15
 ## `Idle` was as long as nothing is actually inside the Gub.
 const SKIN_MIN := 0.06
 
+## How far off horizontal the **spear's** shaft may lie, in degrees, in any clip
+## a Gub carries it through.
+##
+## **This exists because a prose claim about a grip went stale twice in two
+## steps, in the same way both times** (D-072). D-065 promised "both ends stay at
+## least 0.15 m up in every ground clip" and it was true of the six clips that
+## existed; D-066 added six more and nobody re-ran the spear, so `StrafeWalkRight`
+## shipped with the butt 0.012 m off the floor until D-070 found it. D-070 then
+## promised "within 5 degrees of horizontal in all twelve clips" and it was true
+## on the day; D-071 remirrored the four strafes one commit later and nobody
+## re-ran the spear, so the sentence said 5 and the rig did 14.
+##
+## The two floors above never went stale, and the difference is the whole reason
+## this constant is here: **they were checks and the flatness was a comment.** A
+## clip that arrives, changes or is remirrored now fails the gate on the frame it
+## lands instead of being found two steps later by somebody measuring something
+## else. That is worth more than the grip the number describes.
+##
+## Thirty rather than the twenty-five the shipped grip measures, because a
+## threshold is a promise with room in it and not a restatement of today's run —
+## five degrees is narrower than any clip change that has actually happened here
+## and wider than the noise in a 24-sample mean.
+##
+## **The spear only.** The bow's two ends are limb tips with no business end, so
+## its elevation is a number to sort rows by and nothing else (`_prop_ends` says
+## so); the great sword is carried hilt-up at the waist and reads +42 in `Drink`
+## by design. "Lies level" is a claim about the one prop that is a line with a
+## point on the end of it.
+const LEVEL_MAX := 30.0
+
 ## Every clip a Gub carries a weapon *around* in.
 ##
 ## `preview_bow._carried_clips` and `preview_sword.CARRY_SKIP`'s list, kept
@@ -154,11 +184,28 @@ func _measure(everything: bool) -> void:
 	var clips := _carried_clips(player, everything)
 	var failures := 0
 
+	var spear_level := 0.0
 	for weapon: int in [Loadout.Weapon.SPEAR, Loadout.Weapon.BOW,
 			Loadout.Weapon.SWORD]:
-		failures += _report(gub, skeleton, player, clips, weapon)
+		var row := _report(gub, skeleton, player, clips, weapon)
+		failures += int(row[0])
+		if weapon == Loadout.Weapon.SPEAR:
+			spear_level = row[1]
 
 	failures += _report_card(gub, skeleton, player, clips)
+
+	# The spear lies level, and this is the line that keeps that a fact rather
+	# than a sentence somebody wrote on a day it was true (`LEVEL_MAX` says why).
+	if spear_level <= LEVEL_MAX:
+		print("preview_carry: the spear's shaft is never more than %.0f deg off "
+			% spear_level + "horizontal in a carried clip, against %.0f allowed "
+			% LEVEL_MAX + "— level PASS")
+	else:
+		print("preview_carry: level FAIL — the spear's shaft reaches %.0f deg "
+			% spear_level + "off horizontal in a carried clip, against %.0f "
+			% LEVEL_MAX + "allowed. A clip has changed under the grip: re-solve "
+			+ "it with `-- solve spear Idle` rather than widening this.")
+		failures += 1
 
 	# `GRIP_OFFSET` is a `const` that has to equal a function of `GRIP_ROTATION`,
 	# because GDScript cannot call a static to initialise a constant (see its
@@ -191,8 +238,12 @@ func _measure(everything: bool) -> void:
 ## which is what every carried prop in this game was before this step, and it is
 ## here so that the layer's contribution is a number in the log rather than a
 ## claim in a record.
+## Returns `[rows that are out, the worst elevation off horizontal]`, because
+## `_measure` asserts on the second for the spear and there is no cheap way to
+## ask again — every row of this table costs 24 poses and a 3,587-vertex skin
+## scan, so the number leaves with the verdict rather than being re-measured.
 func _report(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
-		clips: Array[String], weapon: int) -> int:
+		clips: Array[String], weapon: int) -> Array:
 	var carry := Loadout.carry_clip(weapon)
 	print("preview_carry: %s, carried over %s"
 		% [Loadout.weapon_name(weapon), "nothing" if carry.is_empty() else carry])
@@ -202,12 +253,14 @@ func _report(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
 	var worst_off := INF
 	var worst_on := INF
 	var skin := INF
+	var level := 0.0
 	for clip: String in clips:
 		var off := _clearance(gub, skeleton, player, clip, "", weapon)
 		var on := _clearance(gub, skeleton, player, clip, carry, weapon)
 		worst_off = minf(worst_off, off[0])
 		worst_on = minf(worst_on, on[0])
 		skin = minf(skin, on[2])
+		level = maxf(level, absf(on[1]))
 		var line := "  %-16s %+9.3f m %+7.0f deg %+9.3f m %+7.0f deg     %.3f m" \
 			% [clip, off[0], off[1], on[0], on[1], on[2]]
 		if on[0] < CARRY_MIN or on[2] < SKIN_MIN:
@@ -215,8 +268,9 @@ func _report(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
 			failures += 1
 		print(line)
 	print("  worst lowest end %+.3f m as shipped, %+.3f m without the layer; "
-		% [worst_on, worst_off] + "nearest trunk %.3f m" % skin)
-	return failures
+		% [worst_on, worst_off] + "nearest trunk %.3f m; furthest off "
+		% skin + "horizontal %.0f deg" % level)
+	return [failures, level]
 
 
 ## The letter card, which rides the spear's grip and therefore moved when the

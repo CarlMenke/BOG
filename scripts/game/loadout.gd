@@ -104,34 +104,51 @@ static func all() -> Array[int]:
 ## it is a lookup rather than a `match`. `GubAnimator` asks it once a frame and
 ## hands the answer to a `Transition` node; nothing else asks it at all.
 ##
-## **The spear borrows the great sword's, and that is the answer to "the spear
-## should be horizontal".** There is no spear carry clip on disk — the two that
-## arrived are a bow's and a sword's — so the spear's row is the one that had to
-## be solved rather than downloaded, and the three candidates already built were
-## scored against each other by `tools/preview_carry.tscn -- solve`:
+## **The spear's row is the Gub's own `Idle`, and it is the one entry here that
+## is not a weapon clip at all** (D-072). The user, shown the spear standing in
+## `SwordCarry`: *"This spear is only thrown so 2 hands doesnt make sense. I like
+## the original one because it looks like hes holding it up with one hand ready
+## to throw."*
+##
+## That is a statement about the **weapon**, and it is the thing D-070 had no way
+## to score. D-070 put three candidate poses to `-- solve` and took the one that
+## laid 1.24 m of shaft flattest:
 ##
 ##   pose over which the grip was solved   flattest   floor    trunk
 ##   Idle, the Gub's own boxer's guard       12 deg    0.45 m   0.09 m
 ##   BowCarry, a longbow at rest             55 deg    0.12 m   0.25 m
 ##   SwordCarry, a great sword at rest      **5 deg**  0.33 m   0.15 m
 ##
-## `Idle` cannot be flat because its fist is up beside a head that is 0.5 m of
-## blob: a level shaft from there either crosses the face or points backwards,
-## and the best bearing that misses the Gub still swings 12 degrees across the
-## set. `BowCarry` puts the right fist at the hip, which is where a javelin is
-## really carried, and it reads beautifully in `Idle` — but the shaft then lies
-## in the sagittal plane, so every degree of pelvis pitch is a degree of spear,
-## and `Run` tips it to 55. `SwordCarry` holds both fists together in front at
-## waist height, which puts the shaft **across** the body where no amount of hip
-## pitch can tilt it, and both hands land on it. It is port arms, and it is the
-## horizontal reading of D-065's own target — *"a Gub in a guard stance with a
-## spear held upright reads as armed"* — with the word "upright" answered.
+## `SwordCarry` won because it is the only genuine **two-handed** pose in the
+## project — both fists together in front at waist height, 0.22 m apart — which
+## puts the shaft across the body where no amount of hip pitch can tilt it. Every
+## word of that is still true and it was still the wrong answer: a thrown spear
+## is held in **one** hand, and port arms is the stance of somebody carrying a
+## pole rather than somebody about to throw. The flattest pose and the right pose
+## were not the same pose, and no number in that table could have said so.
 ##
-## A spear Gub and a sword Gub therefore stand identically and are told apart by
-## what is in their hands, which is the read `HeldGear`'s header asks for anyway.
-## A spear idle of its own is one Mixamo download and would close it; nothing
-## waits on it.
-const CARRY_CLIPS := ["SwordCarry", "BowCarry", "SwordCarry"]
+## So the spear goes back on `Idle` — the hunched guard this game has always had,
+## right fist up beside the head — **with the grip re-solved underneath it**, so
+## that the shaft out of that raised fist lies level and leads forward instead of
+## standing up. `HeldGear.GRIP_ROTATION` carries the derivation and the bearing.
+##
+## **Pointing `carry` at `Idle` is not the same as pointing it at nothing**, and
+## the difference is the whole reason this row is a clip name rather than `""`.
+## The layer still holds `UPPER_BODY_BONES` in one pose across the whole
+## locomotion plane, which is what gives the grip a single hand orientation to be
+## solved against — and a Gub standing still is in exactly the clip it would have
+## been in anyway, so the idle the user asked for is the idle they get, in the
+## ring and in a match. Taking the layer away was measured and is a different
+## animal: the shaft swings 64 deg across the set, ploughs the grass in six of
+## the twelve clips and passes 0.002 m from the chest in `StrafeRight` — and it
+## crashes `GubAnimator._build_graph`, which cannot build an
+## `AnimationNodeAnimation` out of an empty clip name.
+##
+## A spear Gub and a sword Gub now stand differently, which is the read
+## `HeldGear`'s header wanted all along. **A spear idle of its own is no longer
+## waiting on anybody**: what a download would buy is a pose built around the
+## prop, and the pose the user asked for is the one already on disk.
+const CARRY_CLIPS := ["Idle", "BowCarry", "SwordCarry"]
 
 
 ## The carry clip for `weapon`, or "" for one with none.

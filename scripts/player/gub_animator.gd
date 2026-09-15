@@ -24,7 +24,7 @@ extends AnimationTree
 ##     slide      OneShot        the low part of Slide, full body
 ##     land       OneShot        JumpOne's touchdown and absorb, full body
 ##     roll       OneShot        JumpTwo's ground roll, full body
-##     carry_pick Transition     BowCarry / SwordCarry, by the lobby pick
+##     carry_pick Transition     Idle / BowCarry / SwordCarry, by the lobby pick
 ##     carry      Blend2         the carry pose over the plane, upper body only
 ##     draw_clip  Animation(Draw) behind draw_seek, scrubbed by the charge
 ##     draw       Blend2         the draw pose over everything, upper body only
@@ -110,10 +110,15 @@ const REQUIRED_CLIPS: Array[String] = [
 	"JumpOne", "JumpTwo", "Slide", "Throw", "Cast", "Draw", "Loose",
 	"StrafeLeft", "StrafeRight", "StrafeWalkLeft", "StrafeWalkRight",
 	"RunBack", "WalkBack", "Drink", "Swing",
-	# The two carry poses (D-070). Named here rather than left to
-	# `Loadout.CARRY_CLIPS` alone so that a rebuild which dropped one is an error
-	# on the frame the animator is built, on every Gub, instead of a Gub carrying
-	# a great sword in a boxer's guard on two players in three.
+	# The two carry poses that are *only* carry poses (D-070). Named here rather
+	# than left to `Loadout.CARRY_CLIPS` alone so that a rebuild which dropped one
+	# is an error on the frame the animator is built, on every Gub, instead of a
+	# Gub carrying a great sword in a boxer's guard on two players in three.
+	#
+	# The spear's carry pose is `Idle` (D-072) and is already the first name on
+	# this list, which is the one good thing about a weapon whose stance is the
+	# Gub's own: there is no third clip that a rebuild could drop without the
+	# whole rig stopping dead first.
 	"BowCarry", "SwordCarry",
 ]
 
@@ -1321,12 +1326,18 @@ func _shot(fade_in: float, fade_out: float) -> AnimationNodeOneShot:
 
 ## The two carry poses, and the node that picks between them (D-070).
 ##
-## An `AnimationNodeTransition` rather than a `BlendSpace1D` with the two poses
-## at either end, which is the shape this graph reaches for everywhere else: a
-## blend space is for a quantity, and "which weapon did this player bring" is not
-## one. Half a bow carry blended into half a sword carry is a pose nobody ever
-## stands in, and a space whose interior is meaningless is a space that will
-## eventually be asked for its interior.
+## An `AnimationNodeTransition` rather than a `BlendSpace1D` with the poses at
+## either end, which is the shape this graph reaches for everywhere else: a blend
+## space is for a quantity, and "which weapon did this player bring" is not one.
+## Half a bow carry blended into half a sword carry is a pose nobody ever stands
+## in, and a space whose interior is meaningless is a space that will eventually
+## be asked for its interior.
+##
+## One of the three inputs is the plain `Idle` the plane underneath is already
+## playing (D-072), and that is not a wasted node: the layer is what gives the
+## spear's grip a single hand orientation to have been solved against, in `Run`
+## and `WalkBack` as much as in `Idle`. A Gub standing still is simply in the
+## clip it would have been in anyway.
 ##
 ## `xfade_time` is zero and `allow_transition_to_self` is off for the same
 ## reason: `Gub.weapon` is set before the body exists and cannot change while it
