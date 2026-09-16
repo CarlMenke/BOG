@@ -116,6 +116,7 @@ func _ready() -> void:
 	MatchState.letter_hold_changed.connect(_on_letters_changed)
 	MatchState.letter_picked_up.connect(_on_letter_picked_up)
 	MatchState.letter_banked.connect(_on_letter_banked)
+	MatchState.steal_progress.connect(_on_steal_progress)
 	MatchState.letter_stolen.connect(_on_letter_stolen)
 	MatchState.letter_dropped.connect(_on_letter_dropped)
 	MatchState.letter_returned.connect(_on_letter_returned)
@@ -658,6 +659,29 @@ func _call_colour(peer_id: int) -> Color:
 func _display_name(peer_id: int) -> String:
 	var who := String(Net.players.get(peer_id, {}).get("name", ""))
 	return who if not who.is_empty() else "SOMEBODY"
+
+
+## Capture B·O·G (D-070). The bar over a lamp while somebody stands on a vault.
+##
+## Drawn for exactly two people and nobody else: the thief, who needs to know the
+## three seconds are running and that stepping off throws them away, and anybody
+## on the team being robbed, who is the whole reason the timer exists. A
+## spectator, or a third team, gets nothing — the vault is not their business and
+## a bar for it would be noise.
+##
+## `from_team` rides in the message because `_capture` is the host's own
+## bookkeeping: a client cannot look up whose vault is being emptied.
+func _on_steal_progress(peer_id: int, letter: int, from_team: int, done: float) -> void:
+	var me := Net.local_id()
+	if letter == 0:
+		# The attempt ended. Only the two who were shown it need clearing, and
+		# clearing it for everybody is the same call.
+		_letters.set_steal(0, 0.0, false)
+		return
+	if peer_id == me:
+		_letters.set_steal(letter, done, false)
+	elif Net.config.mode == MatchConfig.Mode.TEAMS 			and Net.player_team(me) == from_team:
+		_letters.set_steal(letter, done, true)
 
 
 ## Capture B·O·G (D-068). The loudest thing that can happen in the mode: a team's

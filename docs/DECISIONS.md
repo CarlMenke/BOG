@@ -11695,3 +11695,54 @@ sentence itself.
   score line it sits under.
 - **Checking it in a preview scene.** That is the bug shape this project keeps
   meeting.
+
+## D-070 — The steal bar, drawn for the thief and for the robbed and for nobody else
+D-068 put stealing on a three-second clock and broadcast how far through it was,
+and then nothing listened. The rule shipped, the replication shipped, and the
+screen said nothing at all: a thief stood on a vault with no sign the clock had
+started, and **a defender got no warning whatever** — the first they knew was the
+"STOLE A U FROM TEAM 2" banner, which fires once it is already gone.
+
+That is not a missing nicety, it is the feature not working. **The only reason to
+put stealing on a timer is to give the defender time to arrive**, and a timer
+nobody is told about buys them nothing. The clock and the warning are one
+mechanic; shipping half of it was shipping none of it.
+
+**It borrows the hold's lamp fill** rather than inventing a second kind of
+progress, because it is the same sentence the hold already says: *this letter is
+filling up, and when it is full something happens to it*. The colour carries the
+difference — a hold is amber, "you are earning this"; a steal being done **to**
+you is drawn in an alarm red that nothing else on the HUD uses. The captions are
+`TAKING B · 62%` and `YOUR B IS BEING TAKEN · 62%`.
+
+The defender's wording names what to do rather than what is happening. "SOMEBODY
+IS TAKING YOUR U" is a thing to run at; "U IS BEING STOLEN" is a weather report.
+
+**It is drawn for exactly two people.** The thief, who needs to know the clock is
+running and that stepping off throws it away, and anyone on the team being
+robbed, who is the entire reason the timer exists. A spectator or a third team
+gets nothing: that vault is not their business and a bar for it is noise.
+
+**`from_team` had to be added to the message.** `_capture` is the host's own
+bookkeeping, so a client has no way to ask whose vault is being emptied — without
+it in the payload, no peer but the host can tell a teammate's theft from its own
+vault being robbed. That is the kind of thing that works perfectly in a
+single-process test and fails the moment there are two machines.
+
+### Where it is checked
+`tools/playthrough.gd`, and driven **through the HUD's own handler** rather than
+through the track's setter, so what is proved is the *wiring* — that the signal
+reaches the widget — and not merely that the widget has a method. That
+distinction is this project's whole bug history: the movement keys, the HUD, the
+ambience path all had working parts wired to nothing. Three assertions: a steal
+of mine draws a bar and reads as mine, stepping off clears it, and a robbery of a
+team I am not on draws nothing. 87 checks became 92.
+
+### Rejected
+- **Leaving it unwired.** The timer without the warning is the feature not
+  working.
+- **A separate progress widget.** The lamp already means "this letter is filling
+  up"; a second bar elsewhere would be two places to read one fact.
+- **Showing every steal to everybody.** A vault you have no stake in is noise.
+- **Looking the robbed team up on the client.** It is host-only state, and the
+  bug would only appear with two machines in the room.

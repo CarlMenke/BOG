@@ -57,7 +57,7 @@ signal letter_stolen(peer_id: int, letter: int, from_team: int)
 ## How far through lifting a card out of an enemy vault somebody is, 0 to 1
 ## (D-068). Emitted on every peer so a HUD can draw a thief's progress and a
 ## defender's warning off the same number.
-signal steal_progress(peer_id: int, letter: int, done: float)
+signal steal_progress(peer_id: int, letter: int, from_team: int, done: float)
 ## Capture B·O·G only (D-051), and events in the same sense as the two above: a
 ## dead carrier's letter hit the ground, and a letter went home to its spawn —
 ## after lying dropped too long, or straight away when a carrier died where no
@@ -1923,14 +1923,19 @@ func _tick_steals() -> void:
 						continue
 		if not keep and _steals.has(peer_id):
 			_steals.erase(peer_id)
-			_announce_steal_progress.rpc(peer_id, 0, 0.0)
-			_announce_steal_progress(peer_id, 0, 0.0)
+			_announce_steal_progress.rpc(peer_id, 0, MatchConfig.TEAM_NONE, 0.0)
+			_announce_steal_progress(peer_id, 0, MatchConfig.TEAM_NONE, 0.0)
 			continue
 		if keep:
 			var row: Dictionary = _steals[peer_id]
 			var done := clampf((_now() - float(row["since"])) / wanted, 0.0, 1.0)
-			_announce_steal_progress.rpc(peer_id, int(row["letter"]), done)
-			_announce_steal_progress(peer_id, int(row["letter"]), done)
+			# The robbed team rides along rather than being looked up on the far
+			# side: `_capture` is the host's own bookkeeping, so a client has no
+			# way to ask whose vault is being emptied (D-070).
+			_announce_steal_progress.rpc(peer_id, int(row["letter"]),
+				int(row["team"]), done)
+			_announce_steal_progress(peer_id, int(row["letter"]),
+				int(row["team"]), done)
 
 
 ## The letter standing in `team`'s vault, or 0.
@@ -1957,8 +1962,9 @@ func _take_from_vault(peer_id: int, letter: int, team: int) -> void:
 
 ## How far through a steal `peer_id` is, 0 to 1, for the HUD. 0 when not stealing.
 @rpc("authority", "call_remote", "reliable")
-func _announce_steal_progress(peer_id: int, letter: int, done: float) -> void:
-	steal_progress.emit(peer_id, letter, done)
+func _announce_steal_progress(peer_id: int, letter: int, from_team: int,
+		done: float) -> void:
+	steal_progress.emit(peer_id, letter, from_team, done)
 
 
 func _tick_capture() -> void:
