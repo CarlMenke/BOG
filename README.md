@@ -2,12 +2,14 @@
 
 A match-based third-person multiplayer game in Godot 4.7.2. You are a Gub — a
 small yellow alien — fighting with thrown spears that kill in one hit, on one of
-five maps: **Whisperbloom Hollow**, a floating enchanted-forest island grown from
+six maps: **Whisperbloom Hollow**, a floating enchanted-forest island grown from
 a seed; **Rust**, a hand-made industrial yard under a hard sun; **Kopje
-Crossing**, a savanna plateau with a hundred and twenty-three rocks to climb; or
+Crossing**, a savanna plateau with a hundred and twenty-three rocks to climb;
 **Lantern Wharf**, a small walled box yard at dusk with two bases facing each
-other across it; or **Halcyon Wake**, a superyacht at anchor on a bright
-morning, four decks high, where going over the rail is going into the sea. The
+other across it; **Halcyon Wake**, a superyacht at anchor on a bright morning,
+four decks high, where going over the rail is going into the sea; or **Twin
+Quarry**, a worked-out stone pit built for capture the flag, where each team's
+base sits four metres up on a cut bench with two haul ramps and no other way in. The
 host picks in the lobby.
 
 Spears are the whole fight. One lands, you die, and the thrower's hand is empty
@@ -237,9 +239,9 @@ and `tools/` is full of scenes for it:
 | `preview_sky` | the sky and environment |
 | `preview_island` | **the island** — a dozen framings (plan view, eye height on any pad, under a tree), `match` for real Gubs, `hud` to keep the HUD |
 | `island_report` | **the island as numbers** — footprint, slope, placed props per layer, tree heights, spawn spacing, capture bases. In the gate |
-| `preview_map` | **a static map** — top-down, side, or eye height on any spawn pad; `probe` prints the floor as ASCII. Rust by default, `map=res://scenes/world/maps/safari.tscn` for the savanna, `map=res://scenes/world/maps/wharf.tscn min_triangles=1000` for the box yard, `map=res://scenes/world/maps/yacht.tscn min_triangles=1000` for the yacht. Checks every pad with the physics, and is in the gate for all four |
-| `parkour_report` | **a built map** — rebuilds the Gub's jump arc and proves every platform can be reached from the ground. Kopje Crossing by default; `map=res://scenes/world/maps/wharf.tscn` also proves no jump reaches a tower top and measures the longest sightline; `map=res://scenes/world/maps/yacht.tscn` proves every deck is reachable, the mast is not, and there is nothing but the void over the side. In the gate for all three |
-| `playthrough.tscn` | the whole flow, menu to results, headless. Add `-- rust`, `-- safari`, `-- wharf` or `-- yacht` to play it on a static map |
+| `preview_map` | **a static map** — top-down, side, or eye height on any spawn pad; `probe` prints the floor as ASCII. Rust by default, `map=res://scenes/world/maps/safari.tscn` for the savanna, `map=res://scenes/world/maps/wharf.tscn min_triangles=1000` for the box yard, `map=res://scenes/world/maps/yacht.tscn min_triangles=1000` for the yacht, `map=res://scenes/world/maps/quarry.tscn min_triangles=400` for the quarry. Checks every pad with the physics, and is in the gate for all five |
+| `parkour_report` | **a built map** — rebuilds the Gub's jump arc and proves every platform can be reached from the ground. Kopje Crossing by default; `map=res://scenes/world/maps/wharf.tscn` also proves no jump reaches a tower top and measures the longest sightline; `map=res://scenes/world/maps/yacht.tscn` proves every deck is reachable, the mast is not, and there is nothing but the void over the side; `map=res://scenes/world/maps/quarry.tscn` proves each team's bench is reachable by its two haul ramps and by nothing else, that no jump reaches a column top or the rim, and that no pad sees the other base's pads. In the gate for all four |
+| `playthrough.tscn` | the whole flow, menu to results, headless. Add `-- rust`, `-- safari`, `-- wharf`, `-- yacht` or `-- quarry` to play it on a static map |
 | `match_rules.tscn` | 195 assertions across 14 scoring scenarios, headless |
 | `net_loopback.tscn` | two real processes over a real socket, ten rematches included. Run by hand through `net_test.sh` (not in the gate, ~45 s); binds loopback only |
 | `inspect_scene.gd` | dump a scene's tree, clips, bones and triangle counts |
@@ -351,7 +353,24 @@ still reachable (**D-042**).
 and `scripts/world/maps/wharf_map.gd` lay out a 36 m yard of painted containers
 and crates from tables, with corrugation textures computed in code rather than
 loaded. It is the first map to declare its own Capture G·U·B bases and letters,
-and `parkour_report` holds it to a 25 m sightline (**D-056**).
+and `parkour_report` holds it to a 25 m sightline (**D-056**). The plant around
+the boxes — pipe runs up the wall faces, machinery along the wall tops, panels
+and floor markings — is Kenney Factory Kit, added after the collision is baked
+and kept either above head height or flat on the ground, because on a map this
+tight a prop at the height of cover that a spear flies through is a lie
+(**D-060**).
+
+**Twin Quarry is built the same way as well**, and is the first map whose
+layout came out of a game mode rather than a picture:
+`scenes/world/maps/quarry.tscn` and `scripts/world/maps/quarry_map.gd` cut a
+48 m stone pit out of tables, put each team's Capture G·U·B base four metres up
+on a bench in opposite corners, and leave exactly two haul ramps up to each. Its
+symmetry is a 180 degree turn rather than a mirror, which is why the middle of
+the map is a thirteen-metre rock: under a turn every spawn pad's line to its
+opposite number runs through the origin. It is also the one map that dresses
+itself out of the MegaKit — rubble, weeds and dead trees, none of it collision —
+because an abandoned quarry taken back by weeds is the only thing that puts a
+colour in a hole full of grey stone (**D-058**).
 
 **Halcyon Wake is built the same way too**, and goes up instead of out:
 `scenes/world/maps/yacht.tscn` and `scripts/world/maps/yacht_map.gd` loft a 66 m
@@ -367,7 +386,7 @@ over the side (**D-057**).
 
 ```
 art/generated/   game-ready meshes and textures — committed, no Python needed
-assets/          raw source art (.gdignore'd; only the MegaKit is imported)
+assets/          raw source art (.gdignore'd; the two kits are imported)
 audio/sfx/       synthesised sound effects — committed, see tools/make_sfx.py
 docs/            STATUS, PLAN, DECISIONS, ARCHITECTURE
 resources/       shaders, environment, bus layout
@@ -384,6 +403,13 @@ Autoloads: `Settings`, `Net`, `MatchState`, `SceneFlow`, `AudioDirector`.
 
 The game's own code and assets are **MIT** licensed — see [LICENSE](LICENSE).
 
-Environment art is the **Stylized Nature MegaKit** (CC0). The Gub, spear, lure
-and mushroom are project assets. Sound effects are synthesised from scratch by
-`tools/make_sfx.py`.
+Environment art is the **Stylized Nature MegaKit** by Quaternius (CC0) and the
+**Factory Kit** by [Kenney](https://kenney.nl) (CC0) — the first is the nature
+pack the island, the savanna and the quarry's weeds and rubble come out of, the
+second is the industrial kit, 143 models on a 1 m grid sharing one 64-pixel
+colour atlas. The Gub, spear, lure and mushroom are project assets. Sound effects
+are synthesised from scratch by `tools/make_sfx.py`.
+
+Both kits keep their own `License.txt` beside the models rather than only being
+named here, because a licence that lives in one paragraph of one file is one
+nobody finds when they need it.

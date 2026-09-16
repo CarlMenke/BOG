@@ -64,6 +64,31 @@ const EXPECT := {
 		"min_platforms": 20, "min_big_edges": 0, "summit_zone": "",
 		"sightline": 25.0, "roof_sightline": 26.0, "reach": 20.0, "grid": 1.0,
 	},
+	"res://scenes/world/maps/quarry.tscn": {
+		"min_platforms": 40, "min_big_edges": 0, "summit_zone": "",
+		# Both numbers are the loosest on any map, and both moved when the Stack
+		# became a hole (D-065). The rock at the origin was closing nine lines by
+		# itself — every pad to its antipode, and bench to bench — and a hole
+		# closes none of them, because a line between two pairs of eyes over a
+		# flat floor does not care what is underneath it.
+		#
+		# The pad-to-pad set is a hard check below rather than a budget, and it is
+		# closed by the two axis rocks — eight metres across the map's axes, out
+		# where every one of those four lines runs (D-067). It used to be closed
+		# by blocks on the shaft's lip, which meant the lip had to be built where
+		# the geometry demanded rather than where it looked right; moving the duty
+		# outward freed the rim to be four blocks placed by eye, one to an edge.
+		#
+		# The hole itself is left open on most of its perimeter on purpose. A ring
+		# of cover round it makes it a walled garden, and what it is for is being
+		# the biggest hazard on the map, so the ground limit carries the openness.
+		#
+		# Bench to bench is not coming back either. The bench starts at 11.5 m
+		# and there is nowhere on that diagonal left to stand a column. At 56 m a
+		# spear cannot cross the gap, so what the two bases have of each other is
+		# information, not threat.
+		"sightline": 42.0, "roof_sightline": 56.0, "reach": 24.0, "grid": 2.0,
+	},
 	"res://scenes/world/maps/yacht.tscn": {
 		"min_platforms": 60, "min_big_edges": 0, "summit_zone": "",
 		"sightline": 21.0, "roof_sightline": 38.0, "reach": 37.0, "grid": 2.0,
