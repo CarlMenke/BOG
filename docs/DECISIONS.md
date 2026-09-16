@@ -11636,6 +11636,13 @@ Picking up a third card is not having three — in Collect G·U·B it is the sta
 a ten-second hold anybody can interrupt, and announcing a win that has not
 happened is worse than announcing nothing.
 
+**It is text and nothing else.** The user: *"I dont want anything to actually
+say anything outloud only a message in text"*. Nothing here plays a sound, and
+nothing did before either — a comment on `_sync_letters` claimed "the HUD lamp
+and the sound hang off this signal", which was simply untrue and has been
+corrected. The only audio in a match is the respawn, the death and the
+hitmarker.
+
 **Colour comes from `UIPalette.team_colour`**, the same source the plates, the
 kill feed and the scoreboard use, so a name is the same colour everywhere it is
 written. Outside Teams there is no team, and the call is drawn in
@@ -11662,7 +11669,23 @@ that shape. So the playthrough asserts the node is in the real `hud.tscn` the
 arena instances, that driving it puts a row on screen, that a third call trims
 to `MAX_ROWS`, and that it can be cleared. 81 checks became 86.
 
+### The steal call
+Capture G·U·B only, off `letter_stolen` (D-068): **"THISTLE STOLE A U FROM
+TEAM 2"**, written in the thief's colour. It names the robbed team rather than
+only the thief, because the thief's own side already knows and the side that has
+to react is the one being told it just lost a letter. It is the loudest thing
+that can happen in the mode — a team's score going *down* is something nothing
+else in this game does — so it gets the banner as well as a feed row.
+
+All three letters take "a" and not "an". The first version wrote "AN U", because
+the rule was written for a vowel rather than for how the letter is said aloud:
+G, U and B are read *jee*, *yoo* and *bee*. `match_rules` now captures
+`letter_stolen` and asserts the thief, the letter and the robbed team, so the
+banner's source event cannot quietly stop firing; `playthrough` asserts the
+sentence itself.
+
 ### Rejected
+- **Any sound.** Text only, by request.
 - **Announcing "has GUB" when the third card is picked up.** It is not true yet
   in Collect G·U·B, where the hold can still be interrupted.
 - **Putting it in the kill feed.** The feed is a log in the corner; this is news

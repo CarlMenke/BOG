@@ -116,6 +116,7 @@ func _ready() -> void:
 	MatchState.letter_hold_changed.connect(_on_letters_changed)
 	MatchState.letter_picked_up.connect(_on_letter_picked_up)
 	MatchState.letter_banked.connect(_on_letter_banked)
+	MatchState.letter_stolen.connect(_on_letter_stolen)
 	MatchState.letter_dropped.connect(_on_letter_dropped)
 	MatchState.letter_returned.connect(_on_letter_returned)
 	Net.chat_received.connect(_chat.add_message)
@@ -657,6 +658,18 @@ func _call_colour(peer_id: int) -> Color:
 func _display_name(peer_id: int) -> String:
 	var who := String(Net.players.get(peer_id, {}).get("name", ""))
 	return who if not who.is_empty() else "SOMEBODY"
+
+
+## Capture B·O·G (D-068). The loudest thing that can happen in the mode: a team's
+## score just went *down*, which nothing else in this game does. It gets the
+## banner as well as a feed row, and the banner names the robbed team — the
+## thief's own side already knows, and the side that needs to react is the one
+## being told it has lost a letter.
+func _on_letter_stolen(peer_id: int, letter: int, from_team: int) -> void:
+	_kill_feed.add_event([peer_id, "stole",
+		[MatchState.letter_name(letter), Pickup.LETTER_COLOUR]])
+	_letter_call.stolen(_display_name(peer_id), MatchState.letter_name(letter),
+		from_team, _call_colour(peer_id))
 
 
 ## Capture B·O·G (D-051). A carrier's death already has a kill row; this is the

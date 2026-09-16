@@ -42,10 +42,19 @@ const FADE := 0.9
 const ALL := 7
 
 
-## Somebody has picked a letter up. `letter` is a single bit.
+## All three letters take "a" and not "an": G, U and B are read aloud as *jee*,
+## *yoo* and *bee*, and "AN U" — which this said at first — is the spelling of a
+## word nobody says.
 func picked_up(who: String, letter_text: String, colour: Color) -> void:
-	_say("%s HAS %s %s" % [who.to_upper(),
-		"AN" if letter_text == "U" else "A", letter_text], colour)
+	_say("%s HAS A %s" % [who.to_upper(), letter_text], colour)
+
+
+## Somebody has lifted a card out of another team's vault (D-068). Written in
+## the *thief's* colour, because the name at the front of the sentence is theirs
+## and a line that changes colour halfway through reads as two lines.
+func stolen(who: String, letter_text: String, from_team: int, colour: Color) -> void:
+	_say("%s STOLE A %s FROM TEAM %d" % [who.to_upper(), letter_text,
+		from_team + 1], colour)
 
 
 ## Somebody's scoring mask is complete.

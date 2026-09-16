@@ -1466,8 +1466,13 @@ func award_letter(peer_id: int, letter: int) -> bool:
 
 ## Written on every peer rather than left to ride along on the next
 ## `_sync_scores`, because a letter is the one score change that has to be
-## *felt* the instant it happens — the HUD lamp and the sound hang off this
-## signal, and the next score push may be a whole kill away.
+## *felt* the instant it happens — the HUD lamp and the call across the top of
+## the screen hang off this signal (D-069), and the next score push may be a
+## whole kill away.
+##
+## There is no sound on it, and there never has been: this comment used to say
+## "the HUD lamp and the sound", which was wrong. Letters are announced in text
+## only.
 ##
 ## The team's pooled mask rides in the same message rather than in a second one,
 ## so no peer can ever see a player's lamp lit and their team's not (D-049).

@@ -1432,8 +1432,19 @@ func _run_capture() -> void:
 	_check("stepping off the vault abandons the steal",
 		MatchState._steals.has(901), false)
 
-	# The steal. Peer 901 is on team 1, and takes G out of team 0's vault.
+	# The steal. Peer 901 is on team 1, and takes G out of team 0's vault. The
+	# signal is captured because the HUD's banner hangs off it (D-069), and a
+	# theft nobody is told about is the mode's loudest event going unannounced.
+	var thefts: Array = []
+	var on_theft := func(who: int, what: int, from_team: int) -> void:
+		thefts.append([who, what, from_team])
+	MatchState.letter_stolen.connect(on_theft)
 	_steal(901, vault_0)
+	_check("the theft is announced once", thefts.size(), 1)
+	_check("naming the thief", thefts[0][0] if thefts.size() > 0 else 0, 901)
+	_check("the letter", thefts[0][1] if thefts.size() > 0 else 0, MatchState.LETTER_G)
+	_check("and the robbed team", thefts[0][2] if thefts.size() > 0 else -9, 0)
+	MatchState.letter_stolen.disconnect(on_theft)
 	_check("an enemy takes the card out of the vault",
 		MatchState.is_holding_letter(901), true)
 	_check("and the robbed team loses the letter", MatchState.team_letters(0), 0)
