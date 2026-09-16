@@ -11508,3 +11508,102 @@ before because they are not a `turned()` table and so were not in
 - **A ring of cover round the hole.** A walled garden, not a hazard.
 - **Lip blocks at 3.0 m.** Four kerbs on a bare rim.
 - **Lip blocks tall enough to be out of reach.** 7.2 m, which is a wall.
+
+## D-068 — The vault: a banked letter is a thing standing in a place, and an enemy can stand on it for three seconds and take it
+The user: *"is there a spot for the teams letters to go? like on top of the base
+is there something to store them that the enemy can also steal"* — and, told that
+neither existed, *"I want both of those changes but remeber this is only for the
+capture the flag gamemose. yes everyong in the lobby should be able to clearly
+see what letters the team has. it should be on the top of the base in the corner
+furthest from the other base. The enemy team can walk into it to steal it and
+your team can walk into it to deposit it"*, then *"lets say it takes 3 seconds of
+standing on it to steal it (we can make this a slider gamerule like the others in
+the lobby from 1-5 seconds) ... If a blue member kills them they can also pick up
+the letter and bring it back to their base"*.
+
+**What it replaces.** Under D-051 banking was a fact about a number: walk a card
+into anywhere in your 4 m base, `award_letter` sets a bit, the card teleports
+back to its home point in the middle of the map, and nothing in the game can ever
+take that bit away. The base was a scoring trigger, the score lived only in the
+HUD, and the mode had no defence — once banked, a letter was finished business.
+
+### The vault
+A point inside each base, and now the only place a card can be banked or taken.
+**Derived, not declared**: `CaptureLayout.plan_vaults` pushes it from the base
+toward the direction away from the mean of the other bases, by 0.62 of the base
+radius. With two teams that is simply "away from the enemy", which on Twin
+Quarry's square bench is its outer corner — exactly the spot asked for — and
+every other map that can host the mode gets one on the same rule without a marker
+being added to it. `VAULT_RADIUS` is 1.7 m, much smaller than the 4 m base,
+because a base is somewhere you are and a vault is something you walk up to.
+
+**Banking moved with it.** `_tick_capture` tests `in_vault` rather than
+`in_base`, so standing in your own base no longer scores — a real change to the
+deposit target, and the one the checker asserts first. A banked card is then put
+down *on the vault* by `_store_in_vault` instead of being sent home, which is the
+whole of the idea: the letters a team holds are objects standing in a place,
+visible from across the map, and therefore takeable.
+
+### Stealing, on a clock
+Walking over a banked card does nothing at all — `claim_pickup` refuses every
+card that is standing in any vault, its own team's included, so brushing past
+your own bank cannot undo it. Lifting one out is `_tick_steals`: stand on an
+enemy vault, alive and empty-handed, for `capture_steal_time`, and the bit comes
+off the robbed team and the card lands in your fist in the same call.
+
+**No partial progress is kept.** Step off, die, pick something up, or have the
+card leave the vault, and the attempt is dropped entirely rather than banked for
+later. A thief who can chip a vault down in half-second visits is a thief no
+defender can ever actually stop, which would make the timer decoration.
+
+**`capture_steal_time` is a lobby dial, 1 to 5 seconds, default 3**, sitting in
+the Capture G·U·B section beside the return timer. The range is the argument: at
+one second a bank is a formality and a lone attacker empties it in passing; at
+five a defender who is anywhere nearby always arrives and nothing is ever stolen.
+Three is about a sprint from the bottom of a ramp, which is the distance these
+maps put between a base's door and its vault.
+
+**The score can now go down**, which no win condition in this game had ever
+allowed. `_revoke_letter` is `award_letter` run backwards and deliberately reuses
+the same `_sync_letters` push, so there is no second replication path to keep in
+step — the whole mask goes out either way. The personal mask that loses the bit
+belongs to whoever banked it, which is what `banked_peer` is recorded for. A
+revoke carries letter 0 so the banked fanfare does not fire on a theft; a
+separate `letter_stolen` signal says the opposite thing, and `steal_progress`
+carries 0–1 so a HUD can draw both the thief's bar and the defender's warning off
+one number.
+
+**Killing the thief is already the counter-play**, and needed no new rule: a
+carrier who dies drops the card where they fell for `capture_return_time`, and
+anyone may pick it up — so a defender kills the thief, collects the letter and
+walks it back to their own vault. That is D-051's existing drop rule doing
+exactly what the user described.
+
+### What the checker now proves
+`tools/match_rules.gd` went from 794 assertions to 813, and the new ones are the
+point rather than the count. In order: standing in your own *base* banks nothing;
+standing on your own *vault* does; the card is a real object on the vault
+afterwards; your own team cannot pick its own bank back up; touching an enemy
+vault lifts nothing; standing on one for an instant lifts nothing either;
+stepping off abandons the attempt outright; a full stand takes the letter off the
+robbed team **and** off the banker's personal row; the thief has not scored it
+until they bank it themselves; and a robbed team can steal it straight back with
+no cooldown. The clock is faked by pushing the attempt's start backwards, the
+same way the return timer's test already does, rather than spending real seconds
+in the suite.
+
+Several of the old assertions failed on the first run and were **rewritten to
+test the new rule rather than loosened to pass it** — "walking into your own base
+banks it" became "your own base alone banks nothing" plus "walking into your own
+vault banks it", which is a stronger pair than the one it replaced.
+
+### Rejected
+- **Stealing on contact.** It was built that way first and it is wrong: a vault
+  nobody can defend is a vault, and the user asked for the timer for that reason.
+- **Keeping progress between visits.** Makes the timer unenforceable.
+- **A declared `Vaults` marker per map.** Three maps would each need one, and the
+  rule that produces the right answer on all of them is one line.
+- **Letting a team pick its own banked card back up.** Walking over your own bank
+  would undo it by accident, which is the worst possible way to lose a letter.
+- **A new RPC for the revoke.** `_sync_letters` already pushes the whole mask;
+  a second path is a second thing to keep in step.

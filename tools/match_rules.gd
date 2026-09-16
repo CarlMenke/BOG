@@ -1290,6 +1290,16 @@ func _stand(peer_id: int, at: Vector3) -> void:
 	MatchState._tick_capture()
 
 
+## Stand on a vault long enough to lift the card out of it. The clock is faked
+## the same way the return timer's is, by pushing the attempt's start back — a
+## real wait would put `capture_steal_time` seconds into the suite per steal.
+func _steal(peer_id: int, at: Vector3) -> void:
+	_stand(peer_id, at)
+	if MatchState._steals.has(peer_id):
+		MatchState._steals[peer_id]["since"] -= 99.0
+	MatchState._tick_capture()
+
+
 func _run_capture() -> void:
 	_scenario("capture B·O·G: three cards, carried home, dropped and returned")
 	var world := _capture_world()
@@ -1370,24 +1380,82 @@ func _run_capture() -> void:
 	MatchState._tick_letter_holds()
 	_check("no clock ends a carry", MatchState.is_holding_letter(1), true)
 
-	# The wrong base.
-	_stand(1, CAPTURE_BASES[1])
-	_check("walking into the enemy base banks nothing", MatchState.team_letters(0), 0)
+	# The wrong vault.
+	var layout := MatchState.capture_layout()
+	var vault_0: Vector3 = layout.vaults[0]
+	var vault_1: Vector3 = layout.vaults[1]
+	_stand(1, vault_1)
+	_check("walking into the enemy vault banks nothing", MatchState.team_letters(0), 0)
 	_check("and the carrier still has it", MatchState.is_holding_letter(1), true)
 	_check("and neither does the enemy team", MatchState.team_letters(1), 0)
 
+	# The base is no longer the trigger — the vault inside it is (D-068). Standing
+	# in your own base but away from the vault has to bank nothing, or the vault
+	# is decoration.
+	_stand(1, CAPTURE_BASES[0])
+	_check("your own base alone banks nothing", MatchState.team_letters(0), 0)
+	_check("and the carry is still running", MatchState.is_holding_letter(1), true)
+
 	# The right one.
-	_stand(1, CAPTURE_BASES[0] + Vector3(2.5, 0.0, 1.5))
-	_check("walking into your own base banks it", MatchState.team_letters(0),
+	_stand(1, vault_0)
+	_check("walking into your own vault banks it", MatchState.team_letters(0),
 		MatchState.LETTER_B)
 	_check("the banker's own row keeps it", MatchState.letters_for(1), MatchState.LETTER_B)
 	_check("and the carry ends", MatchState.is_holding_letter(1), false)
-	_check("the card goes back to its spawn", MatchState.capture_state(MatchState.LETTER_B),
+	_check("the card stays in the vault", MatchState.capture_state(MatchState.LETTER_B),
 		"home")
-	var b_again: Pickup = MatchState._pickups.get(_capture_card(MatchState.LETTER_B))
-	_check("as a real card on its home point",
-		b_again != null and _flat_distance(b_again.global_position, CAPTURE_HOMES[0]) < 0.01,
+	_check("and the vault is the team's", MatchState.banked_team_of(MatchState.LETTER_B), 0)
+	var g_again: Pickup = MatchState._pickups.get(_capture_card(MatchState.LETTER_B))
+	_check("as a real card standing on the vault",
+		g_again != null and _flat_distance(g_again.global_position, vault_0) < 0.01,
 		true)
+
+	# Your own bank is not a pickup. Walking over it must not undo it.
+	MatchState.claim_pickup(1, _capture_card(MatchState.LETTER_B))
+	_check("a team cannot pick its own banked card back up",
+		MatchState.is_holding_letter(1), false)
+	_check("and it still has the letter", MatchState.team_letters(0), MatchState.LETTER_B)
+
+	# Walking over an enemy vault does nothing on its own — the card comes out on
+	# a timer, not on contact (D-068). This is the assertion that proves the
+	# timer exists at all.
+	MatchState.claim_pickup(901, _capture_card(MatchState.LETTER_B))
+	_check("touching an enemy vault does not lift the card",
+		MatchState.is_holding_letter(901), false)
+	_stand(901, vault_0)
+	_check("and standing on it for an instant does not either",
+		MatchState.is_holding_letter(901), false)
+	_check("the robbed team still has it mid-steal", MatchState.team_letters(0),
+		MatchState.LETTER_B)
+	# Stepping off drops the attempt rather than banking the progress.
+	_stand(901, CAPTURE_DEATH)
+	_check("stepping off the vault abandons the steal",
+		MatchState._steals.has(901), false)
+
+	# The steal. Peer 901 is on team 1, and takes G out of team 0's vault.
+	_steal(901, vault_0)
+	_check("an enemy takes the card out of the vault",
+		MatchState.is_holding_letter(901), true)
+	_check("and the robbed team loses the letter", MatchState.team_letters(0), 0)
+	_check("the banker's own row loses it too", MatchState.letters_for(1), 0)
+	_check("the thief has not scored it yet", MatchState.team_letters(1), 0)
+	_check("and it is in nobody's vault",
+		MatchState.banked_team_of(MatchState.LETTER_B), MatchConfig.TEAM_NONE)
+
+	# Carried into the thief's own vault, it is a straight transfer.
+	_stand(901, vault_1)
+	_check("the thief banks it in their own vault", MatchState.team_letters(1),
+		MatchState.LETTER_B)
+	_check("and the robbed team still has nothing", MatchState.team_letters(0), 0)
+
+	# And back again: a team may steal back what it just lost, with no cooldown.
+	_steal(1, vault_1)
+	_check("the robbed team can steal it straight back",
+		MatchState.is_holding_letter(1), true)
+	_check("which takes it off the thief", MatchState.team_letters(1), 0)
+	_stand(1, vault_0)
+	_check("and banking it again restores it", MatchState.team_letters(0),
+		MatchState.LETTER_B)
 	_check("still three letters in the world", _letter_cards().size(), 3)
 	_check("and the match goes on", MatchState.phase, MatchState.Phase.PLAYING)
 	_stand(1, Vector3.ZERO)
@@ -1456,7 +1524,7 @@ func _run_capture() -> void:
 
 	# Team 0 banks the other two, and wins.
 	MatchState.claim_pickup(_capture_card(MatchState.LETTER_O), 1)
-	_stand(1, CAPTURE_BASES[0])
+	_stand(1, MatchState.capture_layout().vaults[0])
 	_stand(1, Vector3.ZERO)
 	_check("two banked", MatchState.team_letters(0),
 		MatchState.LETTER_B | MatchState.LETTER_O)
@@ -1465,13 +1533,13 @@ func _run_capture() -> void:
 	# that died: a Bog's body keeps its collision where it fell (D-043), and the
 	# body is what stands in a base. That must not bank.
 	MatchState.claim_pickup(_capture_card(MatchState.LETTER_G), 902)
-	_stand(902, CAPTURE_BASES[0])
+	_stand(902, MatchState.capture_layout().vaults[0])
 	_check("a carrier whose body is dead banks nothing", MatchState.team_letters(0),
 		MatchState.LETTER_B | MatchState.LETTER_O)
 	_check("and keeps carrying", MatchState.is_holding_letter(902), true)
 	# Once the body is back, the same carry in the same base banks.
 	MatchState._respawn(902)
-	_stand(902, CAPTURE_BASES[0])
+	_stand(902, MatchState.capture_layout().vaults[0])
 	_check("banking all three wins", MatchState.phase, MatchState.Phase.POST_MATCH)
 	_check("reason", finished.get("reason"), "capture")
 	_check("the summary carries the team's letters",

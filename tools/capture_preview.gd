@@ -81,7 +81,18 @@ func _physics_process(_delta: float) -> void:
 func _check() -> void:
 	var layout := MatchState.capture_layout()
 	var bases := _arena.get_node_or_null("CaptureBases")
-	_want("the arena drew the bases", bases != null and bases.get_child_count() == 2)
+	# Two bases and the two vaults inside them (D-068), which the arena draws as
+	# rings of the same class at a smaller radius. Counted together because the
+	# thing worth asserting is that the mode's ground is on screen at all; the
+	# vault's own position is `capture_layout`'s business and is checked there.
+	_want("the arena drew the bases and vaults",
+		bases != null and bases.get_child_count() == 4)
+	_want("a vault sits inside each base",
+		layout != null and layout.vaults.size() == layout.bases.size())
+	for team in layout.vaults.size():
+		var apart := layout.vaults[team].distance_to(layout.bases[team])
+		_want("team %d's vault is inside its base (%.1f m of %.1f)"
+			% [team + 1, apart, layout.base_radius], apart < layout.base_radius)
 	var cards := 0
 	for id: int in MatchState._pickups:
 		var item: Pickup = MatchState._pickups[id]

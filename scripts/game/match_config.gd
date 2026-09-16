@@ -231,6 +231,17 @@ const TEAM_NONE := -1
 ## chance to recover it.
 @export_range(3.0, 60.0) var capture_return_time: float = 15.0
 
+## How long a thief has to stand on an enemy vault to lift a banked card out of
+## it (D-068).
+##
+## A dial, and a short one, because it is the whole of what makes a vault a place
+## worth defending. At one second a bank is a formality and a lone attacker
+## empties it on the way past; at five, a defender who is anywhere nearby always
+## arrives in time and nothing is ever stolen. Three is about a sprint from the
+## bottom of a ramp, which is the distance the maps put between a base's door and
+## its vault.
+@export_range(1.0, 5.0) var capture_steal_time: float = 3.0
+
 ## What a Bog carrying a letter in Capture B·O·G multiplies its ground speed by.
 ## Below one on purpose: a carrier who outruns everybody to their base is a
 ## carrier nobody gets to fight. Applied at `Bog.target_speed`, the same single
@@ -424,7 +435,7 @@ const _FIELDS := [
 	"magnet_use_delay", "magnet_radius", "magnet_hold",
 	"magnet_pull_strength", "magnet_fuse",
 	"letter_drop_chance", "letter_hold_time",
-	"capture_return_time", "capture_carrier_speed",
+	"capture_return_time", "capture_steal_time", "capture_carrier_speed",
 	"elder_drop_chance", "lightning_delay", "lightning_cooldown", "lightning_radius",
 	"potion_drop_chance", "heal_amount", "heal_channel",
 	"elder_duration", "elder_speed_multiplier", "elder_jump_multiplier",
@@ -514,6 +525,7 @@ func _clamp_all() -> void:
 	# value to be raised into a hold nobody asked for.
 	letter_hold_time = clampf(letter_hold_time, 0.0, 30.0)
 	capture_return_time = clampf(capture_return_time, 3.0, 60.0)
+	capture_steal_time = clampf(capture_steal_time, 1.0, 5.0)
 	capture_carrier_speed = clampf(capture_carrier_speed, 0.5, 1.2)
 	elder_drop_chance = clampf(elder_drop_chance, 0.0, 1.0)
 	potion_drop_chance = clampf(potion_drop_chance, 0.0, 1.0)

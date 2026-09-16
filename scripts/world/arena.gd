@@ -399,6 +399,17 @@ func _build_capture_bases() -> void:
 		# The base point is a spawn pad or a map's marker, both at foot height.
 		base.position = layout.bases[team]
 		holder.add_child(base)
-	print("  capture: %d bases (%s), letters %s" % [layout.bases.size(),
+		# And the vault inside it, which is where the cards actually stand
+		# (D-068). Drawn as its own small ring rather than folded into the base's
+		# so the two read as different promises: the big one is the team's
+		# ground, the small one is the thing you walk onto to bank — and the
+		# thing an enemy stands on for three seconds to take a letter away.
+		if team < layout.vaults.size():
+			var vault := CaptureBase.create(team, layout.vault_radius)
+			vault.name = "Vault%d" % (team + 1)
+			vault.position = layout.vaults[team]
+			holder.add_child(vault)
+	print("  capture: %d bases + %d vaults (%s), letters %s" % [layout.bases.size(),
+		layout.vaults.size(),
 		"declared by the map" if layout.bases_declared else "fallback from the spawn pads",
 		"declared by the map" if layout.letters_declared else "fallback between the bases"])

@@ -50,6 +50,14 @@ signal letter_hold_changed(peer_id: int)
 ## the only one of the two a card produces. Both fire on every peer.
 signal letter_picked_up(peer_id: int, letter: int)
 signal letter_banked(peer_id: int, letter: int)
+## A card taken out of a team's vault by somebody who is not on that team
+## (D-068). Separate from `letter_banked` because it is the opposite event and
+## the feed has to be able to say so.
+signal letter_stolen(peer_id: int, letter: int, from_team: int)
+## How far through lifting a card out of an enemy vault somebody is, 0 to 1
+## (D-068). Emitted on every peer so a HUD can draw a thief's progress and a
+## defender's warning off the same number.
+signal steal_progress(peer_id: int, letter: int, done: float)
 ## Capture B·O·G only (D-051), and events in the same sense as the two above: a
 ## dead carrier's letter hit the ground, and a letter went home to its spawn —
 ## after lying dropped too long, or straight away when a carrier died where no
@@ -1330,11 +1338,20 @@ func claim_pickup(pickup_id: int, peer_id: int) -> void:
 
 	match pickup.kind:
 		Pickup.Kind.LETTER when is_capture():
-			# Capture B·O·G (D-051). One letter carried at a time, and a letter
-			# the carrier's team has already banked is not picked up at all:
-			# the card stays where it is. Returning before `_take_pickup` is
-			# what leaves it there.
-			if is_holding_letter(peer_id) or scoring_letters(peer_id) & pickup.letter != 0:
+			# Capture B·O·G (D-051), as amended by the vault (D-068). One letter
+			# carried at a time, always.
+			if is_holding_letter(peer_id):
+				return
+			# A card standing in *any* vault is not picked up by walking over it
+			# (D-068). Your own team's must not be undone by brushing past it,
+			# and an enemy's comes out on a timer rather than on contact —
+			# `_tick_steals` owns that, so a thief has to stand still for it and
+			# a defender has time to arrive.
+			if banked_team_of(pickup.letter) != MatchConfig.TEAM_NONE:
+				return
+			if scoring_letters(peer_id) & pickup.letter != 0:
+				# Loose on the map, and a letter this team already holds. Left
+				# exactly where it is, as it always was.
 				return
 			_begin_capture_carry(peer_id, pickup.letter)
 		Pickup.Kind.LETTER:
@@ -1467,7 +1484,11 @@ func _sync_letters(peer_id: int, mask: int, team: int, team_mask: int, letter: i
 		entry["letters"] = mask
 	letters_changed.emit(peer_id)
 	scores_changed.emit()
-	letter_banked.emit(peer_id, letter)
+	# `letter` is 0 when this push is a *revoke* — a card taken back out of a
+	# vault (D-068). The mask still has to move on every peer, but nothing was
+	# banked, so the fanfare the HUD and the sound hang off must not fire.
+	if letter != 0:
+		letter_banked.emit(peer_id, letter)
 
 
 ## The three-bit mask of letters this player holds. Safe to ask for a peer with
@@ -1811,6 +1832,7 @@ func _send_capture_home(letter: int, announce: bool) -> void:
 		_withdraw_pickup(lying)
 	entry["carrier"] = 0
 	entry["return_at"] = 0.0
+	entry["banked_team"] = MatchConfig.TEAM_NONE
 	entry["pickup"] = _spawn_drop(Pickup.Kind.LETTER, letter, entry["home"])
 	if announce:
 		_announce_capture.rpc(0, letter)
@@ -1819,12 +1841,20 @@ func _send_capture_home(letter: int, announce: bool) -> void:
 
 ## Host only, from `claim_pickup`, which has checked that this Bog is alive,
 ## carrying nothing, and on a team that still needs this letter.
+@rpc("authority", "call_remote", "reliable")
+func _announce_steal(peer_id: int, letter: int, from_team: int) -> void:
+	letter_stolen.emit(peer_id, letter, from_team)
+
+
 func _begin_capture_carry(peer_id: int, letter: int) -> void:
 	var entry: Dictionary = _capture.get(letter, {})
 	if not entry.is_empty():
 		entry["pickup"] = 0
 		entry["carrier"] = peer_id
 		entry["return_at"] = 0.0
+		# Once it is in a fist it is in nobody's vault, whether it left one by
+		# being stolen or was only ever loose (D-068).
+		entry["banked_team"] = MatchConfig.TEAM_NONE
 	# INF is the whole difference between a carry and a hold: no tick ever
 	# finishes it, and `letter_hold_remaining` answers INF for it.
 	_do_begin_hold.rpc(peer_id, letter, INF)
@@ -1850,9 +1880,86 @@ func _drop_capture_card(peer_id: int, letter: int, at: Vector3) -> void:
 
 ## Host only, every frame of a running match. Banks carriers standing in their
 ## own base and sends home cards that have lain dropped too long.
+## Host only: peer -> {"letter", "team", "since"}. How far through lifting a
+## card out of an enemy vault each thief is (D-068). Not replicated as a
+## dictionary — the progress each client draws comes from `_announce_steal_progress`.
+var _steals: Dictionary = {}
+
+
+## Host only. Everybody standing on a vault that is not theirs, holding nothing,
+## with a card actually in it. Standing still for `capture_steal_time` lifts it.
+##
+## Anything that is not "still standing there, still alive, still empty-handed,
+## card still in that vault" drops the attempt — there is no partial progress
+## kept, because a thief who can chip away at a vault in half-second visits is a
+## thief the defender can never actually stop.
+func _tick_steals() -> void:
+	if not Net.is_host or phase != Phase.PLAYING or _capture_layout == null:
+		return
+	var wanted := maxf(0.1, config().capture_steal_time)
+	for peer_id: int in bogs.keys():
+		var bog: Bog = bogs.get(peer_id)
+		var keep := false
+		if is_instance_valid(bog) and bog.alive and is_alive(peer_id) \
+				and not is_holding_letter(peer_id):
+			var team := _capture_layout.vault_team(bog.global_position)
+			var mine := _pooling_team(peer_id)
+			if team != MatchConfig.TEAM_NONE and team != mine:
+				var letter := _letter_in_vault(team)
+				if letter != 0:
+					var row: Dictionary = _steals.get(peer_id, {})
+					if int(row.get("letter", 0)) != letter:
+						row = {"letter": letter, "team": team, "since": _now()}
+						_steals[peer_id] = row
+					keep = true
+					if _now() - float(row["since"]) >= wanted:
+						_steals.erase(peer_id)
+						_take_from_vault(peer_id, letter, team)
+						continue
+		if not keep and _steals.has(peer_id):
+			_steals.erase(peer_id)
+			_announce_steal_progress.rpc(peer_id, 0, 0.0)
+			_announce_steal_progress(peer_id, 0, 0.0)
+			continue
+		if keep:
+			var row: Dictionary = _steals[peer_id]
+			var done := clampf((_now() - float(row["since"])) / wanted, 0.0, 1.0)
+			_announce_steal_progress.rpc(peer_id, int(row["letter"]), done)
+			_announce_steal_progress(peer_id, int(row["letter"]), done)
+
+
+## The letter standing in `team`'s vault, or 0.
+func _letter_in_vault(team: int) -> int:
+	for letter: int in _capture:
+		if int(_capture[letter].get("banked_team", MatchConfig.TEAM_NONE)) == team:
+			return letter
+	return 0
+
+
+## Host only. The steal completes: the bit comes off the robbed team and the
+## thief picks the card up in the same breath.
+func _take_from_vault(peer_id: int, letter: int, team: int) -> void:
+	_revoke_letter(letter, team)
+	_announce_steal.rpc(peer_id, letter, team)
+	_announce_steal(peer_id, letter, team)
+	var entry: Dictionary = _capture.get(letter, {})
+	var lying := int(entry.get("pickup", 0))
+	if lying != 0:
+		_withdraw_pickup.rpc(lying)
+		_withdraw_pickup(lying)
+	_begin_capture_carry(peer_id, letter)
+
+
+## How far through a steal `peer_id` is, 0 to 1, for the HUD. 0 when not stealing.
+@rpc("authority", "call_remote", "reliable")
+func _announce_steal_progress(peer_id: int, letter: int, done: float) -> void:
+	steal_progress.emit(peer_id, letter, done)
+
+
 func _tick_capture() -> void:
 	if not is_capture() or _capture_layout == null:
 		return
+	_tick_steals()
 	for peer_id: int in _letter_holds.keys():
 		if not _letter_holds.has(peer_id) or phase != Phase.PLAYING:
 			continue
@@ -1862,7 +1969,10 @@ func _tick_capture() -> void:
 		# the other team's base must not bank from the ground there.
 		if not is_alive(peer_id) or not is_instance_valid(bog) or not bog.alive:
 			continue
-		if _capture_layout.in_base(Net.player_team(peer_id), bog.global_position):
+		# The vault, not the base (D-068). A base is somewhere you are; a vault is
+		# something you walk up to and put a card on, and it has to be the same
+		# spot an enemy comes to take one off.
+		if _capture_layout.in_vault(Net.player_team(peer_id), bog.global_position):
 			_bank_capture(peer_id)
 	if phase != Phase.PLAYING:
 		return
@@ -1880,12 +1990,66 @@ func _bank_capture(peer_id: int) -> void:
 	var letter := letter_hold_letter(peer_id)
 	if letter == 0:
 		return
+	var team := _pooling_team(peer_id)
 	_end_letter_hold(peer_id)
 	award_letter(peer_id, letter)
 	# The award may have ended the match; the whistle leaves the cards alone.
 	if phase != Phase.PLAYING:
 		return
-	_send_capture_home(letter, false)
+	_store_in_vault(letter, team, peer_id)
+
+
+## Host only. The banked card is put down **on the team's vault** rather than
+## sent back to its home point (D-068), which is the whole of the change: a
+## banked letter is now a thing standing somewhere, so everyone can see what a
+## team holds without reading the HUD, and somebody else can come and take it.
+func _store_in_vault(letter: int, team: int, peer_id: int) -> void:
+	var entry: Dictionary = _capture.get(letter, {})
+	if entry.is_empty():
+		return
+	if _capture_layout == null or team < 0 or team >= _capture_layout.vaults.size():
+		# No vault to stand it on — a lobby whose layout never planned one. The
+		# old behaviour is the safe fallback rather than dropping the card.
+		_send_capture_home(letter, false)
+		return
+	var lying := int(entry["pickup"])
+	if lying != 0:
+		_withdraw_pickup.rpc(lying)
+		_withdraw_pickup(lying)
+	entry["carrier"] = 0
+	entry["return_at"] = 0.0
+	entry["banked_team"] = team
+	entry["banked_peer"] = peer_id
+	entry["pickup"] = _spawn_drop(Pickup.Kind.LETTER, letter,
+		_capture_layout.vaults[team])
+
+
+## Which team has this letter standing in its vault, or `TEAM_NONE`.
+func banked_team_of(letter: int) -> int:
+	var entry: Dictionary = _capture.get(letter, {})
+	if entry.is_empty():
+		return MatchConfig.TEAM_NONE
+	return int(entry.get("banked_team", MatchConfig.TEAM_NONE))
+
+
+## Host only. Take `letter` back off `team`'s mask, because somebody has just
+## picked it up out of their vault (D-068).
+##
+## This is `award_letter` run backwards and it reuses the same push, so there is
+## no second replication path to keep in step: the whole mask goes out on
+## `_sync_letters` either way. The personal mask that loses the bit is the one
+## belonging to whoever banked it — that is what `banked_peer` is recorded for.
+func _revoke_letter(letter: int, team: int) -> void:
+	if not Net.is_host:
+		return
+	var entry: Dictionary = _capture.get(letter, {})
+	var peer_id := int(entry.get("banked_peer", 0))
+	var stat: Dictionary = stats.get(peer_id, {})
+	var next := int(stat.get("letters", 0)) & ~letter
+	var team_mask := team_letters(team) & ~letter
+	_sync_letters.rpc(peer_id, next, team, team_mask, 0)
+	_sync_letters(peer_id, next, team, team_mask, 0)
+	_push_scores()
 
 
 ## A dropped card or a returned one, told on every peer. `peer_id` 0 is a

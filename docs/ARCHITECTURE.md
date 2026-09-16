@@ -191,10 +191,14 @@ ordinal travels on the wire, so it is only ever appended to: the kill limit,
 last Bog standing, the clock, **Collect B·O·G** (letters out of corpses, held up
 for ten seconds each, **D-033**, **D-035**) and **Capture B·O·G** (**D-051**).
 Capture is capture the flag with the three letters, and a Teams mode: three
-cards spawn once, a carrier walks one into its own team's base to bank it into
-the team's mask (**D-049**), the card goes back to its home point, and a dead
-carrier's card lies where they fell for the host's `capture_return_time` before
-going home. A carry is a letter hold with no deadline, so the card in the fist,
+cards spawn once, a carrier walks one onto its own team's **vault** to bank it
+into the team's mask (**D-049**), and a dead carrier's card lies where they fell
+for the host's `capture_return_time` before going home. The vault is a small
+point inside each base, pushed to the side furthest from the enemy, and a banked
+card **stands on it** rather than returning to its home point (**D-068**) — so
+what a team holds is visible in the world, and an enemy who stands on that vault
+for `capture_steal_time` lifts the card back out and takes the letter off them.
+It is the only score in the game that can go down. A carry is a letter hold with no deadline, so the card in the fist,
 the carrier marker and the feed are the letters mode's own (**D-050**). The
 bases and home points come from `CaptureLayout`, below.
 
