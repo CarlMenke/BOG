@@ -22,6 +22,17 @@ extends Node3D
 ##     the far side of a wall, which is what a player actually sees as "inside".
 ##     The first two cannot see this against a thin face or a trimesh.
 ##
+## The third verdict is the framing (D-059). A player: *"I slowly look right and
+## for a bit once the camera makes contact with the wall it'll move left first"*.
+## Nothing was inverted — the shoulder was being held at its full 0.62 m while the
+## boom came in, so the lens swung round to the side of the Gub as it pulled in
+## and the Gub slid across the frame, the same way whichever way the view was
+## turning, which is backwards for half of all turns. The invariant that kills it
+## is that the lens must never be further off the boom's axis than the
+## unobstructed camera would be *at the depth it got to*: the shoulder is an angle
+## and it comes in with the boom. It is an inequality, so a shoulder squeezed by a
+## wall of its own is still allowed.
+##
 ## The second verdict is the aim. Pulling a camera in must not move the spear
 ## (D-025): the throw is aimed down the crosshair's ray, and the crosshair has to
 ## mean the same thing whether or not a wall behind the Gub has shoved the lens
@@ -39,6 +50,60 @@ const AIM_MASK := 1 | 2 | 8
 
 const NEAR_CLEARANCE := 0.1
 const AIM_TOLERANCE := 0.01
+## How far past its share of the shoulder the lens may sit. A centimetre is float
+## slack: the rig places the two from the same frame's sweep, so the real margin
+## is zero. Nothing here holds the aim button, whose shoulder and boom ease on
+## slightly different ratios and would need a wider one.
+const FRAME_TOLERANCE := 0.01
+
+## The fourth verdict, `calm`, is the *motion* of the lens rather than its place
+## (D-062). `clip` says the camera is never in a wall and `frame` says the Gub
+## does not walk across the picture; neither of them can see a camera that
+## arrives somewhere correct by jumping, or one that hunts back and forth about a
+## correct place. Those are the two named failure modes of every collision
+## camera — "pop" and "swim" — and they are what is left once the placement is
+## right, so they are measured directly.
+##
+## Three numbers, all read off the lens's own offset within the rig, so the
+## Gub's walking and the player's turning are already subtracted out and what is
+## left is only what the scenery did:
+##
+##   - **step**, metres the lens moved along boom-and-shoulder in one frame. A
+##     pop is a big step. 0.09 m at 60 fps is 5.4 m/s of pure camera dolly,
+##     which is faster than the Gub runs and is the point at which a pull-in
+##     stops reading as a movement and starts reading as a cut. This one is a
+##     budget rather than a zero, and honestly so: where the boom *grazes* a
+##     surface — the view tipping down until the arm lies along the floor — the
+##     length that fits is clearance over the sine of the angle, and the
+##     derivative of that has no bound. At the graze there is no policy, only
+##     geometry, and a camera that refused to move would be in the floor. So the
+##     claim the gate makes is that it is rare: 4 % of frames, against the 14.9 %
+##     measured before any of D-062.
+##   - **flips**, frames where the boom reversed direction by more than a
+##     millimetre having been moving the other way by more than a millimetre.
+##     Swim is literally a high flip count: a camera that cannot decide. One
+##     flip per pull-in is correct and unavoidable (in, then out); a budget of
+##     4 % of frames leaves room for that across legs that make contact
+##     constantly and still fails a camera that is oscillating.
+##   - **turn**, degrees per frame of the *lens's own* rotation away from the
+##     boom's axis. The rig aims the lens at where the aim ray meets the world so
+##     the reticle stays honest (D-045), and that meeting point jumps the whole
+##     length of the ray whenever the ray crosses an edge. 1.2 deg/frame is
+##     72 deg/s, about a third of a fast mouse flick, and anything above it is
+##     the picture snapping on its own.
+const STEP_LIMIT := 0.09
+const STEP_BUDGET := 0.04
+const TURN_LIMIT := 1.2
+const FLIP_BUDGET := 0.04
+## Movement below this is float noise and a sign change in it means nothing.
+const FLIP_EPSILON := 0.001
+## Radians of view turned in one frame past which the frame is a *cut*, not a
+## turn, and `calm` skips it. The "back to a wall" leg deliberately flicks 1.45
+## rad between two frames, which no rig can lead and no player would read as
+## camera movement — the whole picture changed. 0.15 rad is 9 degrees a frame,
+## 540 deg/s, well above anything the sweeping legs produce (0.06 rad at their
+## fastest) and well below a flick, so it separates the two cleanly.
+const CUT_TURN := 0.15
 ## Ticks after a teleport before anything is checked: the rig eases after the
 ## body (`GubCamera.FOLLOW_SPEED`), so for a moment after a forty-metre jump it
 ## is legitimately flying through whatever lies between two stations.
@@ -79,6 +144,7 @@ var _leg: int = -1
 var _tick: int = 0
 var _gub: Gub
 var _rig: GubCamera
+var _boom: Node3D
 var _combat: GubCombat
 
 var _leg_checked: int = 0
@@ -89,12 +155,37 @@ var _leg_behind: int = 0
 var _leg_worst_behind: float = 0.0
 var _leg_aim_off: int = 0
 var _leg_worst_aim: float = 0.0
+var _leg_wide: int = 0
+var _leg_worst_wide: float = 0.0
 var _leg_nearest: float = INF
 var _leg_from: Vector3 = Vector3.ZERO
+var _leg_jumped: int = 0
+var _leg_worst_step: float = 0.0
+var _leg_flips: int = 0
+var _leg_snapped: int = 0
+var _leg_worst_turn: float = 0.0
+
+## Last frame's lens offset and lens-off-boom angle, and which way the boom was
+## last seen moving. Cleared at every leg, because a teleport between stations is
+## a legitimate jump and comparing across it would measure the teleport.
+var _prev_lens: Vector3 = Vector3.ZERO
+var _prev_dev: float = 0.0
+var _prev_sign: int = 0
+var _prev_yaw: float = 0.0
+var _prev_pitch: float = 0.0
+var _have_prev: bool = false
+var _leg_calm: int = 0
+var _total_calm: int = 0
 
 var _total_checked: int = 0
 var _total_clipped: int = 0
 var _total_aim_off: int = 0
+var _total_wide: int = 0
+var _total_jumped: int = 0
+var _total_flips: int = 0
+var _total_snapped: int = 0
+var _worst_step: float = 0.0
+var _worst_turn: float = 0.0
 
 
 func _ready() -> void:
@@ -120,6 +211,7 @@ func _ready() -> void:
 		get_tree().quit()
 		return
 	_rig = _gub.get_node("CameraRig") as GubCamera
+	_boom = _rig.get_node("Boom") as Node3D
 	_combat = _gub.get_node("Combat") as GubCombat
 	print("camera_range: starting, %d legs" % LEGS.size())
 	_next_leg()
@@ -139,7 +231,17 @@ func _next_leg() -> void:
 	_leg_worst_behind = 0.0
 	_leg_aim_off = 0
 	_leg_worst_aim = 0.0
+	_leg_wide = 0
+	_leg_worst_wide = 0.0
 	_leg_nearest = INF
+	_leg_jumped = 0
+	_leg_worst_step = 0.0
+	_leg_flips = 0
+	_leg_snapped = 0
+	_leg_worst_turn = 0.0
+	_leg_calm = 0
+	_have_prev = false
+	_prev_sign = 0
 	if _leg >= LEGS.size():
 		_finish()
 		return
@@ -246,6 +348,54 @@ func _check_frame() -> void:
 		_leg_aim_off += 1
 	_leg_worst_aim = maxf(_leg_worst_aim, aim_error)
 
+	# The lens's own offsets, read off the node the rig placed: how far it sits to
+	# the side, and how far back it got. A lens further to the side than its share
+	# of the boom is a Gub sliding across the frame (D-059).
+	var lens := _rig.camera().position
+	var share := GubCamera.SHOULDER_DEFAULT * lens.z / GubCamera.DISTANCE_DEFAULT
+	if lens.x - share > FRAME_TOLERANCE:
+		_leg_wide += 1
+	_leg_worst_wide = maxf(_leg_worst_wide, lens.x - share)
+
+	# Pop and swim (D-062). `lens` is boom-space, so the Gub's walking and the
+	# player's turning are already out of it and every millimetre here was put
+	# there by the scenery. The lens's own rotation is measured as its angle off
+	# the boom's axis, for the same reason: turning the view turns the boom too,
+	# so what is left is only the reticle correction swinging the picture.
+	var dev := rad_to_deg((-_rig.camera().global_transform.basis.z).angle_to(
+		-_boom.global_transform.basis.z))
+	var cut := absf(_rig.yaw() - _prev_yaw) + absf(_rig.pitch() - _prev_pitch) > CUT_TURN
+	if _have_prev and not cut:
+		_leg_calm += 1
+		var step := lens.distance_to(_prev_lens)
+		_leg_worst_step = maxf(_leg_worst_step, step)
+		if step > STEP_LIMIT:
+			_leg_jumped += 1
+		var turn := absf(dev - _prev_dev)
+		_leg_worst_turn = maxf(_leg_worst_turn, turn)
+		if turn > TURN_LIMIT:
+			_leg_snapped += 1
+		var move := lens.z - _prev_lens.z
+		var sign_now := 0
+		if move > FLIP_EPSILON:
+			sign_now = 1
+		elif move < -FLIP_EPSILON:
+			sign_now = -1
+		if sign_now != 0:
+			if _prev_sign != 0 and sign_now != _prev_sign:
+				_leg_flips += 1
+			_prev_sign = sign_now
+	_prev_lens = lens
+	_prev_dev = dev
+	_prev_yaw = _rig.yaw()
+	_prev_pitch = _rig.pitch()
+	# A cut breaks the chain on both sides: the frame that lands on the new view
+	# is not compared with the old one, and its direction of travel is not carried
+	# across either, so a flick cannot be scored as a flip.
+	_have_prev = not cut
+	if cut:
+		_prev_sign = 0
+
 
 ## Where a throw should go for this view, worked out from the camera the rig
 ## would have with nothing in the way: the rig's pivot, its yaw and pitch, the
@@ -272,13 +422,24 @@ func _unobstructed_aim_point(space: PhysicsDirectSpaceState3D) -> Vector3:
 
 func _report_leg() -> void:
 	var leg: Dictionary = LEGS[_leg]
-	print("camera_range: %-18s walked %4.1f m, camera as close as %.2f m; clipped %3d/%d frames (inside %d, near plane %d, behind a wall %d, worst %.2f m); aim off %d, worst %.3f m" % [
+	print("camera_range: %-18s walked %4.1f m, camera as close as %.2f m; clipped %3d/%d frames (inside %d, near plane %d, behind a wall %d, worst %.2f m); aim off %d, worst %.3f m; lens wide %d, worst %.3f m" % [
 		leg["name"], _gub.global_position.distance_to(_leg_from), _leg_nearest,
 		_leg_clipped, _leg_checked, _leg_inside, _leg_touching,
-		_leg_behind, _leg_worst_behind, _leg_aim_off, _leg_worst_aim])
+		_leg_behind, _leg_worst_behind, _leg_aim_off, _leg_worst_aim,
+		_leg_wide, _leg_worst_wide])
+	print("camera_range: %-18s over %d unbroken frames: lens step worst %.3f m (%d over), flips %3d, lens turn worst %.2f deg (%d over)" % [
+		leg["name"], _leg_calm, _leg_worst_step, _leg_jumped, _leg_flips,
+		_leg_worst_turn, _leg_snapped])
 	_total_checked += _leg_checked
 	_total_clipped += _leg_clipped
 	_total_aim_off += _leg_aim_off
+	_total_wide += _leg_wide
+	_total_jumped += _leg_jumped
+	_total_flips += _leg_flips
+	_total_snapped += _leg_snapped
+	_total_calm += _leg_calm
+	_worst_step = maxf(_worst_step, _leg_worst_step)
+	_worst_turn = maxf(_worst_turn, _leg_worst_turn)
 
 
 func _finish() -> void:
@@ -294,6 +455,21 @@ func _finish() -> void:
 	else:
 		print("camera_range: aim off the unobstructed camera on %d of %d frames — aim FAIL" % [
 			_total_aim_off, _total_checked])
+	if _total_wide == 0 and enough:
+		print("camera_range: the shoulder came in with the boom on all %d frames — frame PASS" % _total_checked)
+	else:
+		print("camera_range: lens wider than its share of the shoulder on %d of %d frames — frame FAIL" % [
+			_total_wide, _total_checked])
+
+	var flip_allowance := int(_total_calm * FLIP_BUDGET)
+	var step_allowance := int(_total_calm * STEP_BUDGET)
+	var calm := _total_jumped <= step_allowance and _total_snapped == 0 \
+		and _total_flips <= flip_allowance and enough and _total_calm >= 1000
+	print("camera_range: over %d frames the view was turned rather than cut: lens step over %.2f m on %d (budget %d, worst %.3f m); boom flips %d (budget %d); lens turn over %.2f deg on %d (worst %.2f deg) — calm %s" % [
+		_total_calm, STEP_LIMIT, _total_jumped, step_allowance, _worst_step,
+		_total_flips, flip_allowance,
+		TURN_LIMIT, _total_snapped, _worst_turn,
+		"PASS" if calm else "FAIL"])
 	get_tree().quit()
 
 
