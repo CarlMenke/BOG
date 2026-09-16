@@ -361,6 +361,13 @@ func _stage_arena() -> bool:
 	call_strip.picked_up("Mossfoot", "G", Color.WHITE)
 	_check("a third call trims the oldest", call_strip.get_child_count(),
 		LetterCall.MAX_ROWS)
+	# A theft is the one event that takes a letter *off* a team (D-068), so it
+	# names the robbed side rather than only the thief.
+	call_strip.clear()
+	call_strip.stolen("Thistle", "U", 1, Color.WHITE)
+	var stolen_row := call_strip.get_child(0) as Label
+	_check("a steal names the thief and the robbed team",
+		stolen_row != null and stolen_row.text == "THISTLE STOLE A U FROM TEAM 2", true)
 	call_strip.clear()
 	_check("and the strip can be cleared", call_strip.get_child_count(), 0)
 
