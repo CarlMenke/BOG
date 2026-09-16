@@ -88,6 +88,16 @@ const MAPS: Array[Dictionary] = [
 		# anchor, with the sea as the void (D-057).
 		"loading_line": "Weighing anchor",
 	},
+	{
+		"id": "quarry",
+		"display_name": "Twin Quarry",
+		"kind": Kind.STATIC,
+		"scene": "res://scenes/world/maps/quarry.tscn",
+		# Built from a table as well, and the first one drawn for Capture G·U·B
+		# rather than fitted to it: a stone pit with each team's base a storey
+		# up on a cut bench, reached by two haul ramps and nothing else (D-058).
+		"loading_line": "Cutting the benches",
+	},
 	# A static map is one more entry and nothing else in this file changes —
 	# the lobby's picker, `SceneFlow`'s loading card and `arena.gd`'s branch all
 	# read this table and none of them names a map.

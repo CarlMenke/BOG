@@ -1,0 +1,98 @@
+[gd_resource type="Environment" load_steps=3 format=3 uid="uid://cq2gubquarryenv"]
+
+; Environment for Twin Quarry. Overcast first light at the bottom of a stone
+; pit, and the one weather on the map list: Rust is a hard afternoon, Kopje
+; Crossing a noon, Lantern Wharf a dusk, Halcyon Wake a bright morning and
+; Whisperbloom Hollow a torch-lit night. None of them is grey (D-058).
+;
+; Derived from `wharf_env.tres`, which came from `safari_env.tres`, which came
+; from `rust_env.tres`, and the rule held again: the tonemapping, the glow and
+; the SSAO are theirs, and the sky, the fog and the exposure are the whole of
+; the difference.
+;
+;   * A flat sky: pale blue-grey overhead, a colder white at the horizon, with
+;     the sun's disc curve wide so nothing on it reads as a sun. It is the
+;     ambient and the reflections, so every face of every block gets light and
+;     the map's shape comes from SSAO and from the drill lines rather than from
+;     shadow — which is the point of an overcast, and why the two work lamps
+;     over the bases are the only warm thing in the pit.
+;   * **`background_energy_multiplier` is the exposure control** (see
+;     `rust_env.tres`, which measured it). 1.05 here, which is the lowest on any
+;     map: a flat sky is ambient from every direction at once, and pale stone
+;     under it at the wharf's 1.5 came out white with no readable edges at all.
+;   * Fog is height-limited so it lies *in* the pit rather than over it: the
+;     floor at y = 0 is hazier than the rim at 11 m, which is what separates the
+;     near cover from the far cover on a map whose stone is all one rock.
+;     **It has to be thin.** The first pass ran the height density at 0.12 and
+;     the bottom eleven metres of the pit — which is all of the map anybody
+;     plays in — came out as a flat white field with the cover invisible in it.
+;     0.02 is a haze you read depth from; anything near a tenth is weather.
+;   * Glow stays on at Rust's threshold, for the two lamp heads.
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_quarrysky"]
+sky_top_color = Color(0.42, 0.49, 0.59, 1)
+sky_horizon_color = Color(0.7, 0.73, 0.77, 1)
+sky_curve = 0.42
+sky_energy_multiplier = 1.0
+ground_bottom_color = Color(0.3, 0.29, 0.27, 1)
+ground_horizon_color = Color(0.6, 0.59, 0.56, 1)
+ground_curve = 0.1
+ground_energy_multiplier = 1.0
+sun_angle_max = 40.0
+sun_curve = 0.02
+use_debanding = true
+
+[sub_resource type="Sky" id="Sky_quarry"]
+sky_material = SubResource("ProceduralSkyMaterial_quarrysky")
+radiance_size = 3
+
+[resource]
+resource_name = "QuarryEnvironment"
+background_mode = 2
+sky = SubResource("Sky_quarry")
+background_energy_multiplier = 1.05
+ambient_light_source = 3
+reflected_light_source = 2
+tonemap_mode = 3
+tonemap_exposure = 1.0
+tonemap_white = 6.0
+ssao_enabled = true
+ssao_radius = 1.3
+ssao_intensity = 1.6
+ssao_power = 1.5
+ssao_detail = 0.6
+ssao_horizon = 0.08
+ssao_sharpness = 0.98
+ssao_light_affect = 0.0
+ssao_ao_channel_affect = 0.4
+glow_enabled = true
+glow_levels/1 = 0.0
+glow_levels/2 = 0.35
+glow_levels/3 = 0.85
+glow_levels/4 = 1.0
+glow_levels/5 = 0.7
+glow_levels/6 = 0.25
+glow_levels/7 = 0.0
+glow_normalized = true
+glow_intensity = 0.45
+glow_strength = 1.0
+glow_mix = 0.05
+glow_bloom = 0.0
+glow_blend_mode = 1
+glow_hdr_threshold = 2.0
+glow_hdr_scale = 2.0
+glow_hdr_luminance_cap = 10.0
+fog_enabled = true
+fog_light_color = Color(0.5, 0.54, 0.6, 1)
+fog_light_energy = 1.0
+fog_sun_scatter = 0.05
+fog_density = 0.002
+fog_aerial_perspective = 0.3
+fog_sky_affect = 0.0
+fog_height = 5.0
+fog_height_density = 0.02
+volumetric_fog_enabled = false
+adjustment_enabled = true
+adjustment_brightness = 1.0
+adjustment_contrast = 1.16
+adjustment_saturation = 0.92
