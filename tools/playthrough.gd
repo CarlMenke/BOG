@@ -342,6 +342,28 @@ func _stage_arena() -> bool:
 	if not _require("the arena instanced the HUD", _find_hud() != null):
 		return false
 
+	# The letter call across the top of the screen (D-069). Checked here rather
+	# than in a preview scene for the reason this file exists at all: every
+	# integration defect this project has had was something wired into a testbed
+	# and into nothing else, and a banner that works in isolation and is absent
+	# from the real HUD is exactly that shape. So: it is in the shipped scene,
+	# and driving it puts a row on screen.
+	var hud := _find_hud()
+	var call_strip := hud.get_node_or_null("%LetterCall") as LetterCall
+	if not _require("the HUD carries the letter call", call_strip != null):
+		return false
+	call_strip.picked_up("Pipwick", "B", Color.WHITE)
+	_check("a pickup puts a line on screen", call_strip.get_child_count(), 1)
+	call_strip.has_them_all("Pipwick", Color.WHITE)
+	_check("and the full set adds another", call_strip.get_child_count(), 2)
+	# Two is the cap, so a third call pushes the oldest off rather than stacking
+	# down over the map.
+	call_strip.picked_up("Mossfoot", "G", Color.WHITE)
+	_check("a third call trims the oldest", call_strip.get_child_count(),
+		LetterCall.MAX_ROWS)
+	call_strip.clear()
+	_check("and the strip can be cleared", call_strip.get_child_count(), 0)
+
 	if not _stage_map(arena):
 		return false
 
