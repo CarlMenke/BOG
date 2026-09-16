@@ -9,7 +9,7 @@
 ; forklifts, three dozen drums, pallets and pipe stock. It then calls `super()`,
 ; which sweeps all of that into world-space trimesh collision on layer 1, and
 ; then adds the dressing: floor paint, door bars, two cranes over the walls, four
-; floodlights on the wall corners, the Factory Kit plant (D-060) and a City Kit
+; floodlights on the wall corners, the Factory Kit plant (D-084) and a City Kit
 ; town outside the wall that is in `StaticMap.BACKDROP_GROUP` and never collision.
 ;
 ; So this file is what `static_map.gd` asks for:

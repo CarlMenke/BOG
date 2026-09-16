@@ -81,7 +81,7 @@ func _physics_process(_delta: float) -> void:
 func _check() -> void:
 	var layout := MatchState.capture_layout()
 	var bases := _arena.get_node_or_null("CaptureBases")
-	# Two bases and the two vaults inside them (D-068), which the arena draws as
+	# Two bases and the two vaults inside them (D-092), which the arena draws as
 	# rings of the same class at a smaller radius. Counted together because the
 	# thing worth asserting is that the mode's ground is on screen at all; the
 	# vault's own position is `capture_layout`'s business and is checked there.

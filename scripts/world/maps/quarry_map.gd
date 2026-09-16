@@ -4,20 +4,20 @@ extends StaticMap
 ## built in code from layout tables the way Kopje Crossing, Lantern Wharf and
 ## Halcyon Wake are (D-042, D-056, D-057).
 ##
-## This is the first map designed for **Capture G·U·B** rather than adapted to
-## it (D-058), and the brief decided the shape:
+## This is the first map designed for **Capture B·O·G** rather than adapted to
+## it (D-082), and the brief decided the shape:
 ##
 ##   * **Each team's base is a storey up.** The base pad sits on a 4 m cut bench
-##     in its own corner of the pit. Four metres is over every jump in the Gub's
+##     in its own corner of the pit. Four metres is over every jump in the Bog's
 ##     kit — the one-tick dive reaches 4.23 m of rise but only off a take-off
 ##     edge, and from flat ground `parkour_report` allows 3.5 — so the face of
 ##     the bench is a wall, not a step.
 ##   * **Two ways up, and they are the haul ramps.** A 25 degree ramp climbs to
-##     each of the bench's two open faces. The Gub has no step-up, so a ramp is
+##     each of the bench's two open faces. The Bog has no step-up, so a ramp is
 ##     the only climbable slope there is (`floor_max_angle` is 52 degrees) and
 ##     stairs on this map would be the yacht's trick for nothing.
 ##   * **A low wall round the pad, with a few doorways.** 1.8 m of cut stone: a
-##     Gub is 1.55 m and its eyes are at 1.45, so you cannot see over it and you
+##     Bog is 1.55 m and its eyes are at 1.45, so you cannot see over it and you
 ##     cannot jump it either (the jump reaches 1.69). You can *leap* onto it,
 ##     which is the defender's perch and is meant to be. Three gaps: the head of
 ##     each ramp, and one drop port that is an exit and a throwing slot, because
@@ -30,7 +30,7 @@ extends StaticMap
 ## cover closes without also closing the flag off; turning the layout instead
 ## puts the bases on a diagonal, where one rock in the middle closes it. It is
 ## as fair — the two halves are congruent — and it costs nothing but a
-## handedness the Gub does not have. What it does cost is the middle: see the
+## handedness the Bog does not have. What it does cost is the middle: see the
 ## Stack, under `COLUMNS`.
 ##
 ## Four kinds of stone stand in the pit, and each has one job. **The two you can
@@ -42,10 +42,10 @@ extends StaticMap
 ##   blocks      3.0 m. Hard cover, climbable off a kerb (1.8 m of rise, and a
 ##               leap lifts 2.30) and out of reach of anything from flat ground.
 ##               It was 2.6 until the pit was widened: at 48 m across, the extra
-##               40 cm is what stops a Gub on a bench corner seeing clean over
+##               40 cm is what stops a Bog on a bench corner seeing clean over
 ##               every block on the map.
 ##   columns     10.2 m of unquarried rock. What cuts the long lines, and out of
-##               reach of every jump the Gub has — `off_limits`, and the report
+##               reach of every jump the Bog has — `off_limits`, and the report
 ##               fails the build if one can be stood on.
 ##   the rim     11 m of cliff on all four sides, terraced away above that. The
 ##               edge of the map, and `off_limits` for the same reason.
@@ -83,7 +83,7 @@ const RIM_TIERS: Array[Vector2] = [
 ]
 
 ## The shaft in the middle of the pit: the next bench down, and the one thing on
-## this map that kills you (D-065).
+## this map that kills you (D-089).
 ##
 ## It stands exactly where the Stack did, and it is the Stack's opposite in every
 ## way that matters. That rock was load-bearing — under a rotational layout every
@@ -97,7 +97,7 @@ const HOLE_HALF := 6.5
 ## How far down you can see before the fog and the dark take it. The floor of the
 ## lower bench is modelled, because a shaft that ends in nothing reads as a
 ## texture error rather than as a quarry, but nobody ever stands on it:
-## `void_height` is -10, so a Gub is dead six metres before it arrives.
+## `void_height` is -10, so a Bog is dead six metres before it arrives.
 const HOLE_FLOOR := -16.0
 ## A ledge part way down, so the drop reads as *quarried* — benches and a haul
 ## road, the same thing the pit above it is — rather than as a lift shaft.
@@ -118,8 +118,8 @@ const BENCH_INNER := 11.5
 ## Where the base marker sits: the middle of the bench, on its floor.
 const BASE_AT := Vector2(-17.75, -17.75)
 
-## The wall round the pad. 1.8 m so a standing Gub cannot see over it and the
-## 1.69 m jump cannot clear it; 0.9 m thick so its top is a landing a Gub fits
+## The wall round the pad. 1.8 m so a standing Bog cannot see over it and the
+## 1.69 m jump cannot clear it; 0.9 m thick so its top is a landing a Bog fits
 ## on, which is what makes the leap onto it worth having.
 const WALL_HEIGHT := 1.8
 const WALL_THICK := 0.9
@@ -134,7 +134,7 @@ const WALL_THICK := 0.9
 ##   foot   where it meets the pit floor; `head` where it meets the bench.
 ##
 ## Both ramps run flush against the rim rather than a little off it. A 1.5 m gap
-## behind a ramp is a slot a Gub gets stuck in, and four of them end to end are a
+## behind a ramp is a slot a Bog gets stuck in, and four of them end to end are a
 ## lane down the pit's own edge that nothing breaks.
 const RAMP_WIDTH := 3.0
 const RAMPS: Array[Dictionary] = [
@@ -144,9 +144,9 @@ const RAMPS: Array[Dictionary] = [
 		"foot": 0.0, "head": -BENCH_INNER},
 ]
 ## How much wider than the ramp the doorway in the wall is, each side. A doorway
-## exactly as wide as the ramp is one a Gub clips the jamb of at a run.
+## exactly as wide as the ramp is one a Bog clips the jamb of at a run.
 const DOOR_MARGIN := 0.2
-## The drop port: the gap in the east wall that is not a way in. A Gub can walk
+## The drop port: the gap in the east wall that is not a way in. A Bog can walk
 ## out of it and fall four metres, and throw through it standing still, and
 ## nothing can come up it.
 const PORT := Vector2(-15.5, -13.9)
@@ -193,11 +193,11 @@ const COLUMNS: Array[Dictionary] = [
 	# a specific job: **all four spawn-to-spawn lines now cross these two rocks**
 	# rather than the blocks on the shaft's lip. Pad-to-pad is a hard check, so
 	# something has to close it; putting that duty out here on a pair of rocks the
-	# map already had frees the hole's rim to be placed by eye (D-067).
+	# map already had frees the hole's rim to be placed by eye (D-091).
 	{"label": "axis west", "at": Vector2(-15.5, 0.0), "size": Vector2(4.0, 8.0)},
 	{"label": "axis north", "at": Vector2(0.0, -15.5), "size": Vector2(8.0, 4.0)},
 	# There used to be a pair here, on the diagonal between the bases, closing
-	# base to base either side of the Stack. Both are gone with it (D-065): the
+	# base to base either side of the Stack. Both are gone with it (D-089): the
 	# shaft's lip runs from the hole's edge out to 9.7 m and the bench begins at
 	# 11.5, so there is no longer any room on that diagonal to stand a column in,
 	# and nothing left for it to close — bench sees bench across the hole now, by
@@ -225,14 +225,14 @@ const COLUMNS: Array[Dictionary] = [
 ## where one of the four lines crosses the lip. The halves are no longer
 ## congruent here and that is the trade: a hazard you can walk into from most of
 ## its perimeter is worth more than a symmetry nobody can see from inside the map
-## (D-067).
+## (D-091).
 ##
 ## They are **1.85 m**, which is the one height that needs nothing else beside it.
 ## 3.0 m is a dive from flat ground, so it would have to carry a kerb to climb
 ## from — four more objects on a rim meant to be nearly bare. Putting them out of
 ## reach instead means clearing a dive off the 3 m cover nearby, which is 7.2 m,
 ## and a 7 m tower on each edge is a wall round the hole. 1.85 m is under
-## `GROUND_LEAP`, so a Gub can leap straight onto one from the floor and nothing
+## `GROUND_LEAP`, so a Bog can leap straight onto one from the floor and nothing
 ## is stranded; and it is over the 1.45 m eye, so it still breaks a standing
 ## line. A quarry puts a low berm round a shaft for the same reason.
 const LIP_TOP := 1.85
@@ -252,8 +252,8 @@ const BLOCKS: Array[Dictionary] = [
 	{"label": "approach north", "at": Vector2(-6.5, -12.5), "size": Vector2(3.0, 3.0)},
 	# Three that used to be 10 m columns. At that height and at this spacing the
 	# pit was a canyon maze: the third-person camera spent the whole match
-	# against a wall, and a Gub could not see its own feet from a spawn pad.
-	# Three metres blocks a standing Gub's eyes exactly as well — the sightline
+	# against a wall, and a Bog could not see its own feet from a spawn pad.
+	# Three metres blocks a standing Bog's eyes exactly as well — the sightline
 	# scan runs at 1.45 m — and lets the camera, and the player, up over it.
 	{"label": "quarter west", "at": Vector2(-6.5, 12.5), "size": Vector2(4.0, 4.0)},
 	{"label": "quarter north", "at": Vector2(12.5, -6.5), "size": Vector2(4.0, 4.0)},
@@ -268,7 +268,7 @@ const BLOCKS: Array[Dictionary] = [
 
 ## Low cover and the step onto a block. Each is laid flush against the block it
 ## is a step onto — a kerb with a metre of daylight beside a block is a slot a
-## Gub gets stuck in, and flush it is a staircase.
+## Bog gets stuck in, and flush it is a staircase.
 const KERB_TOP := 1.2
 const KERBS: Array[Dictionary] = [
 	{"label": "step west", "at": Vector2(-10.0, -6.5), "size": Vector2(2.0, 2.0)},
@@ -309,7 +309,7 @@ const STONE_BENCH := Color(0.60, 0.55, 0.44)
 const STONE_RIM := Color(0.48, 0.45, 0.39)
 const STONE_RAW := Color(0.47, 0.45, 0.41)
 ## The pit floor. Gravel is not one colour and the first pass treated it as one:
-## a two-stop noise ramp reads as damp cardboard at any distance a Gub is
+## a two-stop noise ramp reads as damp cardboard at any distance a Bog is
 ## actually standing. `_gravel_images()` draws individual stones instead, so this
 ## is only the tint over the top of them.
 const FLOOR_GRAVEL := Color(0.62, 0.59, 0.53)
@@ -345,14 +345,14 @@ const SNAGS: PackedStringArray = ["DeadTree_1", "DeadTree_2", "DeadTree_3",
 	"DeadTree_4", "DeadTree_5"]
 
 ## How the apron round a face is walked, and how far out of it a prop sits. Near
-## is against the stone; far is about a Gub's width off it, which is as far as
+## is against the stone; far is about a Bog's width off it, which is as far as
 ## debris reads as having come off that face rather than been dropped.
 const APRON_STRIDE := 1.1
 const APRON_NEAR := 0.15
 const APRON_FAR := 0.85
 
 ## Scales, all taken off `PropScatter.DENSE_LAYERS`, which measured them against
-## the Gub: `Grass_Common_Tall` is 1.87 m at scale 1 and the Gub is 1.81, so
+## the Bog: `Grass_Common_Tall` is 1.87 m at scale 1 and the Bog is 1.81, so
 ## grass at 1.0 is a swamp that hides a crouched player.
 const RUBBLE_SCALE := Vector2(0.7, 1.6)
 const WEED_SCALE := Vector2(0.28, 0.55)
@@ -367,7 +367,7 @@ const SNAG_SCALE := Vector2(0.45, 0.85)
 ## `model` indexes `BOULDERS`, `yaw` turns the rock so four copies of three
 ## meshes do not read as three meshes. Every one of them is off both haul ramps,
 ## out of every doorway, more than ten metres from any spawn pad, and more than
-## two metres from the centre of any other landing, which is what keeps a Gub's
+## two metres from the centre of any other landing, which is what keeps a Bog's
 ## capsule fitting on the kerb next door.
 const SPOIL_ROCKS: Array[Dictionary] = [
 	{"label": "spoil deep", "at": Vector2(-21.6, 20.0), "model": 0, "yaw": 0.4},
@@ -538,14 +538,14 @@ static func factors(at: Vector2) -> Vector2:
 func _build_floor() -> void:
 	# Four slabs round the shaft rather than one across the pit. A picture frame,
 	# so the hole in the middle is a hole in the *collision* and not a hole
-	# painted on a floor a Gub walks over.
+	# painted on a floor a Bog walks over.
 	#
 	# **The four are trimmed against each other, and that is the pattern.** North
 	# and south run the full width; east and west are cut back to the band
 	# between them. Four slabs each running full width would double-cover the
 	# corners, and two coplanar tops at y = 0 is not a thicker floor, it is a
 	# depth-buffer tie — which is the failure `_build_shaft` had against *this*
-	# frame and still had against itself round the ledge (D-065, and the entry
+	# frame and still had against itself round the ledge (D-089, and the entry
 	# that carries this fix).
 	var h := HOLE_HALF
 	var base := -FLOOR_THICK
@@ -558,14 +558,14 @@ func _build_floor() -> void:
 ## The shaft: four walls down to a floor nobody reaches, with a bench ledge
 ## running round it part way so the drop reads as a worked quarry rather than as
 ## a lift shaft. All of it collision — a spear into the shaft wall stops there,
-## and a Gub cannot walk out through the side of the hole.
+## and a Bog cannot walk out through the side of the hole.
 ##
 ## **Two solids may not share a face plane, and both of the seams below were one
 ## when this was first built.** A depth buffer has no opinion about which of two
 ## surfaces at exactly the same depth is in front, so it picks per fragment, out
 ## of float noise that changes with the camera — the striping the shaft was
 ## reported for. Worse here than usual because the two surfaces were not even the
-## same rock: the floor is gravel and the shaft is dressed rim stone (D-065), so
+## same rock: the floor is gravel and the shaft is dressed rim stone (D-089), so
 ## the fight was between two visibly different textures.
 ##
 ##   * **The apron.** The upper slabs used to run from the hole edge out to
@@ -784,7 +784,7 @@ func _build_pit() -> void:
 
 
 ## The spoil rocks, and the only thing the Stylized Nature MegaKit puts on this
-## map that a Gub cannot walk through.
+## map that a Bog cannot walk through.
 ##
 ## A quarry's waste is the biggest loose stone in the pit, and at the size the
 ## kit draws a `Rock_Medium` it reads as cover from right across the floor — so
@@ -804,8 +804,8 @@ func _build_pit() -> void:
 ## **Every one is squashed until its top is exactly `KERB_TOP`.** Left at the
 ## scale the scatter used, a rock stood about 1.5 m — a fourth height on a map
 ## whose entire language is three of them (1.2 kerb, 3.0 block, 10.2 column),
-## and a thing a Gub can stand on that no table mentions, which is the failure
-## D-042 and D-058 both exist to prevent. At 1.2 a rock simply *is* a kerb: low
+## and a thing a Bog can stand on that no table mentions, which is the failure
+## D-042 and D-082 both exist to prevent. At 1.2 a rock simply *is* a kerb: low
 ## cover, one hop from flat ground so the reachability walk never calls it
 ## stranded, and declared in `platforms` like every other kerb on the map.
 ## It is sat on the floor by its own bounding box rather than by eye, so the
@@ -960,12 +960,12 @@ static func _inscribed(size: Vector2) -> float:
 ##     bushes round the puddles. Walking through a weed is what a weed is for,
 ##     and a bush you bounce off is a bush that lies about being cover.
 ##   * **Rubble stays passable**, which is the one that needed thinking about. A
-##     pebble is 0.4 m and the Gub has no step-up: a 0.2 m stair tread is a wall
+##     pebble is 0.4 m and the Bog has no step-up: a 0.2 m stair tread is a wall
 ##     to it (D-057), so a solid pebble is not an obstacle, it is something you
 ##     stub yourself on every few metres for no gain. And at 0.4 m nobody is
 ##     hiding behind one, so it is ground texture and is drawn as ground texture.
 ##   * **The dead trees on the rim stay passable** because they are eleven
-##     metres up on a terrace nothing reaches; solid or not, no Gub will ever
+##     metres up on a terrace nothing reaches; solid or not, no Bog will ever
 ##     touch one.
 ##   * **The spoil rocks are solid**, and they are the whole reason this list
 ##     exists. See `_build_rocks`.
@@ -1031,7 +1031,7 @@ func _solid_footprints() -> Array[Dictionary]:
 
 ## Whether a point is over the shaft, with a margin so nothing perches on the very
 ## lip either. The props were written when the middle of this map was solid rock
-## (D-058); the hole came later (D-065), and every scatter that used to land on
+## (D-082); the hole came later (D-089), and every scatter that used to land on
 ## stone there now lands on nothing — which is what the shrubs and pebbles left
 ## hanging in mid-air over the edge were. Every placement asks this first.
 static func _in_hole(at: Vector2) -> bool:
@@ -1575,7 +1575,7 @@ func _build_materials() -> void:
 	# rather than sharing the rim's, because the rim is a sawn wall two hundred
 	# metres of drill line long and a block is a dressed lump somebody worked all
 	# the way round — tooled, chamfered and chipped at the arrises. Same ochre, so
-	# D-058's readability rule still holds: pale means you can climb it.
+	# D-082's readability rule still holds: pale means you can climb it.
 	var carved := _carved_images()
 	_carved_material = StandardMaterial3D.new()
 	_carved_material.albedo_texture = ImageTexture.create_from_image(carved[0])
@@ -1703,7 +1703,7 @@ func _stone_images() -> Array[Image]:
 ## Real gravel: individual stones, not a noise ramp.
 ##
 ## The first floor was two greys of simplex over a four-metre tile, and at the
-## height a Gub's eye actually is it read as damp cardboard — there was no stone
+## height a Bog's eye actually is it read as damp cardboard — there was no stone
 ## in it, only a stain. Gravel has a *grain size*: a chipping is a few
 ## centimetres, and any texture that does not resolve one is a photograph of a
 ## car park taken from an aeroplane.

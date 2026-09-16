@@ -631,7 +631,7 @@ func _on_letters_changed(_peer_id: int) -> void:
 func _on_letter_picked_up(peer_id: int, letter: int) -> void:
 	_kill_feed.add_event([peer_id, "picked up",
 		[MatchState.letter_name(letter), Pickup.LETTER_COLOUR]])
-	# And across the top of the screen (D-069). The feed is a log you read after
+	# And across the top of the screen (D-093). The feed is a log you read after
 	# the fact; this is the one line in the match that changes what everybody
 	# does next, so it goes where the eye already is.
 	_letter_call.picked_up(_display_name(peer_id), MatchState.letter_name(letter),

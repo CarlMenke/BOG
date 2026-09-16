@@ -22,7 +22,7 @@ extends Node3D
 ##     the far side of a wall, which is what a player actually sees as "inside".
 ##     The first two cannot see this against a thin face or a trimesh.
 ##
-## The third verdict is the framing (D-059). A player: *"I slowly look right and
+## The third verdict is the framing (D-083). A player: *"I slowly look right and
 ## for a bit once the camera makes contact with the wall it'll move left first"*.
 ## Nothing was inverted — the shoulder was being held at its full 0.62 m while the
 ## boom came in, so the lens swung round to the side of the Bog as it pulled in
@@ -57,7 +57,7 @@ const AIM_TOLERANCE := 0.01
 const FRAME_TOLERANCE := 0.01
 
 ## The fourth verdict, `calm`, is the *motion* of the lens rather than its place
-## (D-062). `clip` says the camera is never in a wall and `frame` says the Bog
+## (D-086). `clip` says the camera is never in a wall and `frame` says the Bog
 ## does not walk across the picture; neither of them can see a camera that
 ## arrives somewhere correct by jumping, or one that hunts back and forth about a
 ## correct place. Those are the two named failure modes of every collision
@@ -78,7 +78,7 @@ const FRAME_TOLERANCE := 0.01
 ##     derivative of that has no bound. At the graze there is no policy, only
 ##     geometry, and a camera that refused to move would be in the floor. So the
 ##     claim the gate makes is that it is rare: 4 % of frames, against the 14.9 %
-##     measured before any of D-062.
+##     measured before any of D-086.
 ##   - **flips**, frames where the boom reversed direction by more than a
 ##     millimetre having been moving the other way by more than a millimetre.
 ##     Swim is literally a high flip count: a camera that cannot decide. One
@@ -350,14 +350,14 @@ func _check_frame() -> void:
 
 	# The lens's own offsets, read off the node the rig placed: how far it sits to
 	# the side, and how far back it got. A lens further to the side than its share
-	# of the boom is a Bog sliding across the frame (D-059).
+	# of the boom is a Bog sliding across the frame (D-083).
 	var lens := _rig.camera().position
 	var share := BogCamera.SHOULDER_DEFAULT * lens.z / BogCamera.DISTANCE_DEFAULT
 	if lens.x - share > FRAME_TOLERANCE:
 		_leg_wide += 1
 	_leg_worst_wide = maxf(_leg_worst_wide, lens.x - share)
 
-	# Pop and swim (D-062). `lens` is boom-space, so the Bog's walking and the
+	# Pop and swim (D-086). `lens` is boom-space, so the Bog's walking and the
 	# player's turning are already out of it and every millimetre here was put
 	# there by the scenery. The lens's own rotation is measured as its angle off
 	# the boom's axis, for the same reason: turning the view turns the boom too,

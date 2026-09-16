@@ -232,7 +232,7 @@ const TEAM_NONE := -1
 @export_range(3.0, 60.0) var capture_return_time: float = 15.0
 
 ## How long a thief has to stand on an enemy vault to lift a banked card out of
-## it (D-068).
+## it (D-092).
 ##
 ## A dial, and a short one, because it is the whole of what makes a vault a place
 ## worth defending. At one second a bank is a formality and a lone attacker

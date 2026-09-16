@@ -63,7 +63,7 @@ const NEAR_HEIGHT := 1.5
 ## How close two settled cards may be.
 const MIN_APART := 4.0
 
-## The vault: where a team's banked letters actually sit (D-068).
+## The vault: where a team's banked letters actually sit (D-092).
 ##
 ## Banking used to be a fact about a number — the card went home and the team
 ## gained a bit nothing could take back. Now it is a place, so the bit has
@@ -92,7 +92,7 @@ var letters: Array[Vector3] = []
 var bases_declared: bool = false
 var letters_declared: bool = false
 ## One vault per team, in team order: the point inside each base that banked
-## cards rest on, and the only place a card can be banked or stolen (D-068).
+## cards rest on, and the only place a card can be banked or stolen (D-092).
 var vaults: Array[Vector3] = []
 var vault_radius: float = VAULT_RADIUS
 

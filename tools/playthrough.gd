@@ -342,7 +342,7 @@ func _stage_arena() -> bool:
 	if not _require("the arena instanced the HUD", _find_hud() != null):
 		return false
 
-	# The letter call across the top of the screen (D-069). Checked here rather
+	# The letter call across the top of the screen (D-093). Checked here rather
 	# than in a preview scene for the reason this file exists at all: every
 	# integration defect this project has had was something wired into a testbed
 	# and into nothing else, and a banner that works in isolation and is absent
@@ -361,7 +361,7 @@ func _stage_arena() -> bool:
 	call_strip.picked_up("Mossfoot", "G", Color.WHITE)
 	_check("a third call trims the oldest", call_strip.get_child_count(),
 		LetterCall.MAX_ROWS)
-	# A theft is the one event that takes a letter *off* a team (D-068), so it
+	# A theft is the one event that takes a letter *off* a team (D-092), so it
 	# names the robbed side rather than only the thief.
 	call_strip.clear()
 	call_strip.stolen("Thistle", "U", 1, Color.WHITE)
@@ -371,7 +371,7 @@ func _stage_arena() -> bool:
 	call_strip.clear()
 	_check("and the strip can be cleared", call_strip.get_child_count(), 0)
 
-	# The steal bar (D-070), which is the other half of putting stealing on a
+	# The steal bar (D-094), which is the other half of putting stealing on a
 	# clock: the timer only buys the defender time if something tells them to
 	# come. Driven through the HUD's own handler rather than the track's setter,
 	# so what is proved is the *wiring* — that the signal reaches the widget —

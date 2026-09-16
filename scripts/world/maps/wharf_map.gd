@@ -25,7 +25,7 @@ extends StaticMap
 ##
 ## And the works: a forklift, painted drums, pallets and pipe stock, all of it
 ## **solid** and all of it built before `super()`, because a box at chest height
-## that a spear flies through is the one lie this map must not tell (D-060).
+## that a spear flies through is the one lie this map must not tell (D-084).
 ##
 ## There is no two-high stack anywhere, and that is deliberate. The dive off a
 ## jump reaches 4.2 m of rise, so a 5.2 m stack beside a 2.6 m single is a stack
@@ -316,9 +316,9 @@ const WALL_SHADE := 0.62
 ## before `super()` and is therefore collision**, and that is the whole reason it
 ## is allowed to exist at all.
 ##
-## D-060 put the Factory Kit up the walls and flat on the floor and left the
+## D-084 put the Factory Kit up the walls and flat on the floor and left the
 ## aisles empty, under a rule it stated in one line: nothing between 0.3 m and
-## 2.4 m anywhere a Gub can walk, unless it is real. A forklift is 2.5 m to the
+## 2.4 m anywhere a Bog can walk, unless it is real. A forklift is 2.5 m to the
 ## top of its guard and a drum is 0.9 m — both of them are exactly the height at
 ## which a player decides whether to duck — so the only honest way to put them in
 ## an aisle is to make them solid. They are, so they are cover, and cover shortens
@@ -329,17 +329,17 @@ const WALL_SHADE := 0.62
 ## `parkour_report` and that is the failure D-042 and D-056 exist to prevent.
 ##
 ## The rule these shapes are built to, and it is geometry rather than an
-## assertion: **every flat top a Gub's capsule can find a floor on is a declared
+## assertion: **every flat top a Bog's capsule can find a floor on is a declared
 ## `Platform`.** A drum lid is 0.60 m across and declared; a guard rail is 0.08 m
 ## across, which is narrower than the sphere on the bottom of the capsule, so the
-## contact there is an edge and a Gub slides off it. Nothing on any of these
+## contact there is an edge and a Bog slides off it. Nothing on any of these
 ## props is in between, and that is a thing the shapes were adjusted to make true
 ## rather than a thing they happened to be — see `FORKLIFT_DECK`.
 
 ## The forklift, as a table, north half, mirrored across z = 0 like everything
 ## else. `at` is the middle of the machine on the ground; it is built facing its
 ## own -x and `yaw` turns it. One per end, flush against the outboard end of the
-## bay tower, in the loading bay the floor paint already marks (D-060).
+## bay tower, in the loading bay the floor paint already marks (D-084).
 const FORKLIFTS: Array[Dictionary] = [
 	{"at": Vector2(-4.50, -11.35), "yaw": 0.0},
 ]
@@ -360,7 +360,7 @@ const FORKLIFTS: Array[Dictionary] = [
 ## that reason, and a perch that swings twelve metres over forty is worse.
 ##
 ## So the guard is an open frame — four posts and the rails across their tops —
-## and the highest flat thing on the machine is a 0.08 m rail. A Gub's capsule is
+## and the highest flat thing on the machine is a 0.08 m rail. A Bog's capsule is
 ## 0.38 m across and its underside is a sphere: on a face narrower than a few
 ## centimetres it meets an *edge*, the contact normal is not up, and it slides
 ## off. That is the line between the drum lids below (0.60 m across, declared,
@@ -371,7 +371,7 @@ const FORKLIFT_DECK_LANDING := 0.50
 ## Drums. `at` is the barrel's centre on the floor, `lying` puts it on its side
 ## along `along`, and `paint` indexes `PAINTS`. Upright is 0.90 m to a flat lid
 ## and on its side it is 0.60 m to the curve of the shell; **both are declared**,
-## because a Gub can stand on either and a 0.15 m landing record is cheap next to
+## because a Bog can stand on either and a 0.15 m landing record is cheap next to
 ## a perch the checker has never heard of.
 ##
 ## Every group stands half a metre off the steel it leans against rather than
@@ -416,10 +416,10 @@ const BARRELS: Array[Dictionary] = [
 ## existing crate tops from 25.0 m to 27.4 m. They came back inside instead.
 
 ## Pallets, stacked two high, and bundles of pipe stock lying on the concrete.
-## Both are **28 cm** tall, which is under D-060's own 0.3 m line: they are floor
+## Both are **28 cm** tall, which is under D-084's own 0.3 m line: they are floor
 ## furniture you stride over, not cover, so they get collision (a stack you walk
 ## through is as much of a lie as a crate you shoot through) and no landing
-## record, because standing on one puts a Gub's eyes 28 cm up.
+## record, because standing on one puts a Bog's eyes 28 cm up.
 const PALLET := Vector3(1.20, 0.14, 0.80)
 const PALLETS: Array[Vector2] = [
 	Vector2(-9.0, -5.7), Vector2(9.0, -5.7),
@@ -435,7 +435,7 @@ const PIPE_STOCK: Array[Vector2] = [
 
 # ------------------------------------------------------------ the plant ---
 
-## Kenney's Factory Kit, bolted to the walls and painted on the floor (D-060).
+## Kenney's Factory Kit, bolted to the walls and painted on the floor (D-084).
 ##
 ## The containers are not made of this and cannot be: the kit has no container in
 ## it, and more to the point the boxes *are* the map — the layout was searched
@@ -449,7 +449,7 @@ const PIPE_STOCK: Array[Vector2] = [
 ## crate is 1.2 m and hides you, a single is 2.6 m and hides you, and both are
 ## solid. A 1.5 m machine standing in an aisle that a spear flies straight
 ## through is a lie the player finds out about by dying, so there is nothing here
-## between 0.3 m and 2.4 m anywhere a Gub can walk.
+## between 0.3 m and 2.4 m anywhere a Bog can walk.
 ##
 ## Pipes run at 3.2 m and 4.4 m up the inner wall faces; machinery stands on the
 ## wall tops at 7.8 m, where `parkour_report` has already proved nobody can get;
@@ -478,7 +478,7 @@ const SKYLINE_STRIDE := 6.0
 const SKYLINE_SCALE := Vector2(0.9, 1.5)
 
 ## Flat on the floor, a centimetre up, casting nothing. These are the only kit
-## pieces a Gub ever walks over, and every one of them is a decal in all but
+## pieces a Bog ever walks over, and every one of them is a decal in all but
 ## name.
 const FLOOR_MARKS: PackedStringArray = ["indicator-special-arrow",
 	"indicator-special-lines", "indicator-special-area", "indicator-special-cross"]
@@ -678,7 +678,7 @@ func _box(parent: Node3D, at: Vector2, axis: String, tier: int, paint: int,
 ## therefore swept into collision by `super()` a few lines later.
 ##
 ## Read the comment on `FORKLIFTS` above for why this is the only place it could
-## go. The short version is D-060's rule: on a map whose whole grammar is "this
+## go. The short version is D-084's rule: on a map whose whole grammar is "this
 ## is cover and that is not", a body-height prop is either solid or it is a lie,
 ## and a forklift is very much body height.
 func _build_works(parent: Node3D) -> void:
@@ -743,7 +743,7 @@ func _forklift(parent: Node3D, at: Vector2, yaw: float) -> void:
 
 ## One drum, upright or on its side, and the landing on top of it.
 ##
-## The lid of an upright drum is 0.30 m across and a Gub's capsule is 0.38 m: it
+## The lid of an upright drum is 0.30 m across and a Bog's capsule is 0.38 m: it
 ## does not *fit* on the lid, it balances on it, and it balances perfectly well
 ## because the contact is the bottom of a capsule against a flat face pointing
 ## straight up. That is a place to stand, so it is a `Platform` with a 0.15 m
@@ -1435,7 +1435,7 @@ func _bolt(batch: Dictionary, model: String, at: Vector3, yaw: float, scale: flo
 
 
 ## One `MultiMeshInstance3D` per model, for the same reasons Twin Quarry does it
-## (D-058): a node per prop is a draw call per prop for scenery nothing touches,
+## (D-082): a node per prop is a draw call per prop for scenery nothing touches,
 ## and a multimesh is something `StaticMap`'s collision sweep cannot pick up by
 ## accident, because that only collects `MeshInstance3D`.
 ## `city` picks the kit and, with it, everything about how the piece is treated:
@@ -1515,7 +1515,7 @@ func _container_mesh() -> Mesh:
 ##
 ## **It is open at both ends on purpose, and that is the whole design decision.**
 ## A hollow 6 x 2.4 m box on a 36 m map is a room, and a room is a very strong
-## thing to give somebody. Open at one end it is a pocket: a Gub inside has one
+## thing to give somebody. Open at one end it is a pocket: a Bog inside has one
 ## way out, everybody outside knows where that is, and a single spear thrown
 ## through the door kills whoever is in there with nowhere to go — which on a map
 ## where the spear has a blast radius is not a fight, it is a bin. Open at both
@@ -1545,7 +1545,7 @@ func _container_mesh() -> Mesh:
 ##   this box changed.
 ## - The walls are 0.10 m thick with the interior faces modelled. `StaticMap`
 ##   bakes trimesh collision with `backface_collision` on (D-031), so an interior
-##   face stops a Gub from the inside as firmly as the outside face stops one from
+##   face stops a Bog from the inside as firmly as the outside face stops one from
 ##   the aisle — there is no "inside" and "outside" to a triangle here, which is
 ##   the one property that makes a hollow box out of six flat quads work at all.
 ## - The **door leaves are part of the shell**, so they are collision too. They
@@ -1622,7 +1622,7 @@ func _open_container_mesh() -> Mesh:
 ## drawing.
 ##
 ## The shape is held to one rule, stated with `FORKLIFT_DECK`: the only flat top
-## on the machine a Gub can stand on is the 1.20 m deck, and that is declared.
+## on the machine a Bog can stand on is the 1.20 m deck, and that is declared.
 ## Everything else is either under the deck, narrower than a capsule can find a
 ## floor on, or both.
 func _forklift_mesh(painted: bool) -> Mesh:
@@ -1650,7 +1650,7 @@ func _forklift_mesh(painted: bool) -> Mesh:
 		# The overhead guard: four posts off the deck with two rails along their
 		# tops and two across. Nothing is plated — see `FORKLIFT_DECK` for the
 		# measurement that decided that, and for why an 0.08 m rail is not a
-		# place a Gub stands.
+		# place a Bog stands.
 		for px: float in [-0.40, 0.45]:
 			for pz: float in [-0.55, 0.55]:
 				_add_box(st, id, Vector3(px, 1.81, pz), Vector3(0.10, 1.22, 0.10))
@@ -1695,8 +1695,8 @@ func _barrel_mesh() -> Mesh:
 	return mesh
 
 
-## Two pallets, stacked. 28 cm to the top deck, which is under D-060's 0.3 m line
-## for a thing a Gub walks over rather than round.
+## Two pallets, stacked. 28 cm to the top deck, which is under D-084's 0.3 m line
+## for a thing a Bog walks over rather than round.
 func _pallet_mesh() -> Mesh:
 	if _mesh_cache.has("pallet"):
 		return _mesh_cache["pallet"]

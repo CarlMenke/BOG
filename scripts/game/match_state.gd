@@ -51,11 +51,11 @@ signal letter_hold_changed(peer_id: int)
 signal letter_picked_up(peer_id: int, letter: int)
 signal letter_banked(peer_id: int, letter: int)
 ## A card taken out of a team's vault by somebody who is not on that team
-## (D-068). Separate from `letter_banked` because it is the opposite event and
+## (D-092). Separate from `letter_banked` because it is the opposite event and
 ## the feed has to be able to say so.
 signal letter_stolen(peer_id: int, letter: int, from_team: int)
 ## How far through lifting a card out of an enemy vault somebody is, 0 to 1
-## (D-068). Emitted on every peer so a HUD can draw a thief's progress and a
+## (D-092). Emitted on every peer so a HUD can draw a thief's progress and a
 ## defender's warning off the same number.
 signal steal_progress(peer_id: int, letter: int, from_team: int, done: float)
 ## Capture B·O·G only (D-051), and events in the same sense as the two above: a
@@ -1343,7 +1343,7 @@ func claim_pickup(pickup_id: int, peer_id: int) -> void:
 			if is_holding_letter(peer_id):
 				return
 			# A card standing in *any* vault is not picked up by walking over it
-			# (D-068). Your own team's must not be undone by brushing past it,
+			# (D-092). Your own team's must not be undone by brushing past it,
 			# and an enemy's comes out on a timer rather than on contact —
 			# `_tick_steals` owns that, so a thief has to stand still for it and
 			# a defender has time to arrive.
@@ -1467,7 +1467,7 @@ func award_letter(peer_id: int, letter: int) -> bool:
 ## Written on every peer rather than left to ride along on the next
 ## `_sync_scores`, because a letter is the one score change that has to be
 ## *felt* the instant it happens — the HUD lamp and the call across the top of
-## the screen hang off this signal (D-069), and the next score push may be a
+## the screen hang off this signal (D-093), and the next score push may be a
 ## whole kill away.
 ##
 ## There is no sound on it, and there never has been: this comment used to say
@@ -1490,7 +1490,7 @@ func _sync_letters(peer_id: int, mask: int, team: int, team_mask: int, letter: i
 	letters_changed.emit(peer_id)
 	scores_changed.emit()
 	# `letter` is 0 when this push is a *revoke* — a card taken back out of a
-	# vault (D-068). The mask still has to move on every peer, but nothing was
+	# vault (D-092). The mask still has to move on every peer, but nothing was
 	# banked, so the fanfare the HUD and the sound hang off must not fire.
 	if letter != 0:
 		letter_banked.emit(peer_id, letter)
@@ -1858,7 +1858,7 @@ func _begin_capture_carry(peer_id: int, letter: int) -> void:
 		entry["carrier"] = peer_id
 		entry["return_at"] = 0.0
 		# Once it is in a fist it is in nobody's vault, whether it left one by
-		# being stolen or was only ever loose (D-068).
+		# being stolen or was only ever loose (D-092).
 		entry["banked_team"] = MatchConfig.TEAM_NONE
 	# INF is the whole difference between a carry and a hold: no tick ever
 	# finishes it, and `letter_hold_remaining` answers INF for it.
@@ -1886,7 +1886,7 @@ func _drop_capture_card(peer_id: int, letter: int, at: Vector3) -> void:
 ## Host only, every frame of a running match. Banks carriers standing in their
 ## own base and sends home cards that have lain dropped too long.
 ## Host only: peer -> {"letter", "team", "since"}. How far through lifting a
-## card out of an enemy vault each thief is (D-068). Not replicated as a
+## card out of an enemy vault each thief is (D-092). Not replicated as a
 ## dictionary — the progress each client draws comes from `_announce_steal_progress`.
 var _steals: Dictionary = {}
 
@@ -1931,7 +1931,7 @@ func _tick_steals() -> void:
 			var done := clampf((_now() - float(row["since"])) / wanted, 0.0, 1.0)
 			# The robbed team rides along rather than being looked up on the far
 			# side: `_capture` is the host's own bookkeeping, so a client has no
-			# way to ask whose vault is being emptied (D-070).
+			# way to ask whose vault is being emptied (D-094).
 			_announce_steal_progress.rpc(peer_id, int(row["letter"]),
 				int(row["team"]), done)
 			_announce_steal_progress(peer_id, int(row["letter"]),
@@ -1980,7 +1980,7 @@ func _tick_capture() -> void:
 		# the other team's base must not bank from the ground there.
 		if not is_alive(peer_id) or not is_instance_valid(bog) or not bog.alive:
 			continue
-		# The vault, not the base (D-068). A base is somewhere you are; a vault is
+		# The vault, not the base (D-092). A base is somewhere you are; a vault is
 		# something you walk up to and put a card on, and it has to be the same
 		# spot an enemy comes to take one off.
 		if _capture_layout.in_vault(Net.player_team(peer_id), bog.global_position):
@@ -2011,7 +2011,7 @@ func _bank_capture(peer_id: int) -> void:
 
 
 ## Host only. The banked card is put down **on the team's vault** rather than
-## sent back to its home point (D-068), which is the whole of the change: a
+## sent back to its home point (D-092), which is the whole of the change: a
 ## banked letter is now a thing standing somewhere, so everyone can see what a
 ## team holds without reading the HUD, and somebody else can come and take it.
 func _store_in_vault(letter: int, team: int, peer_id: int) -> void:
@@ -2044,7 +2044,7 @@ func banked_team_of(letter: int) -> int:
 
 
 ## Host only. Take `letter` back off `team`'s mask, because somebody has just
-## picked it up out of their vault (D-068).
+## picked it up out of their vault (D-092).
 ##
 ## This is `award_letter` run backwards and it reuses the same push, so there is
 ## no second replication path to keep in step: the whole mask goes out on

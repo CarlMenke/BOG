@@ -1,11 +1,11 @@
 class_name LetterCall
 extends VBoxContainer
-## "PIPWICK HAS A B" across the top of the screen, and "PIPWICK HAS GUB" when
-## somebody's last one lands (D-069).
+## "PIPWICK HAS A B" across the top of the screen, and "PIPWICK HAS BOG" when
+## somebody's last one lands (D-093).
 ##
 ## The letters were the one thing in this game that happened in silence. A card
 ## coming out of a corpse is announced to nobody, a carrier crossing the map is
-## a Gub with something in its fist, and the only place the state existed was the
+## a Bog with something in its fist, and the only place the state existed was the
 ## letter track at the bottom of your own screen and the scoreboard behind Tab.
 ## In a mode whose whole tension is *who is close to winning*, that is the one
 ## fact everybody needs and nobody had.
@@ -49,7 +49,7 @@ func picked_up(who: String, letter_text: String, colour: Color) -> void:
 	_say("%s HAS A %s" % [who.to_upper(), letter_text], colour)
 
 
-## Somebody has lifted a card out of another team's vault (D-068). Written in
+## Somebody has lifted a card out of another team's vault (D-092). Written in
 ## the *thief's* colour, because the name at the front of the sentence is theirs
 ## and a line that changes colour halfway through reads as two lines.
 func stolen(who: String, letter_text: String, from_team: int, colour: Color) -> void:
@@ -59,7 +59,7 @@ func stolen(who: String, letter_text: String, from_team: int, colour: Color) -> 
 
 ## Somebody's scoring mask is complete.
 func has_them_all(who: String, colour: Color) -> void:
-	_say("%s HAS GUB" % who.to_upper(), colour)
+	_say("%s HAS BOG" % who.to_upper(), colour)
 
 
 func clear() -> void:

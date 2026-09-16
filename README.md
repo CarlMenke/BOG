@@ -369,7 +369,7 @@ the boxes — pipe runs up the wall faces, machinery along the wall tops, panels
 and floor markings — is Kenney Factory Kit, added after the collision is baked
 and kept either above head height or flat on the ground, because on a map this
 tight a prop at the height of cover that a spear flies through is a lie
-(**D-060**).
+(**D-084**).
 
 **Twin Quarry is built the same way as well**, and is the first map whose
 layout came out of a game mode rather than a picture:
@@ -381,7 +381,7 @@ the map is a thirteen-metre rock: under a turn every spawn pad's line to its
 opposite number runs through the origin. It is also the one map that dresses
 itself out of the MegaKit — rubble, weeds and dead trees, none of it collision —
 because an abandoned quarry taken back by weeds is the only thing that puts a
-colour in a hole full of grey stone (**D-058**).
+colour in a hole full of grey stone (**D-082**).
 
 **Halcyon Wake is built the same way too**, and goes up instead of out:
 `scenes/world/maps/yacht.tscn` and `scripts/world/maps/yacht_map.gd` loft a 66 m

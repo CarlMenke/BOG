@@ -93,9 +93,9 @@ const MAPS: Array[Dictionary] = [
 		"display_name": "Twin Quarry",
 		"kind": Kind.STATIC,
 		"scene": "res://scenes/world/maps/quarry.tscn",
-		# Built from a table as well, and the first one drawn for Capture G·U·B
+		# Built from a table as well, and the first one drawn for Capture B·O·G
 		# rather than fitted to it: a stone pit with each team's base a storey
-		# up on a cut bench, reached by two haul ramps and nothing else (D-058).
+		# up on a cut bench, reached by two haul ramps and nothing else (D-082).
 		"loading_line": "Cutting the benches",
 	},
 	# A static map is one more entry and nothing else in this file changes —

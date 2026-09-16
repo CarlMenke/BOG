@@ -40,7 +40,7 @@ const SENSITIVITY_SCALE := 0.0022
 
 ## Camera collision (D-045). The camera is swept to where it wants to be as a
 ## sphere rather than a ray, along the path the camera itself travels: back along
-## the boom, then out to the shoulder at whatever depth the boom got to (D-059).
+## the boom, then out to the shoulder at whatever depth the boom got to (D-083).
 ## A ray down the middle of the boom, which is what the `SpringArm3D` here used
 ## to cast, tested a line the camera was never on — 0.62 m to one side of it.
 ##
@@ -54,7 +54,7 @@ const PROBE_RADIUS := 0.26
 ## against a wall is not re-touching it on float noise every frame.
 const PROBE_MARGIN := 0.05
 
-## The three rates, and why there are three (D-062).
+## The three rates, and why there are three (D-086).
 ##
 ## Every mature third-person rig splits the speed the camera comes *in* from the
 ## speed it goes back *out*, and the good ones have a third number that is
@@ -89,7 +89,7 @@ const RETURN_SPEED := 3.0
 ## are one pull-in.
 const HOLD_TIME := 0.25
 
-## The camera is swept where the view is *going*, not only where it is (D-062).
+## The camera is swept where the view is *going*, not only where it is (D-086).
 ## A wall arriving behind the Bog is arriving at a known rate — the rate the
 ## player is turning — so it can be seen 0.14 s early and the boom can start
 ## shortening before it has to. This is the only thing that actually removes a
@@ -163,7 +163,7 @@ var _shoulder: float = SHOULDER_DEFAULT
 ## the shoulder it allows at that depth, as a fraction. The camera sits at these,
 ## and they only ever lag behind the scenery outwards. The shoulder is a fraction
 ## rather than a length because the length it is a fraction *of* shrinks with the
-## boom (D-059), and easing a number whose scale is moving under it would put the
+## boom (D-083), and easing a number whose scale is moving under it would put the
 ## drift back in that this was written to take out.
 var _boom_clear: float = DISTANCE_DEFAULT
 var _shoulder_room: float = 1.0
@@ -322,12 +322,12 @@ func _apply_zoom(delta: float) -> void:
 ## sweep: looking down lifts the boom into them like any wall.
 ##
 ## Each channel then *approaches* what it was asked for rather than jumping to it
-## (D-062): in at a speed, out on a held, capped exponential, and clamped every
+## (D-086): in at a speed, out on a held, capped exponential, and clamped every
 ## frame to what the honest sweep says is clear. The clamp is what makes the
 ## slowness free — the camera cannot be a frame late into a wall no matter how
 ## gentle the easing is, because the easing never gets the last word.
 ##
-## The shoulder is an angle, not a length (D-059). It is there to keep the Bog
+## The shoulder is an angle, not a length (D-083). It is there to keep the Bog
 ## off the crosshair, and a lens half as far back needs half as much of it to do
 ## that — so it is scaled by how much of the boom survived. Held at its full
 ## 0.62 m while the boom came in, it swung the picture sideways: the Bog slid
@@ -367,7 +367,7 @@ func _place_camera(delta: float) -> void:
 	# Bog's head is a test of the scenery 3.6 m from the thing it is placing.
 	var shoulder := _shoulder * _boom_clear / maxf(_distance, 0.001)
 	var boom_point := pivot + basis.z * _boom_clear
-	# The shoulder is carried as a fraction (D-059), so its speeds have to be
+	# The shoulder is carried as a fraction (D-083), so its speeds have to be
 	# converted out of metres into fractions-of-a-shoulder per second. Below a few
 	# centimetres of shoulder there is nothing left worth rate-limiting and the
 	# division would only make the limit enormous, so the scale floors out.
@@ -390,7 +390,7 @@ func _place_camera(delta: float) -> void:
 	#
 	# All of this is done in the boom's own space so that the player's own turning
 	# is not in it: what is left is the correction alone, and it is the correction
-	# alone that gets the rate limit (D-062). Aiming the lens at a world point
+	# alone that gets the rate limit (D-086). Aiming the lens at a world point
 	# directly, as this used to, meant slerping against a frame that was itself
 	# rotating and there was no honest way to say how fast the *correction* moved.
 	var want_dir := Vector3(0.0, 0.0, -1.0)
@@ -412,7 +412,7 @@ func _place_camera(delta: float) -> void:
 
 
 ## The boom's basis as it will be in `LOOKAHEAD` seconds if the player keeps
-## turning at the rate they are turning now (D-062).
+## turning at the rate they are turning now (D-086).
 func _lead_basis(basis: Basis, delta: float) -> Basis:
 	var step := maxf(delta, 0.0001)
 	var moved_yaw := _yaw - _last_yaw
@@ -438,7 +438,7 @@ func _lead_basis(basis: Basis, delta: float) -> Basis:
 ## Move one channel a frame's worth towards `want`, and return the new value and
 ## what is left of its hold.
 ##
-## The shape of this is the whole of D-062. Coming in is rate-limited but then
+## The shape of this is the whole of D-086. Coming in is rate-limited but then
 ## clamped to `hard`, so the limit buys smoothness on everything the lead saw
 ## coming and gives it straight back when it did not — the camera is never in a
 ## wall for a frame in exchange for being gentle. Going out is an exponential,
@@ -466,7 +466,7 @@ func _approach(current: float, want: float, hard: float, hold: float, delta: flo
 ## rather than collapsing the camera into the Bog's skull.
 ##
 ## That fallback used to be conditional on `intersect_shape` also reporting an
-## overlap at the start, and it is not any more (D-062). `cast_motion` returns a
+## overlap at the start, and it is not any more (D-086). `cast_motion` returns a
 ## safe fraction of zero both when the sphere is genuinely wedged and when it is
 ## merely inside the solver's own contact margin while still technically clear —
 ## and only the first of those satisfied `intersect_shape`. So a sphere sitting a

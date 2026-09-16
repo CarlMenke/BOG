@@ -400,7 +400,7 @@ func _build_capture_bases() -> void:
 		base.position = layout.bases[team]
 		holder.add_child(base)
 		# And the vault inside it, which is where the cards actually stand
-		# (D-068). Drawn as its own small ring rather than folded into the base's
+		# (D-092). Drawn as its own small ring rather than folded into the base's
 		# so the two read as different promises: the big one is the team's
 		# ground, the small one is the thing you walk onto to bank — and the
 		# thing an enemy stands on for three seconds to take a letter away.

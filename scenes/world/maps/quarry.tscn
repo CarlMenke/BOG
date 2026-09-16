@@ -1,6 +1,6 @@
 [gd_scene load_steps=3 format=3 uid="uid://bgubmapquarry01"]
 
-; Twin Quarry — the sixth map, and the first built for Capture G·U·B (D-058).
+; Twin Quarry — the sixth map, and the first built for Capture B·O·G (D-058).
 ;
 ; Like Kopje Crossing, Lantern Wharf and Halcyon Wake this scene has no geometry
 ; in it at all. `scripts/world/maps/quarry_map.gd` extends `StaticMap` and builds
@@ -13,7 +13,7 @@
 ; base.
 ;
 ; The spoil rocks are on the solid side of that line and the rest of the kit is
-; not, which is the point: a rock the size of a Gub reads as cover, so it is
+; not, which is the point: a rock the size of a Bog reads as cover, so it is
 ; cover, and it is squashed to 1.2 m so it is a *kerb* rather than a fourth
 ; height nobody declared. A pebble or a weed is obviously not cover and is
 ; walked through.
@@ -45,7 +45,7 @@
 ;                each way round. See the markers below for why they are not
 ;                three neutral points.
 ;
-; `tools/preview_map.gd` stands a Gub on every pad, `tools/parkour_report.gd`
+; `tools/preview_map.gd` stands a Bog on every pad, `tools/parkour_report.gd`
 ; walks the jump graph, proves the benches are reachable only by the ramps and
 ; that the columns and rim are reachable by nothing, and measures the longest
 ; sightline, and `tools/playthrough.gd` plans the capture layout off the

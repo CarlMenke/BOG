@@ -72,7 +72,7 @@ var _hold_seconds: int = 0
 ## Capture B·O·G (D-051): the card up is a carry with no clock, so the lamp is
 ## full and the caption says where to take it rather than how long is left.
 var _carrying: bool = false
-## A steal in progress that this player can see the point of (D-070): either
+## A steal in progress that this player can see the point of (D-094): either
 ## theirs, or one being committed against their own vault. 0 when there is none.
 var _steal_letter: int = 0
 var _steal_fill: float = 0.0
@@ -143,7 +143,7 @@ func _draw() -> void:
 		_draw_lamp(Rect2(Vector2(left + index * (CELL.x + CELL_GAP), 0.0), CELL), bit)
 		index += 1
 	# A steal outranks the hold caption, and the two cannot both be running: a
-	# steal needs empty hands (D-068), so nothing is being held while one is.
+	# steal needs empty hands (D-092), so nothing is being held while one is.
 	if _steal_letter != 0:
 		_draw_steal_caption()
 	elif _hold_letter != 0:

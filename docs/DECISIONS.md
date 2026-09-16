@@ -10438,7 +10438,7 @@ lying around since D-029 is packed into the binary players download — 142 of
 them in this export's log. Nothing about that changed today and it is not this
 entry's to fix, but it is written down because the number above is otherwise
 unexplainable and because the fix is one path in one line.
-## D-058 — Twin Quarry: the first map drawn for Capture G·U·B, with each base a storey up on a cut bench reached by two haul ramps, and a rotational layout whose middle has to be solid
+## D-082 — Twin Quarry: the first map drawn for Capture G·U·B, with each base a storey up on a cut bench reached by two haul ramps, and a rotational layout whose middle has to be solid
 The user: *"I want to build a new map for the new capture the flag gamemode.
 This map is geared towards 2 teams with either identical or mirrored or mostly
 identical sides. There will be the base tile ideally surrounded with some small
@@ -10466,7 +10466,7 @@ so every peer builds the same pit by construction rather than by a seed.
 - **Props out of the Stylized Nature MegaKit**: rubble and weeds banked against
   every cut face, spoil in the empty corners, bushes round the puddles and dead
   trees on the rim. All of it was non-collision as first built, and **the spoil
-  rocks should not have been** — see D-061, which makes them solid.
+  rocks should not have been** — see D-085, which makes them solid.
 - Eight pads on the pit floor, four a team — **none on a bench**. You spawn
   outside your own base and run in, which is what an attacker does too, and is
   what keeps the ramps the busiest ground on the map.
@@ -10475,20 +10475,20 @@ so every peer builds the same pit by construction rather than by a seed.
 
 ### The three numbers the brief turned into
 **Four metres, because that is over everything.** The bench face has to be a
-wall or "two ways up" means nothing. The Gub's jump reaches 1.69 m, its leap
+wall or "two ways up" means nothing. The Bog's jump reaches 1.69 m, its leap
 2.30 m, and the one-tick dive 4.23 m of rise — but only off a take-off edge;
 from flat ground `parkour_report` allows 3.5 m. At 4.0 m the face is unclimbable
 from the floor, and the cover is kept back from it so no dive off a block
 reaches it either.
 
-**Two ramps at 25.2 degrees, because the Gub has no step-up.** A staircase is a
+**Two ramps at 25.2 degrees, because the Bog has no step-up.** A staircase is a
 wall to it (D-057), so the only climbable slope is a ramp, and 4 m over 8.5 m is
 comfortably under `floor_max_angle`. Each ramp is a wedge, solid underneath, and
 declares a landing every 0.9 m of rise on its centreline — the yacht's pattern,
 and the thing that makes the report call the bench reachable rather than
 stranded. The lowest landing is 0.9 m, which is a hop from flat ground.
 
-**A 1.8 m wall, because 1.55 and 1.69 are either side of it.** A Gub is 1.55 m
+**A 1.8 m wall, because 1.55 and 1.69 are either side of it.** A Bog is 1.55 m
 and its eyes are at 1.45, so it cannot see over; its jump reaches 1.69, so it
 cannot clear it. It *can* leap onto it (2.30 m), which is the defender's perch
 and is meant to be. Three gaps in it: the head of each ramp, and a drop port
@@ -10531,7 +10531,7 @@ measurements plus a margin:
   somebody reads the whole pit from. The report found it; that is what it is for.
 - Longest eye-to-eye line: **26.1 m on the floor** (limit 30) and **43.9 m from
   a landing** (limit 46). The roof number is the loosest on any map and is meant
-  to be: every landing here puts a Gub's eyes between 2.65 m and 5.45 m up, which
+  to be: every landing here puts a Bog's eyes between 2.65 m and 5.45 m up, which
   is over the top of all the 3 m cover, so only the columns and the rim break a
   line like that. What the layout is actually holding is base to base, and the
   Stack closes that.
@@ -10586,12 +10586,12 @@ wide.
 10.2 m column is a wall the third-person camera cannot get above, so a pit with
 seventeen of them is a canyon maze whatever its footprint — the camera spent the
 whole map against rock, and two pads had a face three metres in front of them.
-**A 3 m block blocks a standing Gub's line exactly as well**, because the
+**A 3 m block blocks a standing Bog's line exactly as well**, because the
 sightline scan runs at eye height, 1.45 m. So the quarter, outer and shelf
 columns became blocks, the blocks went from 2.6 m to 3.0 m (still one leap off a
 1.2 m kerb, since a leap lifts 2.30), and what is left tall is eleven: the
 Stack, and the columns that have to break a line seen from a landing, where a
-Gub's eyes are 2.65 m to 5.45 m up and every 3 m block is beneath them.
+Bog's eyes are 2.65 m to 5.45 m up and every 3 m block is beneath them.
 
 That is the height rule the map now runs on, and it is worth stating plainly:
 **tall rock is for sightlines from above; 3 m cover does everything that matters
@@ -10607,7 +10607,7 @@ are drawn as `MultiMeshInstance3D`, which `StaticMap._collect_meshes` does not
 even look at — it collects `MeshInstance3D` — so there is no ordering trap here
 for somebody who later moves the `super()` call.
 
-**That was right for the weeds and wrong for the boulders**, and D-061 is the
+**That was right for the weeds and wrong for the boulders**, and D-085 is the
 correction: a rock big enough to stand behind has to be something you cannot
 stand inside. The spoil rocks moved above `super()` and into the collision sweep;
 everything else here stayed passable.
@@ -10623,7 +10623,7 @@ one.
   and it does not fix what the request is about: a canyon at 48 m is still a
   canyon.
 - **Dropping the tall columns altogether.** Only they break a line from a bench
-  or a wall top, where a Gub's eyes clear every block on the map.
+  or a wall top, where a Bog's eyes clear every block on the map.
 - **A 5.6 m middle height.** It would need to be out of reach of a one-tick dive
   off a 3 m block, which is 7.2 m, so it cannot exist next to the cover the map
   is made of.
@@ -10643,7 +10643,7 @@ one.
 - **Terracing the cliff inward**, which is what a worked quarry actually looks
   like. Every ledge is a perch and a perch has to be proved unreachable, so the
   terracing is above the rim and steps outward instead.
-- **Stairs up to a bench.** The Gub has no step-up (D-057).
+- **Stairs up to a bench.** The Bog has no step-up (D-057).
 - **A third way up.** A 1.2 m kerb near the bench face puts a one-tick dive on
   the top; the cover is kept back from the face on purpose.
 - **Blocks without a kerb against them.** 3 m from flat ground is a dive only,
@@ -10656,7 +10656,7 @@ one.
   metres — all of the map anybody plays in — a flat white field with the cover
   invisible in it. The height density came down from 0.12 to 0.02.
 
-## D-059 — The shoulder is an angle, not a length: it comes in with the boom, and the sweep runs boom first
+## D-083 — The shoulder is an angle, not a length: it comes in with the boom, and the sweep runs boom first
 *Amends D-045's placement. The sweeps, the radii, the margin and the ease are
 unchanged; the order they run in and the length of the shoulder are not.*
 
@@ -10669,9 +10669,9 @@ camera makes contact with the wall it'll move left first"*.
 **What was actually happening.** Nothing was inverted and nothing was a frame
 late. The rig placed the lens at `(shoulder, 0, boom)`, and only the boom was
 allowed to come in — the shoulder stayed at its full 0.62 m all the way. A lens
-0.62 m to one side at 3.6 m back holds the Gub about a tenth of the frame off
+0.62 m to one side at 3.6 m back holds the Bog about a tenth of the frame off
 centre; the same 0.62 m at 0.7 m back holds it near the edge. So every time the
-camera touched something behind the Gub, the Gub *slid sideways across the
+camera touched something behind the Bog, the Bog *slid sideways across the
 frame* while it came in, and slid back as it went out. Measured on a wall walked
 into at 0.6 rad/s, that is most of a screen width — 745 px of 1,152 — at up to
 20 px a frame.
@@ -10687,8 +10687,8 @@ Hence "inverted **sometimes**", and hence "it'll move left **first**".
 angle rather than a distance: it is scaled by how much of the boom survived the
 sweep, so the lens always sits on the line from the pivot to where the
 unobstructed camera would be. `shoulder_now / boom_clear` is constant, which is
-exactly the Gub's place in the frame, so a pull-in is a pull-in and nothing
-else. The Gub is no smaller a share of the picture than it was; it just stops
+exactly the Bog's place in the frame, so a pull-in is a pull-in and nothing
+else. The Bog is no smaller a share of the picture than it was; it just stops
 walking across it.
 
 That forces the **sweeps to swap order**. D-045 swept pivot → shoulder →
@@ -10698,12 +10698,12 @@ tested from the *full* shoulder, a corridor the lens is no longer in once the
 shoulder is scaled down. Sweeping the boom from the pivot first and then out to
 the shoulder from wherever the boom got to puts the lens exactly at the end of
 the swept path again, and it tests the shoulder at the depth the lens is
-actually at rather than 3.6 m away from it at the Gub's head. D-045's objection
+actually at rather than 3.6 m away from it at the Bog's head. D-045's objection
 to the old `SpringArm3D` was that it tested a line the camera was never on; the
 camera *is* on this one, and travels it in this order.
 
 Two consequences worth naming. The shoulder now collapses when the **lens's**
-own position is against a wall rather than when the Gub's head is, so swinging
+own position is against a wall rather than when the Bog's head is, so swinging
 the view into a wall gives up the side offset and keeps the distance, where
 before it kept the offset and gave up the distance: `camera_range`'s "wall on
 the right" leg now comes no closer than 1.36 m, against 0.64 m before. And the
@@ -10711,7 +10711,7 @@ lens is off the aim ray whenever the boom is short, not only when a wall
 squeezed the shoulder, so the crosshair correction D-045 added — turn the lens
 in to meet the aim ray where the aim ray meets the world — now runs on every
 pull-in. That is what it is for. `aim_ray` itself is untouched, so a wall behind
-the Gub still cannot move a spear (D-025).
+the Bog still cannot move a spear (D-025).
 
 **Checked.** `tools/camera_range.tscn` gains a third verdict, `frame`, and a
 third `also` in the gate: every frame, the lens may not sit further off the
@@ -10734,7 +10734,7 @@ survives this, it is a second bug and this entry does not cover it.
 ### Rejected
 - **One sweep straight from the pivot to the camera's ideal point.** It is the
   shortest way to say "test where the lens goes", and it fails against a wall
-  the Gub is standing beside: the diagonal is blocked in its first few
+  the Bog is standing beside: the diagonal is blocked in its first few
   centimetres, and the whole boom is lost to an obstacle that is only in the way
   of the side offset. The L keeps those two answers separate.
 - **Easing the shoulder in.** Any frame spent easing a lens *towards* clear is a
@@ -10743,13 +10743,13 @@ survives this, it is a second bug and this entry does not cover it.
 - **Keeping the shoulder in metres and damping the slide.** The slide would then
   be slower and still wrong, and a damped lateral offset is a lens that lags the
   boom — the thing D-045 spent its ease budget avoiding.
-- **Fading the Gub out when the camera is close.** It hides the symptom, costs a
+- **Fading the Bog out when the camera is close.** It hides the symptom, costs a
   material swap on the mesh the player looks at most, and does nothing about the
   picture moving.
 - **A pitch-based shoulder or a smaller `SHOULDER_DEFAULT`.** Both change how
   the game is framed everywhere to fix what happens against a wall.
 
-## D-060 — A second asset kit, and Lantern Wharf's plant: Factory Kit props above head height or flat on the floor, and never at the height of cover
+## D-084 — A second asset kit, and Lantern Wharf's plant: Factory Kit props above head height or flat on the floor, and never at the height of cover
 The user: *"can we get a new asset pack. maybe 2? one for like industrial stuff,
 we can use this on some other maps too. and maybe an asset pack for rocks and
 stuff"*, and then, asked which: the industrial one, and no rock pack.
@@ -10763,16 +10763,16 @@ Three things about it decided that it was worth taking over the alternatives:
 
 - **Everything is on a one-metre grid.** `pipe-large` is exactly 1 m cubed,
   `catwalk-straight` is 1.00 x 0.60 x 1.26. This project lays maps out of tables
-  of metres (D-042, D-056, D-057, D-058), so a run of n metres of pipe is n
+  of metres (D-042, D-056, D-057, D-082), so a run of n metres of pipe is n
   pieces and every joint lands on a whole metre by construction.
 - **One 64-pixel colour atlas** across all 143 models, one surface each, 70 to
   416 triangles. Scattering it costs nothing.
-- **It is already Gub-scale.** `structure-tall` is 2.0 m against a 1.81 m Gub, so
+- **It is already Bog-scale.** `structure-tall` is 2.0 m against a 1.81 m Bog, so
   nothing needs the 0.3x the MegaKit's grass needed (`PropScatter.DENSE_LAYERS`).
 
 **No rock pack.** The kit already in the project *is* Quaternius's Stylized
 Nature MegaKit, which carries 27 rocks, and Twin Quarry's rubble and spoil heaps
-are made of them (D-058). A second nature pack would have duplicated that and
+are made of them (D-082). A second nature pack would have duplicated that and
 added a style clash to police.
 
 `PropScatter` grew `FACTORY` beside `KIT`, and the mesh extraction the two share
@@ -10807,9 +10807,9 @@ What the kit adds is the plant around them, in `WharfMap._build_plant`, after
   the aisles, a centimetre up and casting nothing, exactly like the painted
   stripes they sit among.
 
-**Nothing is between 0.3 m and 2.4 m anywhere a Gub can walk, and that rule is
+**Nothing is between 0.3 m and 2.4 m anywhere a Bog can walk, and that rule is
 the whole decision.** On Twin Quarry the equivalent rule was "hug a face"
-(D-058); here it has to be stricter, because Lantern Wharf's entire grammar is
+(D-082); here it has to be stricter, because Lantern Wharf's entire grammar is
 *this is cover and that is not*. A crate is 1.2 m and hides you; a single is
 2.6 m and hides you; both are solid. A 1.5 m machine standing in an aisle that a
 spear flies straight through is a lie the player only finds out about by dying.
@@ -10820,7 +10820,7 @@ The wall tops are the one place on the map where something can be put that is
 neither cover nor an obstacle, and that is not a claim this made — it is a thing
 `parkour_report` proves on every build, for all 56 tower and wall tops (D-056).
 
-Props are `MultiMeshInstance3D` for the reason Twin Quarry's are (D-058): one
+Props are `MultiMeshInstance3D` for the reason Twin Quarry's are (D-082): one
 draw call per model rather than per prop, and a multimesh is not something
 `StaticMap`'s collision sweep can pick up by accident, because that only collects
 `MeshInstance3D`.
@@ -10833,7 +10833,7 @@ for a person.
 - **Replacing the containers with kit models.** There are none, and the boxes
   are the searched layout rather than dressing.
 - **Catwalks anywhere.** They read as walkable, they are not collision, and the
-  Gub has no step-up to climb the stairs that come with them (D-057).
+  Bog has no step-up to climb the stairs that come with them (D-057).
 - **Machines, hoppers or boxes standing on the yard floor.** Body height, not
   solid: see the rule above. They went on the wall tops instead.
 - **Pipes at the foot of the wall.** A 1 m pipe lying on the concrete is crate
@@ -10842,12 +10842,12 @@ for a person.
   uses them.
 - **Committing the FBX and OBJ copies.** Three formats of 143 models to use one.
 
-## D-061 — Twin Quarry's spoil rocks are solid, kerb-high and declared; the pebbles stay walk-through because the Gub has no step-up
+## D-085 — Twin Quarry's spoil rocks are solid, kerb-high and declared; the pebbles stay walk-through because the Gub has no step-up
 The user: *"for twin quarry the rocks need to be physical. you cant just be able
 to hide inside them they need to be actually real not just a model with no
 collision."*
 
-D-058 drew one rule for the quarry's props — hug a face, change nothing — and
+D-082 drew one rule for the quarry's props — hug a face, change nothing — and
 then broke it by scattering `Rock_Medium_*` boulders big enough to stand behind.
 A rock you walk into and stand inside is worse than no rock: the map's whole
 readability rests on *pale stone you climb, dark stone you cannot*, and a third
@@ -10872,12 +10872,12 @@ They are tinted `STONE_CUT` rather than the raw grey the pebbles get, because
 pale means climbable on this map and these are climbable.
 
 **Undeclared solid geometry is the failure this project keeps meeting.** A rock a
-Gub can stand on that `parkour_report` has never heard of is exactly the shape of
-bug D-042 and D-058 were written about, so the declaration is not bookkeeping —
+Bog can stand on that `parkour_report` has never heard of is exactly the shape of
+bug D-042 and D-082 were written about, so the declaration is not bookkeeping —
 it is the thing that makes the rock real to the checker as well as to the player.
 
 ### What stayed walk-through, and why that is not the same bug
-- **Pebbles and rubble.** About 0.4 m, and **the Gub has no step-up** (D-057
+- **Pebbles and rubble.** About 0.4 m, and **the Bog has no step-up** (D-057
   measured that against stair treads). Solid, a pebble is not an obstacle, it is
   something you stub yourself on every few metres for nothing; and nobody hides
   behind 0.4 m of stone. So it is ground texture, and it is drawn as ground
@@ -10925,7 +10925,7 @@ kerb to climb from.
 - **Keeping the random scatter and just adding collision.** It had already put a
   heap 1.4 m from a spawn pad.
 
-## D-062 — The quarry's wedge parity is `frame * toward`, not the axis: two invisible ramps, five faces wound apart, and a paint dash with a twist in it
+## D-086 — The quarry's wedge parity is `frame * toward`, not the axis: two invisible ramps, five faces wound apart, and a paint dash with a twist in it
 The user: *"the quarry still has a few issues. each base has one transparent
 ramp and one that looks fine just the texture is a little glitchy"*.
 
@@ -10974,7 +10974,7 @@ now, and the flank normal is derived from the span rather than from
 
 ### What this says about the checks
 Nothing in the gate could have caught any of it. `parkour_report` asks whether a
-Gub can stand and jump on the map and `preview_map` asks whether the collision is
+Bog can stand and jump on the map and `preview_map` asks whether the collision is
 there; neither renders a ramp and looks at it. The map passed 11 of 11 and 60 of
 60 with two of its four ramps invisible. **The tools prove the map is playable,
 not that it is visible**, and the only thing that catches a winding fault is a
@@ -10983,7 +10983,7 @@ this either, which is why the fix was verified from the pit floor at the foot of
 each of the four ramps separately.
 
 This is the second winding bug on this map; the first was `_slab()`'s top face
-(D-058), found because the letter cards settled in the wrong place. Both came
+(D-082), found because the letter cards settled in the wrong place. Both came
 from writing a corner order for one case and assuming it generalised. The lesson
 that is now written into `_wedge` is to derive the parity rather than to spell
 out the winding per face.
@@ -10999,7 +10999,7 @@ after, and no table value, span, foot, head or angle moved.
   two frames times two climb directions is twenty orderings that have to agree,
   which is how this went wrong in the first place.
 
-## D-063 — Lantern Wharf's open containers and its works: a through-route not a pocket, everything body-high made solid, and two perches that measured their way back out again
+## D-087 — Lantern Wharf's open containers and its works: a through-route not a pocket, everything body-high made solid, and two perches that measured their way back out again
 The user: *"for the wharf, there should be a few crates ou can walk into just
 like the rust map. Its also missinga few more industrial things like a forklift
 as well as some barrels and a few more things"*.
@@ -11030,20 +11030,20 @@ off the other — so the longest line threadable through one is about 17 m.
 y = 0, so running in is running rather than a step, and the inside of an open
 container is not a new standable height for the sightline scan to have to learn
 about. The roof is still 2.6 m with the two landing records the table always
-wrote. Interior faces stop a Gub from the inside because `StaticMap` bakes with
+wrote. Interior faces stop a Bog from the inside because `StaticMap` bakes with
 `backface_collision` on (D-031).
 
 ### The works, and the rule they had to satisfy
 Two forklifts, 36 drums (24 upright at 0.90 m, 12 on their side at 0.60 m),
 pallet stacks and pipe-stock bundles — **all built before `super()`, so all
-solid**. D-060 set the rule for this map: a prop a Gub can walk among is either
+solid**. D-084 set the rule for this map: a prop a Gub can walk among is either
 above head height, flat on the ground, or **real collision**. Barrel height is
 crate height and crates are cover here, so a barrel that a spear passes through
-is exactly the lie D-060 exists to forbid. Every drum lid is a declared
+is exactly the lie D-084 exists to forbid. Every drum lid is a declared
 `Platform`, because a 0.30 m lid is wider than the sphere on the bottom of a
-Gub's capsule and is therefore somewhere to stand, and undeclared standable
+Bog's capsule and is therefore somewhere to stand, and undeclared standable
 geometry is invisible to `parkour_report`. Pallets and pipe stock are 0.28 m —
-under D-060's own 0.3 m line — so collision, no landing record.
+under D-084's own 0.3 m line — so collision, no landing record.
 
 Neither Kenney industrial kit has a forklift, a barrel or a pallet; both model
 lists were read rather than guessed at. They are built in code, which is what
@@ -11112,12 +11112,12 @@ checker now knows about.
 - **Importing a forklift or barrels.** Neither kit has one, and this file already
   builds its own containers and cranes.
 
-## D-064 — The camera's bad feel near walls was an unbounded reticle rotation, not its placement: three rates, a hold, a lead, and a `calm` verdict that measures the lens's own motion
+## D-088 — The camera's bad feel near walls was an unbounded reticle rotation, not its placement: three rates, a hold, a lead, and a `calm` verdict that measures the lens's own motion
 The user: *"set another agent on really fine tuning the camera when it hits
 walls and stuff, maybe do some research on how other devs have done this in the
 past, we seem to be making very minimial progress in this area"*.
 
-That last clause was the brief. D-045 and D-059 each fixed a real defect and the
+That last clause was the brief. D-045 and D-083 each fixed a real defect and the
 camera still did not feel right, which usually means the model is wrong rather
 than the tuning. So this started with research rather than another patch.
 
@@ -11147,7 +11147,7 @@ defects:
 1. **No hold.** Nothing kept the nearest point, so every obstruction crossing the
    boom was a full in-and-out cycle.
 2. **The reticle correction was unbounded rotation, and this is the big one.**
-   D-059 made the shoulder shrink with the boom, which means `look_at(meet)` now
+   D-083 made the shoulder shrink with the boom, which means `look_at(meet)` now
    fires on *every* pull-in. `meet` is a raycast that jumps from 2 m to 60 m the
    moment the aim ray crosses an edge. Measured: **13.84 degrees in a single
    frame, 830 deg/s, with nobody touching the mouse.** That — not where the lens
@@ -11190,7 +11190,7 @@ the view was *cut* rather than turned are excluded.
 
 Over 1,620 turned frames:
 
-| | D-059 | now |
+| | D-083 | now |
 |---|---|---|
 | uncommanded lens turn, worst | 13.84 deg/frame | **1.00 deg/frame** |
 | frames over 1.2 deg/frame | 59 | **0** |
@@ -11232,7 +11232,7 @@ frame. It is reverted and the comment says why.
 - **Treating "instant" as a fast damping.** It is the absence of one, and the
   hold is what was actually missing.
 
-## D-065 — Twin Quarry: team brick, real gravel, dressed stone, and the Stack replaced by a shaft that kills — which cost nine sightlines and bought the map its middle back
+## D-089 — Twin Quarry: team brick, real gravel, dressed stone, and the Stack replaced by a shaft that kills — which cost nine sightlines and bought the map its middle back
 The user, in two messages: *"for the quarry map can we make one base out of blue
 bricks and one base out of red bricks. the ground texture can we change to a more
 real gravel texture, and for all the carved stone inside the map can we make
@@ -11253,7 +11253,7 @@ field rather than painted on, so the joints are recessed under the normal map
 instead of being a grid drawn on a flat wall.
 
 **The floor is gravel with stones in it.** The first floor was two greys of
-simplex over a four-metre tile and at the height a Gub's eye actually sits it
+simplex over a four-metre tile and at the height a Bog's eye actually sits it
 read as damp cardboard, because gravel has a *grain size* — a chipping is a few
 centimetres — and a texture that never resolves one is a photograph of a car park
 taken from an aeroplane. `_gravel_images()` draws the stones: cellular noise
@@ -11266,14 +11266,14 @@ a sawn face two hundred metres of drill line long; a block is a lump somebody
 worked all the way round. So `_carved_images()` runs its tool marks diagonally
 and crossing, and draws a chamfer into the arris — which is what stops a 3 m cube
 reading as a texture-mapped cube, since the edge then catches light whatever the
-sun is doing. Same ochre, so D-058's rule holds: pale means you can climb it.
+sun is doing. Same ochre, so D-082's rule holds: pale means you can climb it.
 
 Building the map went from 61 ms to 266 ms, all of it in those three images.
 
 ### The Stack became a shaft, and what that cost
 The monolith at the origin was not decoration. Under a rotational layout every
 spawn pad's line to its antipode runs through the origin, and so does base to
-base — **one rock at the origin was closing nine sightlines at once** (D-058).
+base — **one rock at the origin was closing nine sightlines at once** (D-082).
 
 **A hole closes none of them.** A straight line between two pairs of eyes 1.45 m
 over a flat floor does not care what is underneath it; a pit is more transparent
@@ -11310,7 +11310,7 @@ the map had to move. The floor is built as four slabs round it — a picture fra
 walks over. A bench ledge runs round it at -5.5 m and the lower floor is modelled
 at -16, because a shaft that ends in nothing reads as a texture error rather than
 as a quarry; **nobody ever stands on that floor**, because `void_height` is -10
-and a Gub is dead six metres before it arrives. The walls are solid rock either
+and a Bog is dead six metres before it arrives. The walls are solid rock either
 side of the void, so a spear into the shaft stops there and nobody walks out
 through the side of the hole.
 
@@ -11335,13 +11335,13 @@ across 56 m changes how the mode opens, are all for a person.
 - **Picking the brick colours by eye.** They would stop matching the nameplates
   the first time that table moved.
 
-## D-066 — Four blocks on the shaft's lip and no more, and the stone apron that was never designed: a literal typed twice is a coplanar face
+## D-090 — Four blocks on the shaft's lip and no more, and the stone apron that was never designed: a literal typed twice is a coplanar face
 The user: *"I want there to only be a few blocks around the big hole not
 protecting it all the way around, I want it to be a very big hazard for this
 map. Also there are some textures that overlap and glitch out around the hole"*.
 
 ### The lip is four blocks, and four is the floor not the taste
-D-065 put seven blocks round the shaft. Only **four of them were load-bearing**:
+D-089 put seven blocks round the shaft. Only **four of them were load-bearing**:
 each sits where one of the four spawn-to-spawn lines crosses the shaft's edge,
 and pad-to-pad is a hard assertion in `parkour_report` rather than a budget, so
 those four cannot go. The other three were bought purely to shorten the ground
@@ -11354,7 +11354,7 @@ lure or a shove is a kill. So the four stay, the three are gone, and the ground
 limit carries the openness at 46 m instead of the geometry carrying it.
 
 Twin Quarry's ground sightline has now gone 26.1 m → 34.1 m → **43.9 m** across
-D-065 and this, which is worth saying plainly: it is a materially more open map
+D-089 and this, which is worth saying plainly: it is a materially more open map
 than the one the original search produced. A spear cannot cross 44 m, so the far
 end of that line is sight rather than threat — but the middle of this map is now
 a void people watch each other across, not a rock they fight around.
@@ -11392,7 +11392,7 @@ that was already there. 3,842 triangles before and after.
 
 The other candidate fix — shrinking the floor frame back to 8.1 — was rejected: it
 hands the lip band to the rim material and puts a real 1.6 m stone apron round
-the hole, which is a visible change to the map and the opposite of what D-065
+the hole, which is a visible change to the map and the opposite of what D-089
 describes. Dropping the rock below the floor keeps the gravel running unbroken to
 the lip, which is what it always looked like it was meant to do.
 
@@ -11415,7 +11415,7 @@ ledge corner, one three-quarter over a corner, one top-down wide — checked at
 three angles and four distances, because z-fighting is view-dependent and a
 single render can miss it.
 
-That is the second time in two decisions (D-062 was the first) that a purely
+That is the second time in two decisions (D-086 was the first) that a purely
 visual fault passed every check in the gate. `parkour_report` and `preview_map`
 prove a map is *playable*; nothing in the suite proves it is *looked at*.
 
@@ -11428,7 +11428,7 @@ prove a map is *playable*; nothing in the suite proves it is *looked at*.
   The literal is the bug; both overlaps were one number written twice and not
   known to be the same number.
 
-## D-067 — Four blocks on the shaft's lip, placed by eye: the mirrored table was building ten and jamming two pairs into each other, and the duty it was doing moved out to the axis rocks
+## D-091 — Four blocks on the shaft's lip, placed by eye: the mirrored table was building ten and jamming two pairs into each other, and the duty it was doing moved out to the axis rocks
 The user: *"You are to worried about the symetry now, the blocks surrounding the
 hole, just put like 4 and call it a day, there are like 12 now and half of them
 are inside eachother because I assume you wanted to make it symetrical and you
@@ -11442,7 +11442,7 @@ right.
 
 ### Why a mirrored table is the wrong tool for a rim
 Every other piece of stone on this map is written once and placed twice by
-`turned()`, and that is what keeps the two halves congruent (D-058). Round a hole
+`turned()`, and that is what keeps the two halves congruent (D-082). Round a hole
 it is exactly wrong, for a reason worth writing down: **each of the four
 spawn-to-spawn lines needs one blocker somewhere along it, not one at each end.**
 A line is blocked wherever it is blocked. So a mirrored table builds eight blocks
@@ -11473,18 +11473,18 @@ worth keeping because it is all forced:
   landing *and* a kerb to climb from — four more objects on a rim meant to be
   nearly bare.
 - **4.0 m** was rejected by `parkour_report`: it measures that dive at 4.23 m of
-  rise, so 4 m is under it and a Gub stands on one.
+  rise, so 4 m is under it and a Bog stands on one.
 - **4.6 m** clears the dive from the ground and is still reachable from the 3 m
   cover nearby, which tops out at 7.2 m — and a 7 m tower on each edge is a wall
   round the hole, which is the thing being avoided.
-- **1.85 m** is under `GROUND_LEAP` (1.9), so a Gub leaps straight onto one off
+- **1.85 m** is under `GROUND_LEAP` (1.9), so a Bog leaps straight onto one off
   the floor and nothing is stranded, and it is over the 1.45 m eye, so it still
   breaks a standing line. A quarry puts a low berm round a shaft for the same
   reason.
 
 ### The props that were hanging in the air
-The scatter was written when the middle of this map was solid rock (D-058). The
-hole came later (D-065) and nothing told the scatter, so every weed and pebble
+The scatter was written when the middle of this map was solid rock (D-082). The
+hole came later (D-089) and nothing told the scatter, so every weed and pebble
 that used to land on stone at the origin was left hanging over a sixteen-metre
 drop. `_in_hole()` is now asked before every placement — the apron walk, the
 spoil skirt, the puddle fringe — with half a metre of margin so nothing perches
@@ -11509,7 +11509,7 @@ before because they are not a `turned()` table and so were not in
 - **Lip blocks at 3.0 m.** Four kerbs on a bare rim.
 - **Lip blocks tall enough to be out of reach.** 7.2 m, which is a wall.
 
-## D-068 — The vault: a banked letter is a thing standing in a place, and an enemy can stand on it for three seconds and take it
+## D-092 — The vault: a banked letter is a thing standing in a place, and an enemy can stand on it for three seconds and take it
 The user: *"is there a spot for the teams letters to go? like on top of the base
 is there something to store them that the enemy can also steal"* — and, told that
 neither existed, *"I want both of those changes but remeber this is only for the
@@ -11608,7 +11608,7 @@ vault banks it", which is a stronger pair than the one it replaced.
 - **A new RPC for the revoke.** `_sync_letters` already pushes the whole mask;
   a second path is a second thing to keep in step.
 
-## D-069 — The letter call: "PIPWICK HAS A B" across the top of the screen, in the team's colour, in every mode
+## D-093 — The letter call: "PIPWICK HAS A B" across the top of the screen, in the team's colour, in every mode
 The user: *"There needs to be a notification at the top of your screen once a
 player picks up a letter, it should say x player name has a B for example. and
 on their last letter it should say x player has GUB. this should be for all
@@ -11616,7 +11616,7 @@ modes, the text can be the color of the team too"*.
 
 The letters were the one thing in this game that happened in silence. A card
 coming out of a corpse was announced to nobody, a carrier crossing the map was a
-Gub with something in its fist, and the only places the state existed were the
+Bog with something in its fist, and the only places the state existed were the
 letter track at the bottom of your own screen and the scoreboard behind Tab. In a
 mode whose whole tension is *who is close to winning*, that is the one fact
 everybody needs and nobody had.
@@ -11670,7 +11670,7 @@ arena instances, that driving it puts a row on screen, that a third call trims
 to `MAX_ROWS`, and that it can be cleared. 81 checks became 86.
 
 ### The steal call
-Capture G·U·B only, off `letter_stolen` (D-068): **"THISTLE STOLE A U FROM
+Capture G·U·B only, off `letter_stolen` (D-092): **"THISTLE STOLE A U FROM
 TEAM 2"**, written in the thief's colour. It names the robbed team rather than
 only the thief, because the thief's own side already knows and the side that has
 to react is the one being told it just lost a letter. It is the loudest thing
@@ -11696,8 +11696,8 @@ sentence itself.
 - **Checking it in a preview scene.** That is the bug shape this project keeps
   meeting.
 
-## D-070 — The steal bar, drawn for the thief and for the robbed and for nobody else
-D-068 put stealing on a three-second clock and broadcast how far through it was,
+## D-094 — The steal bar, drawn for the thief and for the robbed and for nobody else
+D-092 put stealing on a three-second clock and broadcast how far through it was,
 and then nothing listened. The rule shipped, the replication shipped, and the
 screen said nothing at all: a thief stood on a vault with no sign the clock had
 started, and **a defender got no warning whatever** — the first they knew was the

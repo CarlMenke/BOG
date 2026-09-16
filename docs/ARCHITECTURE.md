@@ -268,7 +268,7 @@ fallback. Its industrial dressing — pipe runs up the wall faces, machinery on 
 wall tops, panels and floor markings — is Kenney Factory Kit props added after
 the collision bake, and every one of them is above head height or flat on the
 ground: on a map whose grammar is *this is cover and that is not*, a prop at the
-height of a crate that a spear flies through is a lie (**D-060**).
+height of a crate that a spear flies through is a lie (**D-084**).
 
 **Halcyon Wake** is the fourth built map, and the tall one (**D-057**):
 `scenes/world/maps/yacht.tscn` with `YachtMap` extending `StaticMap`. A hull
@@ -284,7 +284,7 @@ holds the mast `off_limits`, measures sightlines, and — for this map only
 edge of the deck. It declares `Bases` and `Letters`, with G on the sun deck.
 
 **Twin Quarry** is the fifth built map, and the one drawn for a *mode* rather
-than for a shape (**D-058**): `scenes/world/maps/quarry.tscn` with `QuarryMap`
+than for a shape (**D-082**): `scenes/world/maps/quarry.tscn` with `QuarryMap`
 extending `StaticMap`. A 48 m stone pit inside an 11 m cliff, with each team's
 Capture G·U·B base four metres up on a cut bench in opposite corners, reached by
 two 19 degree haul ramps and by nothing else — 4 m is over every jump the Gub
@@ -295,27 +295,27 @@ down. Its symmetry is **rotational**, not mirrored, which is what puts the two
 bases on a diagonal — and which forces the middle to be solid, because under a
 turn every pad's line to its antipode runs through the origin. That rock was the
 Stack; it is now a **13 m shaft down to a bench nobody reaches**, since
-`void_height` is -10 and its floor is at -16 (**D-065**). A hole closes no
+`void_height` is -10 and its floor is at -16 (**D-089**). A hole closes no
 sightline at all, so of the nine lines the Stack was holding, the four
 spawn-to-spawn ones — a hard check — are closed by widening the two **axis
 rocks** to 8 m out at ±15.5, where all four of those lines pass. That deliberately
 keeps the duty *off* the hole's rim, which is four low blocks placed by eye, one
 to an edge and not mirrors of each other: a mirrored table builds eight to do
-four blocks' work and jams them together (**D-066**, **D-067**). The rest, bench
+four blocks' work and jams them together (**D-090**, **D-091**). The rest, bench
 to bench included, are open — the hole is meant to be the map's biggest hazard,
 not a walled garden — and the sightline limits say so. G still sits on the other diagonal.
 
 Its cover runs at three heights and the split is the map's rule: 1.2 m kerbs are
 the step up, 3 m blocks break every line at head height — the sightline scan runs
 at 1.45 m — and only eleven columns are 10.2 m. Tall rock boxes the third-person
-camera in, so it is spent only where a line has to be broken for a Gub standing
+camera in, so it is spent only where a line has to be broken for a Bog standing
 on a bench or a wall top, whose eyes are 2.65 m to 5.45 m up and clear every
 block on the map. Its props are MegaKit rubble, weeds, spoil and dead trees
 banked against the stone faces. The weeds and pebbles are `MultiMeshInstance3D`
 and pass straight through — a multimesh is not something `StaticMap`'s sweep can
 pick up by accident, because that only collects `MeshInstance3D` — but the
 **spoil rocks are solid**, built above `super()` and swept into collision like
-any slab, sitting at kerb height and declared as landings (**D-061**). The line
+any slab, sitting at kerb height and declared as landings (**D-085**). The line
 is not "props are scenery" but "anything a player could mistake for cover is
 solid".
 
@@ -365,7 +365,7 @@ declares (**D-051**). A static map built for the mode declares, on its
   spawn only on their own team's pads.
 
 **Lantern Wharf, Halcyon Wake and Twin Quarry declare all of them (D-056,
-D-057, D-058); every other map plays on a placeholder fallback**:
+D-057, D-082); every other map plays on a placeholder fallback**:
 the pads are split into one arc per team by bearing, each team's base is the pad
 nearest its arc's middle, and the letters sit between the first two bases (B at
 the midpoint, O and G either side across the axis). The host settles each card

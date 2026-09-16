@@ -1417,7 +1417,7 @@ func _run_capture() -> void:
 	_check("and it still has the letter", MatchState.team_letters(0), MatchState.LETTER_B)
 
 	# Walking over an enemy vault does nothing on its own — the card comes out on
-	# a timer, not on contact (D-068). This is the assertion that proves the
+	# a timer, not on contact (D-092). This is the assertion that proves the
 	# timer exists at all.
 	MatchState.claim_pickup(901, _capture_card(MatchState.LETTER_B))
 	_check("touching an enemy vault does not lift the card",
@@ -1433,7 +1433,7 @@ func _run_capture() -> void:
 		MatchState._steals.has(901), false)
 
 	# The steal. Peer 901 is on team 1, and takes G out of team 0's vault. The
-	# signal is captured because the HUD's banner hangs off it (D-069), and a
+	# signal is captured because the HUD's banner hangs off it (D-093), and a
 	# theft nobody is told about is the mode's loudest event going unannounced.
 	var thefts: Array = []
 	var on_theft := func(who: int, what: int, from_team: int) -> void:
@@ -1442,7 +1442,7 @@ func _run_capture() -> void:
 	_steal(901, vault_0)
 	_check("the theft is announced once", thefts.size(), 1)
 	_check("naming the thief", thefts[0][0] if thefts.size() > 0 else 0, 901)
-	_check("the letter", thefts[0][1] if thefts.size() > 0 else 0, MatchState.LETTER_G)
+	_check("the letter", thefts[0][1] if thefts.size() > 0 else 0, MatchState.LETTER_B)
 	_check("and the robbed team", thefts[0][2] if thefts.size() > 0 else -9, 0)
 	MatchState.letter_stolen.disconnect(on_theft)
 	_check("an enemy takes the card out of the vault",

@@ -809,14 +809,14 @@ check "free-for-all letter carriers" "letter_carriers: ffa PASS"     "$GODOT" --
 # frames fail. `--fixed-fps 60` so a tick of view-turning is the same on every
 # machine; headless, about two seconds.
 #
-# The second is the framing (D-059): the lens is never allowed further off the
+# The second is the framing (D-083): the lens is never allowed further off the
 # boom's axis than the unobstructed camera would be at the depth the boom got to,
-# so the Gub keeps its place in the frame while the camera comes in. With the
+# so the Bog keeps its place in the frame while the camera comes in. With the
 # shoulder held at its full length through the pull-in, 1,461 frames fail, by as
 # much as 0.62 m — which is a Gub sliding most of a screen width sideways, the
 # same way whichever way the player was turning.
 #
-# The third is how the lens *moves* rather than where it ends up (D-062), which
+# The third is how the lens *moves* rather than where it ends up (D-086), which
 # is what is left once the placement is right: no frame may turn the lens more
 # than 1.2 degrees on its own, and the frames that dolly it faster than 5.4 m/s,
 # or reverse its direction, stay under 4 % each. Without the lead sweeps, the
@@ -883,7 +883,7 @@ also "yacht playthrough" "playthrough: capture layout PASS"
 also "yacht playthrough" "capture layout on 'yacht' — declared bases"
 # A Capture B·O·G match standing up in the real arena (D-051): `arena.gd` draws
 # And on Twin Quarry, the map drawn for Capture G·U·B rather than fitted to it
-# (D-058): a stone pit whose two bases stand four metres up on cut benches with
+# (D-082): a stone pit whose two bases stand four metres up on cut benches with
 # two haul ramps each. Same four lines again — it declares bases and letters
 # too, and its letters are the first that are not three neutral points.
 check "quarry playthrough" "playthrough: PASS" \
@@ -1143,7 +1143,7 @@ check "quarry spawns and collision" "preview_map: PASS" \
 # else, no jump at all reaches a column top or the rim, no eye-to-eye line runs
 # past 30 m on the floor or 43 m from a landing, and no pad sees the other
 # base's pads — which on a rotationally symmetric map is only true because the
-# Stack stands on the origin every one of those lines runs through (D-058).
+# Stack stands on the origin every one of those lines runs through (D-082).
 check "quarry parkour and ramps" "parkour_report: PASS" \
     "$GODOT" --path "$GODOT_ROOT" --resolution 1000x1000 --script tools/snapshot.gd -- \
     res://tools/parkour_report.tscn "$GODOT_LOG_DIR/quarry_parkour.png" 30 top \

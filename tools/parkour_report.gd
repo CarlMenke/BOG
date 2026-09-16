@@ -67,14 +67,14 @@ const EXPECT := {
 	"res://scenes/world/maps/quarry.tscn": {
 		"min_platforms": 40, "min_big_edges": 0, "summit_zone": "",
 		# Both numbers are the loosest on any map, and both moved when the Stack
-		# became a hole (D-065). The rock at the origin was closing nine lines by
+		# became a hole (D-089). The rock at the origin was closing nine lines by
 		# itself — every pad to its antipode, and bench to bench — and a hole
 		# closes none of them, because a line between two pairs of eyes over a
 		# flat floor does not care what is underneath it.
 		#
 		# The pad-to-pad set is a hard check below rather than a budget, and it is
 		# closed by the two axis rocks — eight metres across the map's axes, out
-		# where every one of those four lines runs (D-067). It used to be closed
+		# where every one of those four lines runs (D-091). It used to be closed
 		# by blocks on the shaft's lip, which meant the lip had to be built where
 		# the geometry demanded rather than where it looked right; moving the duty
 		# outward freed the rim to be four blocks placed by eye, one to an edge.

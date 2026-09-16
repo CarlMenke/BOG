@@ -22,11 +22,11 @@ island and out to a results screen, and two automated checks now walk that path:
 one in a single process, one across two processes over a real socket.
 
 ```
-bash tools/smoke_test.sh        # 126 checks, ~6 minutes, finds Godot by itself
+bash tools/smoke_test.sh        # 134 checks, ~6 minutes, finds Godot by itself
 bash tools/net_test.sh          # two processes, one socket; ~45 s, run by hand
 ```
 
-`smoke_test.sh` is the gate and it passes, 126 of 126. `net_test.sh` is kept out
+`smoke_test.sh` is the gate and it passes, 134 of 134. `net_test.sh` is kept out
 of it to keep the gate fast; run it by hand after touching networking, the lobby
 or the results screen. It passes all twelve stages (200 + 34 assertions), ten of
 which end in a rematch, with the engine quiet in both processes — the error it
@@ -160,7 +160,7 @@ of what that means:
   an overcast, with each team's base four metres up on a cut bench inside a
   1.8 m wall, reached by two haul ramps and by nothing else. Its symmetry is a
   180 degree turn rather than a mirror, which is what forces the middle of the
-  map to be solid rock and G onto the other diagonal (**D-058**). It is also the
+  map to be solid rock and G onto the other diagonal (**D-082**). It is also the
   map that wrote down the height rule the others only imply: **3 m cover breaks
   every line at head height, and tall rock is only for lines seen from above** —
   ten-metre columns box the third-person camera in, so there are eleven of them
@@ -171,10 +171,10 @@ of what that means:
   `capture_steal_time` (a 1-5 s lobby dial) lifts one back out. It is the only
   score in the game that can go down. Both ends of the clock are drawn — a bar
   for the thief, an alarm for the team being robbed.
-- **Every letter is called out across the top of the screen** (**D-069**), in the
+- **Every letter is called out across the top of the screen** (**D-093**), in the
   team's colour, in every mode: picked up, the full set, and stolen. Text only,
   no sound.
-- **The camera near geometry is measured, not guessed at** (**D-064**).
+- **The camera near geometry is measured, not guessed at** (**D-088**).
   `tools/camera_range.gd` now carries a fourth verdict, `calm`, which watches the
   lens's own motion with the player's walking and turning subtracted out. The
   uncommanded rotation it was added to catch went from 13.84 deg in one frame to
@@ -184,7 +184,7 @@ of what that means:
   grid, one colour atlas) for industrial dressing, and Kenney's **City Kit
   (Industrial)** (CC0, 37 models) for what stands beyond a wall. Lantern Wharf
   uses the first for pipe runs, wall-top machinery, panels and floor markings and
-  the second for a town outside its wall; none of either is collision (**D-060**,
+  the second for a town outside its wall; none of either is collision (**D-084**,
   **D-063**). Neither kit has a forklift, a barrel or a pallet — those are built
   in code, like the map's containers and cranes already are.
 - **The UI** is themed and complete: menu with a live glade behind it, an
@@ -268,7 +268,7 @@ of what that means:
    **Halcyon Wake** (**D-057**): whether the flybridge is a hill worth taking or
    a perch with no cover, whether the 2 m walkways under the upper deck are good
    flanks or corridors, and whether the third-person camera copes in the salon
-   and under the overhangs. And **Twin Quarry** (**D-058**), whose questions are
+   and under the overhangs. And **Twin Quarry** (**D-082**), whose questions are
    the ones an elevated base raises: whether two ramps is one too few to break a
    defended bench, whether the drop port in the wall is a sniper slot, and
    whether the team whose bench U or B happens to sit beside is ahead.
@@ -374,7 +374,7 @@ Three tiers, because three different kinds of claim need three different proofs
 | `tools/net_loopback.tscn` | two processes, one socket, including a *client* using all three abilities, dying and respawning, and ten rematches with the client in the lobby for half of them (D-044). **In the gate** through `net_test.sh`, bound to 127.0.0.1 on a random port |
 | `tools/preview_map.tscn` | Rust, Kopje Crossing, Lantern Wharf, Halcyon Wake and Twin Quarry: renders one, and checks every spawn pad with the physics. **In the gate** for all five |
 | `tools/island_report.tscn` | Whisperbloom Hollow as numbers: footprint, slope, every scatter layer's placed count, tree heights, spawn spacing and the capture bases (D-055). **In the gate** on four seeds |
-| `tools/parkour_report.tscn` | every platform on a built map has its rock, fits a Gub, and is reachable from the ground (D-042); on Lantern Wharf also that no jump reaches a tower or wall top, no sightline runs past 25 m (26 m from a roof), and no pad sees the other base's pads (D-056); on Halcyon Wake every deck reachable, the mast out of reach, sightlines under 21 m on the main deck and 38 m from a landing, and nothing but the void over every edge of the deck (D-057); on Twin Quarry that each team's bench is reachable from the pit floor by its two haul ramps and by nothing else, that no jump reaches a 10.2 m column top or the rim, and that no sightline runs past 30 m on the floor or 43 m from a landing (D-058). **In the gate** for all four |
+| `tools/parkour_report.tscn` | every platform on a built map has its rock, fits a Gub, and is reachable from the ground (D-042); on Lantern Wharf also that no jump reaches a tower or wall top, no sightline runs past 25 m (26 m from a roof), and no pad sees the other base's pads (D-056); on Halcyon Wake every deck reachable, the mast out of reach, sightlines under 21 m on the main deck and 38 m from a landing, and nothing but the void over every edge of the deck (D-057); on Twin Quarry that each team's bench is reachable from the pit floor by its two haul ramps and by nothing else, that no jump reaches a 10.2 m column top or the rim, and that no sightline runs past 30 m on the floor or 43 m from a landing (D-082). **In the gate** for all four |
 | `tools/preview_*.tscn` | it *looks* right. Needs a person, always will |
 
 **`playthrough` is the one that catches integration.** Every other harness looks
