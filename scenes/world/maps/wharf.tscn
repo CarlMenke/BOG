@@ -5,9 +5,12 @@
 ; Like Kopje Crossing this scene has no geometry in it at all.
 ; `scripts/world/maps/wharf_map.gd` extends `StaticMap` and builds the yard in
 ; `_ready()` from its layout tables — the floor, the container walls, the boxes
-; and crates — then calls `super()`, which sweeps them into world-space trimesh
-; collision on layer 1, and then adds the dressing: floor paint, door bars, two
-; cranes over the walls and four floodlights on the wall corners.
+; and crates, four of which are hollow and open at both ends, and the works: two
+; forklifts, three dozen drums, pallets and pipe stock. It then calls `super()`,
+; which sweeps all of that into world-space trimesh collision on layer 1, and
+; then adds the dressing: floor paint, door bars, two cranes over the walls, four
+; floodlights on the wall corners, the Factory Kit plant (D-060) and a City Kit
+; town outside the wall that is in `StaticMap.BACKDROP_GROUP` and never collision.
 ;
 ; So this file is what `static_map.gd` asks for:
 ;
