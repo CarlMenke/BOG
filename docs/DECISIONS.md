@@ -5783,3 +5783,68 @@ vault banks it", which is a stronger pair than the one it replaced.
   would undo it by accident, which is the worst possible way to lose a letter.
 - **A new RPC for the revoke.** `_sync_letters` already pushes the whole mask;
   a second path is a second thing to keep in step.
+
+## D-069 — The letter call: "PIPWICK HAS A B" across the top of the screen, in the team's colour, in every mode
+The user: *"There needs to be a notification at the top of your screen once a
+player picks up a letter, it should say x player name has a B for example. and
+on their last letter it should say x player has GUB. this should be for all
+modes, the text can be the color of the team too"*.
+
+The letters were the one thing in this game that happened in silence. A card
+coming out of a corpse was announced to nobody, a carrier crossing the map was a
+Gub with something in its fist, and the only places the state existed were the
+letter track at the bottom of your own screen and the scoreboard behind Tab. In a
+mode whose whole tension is *who is close to winning*, that is the one fact
+everybody needs and nobody had.
+
+**Two calls, because they are two different pieces of news.**
+- **Picked up** — somebody is carrying a letter *now*. This is what makes a
+  player a target, and it fires in every mode that has letters at all, off the
+  `letter_picked_up` signal that already existed for the kill feed.
+- **All three** — somebody's *scoring* mask is complete, off `letter_banked`.
+  `scoring_letters` is the pooled team mask in Teams (D-049) and the personal one
+  in a free-for-all, which is to say it is the mask that actually wins, so the
+  call fires exactly when somebody's side is done.
+
+The distinction matters and is not the obvious reading of the request: "has GUB"
+fires on the letter being **earned**, not on the third card being picked up.
+Picking up a third card is not having three — in Collect G·U·B it is the start of
+a ten-second hold anybody can interrupt, and announcing a win that has not
+happened is worse than announcing nothing.
+
+**Colour comes from `UIPalette.team_colour`**, the same source the plates, the
+kill feed and the scoreboard use, so a name is the same colour everywhere it is
+written. Outside Teams there is no team, and the call is drawn in
+`Nameplate.NEUTRAL_COLOUR` rather than in nothing.
+
+It sits under the clock and the score line in `TopBar`, which is already
+top-centre and already where the eye is. The kill feed keeps its own rows: the
+feed is a log you read after the fact, this is the line that changes what
+everybody does next.
+
+**Two rows, then the oldest is pushed off**, and the trim does `remove_child`
+before `queue_free` — the reason is written out at length in `kill_feed.gd` and
+is worth repeating here because this is the same shape of widget: `queue_free`
+defers to the end of the frame, so a loop that frees a child and re-reads
+`get_child_count()` sees the same number and spins for ever. That bug hung the
+whole process at 100% CPU on the sixth death of every match once already.
+
+### Where it is checked
+In `tools/playthrough.gd`, not in a preview scene, and deliberately: **every
+integration defect this project has had was something wired into a testbed and
+into nothing else** — the movement keys, the HUD itself, the ambience path. A
+banner that works in isolation and is missing from the shipped HUD is exactly
+that shape. So the playthrough asserts the node is in the real `hud.tscn` the
+arena instances, that driving it puts a row on screen, that a third call trims
+to `MAX_ROWS`, and that it can be cleared. 81 checks became 86.
+
+### Rejected
+- **Announcing "has GUB" when the third card is picked up.** It is not true yet
+  in Collect G·U·B, where the hold can still be interrupted.
+- **Putting it in the kill feed.** The feed is a log in the corner; this is news
+  you act on, and it belongs where the eye already is.
+- **A panel behind the text.** It floats over whatever the map happens to be, so
+  it carries a dark outline instead — a panel at the top centre would cover the
+  score line it sits under.
+- **Checking it in a preview scene.** That is the bug shape this project keeps
+  meeting.

@@ -38,6 +38,7 @@ const FLASH_TIME := 1.4
 @onready var _kill_feed: KillFeed = %KillFeed
 @onready var _lives: HBoxContainer = %Lives
 @onready var _letters: LetterTrack = %Letters
+@onready var _letter_call: LetterCall = %LetterCall
 @onready var _elder: ElderTrack = %Elder
 @onready var _abilities: HBoxContainer = %Abilities
 @onready var _spear_slot: AbilitySlot = %SpearSlot
@@ -457,11 +458,34 @@ func _on_letters_changed(_peer_id: int) -> void:
 func _on_letter_picked_up(peer_id: int, letter: int) -> void:
 	_kill_feed.add_event([peer_id, "picked up",
 		[MatchState.letter_name(letter), Pickup.LETTER_COLOUR]])
+	# And across the top of the screen (D-069). The feed is a log you read after
+	# the fact; this is the one line in the match that changes what everybody
+	# does next, so it goes where the eye already is.
+	_letter_call.picked_up(_display_name(peer_id), MatchState.letter_name(letter),
+		_call_colour(peer_id))
 
 
 func _on_letter_banked(peer_id: int, letter: int) -> void:
 	_kill_feed.add_event([peer_id, "banked",
 		[MatchState.letter_name(letter), Pickup.LETTER_COLOUR]])
+	# The mask that decides the match: pooled in Teams (D-049), personal in a
+	# free-for-all. Whoever's last letter it was gets their name on it.
+	if MatchState.scoring_letters(peer_id) == LetterCall.ALL:
+		_letter_call.has_them_all(_display_name(peer_id), _call_colour(peer_id))
+
+
+## The colour a call is written in: the player's team, or the neutral colour in
+## a mode that has no teams. Same source as the plates and the scoreboard, so a
+## name is one colour everywhere it is written.
+func _call_colour(peer_id: int) -> Color:
+	if Net.config.mode != MatchConfig.Mode.TEAMS:
+		return Nameplate.NEUTRAL_COLOUR
+	return UIPalette.team_colour(Net.player_team(peer_id))
+
+
+func _display_name(peer_id: int) -> String:
+	var who := String(Net.players.get(peer_id, {}).get("name", ""))
+	return who if not who.is_empty() else "SOMEBODY"
 
 
 ## Capture G·U·B (D-051). A carrier's death already has a kill row; this is the
