@@ -388,7 +388,12 @@ func _stage_map(arena: Arena) -> bool:
 		return false
 	_check("collision is on the world layer", body.collision_layer,
 		StaticMap.LAYER_WORLD)
-	_check("the map has geometry in it", map.triangles > 1000, true)
+	# Not 1000, which is what this was until Twin Quarry. The number is here to
+	# catch a map whose `.glb` did not import — a map that built a collision body
+	# out of nothing — and a table-built map has no `.glb` to fail: the quarry is
+	# 632 triangles of big stone slabs and is meant to be. `tools/preview_map.gd`
+	# is where a per-map floor belongs, and it already takes one (`min_triangles=`).
+	_check("the map has geometry in it", map.triangles > 300, true)
 	_check("the map has collision shapes", body.get_child_count() > 0, true)
 	_check("the match took the map's void height", MatchState.void_height,
 		map.void_height)
