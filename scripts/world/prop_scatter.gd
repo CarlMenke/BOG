@@ -26,6 +26,22 @@ extends RefCounted
 
 const KIT := "res://assets/Stylized_Nature_MegaKitStandard/glTF/%s.gltf"
 
+## The other kit, and the only industrial one: Kenney's Factory Kit, 143 models
+## on a one-metre grid sharing a single 64-pixel colour atlas (CC0, see
+## `assets/Kenney_FactoryKit/License.txt`). Nothing here scatters it — the
+## scatter is about vegetation on an island — but the loader below is the one
+## place in the project that knows how to get a mesh out of a kit file, and two
+## copies of that would be two things to fix when an import setting changes.
+const FACTORY := "res://assets/Kenney_FactoryKit/glb/%s.glb"
+
+## The third kit, and the big end of the same family: Kenney's City Kit
+## (Industrial), 37 models on the same one-metre grid and the same atlas trick
+## (CC0, see `assets/Kenney_CityKitIndustrial/License.txt`). Where the Factory
+## Kit is plant you stand next to, this is buildings, chimneys, storage tanks and
+## a water tower — the things a yard has *beyond* its wall, which is the one
+## thing a walled map cannot build for itself.
+const CITY := "res://assets/Kenney_CityKitIndustrial/glb/%s.glb"
+
 ## Physics layer 1 — "world" in project.godot. Trunks and boulders are cover, so
 ## they collide with Bogs and stop spears exactly like the terrain does.
 const LAYER_WORLD := 1
@@ -543,7 +559,26 @@ func kit_mesh(model: String) -> Mesh:
 
 ## Uncached load, also used by the landmark pass for its one-off pieces.
 static func load_kit_mesh(model: String) -> Mesh:
-	var packed := load(KIT % model) as PackedScene
+	return load_mesh(KIT % model, model)
+
+
+## The same, out of the Factory Kit. A separate entry point rather than a flag,
+## because a caller asking for "conveyor" out of the nature kit is a typo and
+## should say so rather than quietly resolve.
+static func load_factory_mesh(model: String) -> Mesh:
+	return load_mesh(FACTORY % model, model)
+
+
+## And out of the City Kit.
+static func load_city_mesh(model: String) -> Mesh:
+	return load_mesh(CITY % model, model)
+
+
+## The mesh out of a one-model kit file. Both kits are exported the same way —
+## a scene whose first `MeshInstance3D` child is the whole of the model — so this
+## is the only thing that has to know how a kit is shaped.
+static func load_mesh(path: String, model: String) -> Mesh:
+	var packed := load(path) as PackedScene
 	if packed == null:
 		push_error("PropScatter: missing kit model '%s'" % model)
 		return null
