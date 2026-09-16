@@ -154,6 +154,30 @@ of what that means:
   cumulus, a 3.6 km plain with three receding ranges, dust devils and vultures.
   None of it is collision — all of it is built after `StaticMap`'s `super()` — and
   no pad, sightline or jump moved. The gate is still 63 of 63.
+  stairs and hop steps, the sea as the void, and G two decks up (**D-057**).
+- **The sixth map** (Twin Quarry) is built the same way and is the first one
+  drawn for **Capture G·U·B** rather than fitted to it: a 48 m stone pit under
+  an overcast, with each team's base four metres up on a cut bench inside a
+  1.8 m wall, reached by two haul ramps and by nothing else. Its symmetry is a
+  180 degree turn rather than a mirror, which is what forces the middle of the
+  map to be solid rock and G onto the other diagonal (**D-058**). It is also the
+  map that wrote down the height rule the others only imply: **3 m cover breaks
+  every line at head height, and tall rock is only for lines seen from above** —
+  ten-metre columns box the third-person camera in, so there are eleven of them
+  and not seventeen. It dresses itself out of the MegaKit, none of it collision.
+- **The camera near geometry is measured, not guessed at** (**D-064**).
+  `tools/camera_range.gd` now carries a fourth verdict, `calm`, which watches the
+  lens's own motion with the player's walking and turning subtracted out. The
+  uncommanded rotation it was added to catch went from 13.84 deg in one frame to
+  1.00, and the old rig fails the new check on all three of its counts.
+- **There are three asset kits now.** The Stylized Nature MegaKit (CC0,
+  Quaternius) it always had, Kenney's **Factory Kit** (CC0, 143 models on a 1 m
+  grid, one colour atlas) for industrial dressing, and Kenney's **City Kit
+  (Industrial)** (CC0, 37 models) for what stands beyond a wall. Lantern Wharf
+  uses the first for pipe runs, wall-top machinery, panels and floor markings and
+  the second for a town outside its wall; none of either is collision (**D-060**,
+  **D-063**). Neither kit has a forklift, a barrel or a pallet — those are built
+  in code, like the map's containers and cranes already are.
 - **The UI** is themed and complete: menu with a live glade behind it, an
   eight-Bog lobby, HUD, scoreboard, kill feed, pause, settings, chat, results.
 - **Combat** is a one-hit spear, a shield you cannot be shot through, and a
@@ -235,7 +259,10 @@ of what that means:
    **Halcyon Wake** (**D-057**): whether the flybridge is a hill worth taking or
    a perch with no cover, whether the 2 m walkways under the upper deck are good
    flanks or corridors, and whether the third-person camera copes in the salon
-   and under the overhangs.
+   and under the overhangs. And **Twin Quarry** (**D-058**), whose questions are
+   the ones an elevated base raises: whether two ramps is one too few to break a
+   defended bench, whether the drop port in the wall is a sniper slot, and
+   whether the team whose bench U or B happens to sit beside is ahead.
 4. **Playing it, properly.** A person has walked around the island and thrown
    spears, and the automated checks cover the rest — but nobody has played a
    *match* to a conclusion against another person, and no one has tuned the feel:
@@ -334,6 +361,11 @@ Three tiers, because three different kinds of claim need three different proofs
 | `tools/island_report.tscn` | Whisperbloom Hollow as numbers: footprint, slope, every scatter layer's placed count, tree heights, spawn spacing and the capture bases (D-055). **In the gate** on four seeds |
 | `tools/parkour_report.tscn` | every platform on a built map has its rock, fits a Bog, and is reachable from the ground (D-042); on Lantern Wharf also that no jump reaches a tower or wall top, no sightline runs past 25 m (26 m from a roof), and no pad sees the other base's pads (D-056); on Halcyon Wake every deck reachable, the mast out of reach, sightlines under 21 m on the main deck and 38 m from a landing, and nothing but the void over every edge of the deck (D-057). **In the gate** for all three |
 | `tools/bake_tiles.gd` | the ability bar's seven tiles, photographed from the real `.glb`s under one camera, one light rig and one framing rule — the geometric mean of a silhouette's on-screen width and height is 66% of the tile, capped at 88% on the longer side, slender props laid on the diagonal (D-076). `-- check` re-measures the **committed** PNGs and is **in the gate**, headless, because what has to hold on every machine is that the pictures in the repository obey the rule rather than that this machine's GPU can reproduce them; `-- sheet` writes `out/tiles_sheet.png`, the seven side by side, which is the only way to answer "do they read as a set" |
+| `tools/combat_range.tscn` | the real match path: a spear, a mushroom, a lure, a letter, the Elder's bolt |
+| `tools/net_loopback.tscn` | two processes, one socket, including a *client* using all three abilities, dying and respawning, and ten rematches with the client in the lobby for half of them (D-044). **In the gate** through `net_test.sh`, bound to 127.0.0.1 on a random port |
+| `tools/preview_map.tscn` | Rust, Kopje Crossing, Lantern Wharf, Halcyon Wake and Twin Quarry: renders one, and checks every spawn pad with the physics. **In the gate** for all five |
+| `tools/island_report.tscn` | Whisperbloom Hollow as numbers: footprint, slope, every scatter layer's placed count, tree heights, spawn spacing and the capture bases (D-055). **In the gate** on four seeds |
+| `tools/parkour_report.tscn` | every platform on a built map has its rock, fits a Gub, and is reachable from the ground (D-042); on Lantern Wharf also that no jump reaches a tower or wall top, no sightline runs past 25 m (26 m from a roof), and no pad sees the other base's pads (D-056); on Halcyon Wake every deck reachable, the mast out of reach, sightlines under 21 m on the main deck and 38 m from a landing, and nothing but the void over every edge of the deck (D-057); on Twin Quarry that each team's bench is reachable from the pit floor by its two haul ramps and by nothing else, that no jump reaches a 10.2 m column top or the rim, and that no sightline runs past 30 m on the floor or 43 m from a landing (D-058). **In the gate** for all four |
 | `tools/preview_*.tscn` | it *looks* right. Needs a person, always will |
 
 **`playthrough` is the one that catches integration.** Every other harness looks

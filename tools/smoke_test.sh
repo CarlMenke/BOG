@@ -803,14 +803,31 @@ check "free-for-all letter carriers" "letter_carriers: ffa PASS"     "$GODOT" --
 # ray from the eye (is it behind a wall). Against the old spring arm 942 of the
 # 1,700 fail, in every leg.
 #
-# The `also` is the half that keeps D-025 true: the point a throw is aimed at is
-# required, every frame, to be the one the *unobstructed* camera would give for
-# the same view. With `aim_ray` taken from the pulled-in lens instead, 1,030
+# The first `also` is the half that keeps D-025 true: the point a throw is aimed
+# at is required, every frame, to be the one the *unobstructed* camera would give
+# for the same view. With `aim_ray` taken from the pulled-in lens instead, 1,030
 # frames fail. `--fixed-fps 60` so a tick of view-turning is the same on every
 # machine; headless, about two seconds.
+#
+# The second is the framing (D-059): the lens is never allowed further off the
+# boom's axis than the unobstructed camera would be at the depth the boom got to,
+# so the Gub keeps its place in the frame while the camera comes in. With the
+# shoulder held at its full length through the pull-in, 1,461 frames fail, by as
+# much as 0.62 m — which is a Gub sliding most of a screen width sideways, the
+# same way whichever way the player was turning.
+#
+# The third is how the lens *moves* rather than where it ends up (D-062), which
+# is what is left once the placement is right: no frame may turn the lens more
+# than 1.2 degrees on its own, and the frames that dolly it faster than 5.4 m/s,
+# or reverse its direction, stay under 4 % each. Without the lead sweeps, the
+# split pull-in and return speeds, the hold and the rate-limited reticle
+# correction, that is 241 frames over the step limit against 64 allowed and a
+# 13.8-degree single-frame snap of the whole picture with nobody at the mouse.
 check "camera stays out of the scenery" "clip PASS" \
     "$GODOT" --headless --fixed-fps 60 --path "$GODOT_ROOT" tools/camera_range.tscn
 also "camera stays out of the scenery" "aim PASS"
+also "camera stays out of the scenery" "frame PASS"
+also "camera stays out of the scenery" "calm PASS"
 # Menu to results screen, through the real scenes and the real autoloads. The
 # only check here that can notice a *join* coming apart — a lobby that never
 # hands off to the arena, an arena that never registers, a results screen that
@@ -865,6 +882,16 @@ also "yacht playthrough" "arena: Halcyon Wake built from"
 also "yacht playthrough" "playthrough: capture layout PASS"
 also "yacht playthrough" "capture layout on 'yacht' — declared bases"
 # A Capture B·O·G match standing up in the real arena (D-051): `arena.gd` draws
+# And on Twin Quarry, the map drawn for Capture G·U·B rather than fitted to it
+# (D-058): a stone pit whose two bases stand four metres up on cut benches with
+# two haul ramps each. Same four lines again — it declares bases and letters
+# too, and its letters are the first that are not three neutral points.
+check "quarry playthrough" "playthrough: PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" tools/playthrough.tscn -- quarry
+also "quarry playthrough" "arena: Twin Quarry built from"
+also "quarry playthrough" "playthrough: capture layout PASS"
+also "quarry playthrough" "capture layout on 'quarry' — declared bases"
+# A Capture G·U·B match standing up in the real arena (D-051): `arena.gd` draws
 # a ring per team, the host settles three cards onto the map once the physics
 # has stepped, and every Bog spawns on a pad of its own team's. The rules
 # themselves — carry, bank, the enemy base doing nothing, a dead carrier's drop
@@ -1105,6 +1132,22 @@ check "yacht parkour and overboard" "parkour_report: PASS" \
     "$GODOT" --path "$GODOT_ROOT" --resolution 1000x1000 --script tools/snapshot.gd -- \
     res://tools/parkour_report.tscn "$GODOT_LOG_DIR/yacht_parkour.png" 30 top \
     map=res://scenes/world/maps/yacht.tscn
+# Twin Quarry's eight pads, on the lowest triangle floor of any map: 632 big
+# stone slabs' worth, and deliberately — the whole pit is 56 boxes.
+check "quarry spawns and collision" "preview_map: PASS" \
+    "$GODOT" --path "$GODOT_ROOT" --resolution 900x900 --script tools/snapshot.gd -- \
+    res://tools/preview_map.tscn "$GODOT_LOG_DIR/quarry_top.png" 30 top \
+    map=res://scenes/world/maps/quarry.tscn min_triangles=400
+# And the quarry's promises, which are the ones the elevated bases rest on:
+# every bench tile is reachable from the pit floor by the haul ramps and nothing
+# else, no jump at all reaches a column top or the rim, no eye-to-eye line runs
+# past 30 m on the floor or 43 m from a landing, and no pad sees the other
+# base's pads — which on a rotationally symmetric map is only true because the
+# Stack stands on the origin every one of those lines runs through (D-058).
+check "quarry parkour and ramps" "parkour_report: PASS" \
+    "$GODOT" --path "$GODOT_ROOT" --resolution 1000x1000 --script tools/snapshot.gd -- \
+    res://tools/parkour_report.tscn "$GODOT_LOG_DIR/quarry_parkour.png" 30 top \
+    map=res://scenes/world/maps/quarry.tscn
 # Walks the menu into a real match and asks Input.mouse_mode what happened. It
 # grabs the physical mouse for about a second on the way through, which is the
 # only way to prove the thing it proves: every other check here stands the arena
