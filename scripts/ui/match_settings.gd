@@ -97,6 +97,9 @@ func _build() -> void:
 	# one number that decides what killing a carrier is worth.
 	_slider("capture_return_time", "Dropped letter returns", 3.0, 60.0, 1.0,
 		func(v: float) -> String: return "after %d s" % roundi(v))
+	# How long a thief stands on an enemy vault before the card comes out of it.
+	_slider("capture_steal_time", "Stealing a banked letter", 1.0, 5.0, 0.5,
+		func(v: float) -> String: return "takes %.1f s" % v)
 	# As a percentage off the base speed, like the Elder's boost, because "-10%"
 	# is a sentence about the game and "0.9" is a number about the code.
 	_slider("capture_carrier_speed", "Carrier speed", 0.5, 1.2, 0.05,
@@ -249,6 +252,7 @@ func _apply_visibility(config: MatchConfig) -> void:
 		node.visible = capture
 	_capture_note.visible = capture
 	_fields["capture_return_time"]["row"].visible = capture
+	_fields["capture_steal_time"]["row"].visible = capture
 	_fields["capture_carrier_speed"]["row"].visible = capture
 	# A seed only means something to a map that is grown from one. On a static
 	# map the row would offer to reroll an island nobody is going to see.

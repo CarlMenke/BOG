@@ -61,6 +61,24 @@ const NEAR_HEIGHT := 1.5
 ## How close two settled cards may be.
 const MIN_APART := 4.0
 
+## The vault: where a team's banked letters actually sit (D-068).
+##
+## Banking used to be a fact about a number — the card went home and the team
+## gained a bit nothing could take back. Now it is a place, so the bit has
+## something to stand on and something to be stolen off. The vault is **inside
+## the base, pushed to the side furthest from the enemy**, which is the corner a
+## defender ends up standing on and the last ground an attacker reaches.
+##
+## It is derived rather than declared, and that is deliberate: every map that
+## can host this mode gets one for free, on the same rule, without a marker
+## having to be added to each of them. `VAULT_PUSH` is a fraction of
+## `base_radius`, so a base of any size puts its vault the same way.
+const VAULT_PUSH := 0.62
+## How close a Gub has to be to bank into a vault, or to take out of one. Much
+## smaller than the base — the base is somewhere you are, the vault is something
+## you walk up to and touch.
+const VAULT_RADIUS := 1.7
+
 ## One point per team, in team order.
 var bases: Array[Vector3] = []
 var base_radius: float = DEFAULT_BASE_RADIUS
@@ -71,6 +89,10 @@ var letters: Array[Vector3] = []
 ## Whether the map stated these, or the fallback made them up.
 var bases_declared: bool = false
 var letters_declared: bool = false
+## One vault per team, in team order: the point inside each base that banked
+## cards rest on, and the only place a card can be banked or stolen (D-068).
+var vaults: Array[Vector3] = []
+var vault_radius: float = VAULT_RADIUS
 
 
 ## Plan a layout. `declared_bases` and `declared_letters` come from the map and
@@ -116,7 +138,54 @@ static func plan(spawns: Array[Transform3D], team_count: int,
 			push_warning("CaptureLayout: the map declares %d letter points, not 3; "
 				% declared_letters.size() + "using the fallback")
 		layout.letters = fallback_letters(layout.bases, spawns)
+	layout.vaults = plan_vaults(layout.bases, layout.base_radius)
 	return layout
+
+
+## One vault per base, pushed toward the side furthest from everyone else.
+##
+## "Furthest from the enemy" is the mean of the other bases: with two teams that
+## is simply the other base, and the vault lands on the far side of yours, which
+## on a square bench is its outer corner. With more than two it is the direction
+## away from the pack, which is the same idea and the best a single point can do.
+## A lone base has nobody to be far from, so its vault sits in the middle.
+static func plan_vaults(base_points: Array[Vector3], radius: float) -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	for i in base_points.size():
+		var here := base_points[i]
+		var others := Vector3.ZERO
+		var count := 0
+		for j in base_points.size():
+			if j != i:
+				others += base_points[j]
+				count += 1
+		if count == 0:
+			out.append(here)
+			continue
+		var away := _flat(here - others / float(count))
+		if away.length() < 0.001:
+			away = Vector3.RIGHT
+		out.append(here + away.normalized() * radius * VAULT_PUSH)
+	return out
+
+
+## Whether `point` is at `team`'s vault: close across the ground, and within the
+## same height band a base uses, so a vault on a bench is not reachable from the
+## floor beneath it.
+func in_vault(team: int, point: Vector3) -> bool:
+	if team < 0 or team >= vaults.size():
+		return false
+	var vault := vaults[team]
+	return _flat(point).distance_to(_flat(vault)) <= vault_radius 		and absf(point.y - vault.y) <= BASE_HEIGHT
+
+
+## Which team's vault `point` is standing in, or `TEAM_NONE`. A thief needs this:
+## the rule for taking a card out is *whose* vault it is, not whether it is one.
+func vault_team(point: Vector3) -> int:
+	for team in vaults.size():
+		if in_vault(team, point):
+			return team
+	return MatchConfig.TEAM_NONE
 
 
 ## The team whose base `point` is horizontally nearest, or `TEAM_NONE`.
