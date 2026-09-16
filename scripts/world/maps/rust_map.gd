@@ -172,10 +172,10 @@ const FLARE_SMOKE_COUNT := 44
 ## container walls at the two ends of the yard, the roof line down each side,
 ## and the tower's own structure — and none of them stands across the open
 ## ground in the middle where a fight happens. That is the whole readability
-## rule for this effect: a Gub seen *through* shimmer at 30 m has its edge
-## crawl, which is weather; a Gub seen through shimmer at 8 m would dissolve,
-## which is a bug. Panels are also all above 3.4 m, which is over a Gub's head
-## (a Gub is 1.55 m) — so nothing at eye level in the yard is ever behind one.
+## rule for this effect: a Bog seen *through* shimmer at 30 m has its edge
+## crawl, which is weather; a Bog seen through shimmer at 8 m would dissolve,
+## which is a bug. Panels are also all above 3.4 m, which is over a Bog's head
+## (a Bog is 1.55 m) — so nothing at eye level in the yard is ever behind one.
 const SHIMMER: Array[Dictionary] = [
 	# Over the north wall, at the far end of the longest sightline on the map.
 	{"at": Vector3(-6.0, 5.2, -33.0), "size": Vector2(26.0, 5.0)},
@@ -663,7 +663,7 @@ func _backdrop_entry(kind: String) -> Dictionary:
 ## Neither is anywhere a player walks, because neither is anywhere at all — they
 ## are particles with no collision and no physics, and the only thing to be
 ## careful of is how much of the screen they cover. Both are small, both are
-## dim, and the dust's alpha peaks at a third; the test is that a Gub silhouette
+## dim, and the dust's alpha peaks at a third; the test is that a Bog silhouette
 ## at 20 m is exactly as readable through them as without them, and it is.
 func _build_air(parent: Node3D) -> void:
 	var wind := deg_to_rad(WIND_BEARING)

@@ -1,5 +1,5 @@
 extends Node3D
-## The carry layer: what a Gub's weapon does while it is only being carried.
+## The carry layer: what a Bog's weapon does while it is only being carried.
 ## Development tool, not shipped.
 ##
 ##   # the tables — every weapon, every carried clip, headless, printed
@@ -43,14 +43,14 @@ extends Node3D
 ## layer this measures to stop being the layer the game composes.
 ##
 ## **The composition is done by hand and it is exactly what the graph does.**
-## `carry` is an `AnimationNodeBlend2` filtered to `GubAnimator.UPPER_BODY_BONES`
+## `carry` is an `AnimationNodeBlend2` filtered to `BogAnimator.UPPER_BODY_BONES`
 ## at weight 1, so every bone in that list takes its local pose from the carry
 ## clip and every other bone keeps whatever the plane below is producing. `_pose`
 ## below reproduces that a bone at a time, rather than standing an
 ## `AnimationTree` up: a tree needs frames to settle and a blend weight to be
 ## driven, and this reads the skeleton back inside the same call it wrote it in.
 
-const GUB := preload("res://scenes/player/gub.tscn")
+const BOG := preload("res://scenes/player/bog.tscn")
 
 ## How many samples of each locomotion clip. The same 24 `preview_bow` and
 ## `preview_sword` take, so the tables below can be read against the ones in
@@ -76,17 +76,17 @@ const CARRY_SAMPLES := 12
 ## fact about how tall grass is and not about which prop is in the fist.
 const CARRY_MIN := 0.15
 
-## How close a carried weapon may come to the Gub's own skin, in metres.
+## How close a carried weapon may come to the Bog's own skin, in metres.
 ##
 ## D-065 measured the spear against the real skinned mesh and reported "the
 ## tightest is the throw follow-through at 6 cm"; every *carried* clip in that
 ## table is 0.11 m or better. This is the floor under those, and it is a floor
 ## rather than the measured best because a pose is allowed to be tighter than
-## `Idle` was as long as nothing is actually inside the Gub.
+## `Idle` was as long as nothing is actually inside the Bog.
 const SKIN_MIN := 0.06
 
 ## How far off horizontal the **spear's** shaft may lie, in degrees, in any clip
-## a Gub carries it through.
+## a Bog carries it through.
 ##
 ## **This exists because a prose claim about a grip went stale twice in two
 ## steps, in the same way both times** (D-072). D-065 promised "both ends stay at
@@ -115,7 +115,7 @@ const SKIN_MIN := 0.06
 ## point on the end of it.
 const LEVEL_MAX := 30.0
 
-## How far the spear's shaft may pass from the centre of the Gub's own fist, in
+## How far the spear's shaft may pass from the centre of the Bog's own fist, in
 ## metres, in the pose it is carried in.
 ##
 ## **This is the number the user found by eye and no check could have told them**
@@ -144,7 +144,7 @@ const LEVEL_MAX := 30.0
 const PALM_MAX := 0.066
 
 ## Every bone the mitten hangs off: the hand and the three finger chains under
-## it. All of them are in `GubAnimator.UPPER_BODY_BONES`, which is what makes the
+## it. All of them are in `BogAnimator.UPPER_BODY_BONES`, which is what makes the
 ## fist a single measurement rather than twelve — the carry clip owns the whole
 ## chain, so where the fist is *in the hand's own frame* is the carry clip's
 ## alone and the locomotion underneath cannot move it.
@@ -154,7 +154,7 @@ const FIST_BONES := ["RightHand",
 	"RightHandMiddle1", "RightHandMiddle2", "RightHandMiddle3",
 	"RightHandMiddle4"]
 
-## The **left** mitten, which is the bow fist and is the hand a Gub drinks with
+## The **left** mitten, which is the bow fist and is the hand a Bog drinks with
 ## (D-067, D-075). `FIST_BONES` one hand over, letter for letter, because the
 ## question `bottle` asks about the bottle is the question `palm` asks about the
 ## shaft and a second list that had drifted by one finger would be a second
@@ -174,7 +174,7 @@ const LEFT_FIST_BONES := ["LeftHand",
 ## grip can sit perfectly in a fist and still be a mime, which is D-074's own
 ## lesson one hand over, and `POTION_SCALE` is exactly the lever that would
 ## break it. Measured, it does not discriminate. The drinking hand is at the
-## face by the middle of the clip and a Gub's head is a 0.40 m blob, so the lip
+## face by the middle of the clip and a Bog's head is a 0.40 m blob, so the lip
 ## comes within 0.015 m of it at **every** scale from 0.20 to 0.50 — 0.010 at
 ## the shipped 0.30 and 0.006 at half a metre of bottle. A threshold that
 ## passes every value of the lever it is supposed to police is not a threshold,
@@ -195,7 +195,7 @@ const HEAD_BONES := ["Head", "HeadTop_End"]
 ## clip, which resolves the 0.7 s the head is back into six of them.
 const DRINK_SAMPLES := 25
 
-## Which moments of the channel the two drink sheets stand a Gub at, as
+## Which moments of the channel the two drink sheets stand a Bog at, as
 ## fractions of the window.
 ##
 ## The whole-body sheet takes six evenly, which at the default two-second
@@ -207,21 +207,21 @@ const DRINK_SAMPLES := 25
 const DRINK_BODY_FRACTIONS := [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
 const DRINK_FIST_FRACTIONS := [0.0, 0.55, 1.0]
 
-## Where the close drink sheet stands, in degrees round the Gub.
+## Where the close drink sheet stands, in degrees round the Bog.
 ##
 ## Not `FIST_AZIMUTH` mirrored, which is what it started as and is what D-074's
 ## argument would predict. That sheet is seen from **behind** the shoulder
 ## because a shaft crossing a fist in the screen plane cannot be told from one
 ## passing through it, and the palm normal has to lie across the screen first.
 ## A bottle is not a line through a fist, it is a volume beside one, and the
-## question it raises is the other kind — *is any of it inside the Gub* — which
+## question it raises is the other kind — *is any of it inside the Bog* — which
 ## is answered from the **front** quarter, where the body's own silhouette is
 ## behind the bottle rather than in front of it. Rendered from behind the
 ## shoulder the bottle is occluded by the mitten at both ends of the window and
 ## the sheet says nothing; from -25 it is the whole argument.
 const DRINK_AZIMUTH := -25.0
 
-## Every clip a Gub carries a weapon *around* in.
+## Every clip a Bog carries a weapon *around* in.
 ##
 ## `preview_bow._carried_clips` and `preview_sword.CARRY_SKIP`'s list, kept
 ## letter for letter so that the before/after in D-070 is a comparison and not a
@@ -230,7 +230,7 @@ const DRINK_AZIMUTH := -25.0
 ##
 ## **The jumps and the slide are excluded because a floor check means nothing in
 ## them**, which is why those two tools excluded them and is worth saying out
-## loud now that `--all` will show them. A leaping Gub is not standing on the
+## loud now that `--all` will show them. A leaping Bog is not standing on the
 ## plane this measures against, and `Slide` puts its hips at 0.165 m by design —
 ## so a prop held at the waist is *supposed* to be near the ground there. Asked
 ## anyway, every weapon reads below zero in `Slide` both with the layer and
@@ -259,8 +259,8 @@ const SHEET_GAP := 0.8
 ## that sheet is seen obliquely and this one head-on with 1.24 m of shaft lying
 ## across every body.
 const ELEVATION_SPREAD := 2.4
-## How the `fist` mode is framed (D-074). Behind the Gub's right shoulder rather
-## than in front of it, and 0.9 m of Gub per column rather than 1.7, because that
+## How the `fist` mode is framed (D-074). Behind the Bog's right shoulder rather
+## than in front of it, and 0.9 m of Bog per column rather than 1.7, because that
 ## sheet is about a body and this one is about a hand.
 const FIST_AZIMUTH := 125.0
 const FIST_ELEVATION := 15.0
@@ -357,22 +357,22 @@ func _ready() -> void:
 # ------------------------------------------------------------- the numbers ---
 
 func _measure(everything: bool) -> void:
-	var gub := _bare_gub()
-	var skeleton := gub.find_child("Skeleton3D", true, false) as Skeleton3D
-	var player := gub.find_child("AnimationPlayer", true, false) as AnimationPlayer
-	_build_skin(gub, skeleton)
+	var bog := _bare_bog()
+	var skeleton := bog.find_child("Skeleton3D", true, false) as Skeleton3D
+	var player := bog.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	_build_skin(bog, skeleton)
 	var clips := _carried_clips(player, everything)
 	var failures := 0
 
 	var spear_level := 0.0
 	for weapon: int in [Loadout.Weapon.SPEAR, Loadout.Weapon.BOW,
 			Loadout.Weapon.SWORD]:
-		var row := _report(gub, skeleton, player, clips, weapon)
+		var row := _report(bog, skeleton, player, clips, weapon)
 		failures += int(row[0])
 		if weapon == Loadout.Weapon.SPEAR:
 			spear_level = row[1]
 
-	failures += _report_card(gub, skeleton, player, clips)
+	failures += _report_card(bog, skeleton, player, clips)
 	failures += _report_palm(skeleton, player)
 	failures += _report_bottle(skeleton, player)
 
@@ -435,7 +435,7 @@ func _measure(everything: bool) -> void:
 ## `_measure` asserts on the second for the spear and there is no cheap way to
 ## ask again — every row of this table costs 24 poses and a 3,587-vertex skin
 ## scan, so the number leaves with the verdict rather than being re-measured.
-func _report(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
+func _report(bog: Bog, skeleton: Skeleton3D, player: AnimationPlayer,
 		clips: Array[String], weapon: int) -> Array:
 	var carry := Loadout.carry_clip(weapon)
 	print("preview_carry: %s, carried over %s"
@@ -448,8 +448,8 @@ func _report(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
 	var skin := INF
 	var level := 0.0
 	for clip: String in clips:
-		var off := _clearance(gub, skeleton, player, clip, "", weapon)
-		var on := _clearance(gub, skeleton, player, clip, carry, weapon)
+		var off := _clearance(bog, skeleton, player, clip, "", weapon)
+		var on := _clearance(bog, skeleton, player, clip, carry, weapon)
 		worst_off = minf(worst_off, off[0])
 		worst_on = minf(worst_on, on[0])
 		skin = minf(skin, on[2])
@@ -470,8 +470,8 @@ func _report(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
 ## grip did (D-035, D-070).
 ##
 ## **Measured with the layer off, which is the pose it is actually held in.** A
-## letter hold disarms a Gub — `has_spear()` says so and has since D-035 — so
-## there is no weapon for a carry pose to be the pose of, `GubAnimator._armed()`
+## letter hold disarms a Bog — `has_spear()` says so and has since D-035 — so
+## there is no weapon for a carry pose to be the pose of, `BogAnimator._armed()`
 ## answers no, and the arms go back to whatever the locomotion plane is doing.
 ## The card then sits `CARD_ABOVE_FIST` along the *virtual* shaft out of that
 ## hand, which after D-070 points across the body where it used to point up the
@@ -482,7 +482,7 @@ func _report(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
 ## a comment. It was a comment about a grip that has since moved eighty degrees,
 ## which is exactly the kind of number that should have been a check — so here it
 ## is as one.
-func _report_card(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
+func _report_card(bog: Bog, skeleton: Skeleton3D, player: AnimationPlayer,
 		clips: Array[String]) -> int:
 	var hand := skeleton.find_bone(HeldGear.HAND_BONE)
 	var half := 0.5 * Pickup.LETTER_HEIGHT * HeldGear.CARD_SCALE
@@ -493,7 +493,7 @@ func _report_card(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
 		for i in samples:
 			_pose(player, skeleton, clip, length * float(i) / float(samples),
 				"", 0.0)
-			var at := gub.global_transform * skeleton.global_transform \
+			var at := bog.global_transform * skeleton.global_transform \
 				* skeleton.get_bone_global_pose(hand) * HeldGear.card_offset()
 			if at.y < lowest:
 				lowest = at.y
@@ -513,7 +513,7 @@ func _report_card(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
 ## The shaft against the **hand**, which is the one thing every table above
 ## measures around rather than at (D-074).
 ##
-## Everything else on this page asks where the spear is relative to the Gub's
+## Everything else on this page asks where the spear is relative to the Bog's
 ## body, its floor or the horizon. None of that can see the complaint the user
 ## actually raised — *"it doesnt appear to be in the palm... it appears as if its
 ## attached to the back of the hand"* — because a shaft riding the knuckles is
@@ -616,8 +616,8 @@ func _fist_centre(skeleton: Skeleton3D, hand: int,
 ##
 ## The pose is `Drink` layered over `Idle`, which is what the graph composes: a
 ## `OneShot` filtered to `UPPER_BODY_BONES` over whatever the locomotion plane
-## is doing, at weight 1 (D-067). `Idle` underneath because a Gub that is
-## moving is a Gub that is not drinking — `CHANNEL_MOVE_SPEED` says so — which
+## is doing, at weight 1 (D-067). `Idle` underneath because a Bog that is
+## moving is a Bog that is not drinking — `CHANNEL_MOVE_SPEED` says so — which
 ## makes this the one measurement on this page with nothing to average over.
 ##
 ## **What it does not check is `POTION_SCALE`**, and `HEAD_BONES` carries why.
@@ -656,17 +656,17 @@ func _report_bottle(skeleton: Skeleton3D, player: AnimationPlayer) -> int:
 ## Which moment of the drink window sample `i` is, in the clip's own seconds.
 ##
 ## The **window** and not the clip, because the clip is 6.117 s of which
-## `GubAnimator` plays 2.933 (D-067): the 1.267 s of stillness before the arm
+## `BogAnimator` plays 2.933 (D-067): the 1.267 s of stillness before the arm
 ## starts and the 1.917 s after it stops are frames no player ever sees, and a
-## bottle measured through them would be measured mostly against a Gub standing
+## bottle measured through them would be measured mostly against a Bog standing
 ## still with its arms down.
 func _drink_time(i: int) -> float:
-	return GubAnimator.DRINK_CLIP_START \
-		+ (GubAnimator.DRINK_CLIP_END - GubAnimator.DRINK_CLIP_START) \
+	return BogAnimator.DRINK_CLIP_START \
+		+ (BogAnimator.DRINK_CLIP_END - BogAnimator.DRINK_CLIP_START) \
 		* float(i) / float(maxi(DRINK_SAMPLES - 1, 1))
 
 
-## How near a world point comes to the Gub's own skinned head.
+## How near a world point comes to the Bog's own skinned head.
 ##
 ## `_nearest_skin`'s method with two differences and both are the question:
 ## `HEAD_BONES` rather than the trunk, and one point rather than a segment. The
@@ -696,12 +696,12 @@ func _nearest_head(skeleton: Skeleton3D, p: Vector3) -> float:
 	return nearest
 
 ## The lowest end of `weapon`'s prop above the floor through one locomotion
-## clip, the mean elevation of its long axis, and how near it gets to the Gub's
+## clip, the mean elevation of its long axis, and how near it gets to the Bog's
 ## own skin — as `[metres, degrees, metres]`.
 ##
 ## `carry` empty means the layer is off, which is the pose the game shipped
 ## before D-070 and is the left-hand column of every table above.
-func _clearance(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
+func _clearance(bog: Bog, skeleton: Skeleton3D, player: AnimationPlayer,
 		clip: String, carry: String, weapon: int,
 		tune: Vector3 = Vector3.INF) -> Array:
 	var hand := skeleton.find_bone(_hand_bone(weapon))
@@ -715,7 +715,7 @@ func _clearance(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
 	var nearest := INF
 	var reach := INF
 	var elevation := 0.0
-	# Where the business end points round the Gub, summed as a **vector** rather
+	# Where the business end points round the Bog, summed as a **vector** rather
 	# than as degrees (D-073): a bearing is an angle on a circle, and 24 samples
 	# either side of the -180/+180 seam average to zero if they are added as
 	# numbers. Every other column here is a min or a scalar mean and can be.
@@ -728,7 +728,7 @@ func _clearance(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
 			carry_time = carry_length \
 				* float(i % CARRY_SAMPLES) / float(CARRY_SAMPLES)
 		_pose(player, skeleton, clip, time, carry, carry_time)
-		var grip := gub.global_transform * skeleton.global_transform \
+		var grip := bog.global_transform * skeleton.global_transform \
 			* skeleton.get_bone_global_pose(hand) * _prop_transform(weapon, tune)
 		var ends := _prop_ends(weapon)
 		var a: Vector3 = grip * ends[0]
@@ -741,11 +741,11 @@ func _clearance(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
 			/ maxf(a.distance_to(b), 0.0001), -1.0, 1.0)))
 		bearing += Vector2(b.x - a.x, b.z - a.z).normalized()
 		count += 1
-		nearest = minf(nearest, _nearest_skin(gub, skeleton, ba, bb))
+		nearest = minf(nearest, _nearest_skin(bog, skeleton, ba, bb))
 		# How near the *other* fist comes to the weapon, which is the question
 		# "does this pose look like it is holding the thing": a two-handed carry
 		# whose second hand closes on air is worse than no carry pose at all.
-		var second := gub.global_transform * skeleton.global_transform 			* skeleton.get_bone_global_pose(off_hand)
+		var second := bog.global_transform * skeleton.global_transform 			* skeleton.get_bone_global_pose(off_hand)
 		reach = minf(reach, _point_to_segment(second.origin, a, b))
 	return [lowest, elevation / float(maxi(count, 1)), nearest, reach,
 		rad_to_deg(atan2(bearing.x, -bearing.y))]
@@ -808,7 +808,7 @@ func _prop_ends(weapon: int) -> Array:
 			return [Vector3.ZERO, Vector3(0.0, HeldGear.SHAFT_LENGTH, 0.0)]
 
 
-## The part of the prop that has to miss the Gub, in model units — which is not
+## The part of the prop that has to miss the Bog, in model units — which is not
 ## always the part that has to miss the floor.
 ##
 ## For a spear and a bow it is the whole thing: a shaft is gripped in its middle
@@ -831,7 +831,7 @@ func _hand_bone(weapon: int) -> String:
 
 
 ## Put the skeleton in the pose the graph would compose: `clip` at `time` under
-## a `carry` layer at weight 1, filtered to `GubAnimator.UPPER_BODY_BONES`.
+## a `carry` layer at weight 1, filtered to `BogAnimator.UPPER_BODY_BONES`.
 ##
 ## Two passes, because that is what a filtered blend is: the layer's local poses
 ## are read first, then the plane is posed, then the layer's bones are written
@@ -846,7 +846,7 @@ func _pose(player: AnimationPlayer, skeleton: Skeleton3D, clip: String,
 		player.play(carry)
 		player.seek(carry_time, true, true)
 		player.pause()
-		for bone: String in GubAnimator.UPPER_BODY_BONES:
+		for bone: String in BogAnimator.UPPER_BODY_BONES:
 			var idx := skeleton.find_bone(bone)
 			if idx < 0:
 				continue
@@ -890,10 +890,10 @@ const SWEEP_STEPS := 9
 func _sweep(weapon_name: String, carry_override: String = "",
 		span: float = SWEEP_DEGREES, base_override: String = "") -> void:
 	var weapon := Loadout.sanitize(Loadout.from_name(weapon_name))
-	var gub := _bare_gub()
-	var skeleton := gub.find_child("Skeleton3D", true, false) as Skeleton3D
-	var player := gub.find_child("AnimationPlayer", true, false) as AnimationPlayer
-	_build_skin(gub, skeleton)
+	var bog := _bare_bog()
+	var skeleton := bog.find_child("Skeleton3D", true, false) as Skeleton3D
+	var player := bog.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	_build_skin(bog, skeleton)
 	var clips := _carried_clips(player, false)
 	var carry := Loadout.carry_clip(weapon)
 	if not carry_override.is_empty():
@@ -925,11 +925,11 @@ func _sweep(weapon_name: String, carry_override: String = "",
 			var worst := INF
 			var skin := INF
 			for clip: String in clips:
-				var row := _clearance(gub, skeleton, player, clip, carry,
+				var row := _clearance(bog, skeleton, player, clip, carry,
 					weapon, tune)
 				worst = minf(worst, row[0])
 				skin = minf(skin, row[2])
-			var idle := _clearance(gub, skeleton, player, "Idle", carry,
+			var idle := _clearance(bog, skeleton, player, "Idle", carry,
 				weapon, tune)
 			line += " %+6.3f/%.2f/%+04.0f/%.2f" % [worst, skin, idle[1], idle[3]]
 		var reach := float((SWEEP_STEPS - 1) / 2) * span
@@ -953,7 +953,7 @@ func _base_tune(weapon: int) -> Vector3:
 
 # ----------------------------------------------------------- what a pose is ---
 
-## What a candidate carry clip does with the two fists, in the Gub's own frame —
+## What a candidate carry clip does with the two fists, in the Bog's own frame —
 ## where they are, how far apart, and which way the line between them points
 ## (D-070).
 ##
@@ -979,9 +979,9 @@ func _base_tune(weapon: int) -> Vector3:
 ## together in front at waist height, 0.22 m apart, which is the only one of the
 ## three that is a two-handed grip at all.
 func _poses() -> void:
-	var gub := _bare_gub()
-	var skeleton := gub.find_child("Skeleton3D", true, false) as Skeleton3D
-	var player := gub.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	var bog := _bare_bog()
+	var skeleton := bog.find_child("Skeleton3D", true, false) as Skeleton3D
+	var player := bog.find_child("AnimationPlayer", true, false) as AnimationPlayer
 	var right := skeleton.find_bone(HeldGear.HAND_BONE)
 	var left := skeleton.find_bone(HeldGear.BOW_HAND_BONE)
 	print("preview_carry: what each candidate pose does with the fists")
@@ -996,7 +996,7 @@ func _poses() -> void:
 		for i in CARRY_SAMPLES:
 			_pose(player, skeleton, clip, 0.0, clip,
 				length * float(i) / float(CARRY_SAMPLES))
-			var to_body := gub.global_transform * skeleton.global_transform
+			var to_body := bog.global_transform * skeleton.global_transform
 			r += to_body * skeleton.get_bone_global_pose(right).origin
 			l += to_body * skeleton.get_bone_global_pose(left).origin
 		r /= float(CARRY_SAMPLES)
@@ -1020,15 +1020,15 @@ func _poses() -> void:
 ## the carry pose answers differently because it is a different pose.
 ##
 ## **Under the layer the answer is one number, not twelve.** Every bone of both
-## arms is in `GubAnimator.UPPER_BODY_BONES` and they all hang off `Spine1`, so
+## arms is in `BogAnimator.UPPER_BODY_BONES` and they all hang off `Spine1`, so
 ## the carry clip owns the whole chain and the left fist's position *in the right
 ## fist's frame* is the carry clip's alone — the locomotion underneath moves both
 ## fists together and cancels out. That is why a carried grip can be fitted
 ## exactly while the swing's can only be fitted on average.
 func _hilt() -> void:
-	var gub := _bare_gub()
-	var skeleton := gub.find_child("Skeleton3D", true, false) as Skeleton3D
-	var player := gub.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	var bog := _bare_bog()
+	var skeleton := bog.find_child("Skeleton3D", true, false) as Skeleton3D
+	var player := bog.find_child("AnimationPlayer", true, false) as AnimationPlayer
 	var swing := _hilt_in_swing(player, skeleton)
 	var carry := _hilt_in_carry(player, skeleton, "SwordCarry")
 	print("preview_carry: the great sword's hilt line, fist to fist, in the right fist's frame")
@@ -1040,7 +1040,7 @@ func _hilt() -> void:
 				p.length() / (HeldGear.SWORD_REAR_HAND - HeldGear.SWORD_FORE_HAND)])
 	print("  the two hilt lines are %.1f deg apart"
 		% rad_to_deg(swing.normalized().angle_to(carry.normalized())))
-	_hilt_spread(gub, skeleton, player, [
+	_hilt_spread(bog, skeleton, player, [
 		["Swing fit (shipped)", HeldGear.sword_transform()],
 		["SwordCarry fit", _sword_grip_from(carry)]])
 	_hilt_verdict(swing, carry)
@@ -1065,7 +1065,7 @@ func _hilt() -> void:
 ##
 ## Three ways to fail, and they are three different accidents:
 ##
-##   fit       `Swing` or the window `GubAnimator` plays of it has moved, so the
+##   fit       `Swing` or the window `BogAnimator` plays of it has moved, so the
 ##             constants describe a clip that is no longer there. Re-run
 ##             `preview_sword -- measure` and paste its three lines.
 ##   derived   somebody re-aimed `SWORD_GRIP_ROTATION` and left
@@ -1147,23 +1147,23 @@ const FIT_SCALE := 0.001
 const DERIVED_MAX := 0.0005
 
 ## How far past the pommel a joining fist may close. `preview_sword`'s own
-## `FIT_TOLERANCE`, copied rather than imported for the reason `_bare_gub` is a
+## `FIT_TOLERANCE`, copied rather than imported for the reason `_bare_bog` is a
 ## copy: the number means "the size of this rig's mitten" and a tool that
 ## measured a different prop with a silently shared constant would be worse than
 ## two tools that disagree loudly.
 const FIT_TOLERANCE := 0.16
 
 
-## Where the blade actually points, in the Gub's own frame, under the carry
+## Where the blade actually points, in the Bog's own frame, under the carry
 ## layer — averaged over the carry clip's loop, in `Idle`.
 ##
 ## The angle above is the one the *fit* is wrong by; this is the one a **player**
 ## sees, and they are not the same question. Bearing is degrees round from the
-## Gub's forward, positive to its right, of the direction the point sticks out
+## Bog's forward, positive to its right, of the direction the point sticks out
 ## in; elevation is degrees above horizontal; "off fists" is how far the blade's
 ## own axis lies from the line between the two fists, which is the one a
 ## re-fitted grip can move.
-func _hilt_spread(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
+func _hilt_spread(bog: Bog, skeleton: Skeleton3D, player: AnimationPlayer,
 		grips: Array) -> void:
 	var hand := skeleton.find_bone(HeldGear.HAND_BONE)
 	var off_hand := skeleton.find_bone(HeldGear.BOW_HAND_BONE)
@@ -1178,7 +1178,7 @@ func _hilt_spread(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
 			_pose(player, skeleton, "Idle", 0.0, "SwordCarry",
 				length * float(i) / float(CARRY_SAMPLES))
 			var pose := skeleton.get_bone_global_pose(hand)
-			var at := gub.global_transform * skeleton.global_transform * pose * grip
+			var at := bog.global_transform * skeleton.global_transform * pose * grip
 			# Guard to point, which is the way the blade sticks out of the fists.
 			point += at.origin - at * Vector3(0.0, HeldGear.SWORD_GUARD, 0.0)
 			var fists := (pose.basis.orthonormalized().inverse()
@@ -1217,7 +1217,7 @@ func _hilt_in_swing(player: AnimationPlayer, skeleton: Skeleton3D) -> Vector3:
 	var left := skeleton.find_bone(HeldGear.BOW_HAND_BONE)
 	var mean := Vector3.ZERO
 	for i in SWING_CHECKS:
-		var time := lerpf(GubAnimator.SWING_CLIP_START, GubAnimator.SWING_CLIP_END,
+		var time := lerpf(BogAnimator.SWING_CLIP_START, BogAnimator.SWING_CLIP_END,
 			float(i) / float(SWING_CHECKS - 1))
 		_pose(player, skeleton, "Swing", time, "", 0.0)
 		var fist := skeleton.get_bone_global_pose(right).affine_inverse()
@@ -1248,14 +1248,14 @@ const SWING_CHECKS := 17
 
 # ---------------------------------------------------------------- the solve ---
 
-## How many bearings round the Gub the solve tries, and what elevations.
+## How many bearings round the Bog the solve tries, and what elevations.
 const SOLVE_BEARINGS := 24
 const SOLVE_ELEVATIONS := [0.0, 10.0, 20.0]
 
 ## The same for the great sword, which is a different question (D-073). A spear
 ## is asked to lie flat, so the band that matters is the one just off horizontal;
 ## a carried sword's own pose already holds the blade at +38, and what is being
-## asked of it is where a blade *may* point without going through the Gub or into
+## asked of it is where a blade *may* point without going through the Bog or into
 ## the grass. So the band is the whole upper half, in twenty-degree steps.
 const SWORD_ELEVATIONS := [0.0, 20.0, 40.0, 60.0, 80.0]
 
@@ -1272,9 +1272,9 @@ const SWORD_ELEVATIONS := [0.0, 20.0, 40.0, 60.0, 80.0]
 ## in one pose across the whole locomotion plane there is exactly one hand
 ## orientation, and "lay the shaft flat" becomes an equation:
 ##
-##     d       the direction the shaft is wanted in, in the Gub's own frame —
+##     d       the direction the shaft is wanted in, in the Bog's own frame —
 ##             `elevation` degrees above horizontal at `bearing` degrees round
-##             from forward toward the Gub's right
+##             from forward toward the Bog's right
 ##     hand    the gripping hand's basis in that frame, under the carry layer
 ##     R.Y     hand^-1 * d, because the shaft is the grip's own +Y
 ##     R.X/Z   any orthonormal pair completing it — a shaft is a cylinder and
@@ -1283,7 +1283,7 @@ const SWORD_ELEVATIONS := [0.0, 20.0, 40.0, 60.0, 80.0]
 ##             the palm so the fist stays 55% of the way up the shaft
 ##
 ## What the sweep below is for is the *other* half, which no equation answers:
-## where round the Gub a flat shaft may point without going through the Gub. So
+## where round the Bog a flat shaft may point without going through the Bog. So
 ## every bearing is solved and then **scored against the real skinned trunk**,
 ## which is D-065's own method and the reason its table is believable.
 func _solve(weapon_name: String, carry_override: String = "",
@@ -1299,10 +1299,10 @@ func _solve(weapon_name: String, carry_override: String = "",
 		elevations = []
 		for part: String in elevations_override.split(","):
 			elevations.append(float(part))
-	var gub := _bare_gub()
-	var skeleton := gub.find_child("Skeleton3D", true, false) as Skeleton3D
-	var player := gub.find_child("AnimationPlayer", true, false) as AnimationPlayer
-	_build_skin(gub, skeleton)
+	var bog := _bare_bog()
+	var skeleton := bog.find_child("Skeleton3D", true, false) as Skeleton3D
+	var player := bog.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	_build_skin(bog, skeleton)
 	var clips := _carried_clips(player, false)
 	var carry := Loadout.carry_clip(weapon)
 	if not carry_override.is_empty():
@@ -1317,7 +1317,7 @@ func _solve(weapon_name: String, carry_override: String = "",
 	for elevation: float in elevations:
 		for b in SOLVE_BEARINGS:
 			var bearing := 360.0 * float(b) / float(SOLVE_BEARINGS) - 180.0
-			var grip := _grip_for(gub, skeleton, player, carry, elevation,
+			var grip := _grip_for(bog, skeleton, player, carry, elevation,
 				bearing, weapon)
 			var worst := INF
 			var skin := INF
@@ -1325,7 +1325,7 @@ func _solve(weapon_name: String, carry_override: String = "",
 			var off_hand := 0.0
 			var lowest_elev := 0.0
 			for clip: String in clips:
-				var row := _clearance(gub, skeleton, player, clip, carry,
+				var row := _clearance(bog, skeleton, player, clip, carry,
 					weapon, grip)
 				worst = minf(worst, row[0])
 				skin = minf(skin, row[2])
@@ -1340,7 +1340,7 @@ func _solve(weapon_name: String, carry_override: String = "",
 
 
 ## The grip rotation that points the **business end** `elevation` degrees up at
-## `bearing` degrees round from the Gub's forward, under the carry layer.
+## `bearing` degrees round from the Bog's forward, under the carry layer.
 ##
 ## Read at one representative frame — the carry clip's own first key over `Idle`
 ## — because that is what "under the layer" means: `UPPER_BODY_BONES` takes its
@@ -1354,14 +1354,14 @@ func _solve(weapon_name: String, carry_override: String = "",
 ## **point-to-pommel**, so aiming +Y at a bearing would aim the *pommel* there
 ## and put the blade out the back. Asked the wrong way round, `solve sword` reads
 ## as a perfectly plausible table in which every row is 180 degrees wrong.
-func _grip_for(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
+func _grip_for(bog: Bog, skeleton: Skeleton3D, player: AnimationPlayer,
 		carry: String, elevation: float, bearing: float,
 		weapon: int = Loadout.Weapon.SPEAR) -> Vector3:
 	_pose(player, skeleton, "Idle", 0.0, carry, 0.0)
 	var hand := skeleton.find_bone(HeldGear.HAND_BONE)
-	var to_world := (gub.global_transform * skeleton.global_transform
+	var to_world := (bog.global_transform * skeleton.global_transform
 		* skeleton.get_bone_global_pose(hand)).basis.orthonormalized()
-	# The Gub's own frame: -Z is forward for an untouched node, +X its right.
+	# The Bog's own frame: -Z is forward for an untouched node, +X its right.
 	var e := deg_to_rad(elevation)
 	var a := deg_to_rad(bearing)
 	var want := Vector3(sin(a) * cos(e), sin(e), -cos(a) * cos(e))
@@ -1403,7 +1403,7 @@ const TRUNK_BONES := ["Hips", "Spine", "Spine1", "Spine2", "Neck", "Head",
 const TRUNK_SHARE := 0.5
 
 
-## The Gub's own body, skinned, so that "does the shaft go through the head" is a
+## The Bog's own body, skinned, so that "does the shaft go through the head" is a
 ## measurement rather than a look at a contact sheet (D-065 scored its grip this
 ## way and the table in `HeldGear.GRIP_OFFSET` is that score).
 ##
@@ -1411,8 +1411,8 @@ const TRUNK_SHARE := 0.5
 ## the four influences, which is what `_nearest_skin` below does — the same
 ## formula the GPU runs, so this is the body a player sees and not an
 ## approximation of it. Only the trunk survives the read; see `TRUNK_BONES`.
-func _build_skin(gub: Gub, skeleton: Skeleton3D) -> void:
-	var mesh_node := gub.body_mesh
+func _build_skin(bog: Bog, skeleton: Skeleton3D) -> void:
+	var mesh_node := bog.body_mesh
 	if mesh_node == null or mesh_node.mesh == null or mesh_node.skin == null:
 		push_warning("preview_carry: no skinned body mesh; skin is not measured")
 		return
@@ -1490,10 +1490,10 @@ func _build_skin(gub: Gub, skeleton: Skeleton3D) -> void:
 ##
 ## Every vertex, at every sample, which is 5,295 points per sample and is the
 ## reason `measure` is a headless mode rather than something the gate runs on
-## every clip in the game. It is also the only honest answer: a Gub's head is a
+## every clip in the game. It is also the only honest answer: a Bog's head is a
 ## 0.5 m blob and the three ellipsoids the first pass of D-065 stood in for it
 ## with are precisely what under-measured it.
-func _nearest_skin(gub: Gub, skeleton: Skeleton3D, a: Vector3, b: Vector3) -> float:
+func _nearest_skin(bog: Bog, skeleton: Skeleton3D, a: Vector3, b: Vector3) -> float:
 	if _skin_rest.is_empty() or _skin_binds.is_empty():
 		return INF
 	var bones: Array[Transform3D] = []
@@ -1503,7 +1503,7 @@ func _nearest_skin(gub: Gub, skeleton: Skeleton3D, a: Vector3, b: Vector3) -> fl
 			bones.append(Transform3D.IDENTITY)
 		else:
 			bones.append(skeleton.get_bone_global_pose(bone) * _skin_binds[i])
-	var to_world := gub.global_transform * skeleton.global_transform
+	var to_world := bog.global_transform * skeleton.global_transform
 	var nearest := INF
 	for v in _skin_rest.size():
 		var rest := _skin_rest[v]
@@ -1534,7 +1534,7 @@ static func _point_to_segment(p: Vector3, a: Vector3, b: Vector3) -> float:
 
 func _carried_clips(player: AnimationPlayer, everything: bool) -> Array[String]:
 	var out: Array[String] = []
-	for clip: String in GubAnimator.REQUIRED_CLIPS:
+	for clip: String in BogAnimator.REQUIRED_CLIPS:
 		if not everything and clip in CARRY_SKIP:
 			continue
 		if clip in ["BowCarry", "SwordCarry", "SpearCarry"]:
@@ -1544,20 +1544,20 @@ func _carried_clips(player: AnimationPlayer, everything: bool) -> Array[String]:
 	return out
 
 
-## A Gub with nothing on it that could move a bone or fall through the floor.
-## `preview_sword._bare_gub`'s twin, and deliberately a copy of it rather than a
+## A Bog with nothing on it that could move a bone or fall through the floor.
+## `preview_sword._bare_bog`'s twin, and deliberately a copy of it rather than a
 ## shared helper in a fourth file: the list of nodes a measurement tool has to
-## take off a Gub is the kind of thing that ought to fail loudly in one tool when
+## take off a Bog is the kind of thing that ought to fail loudly in one tool when
 ## the scene changes, not quietly in three.
-func _bare_gub() -> Gub:
-	var gub := GUB.instantiate() as Gub
-	add_child(gub)
-	gub.set_physics_process(false)
+func _bare_bog() -> Bog:
+	var bog := BOG.instantiate() as Bog
+	add_child(bog)
+	bog.set_physics_process(false)
 	for spare in ["CameraRig", "Nameplate", "AnimationTree"]:
-		var node := gub.get_node_or_null(spare)
+		var node := bog.get_node_or_null(spare)
 		if node != null:
 			node.queue_free()
-	return gub
+	return bog
 
 
 # ------------------------------------------------------------- the picture ---
@@ -1585,26 +1585,26 @@ func _sheet(weapon_name: String, carry_override: String = "",
 	for i in columns * 2:
 		var layered := i >= columns
 		var clip: String = SHEET_CLIPS[i % columns]
-		var gub := _bare_gub()
-		var skeleton := gub.find_child("Skeleton3D", true, false) as Skeleton3D
-		var player := gub.find_child("AnimationPlayer", true, false) as AnimationPlayer
+		var bog := _bare_bog()
+		var skeleton := bog.find_child("Skeleton3D", true, false) as Skeleton3D
+		var player := bog.find_child("AnimationPlayer", true, false) as AnimationPlayer
 		# One row of six and not two rows of three, with a gap in the middle.
 		# Two rows were tried first and are unreadable at this camera: the back
 		# row stands *behind* the front one at an oblique angle, so half of every
 		# comparison is occluded by the thing it is being compared with.
 		var slot := float(i) + (SHEET_GAP if layered else 0.0)
-		gub.position = row * (slot - (float(columns * 2 - 1) + SHEET_GAP) * 0.5) \
+		bog.position = row * (slot - (float(columns * 2 - 1) + SHEET_GAP) * 0.5) \
 			* SHEET_SPREAD
-		gub.weapon = weapon
-		_show(gub, weapon)
+		bog.weapon = weapon
+		_show(bog, weapon)
 		# The worst frame of the clip rather than a lucky one — the same sample
 		# the table reports, asked for its time instead of its height, which is
 		# `preview_bow`'s own rule for this picture.
-		var at := _worst_moment(gub, skeleton, player, clip,
+		var at := _worst_moment(bog, skeleton, player, clip,
 			carry if layered else "", weapon, tune)
 		_pose(player, skeleton, clip, at[0], carry if layered else "", at[1])
 		if tune != Vector3.INF and weapon == Loadout.Weapon.SPEAR:
-			gub.held_gear.set_grip(HeldGear.grip_offset(tune), tune)
+			bog.held_gear.set_grip(HeldGear.grip_offset(tune), tune)
 
 		var stamp := Label3D.new()
 		stamp.text = "%s%s" % [clip, "  + carry" if layered else ""]
@@ -1612,7 +1612,7 @@ func _sheet(weapon_name: String, carry_override: String = "",
 		stamp.pixel_size = 0.0016
 		stamp.position = Vector3(0.0, 2.30, 0.0)
 		stamp.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		gub.add_child(stamp)
+		bog.add_child(stamp)
 
 	_build_stage(eye)
 
@@ -1621,12 +1621,12 @@ func _sheet(weapon_name: String, carry_override: String = "",
 ##
 ## **The one judgement on this page that is not a number's to make.** The user
 ## can see that a spear is riding the back of a hand and `palm` can now say so in
-## millimetres, but "does this read as a Gub holding a spear" is settled by
+## millimetres, but "does this read as a Bog holding a spear" is settled by
 ## looking, and a sheet framed on a whole body puts the fist twenty pixels
-## across. So: one Gub per palm z asked for, all in the carried `Idle`, framed on
+## across. So: one Bog per palm z asked for, all in the carried `Idle`, framed on
 ## the hand.
 ##
-## Seen from **behind the Gub's right shoulder**, which is not the sheet's own
+## Seen from **behind the Bog's right shoulder**, which is not the sheet's own
 ## camera and is chosen for the same kind of reason `elevations plan` is. From
 ## the front the shaft crosses the fist in the screen plane and passing in front
 ## of the hand looks the same as passing through it; from behind the shoulder the
@@ -1644,24 +1644,24 @@ func _fist(zs: Array[float]) -> void:
 	var centre := Vector3.ZERO
 
 	for i in zs.size():
-		var gub := _bare_gub()
-		var skeleton := gub.find_child("Skeleton3D", true, false) as Skeleton3D
-		var player := gub.find_child("AnimationPlayer", true, false) as AnimationPlayer
-		gub.position = row * (float(i) - float(zs.size() - 1) * 0.5) * FIST_SPREAD
-		gub.weapon = Loadout.Weapon.SPEAR
-		_show(gub, Loadout.Weapon.SPEAR)
+		var bog := _bare_bog()
+		var skeleton := bog.find_child("Skeleton3D", true, false) as Skeleton3D
+		var player := bog.find_child("AnimationPlayer", true, false) as AnimationPlayer
+		bog.position = row * (float(i) - float(zs.size() - 1) * 0.5) * FIST_SPREAD
+		bog.weapon = Loadout.Weapon.SPEAR
+		_show(bog, Loadout.Weapon.SPEAR)
 		_pose(player, skeleton, "Idle", 0.0, carry, 0.0)
 		# The grip derived from the palm point being asked about, exactly as
 		# `HeldGear` would derive it — the rotation is held, because this picture
 		# is about one component of one vector and nothing else.
 		var palm := Vector3(HeldGear.GRIP_PALM.x, HeldGear.GRIP_PALM.y, zs[i])
-		gub.held_gear.set_grip(palm - HeldGear.shaft_direction()
+		bog.held_gear.set_grip(palm - HeldGear.shaft_direction()
 			* (HeldGear.GRIP_FRACTION * HeldGear.SHAFT_LENGTH),
 			HeldGear.GRIP_ROTATION)
 		var hand := skeleton.find_bone(HeldGear.HAND_BONE)
-		# `Skeleton3D.global_transform` already carries the Gub's own placement,
-		# so this is the world hand and not the hand times the Gub twice — which
-		# matters here and does not in the tables above, where the Gub is at the
+		# `Skeleton3D.global_transform` already carries the Bog's own placement,
+		# so this is the world hand and not the hand times the Bog twice — which
+		# matters here and does not in the tables above, where the Bog is at the
 		# origin and the doubling is the identity.
 		var at := skeleton.global_transform * skeleton.get_bone_global_pose(hand)
 		centre += at * _fist_middle(skeleton, hand)
@@ -1671,8 +1671,8 @@ func _fist(zs: Array[float]) -> void:
 			"  (shipped)" if is_equal_approx(zs[i], HeldGear.GRIP_PALM.z) else ""]
 		stamp.font_size = 44
 		stamp.pixel_size = 0.0004
-		# Hung in the world above the hand rather than parented to the Gub: the
-		# Gub carries a scale, and a label placed in its local space lands a
+		# Hung in the world above the hand rather than parented to the Bog: the
+		# Bog carries a scale, and a label placed in its local space lands a
 		# metre off. Over the top of whatever is in front of it as well, because
 		# at this range the head is between the camera and the hand.
 		stamp.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -1707,13 +1707,13 @@ func _fist(zs: Array[float]) -> void:
 ## render mode and does not run `_build_skin`.
 func _fist_middle(skeleton: Skeleton3D, hand: int) -> Vector3:
 	if _fist_rest.is_empty():
-		var gub := get_child(0) as Gub
-		_build_skin(gub, skeleton)
+		var bog := get_child(0) as Bog
+		_build_skin(bog, skeleton)
 	return _fist_centre(skeleton, hand, _fist_rest, _fist_bones,
 		_fist_weights)
 
 
-## The elevation table as a picture: one Gub per carried clip, in a row, with
+## The elevation table as a picture: one Bog per carried clip, in a row, with
 ## what its weapon's long axis is doing stamped under it (D-070).
 ##
 ## The claim the spear's whole grip rests on is *"within 5 degrees of horizontal
@@ -1726,7 +1726,7 @@ func _fist_middle(skeleton: Skeleton3D, hand: int) -> Vector3:
 ## different claim and needs a different camera. A spear's grip is judged by
 ## whether the shaft lies flat, so its picture is side-on and its stamp is an
 ## elevation. The great sword's complaint was *"coming out of the hands at a 35
-## ish degree angle to the characters right"* — an angle round the Gub, not above
+## ish degree angle to the characters right"* — an angle round the Bog, not above
 ## the horizon — and side-on that is the one component you cannot see, because a
 ## blade swung out to the right leaves the screen plane and only looks short.
 ## From overhead it is an angle on the screen and a protractor settles it.
@@ -1735,19 +1735,19 @@ func _elevations(weapon_name: String, view: String = "side") -> void:
 	var plan := view == "plan"
 	var carry := Loadout.carry_clip(weapon)
 	# The row runs across the frame and the camera stands **in front**, which is
-	# forced rather than chosen: the shaft lies across the Gub's body, along its
+	# forced rather than chosen: the shaft lies across the Bog's body, along its
 	# own left-right axis, so a camera on that axis sees it end-on as a dot. Seen
 	# from the front the shaft is a line at full length and its angle off
 	# horizontal is the angle on the screen, which is the one thing this picture
 	# is for. Laid along the same axis at `SHEET_SPREAD` the shafts would nearly
 	# touch, so this row is wider.
 	var row := Vector3.RIGHT
-	var gub0 := _bare_gub()
-	var probe := gub0.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	var bog0 := _bare_bog()
+	var probe := bog0.find_child("AnimationPlayer", true, false) as AnimationPlayer
 	var clips := _carried_clips(probe, false)
-	gub0.queue_free()
+	bog0.queue_free()
 	# Three clips from overhead rather than twelve, and it is not a preference:
-	# seen from above a Gub is a metre across, so a twelve-wide row is framed on
+	# seen from above a Bog is a metre across, so a twelve-wide row is framed on
 	# twenty metres and every body in it is too small to put a protractor on. The
 	# side-on row gets away with twelve because a 1.24 m shaft lying across the
 	# body is most of a column. `SHEET_CLIPS` is the same three the before/after
@@ -1759,16 +1759,16 @@ func _elevations(weapon_name: String, view: String = "side") -> void:
 
 	for i in clips.size():
 		var clip: String = clips[i]
-		var gub := _bare_gub()
-		var skeleton := gub.find_child("Skeleton3D", true, false) as Skeleton3D
-		var player := gub.find_child("AnimationPlayer", true, false) as AnimationPlayer
-		gub.position = row * (float(i) - float(clips.size() - 1) * 0.5) \
+		var bog := _bare_bog()
+		var skeleton := bog.find_child("Skeleton3D", true, false) as Skeleton3D
+		var player := bog.find_child("AnimationPlayer", true, false) as AnimationPlayer
+		bog.position = row * (float(i) - float(clips.size() - 1) * 0.5) \
 			* (ELEVATION_SPREAD if plan else SHEET_SPREAD)
-		gub.weapon = weapon
-		_show(gub, weapon)
-		var at := _worst_moment(gub, skeleton, player, clip, carry, weapon)
+		bog.weapon = weapon
+		_show(bog, weapon)
+		var at := _worst_moment(bog, skeleton, player, clip, carry, weapon)
 		_pose(player, skeleton, clip, at[0], carry, at[1])
-		var measured := _clearance(gub, skeleton, player, clip, carry, weapon)
+		var measured := _clearance(bog, skeleton, player, clip, carry, weapon)
 
 		var stamp := Label3D.new()
 		stamp.text = "%s\n%+.0f deg  %+.2f m" % [clip, measured[1], measured[0]]
@@ -1778,7 +1778,7 @@ func _elevations(weapon_name: String, view: String = "side") -> void:
 		stamp.pixel_size = 0.0016
 		stamp.position = Vector3(0.0, 2.30, 0.0)
 		stamp.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		gub.add_child(stamp)
+		bog.add_child(stamp)
 
 	# Dead side-on and near enough level: the whole point is that a horizontal
 	# shaft draws a horizontal line on the screen, and any elevation at all tilts
@@ -1787,9 +1787,9 @@ func _elevations(weapon_name: String, view: String = "side") -> void:
 	# number every stamp carries.
 	#
 	# From overhead the same argument runs one axis over, and the camera's own
-	# "up" has to become the Gub's **forward**: looking straight down, `UP` is
+	# "up" has to become the Bog's **forward**: looking straight down, `UP` is
 	# parallel to the view and `look_at_from_position` has no frame to build. With
-	# `FORWARD` as up, the Gub's forward points up the screen, so a blade at +44°
+	# `FORWARD` as up, the Bog's forward points up the screen, so a blade at +44°
 	# draws a line 44° clockwise off vertical and the stamp is the protractor.
 	_sheet_columns = clips.size()
 	if plan:
@@ -1807,7 +1807,7 @@ var _sheet_columns: int = 0
 ## The moment in `clip` at which this weapon hangs lowest, as
 ## `[clip second, carry-clip second]` — so the sheet shows the frame the table's
 ## number came from.
-func _worst_moment(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
+func _worst_moment(bog: Bog, skeleton: Skeleton3D, player: AnimationPlayer,
 		clip: String, carry: String, weapon: int,
 		tune: Vector3 = Vector3.INF) -> Array:
 	var hand := skeleton.find_bone(_hand_bone(weapon))
@@ -1824,7 +1824,7 @@ func _worst_moment(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
 			carry_time = carry_length \
 				* float(i % CARRY_SAMPLES) / float(CARRY_SAMPLES)
 		_pose(player, skeleton, clip, time, carry, carry_time)
-		var grip := gub.global_transform * skeleton.global_transform \
+		var grip := bog.global_transform * skeleton.global_transform \
 			* skeleton.get_bone_global_pose(hand) * _prop_transform(weapon, tune)
 		for end: Vector3 in _prop_ends(weapon):
 			var p: Vector3 = grip * end
@@ -1835,18 +1835,18 @@ func _worst_moment(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
 
 
 ## Put this weapon in the hand and take the other two out — the same exclusion
-## `GubCombat._refresh_hand` enforces, done by hand because there is no combat
-## node on a bare Gub.
-func _show(gub: Gub, weapon: int) -> void:
-	gub.held_gear.set_carried(weapon == Loadout.Weapon.SPEAR)
-	gub.held_gear.set_bow(weapon == Loadout.Weapon.BOW)
-	gub.held_gear.set_sword(weapon == Loadout.Weapon.SWORD)
-	gub.held_gear.set_arrow(false)
+## `BogCombat._refresh_hand` enforces, done by hand because there is no combat
+## node on a bare Bog.
+func _show(bog: Bog, weapon: int) -> void:
+	bog.held_gear.set_carried(weapon == Loadout.Weapon.SPEAR)
+	bog.held_gear.set_bow(weapon == Loadout.Weapon.BOW)
+	bog.held_gear.set_sword(weapon == Loadout.Weapon.SWORD)
+	bog.held_gear.set_arrow(false)
 	# The bow's carry tilt **on**, because it is what ships (D-070 kept it and
 	# says why in `HeldGear.CARRY_TILT`); `set_carry(1.0)` is the value
-	# `GubAnimator` holds for a bow nobody is drawing. The sword has no tilt any
+	# `BogAnimator` holds for a bow nobody is drawing. The sword has no tilt any
 	# more and the spear never had one, so those two are whatever their grip says.
-	gub.held_gear.set_carry(1.0)
+	bog.held_gear.set_carry(1.0)
 
 
 func _build_stage(eye: Vector3, up: Vector3 = Vector3.UP) -> void:
@@ -1865,10 +1865,10 @@ func _build_stage(eye: Vector3, up: Vector3 = Vector3.UP) -> void:
 	env.environment = e
 	add_child(env)
 
-	# Framed on the **width** of the row rather than the height of a Gub, which
+	# Framed on the **width** of the row rather than the height of a Bog, which
 	# is the one thing this sheet needs that `preview_bow`'s and
 	# `preview_sword`'s do not: six bodies plus a gap is ten metres across and a
-	# camera sized to a 1.8 m Gub crops four of them off the ends. `KEEP_WIDTH`
+	# camera sized to a 1.8 m Bog crops four of them off the ends. `KEEP_WIDTH`
 	# makes `size` mean the horizontal extent, so the frame follows the layout
 	# instead of a number somebody would have to keep in step with it.
 	var width := (float(SHEET_CLIPS.size() * 2 - 1) + SHEET_GAP) * SHEET_SPREAD
@@ -1905,8 +1905,8 @@ func _build_stage(eye: Vector3, up: Vector3 = Vector3.UP) -> void:
 ##
 ## `-- solve`'s opposite number for a prop that is not carried. `_solve` sweeps
 ## 24 bearings by 3 elevations and scores each against the floor and the trunk,
-## because a carried weapon may point anywhere round a Gub and the question is
-## which of those directions is not occupied by the Gub. A bottle has no such
+## because a carried weapon may point anywhere round a Bog and the question is
+## which of those directions is not occupied by the Bog. A bottle has no such
 ## freedom: it is held for 2.9 s of one clip whose hand does one thing, so there
 ## are not 288 candidates, there are **two** — stand the bottle up at the start
 ## of the drink, or stand it up at the lips — and the whole of the argument is
@@ -1917,10 +1917,10 @@ func _build_stage(eye: Vector3, up: Vector3 = Vector3.UP) -> void:
 ## each other and is not obvious before, and a tool that printed only the winner
 ## would be asking to be believed.
 func _potion() -> void:
-	var gub := _bare_gub()
-	var skeleton := gub.find_child("Skeleton3D", true, false) as Skeleton3D
-	var player := gub.find_child("AnimationPlayer", true, false) as AnimationPlayer
-	_build_skin(gub, skeleton)
+	var bog := _bare_bog()
+	var skeleton := bog.find_child("Skeleton3D", true, false) as Skeleton3D
+	var player := bog.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	_build_skin(bog, skeleton)
 	var hand := skeleton.find_bone(HeldGear.BOW_HAND_BONE)
 
 	# The palm point, which is the measurement and not a choice: the centre of
@@ -1952,20 +1952,20 @@ func _potion() -> void:
 
 	print("  %-22s %-28s" % ["fitted at", "POTION_GRIP_ROTATION"]
 		+ "  the bottle's tilt off horizontal, across the window")
-	for spec: Array in [["the window opens", GubAnimator.DRINK_CLIP_START],
+	for spec: Array in [["the window opens", BogAnimator.DRINK_CLIP_START],
 			["the lips", _lips_time(player, skeleton)]]:
-		var rot := _upright_at(gub, skeleton, player, float(spec[1]))
+		var rot := _upright_at(bog, skeleton, player, float(spec[1]))
 		var line := ""
 		for i in 13:
 			_pose(player, skeleton, "Idle", 0.0, "Drink",
-				GubAnimator.DRINK_CLIP_START
-				+ (GubAnimator.DRINK_CLIP_END - GubAnimator.DRINK_CLIP_START)
+				BogAnimator.DRINK_CLIP_START
+				+ (BogAnimator.DRINK_CLIP_END - BogAnimator.DRINK_CLIP_START)
 				* float(i) / 12.0)
 			line += "%+4.0f " % _bottle_tilt(skeleton, hand, rot)
 		print("  %-22s Vector3(%7.2f,%8.2f,%8.2f)  %s"
 			% [spec[0], rot.x, rot.y, rot.z, line])
 
-	# Which way is **out of the Gub**, in the hand's own frame, at the frame
+	# Which way is **out of the Bog**, in the hand's own frame, at the frame
 	# the window opens on: horizontally away from `Spine1`, with the component
 	# along the bottle projected out because sliding a prop along its own axis
 	# is the grip fraction's business. It is the axis the palm point is fitted
@@ -1975,13 +1975,13 @@ func _potion() -> void:
 	#
 	# **Printed and not scored**, which is this mode's one honest limitation.
 	# The thing five centimetres out of the fist buys is that the bottle is not
-	# inside the Gub's stomach, and the measurement that ought to say so —
+	# inside the Bog's stomach, and the measurement that ought to say so —
 	# `_nearest_skin` against the trunk — cannot: the drink puts a bottle at a
 	# face on purpose, so the minimum over the window is nearly zero at every
 	# offset and says nothing about the half of it that happens at the hip.
 	# `-- drink fist <scale> <fraction> <out>` renders the comparison instead,
 	# and D-075 has the three pictures.
-	_pose(player, skeleton, "Idle", 0.0, "Drink", GubAnimator.DRINK_CLIP_START)
+	_pose(player, skeleton, "Idle", 0.0, "Drink", BogAnimator.DRINK_CLIP_START)
 	var spine := skeleton.get_bone_global_pose(
 		skeleton.find_bone("Spine1")).origin
 	var hand_at := skeleton.get_bone_global_pose(hand)
@@ -1991,7 +1991,7 @@ func _potion() -> void:
 		* out_world.normalized()
 	outward = (outward - along * outward.dot(along)).normalized()
 	var out_by := HeldGear.POTION_PALM - centre
-	print("  out of the Gub is %v in the hand's own frame, and POTION_PALM is "
+	print("  out of the Bog is %v in the hand's own frame, and POTION_PALM is "
 		% outward + "%.3f m along it — %.3f m of %.3f allowed"
 		% [out_by.dot(outward), (out_by - along * out_by.dot(along)).length(),
 		PALM_MAX])
@@ -2028,10 +2028,10 @@ func _potion() -> void:
 ## for the reason `HeldGear.POTION_GRIP_ROTATION` gives — the bottle is a
 ## surface of revolution — so any completion will do and the seed is the same
 ## one `_grip_for` uses.
-func _upright_at(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
+func _upright_at(bog: Bog, skeleton: Skeleton3D, player: AnimationPlayer,
 		at: float) -> Vector3:
 	_pose(player, skeleton, "Idle", 0.0, "Drink", at)
-	var to_world := (gub.global_transform * skeleton.global_transform
+	var to_world := (bog.global_transform * skeleton.global_transform
 		* skeleton.get_bone_global_pose(skeleton.find_bone(
 			HeldGear.BOW_HAND_BONE))).basis.orthonormalized()
 	var axis := (to_world.inverse() * Vector3.UP).normalized()
@@ -2041,13 +2041,13 @@ func _upright_at(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
 	return Basis(x, axis, x.cross(axis)).get_euler() * (180.0 / PI)
 
 
-## Which moment of the window the bottle is at the Gub's mouth — the sample at
+## Which moment of the window the bottle is at the Bog's mouth — the sample at
 ## which the drinking hand is highest, which is D-067's own detector and finds
 ## the same 2.6-3.0 s three other tools do.
 func _lips_time(player: AnimationPlayer, skeleton: Skeleton3D) -> float:
 	var hand := skeleton.find_bone(HeldGear.BOW_HAND_BONE)
 	var best := -INF
-	var at := GubAnimator.DRINK_CLIP_START
+	var at := BogAnimator.DRINK_CLIP_START
 	for i in DRINK_SAMPLES:
 		var t := _drink_time(i)
 		_pose(player, skeleton, "Idle", 0.0, "Drink", t)
@@ -2075,15 +2075,15 @@ func _bottle_tilt(skeleton: Skeleton3D, hand: int,
 ##
 ## Two framings, and the brief is that both are needed — which is the pair D-074
 ## landed on one hand over. `fist` is close on the mitten, because "is the
-## bottle in the hand" is a question about twenty centimetres of Gub; `body` is
-## the whole Gub, because "does this read as drinking" is a question about all
+## bottle in the hand" is a question about twenty centimetres of Bog; `body` is
+## the whole Bog, because "does this read as drinking" is a question about all
 ## of it and about the empty other fist in particular.
 ##
 ## **The close one lines the fists up and lets the bodies fall where they
 ## like.** That is the one liberty this sheet takes and it is worth stating: the
-## drinking hand travels 0.6 m across the window, so a row of Gubs planted on
+## drinking hand travels 0.6 m across the window, so a row of Bogs planted on
 ## one floor puts their fists on a diagonal and a frame tight enough to see any
-## of them contains one. Each Gub is translated so its own hand lands on the row
+## of them contains one. Each Bog is translated so its own hand lands on the row
 ## line instead. Nothing about the grip is changed by translating a whole body,
 ## which is exactly why it is safe to do — what is being judged is a hand-local
 ## transform. It is three columns rather than six for the same reason it is
@@ -2091,17 +2091,17 @@ func _bottle_tilt(skeleton: Skeleton3D, hand: int,
 ## hundred pixels, and the three that carry the argument are the bottle upright
 ## at the side, the bottle at the lips, and the bottle upright again.
 ##
-## From the Gub's front-left quarter and **not** from behind the shoulder,
+## From the Bog's front-left quarter and **not** from behind the shoulder,
 ## which is where this parts company with `_fist`; `DRINK_AZIMUTH` carries the
 ## argument.
 ##
-## **`Combat` is taken off these Gubs and that is not tidiness.** `_tick_hand`
+## **`Combat` is taken off these Bogs and that is not tidiness.** `_tick_hand`
 ## polls four — five, now — questions every frame and repaints any hand that
-## disagrees with its gates, and `is_channelling()` is false on a Gub nobody is
+## disagrees with its gates, and `is_channelling()` is false on a Bog nobody is
 ## driving. Left on, it takes the bottle back out of the fist and puts the
 ## default weapon in it somewhere around the twentieth warmup frame, which is
 ## before the shutter. Every other picture on this page gets away with leaving
-## it: they set `gub.weapon` and then show that weapon, so the poll agrees with
+## it: they set `bog.weapon` and then show that weapon, so the poll agrees with
 ## them. This is the first mode whose hand the poll would disagree with, and it
 ## is the first one that has to say so.
 func _drink(view: String, tune: Vector3 = Vector3.ZERO) -> void:
@@ -2118,18 +2118,18 @@ func _drink(view: String, tune: Vector3 = Vector3.ZERO) -> void:
 	var centre := Vector3.ZERO
 
 	for i in fractions.size():
-		var gub := _bare_gub()
-		var combat := gub.get_node_or_null("Combat")
+		var bog := _bare_bog()
+		var combat := bog.get_node_or_null("Combat")
 		if combat != null:
 			combat.queue_free()
-		var skeleton := gub.find_child("Skeleton3D", true, false) as Skeleton3D
-		var player := gub.find_child("AnimationPlayer", true, false) as AnimationPlayer
+		var skeleton := bog.find_child("Skeleton3D", true, false) as Skeleton3D
+		var player := bog.find_child("AnimationPlayer", true, false) as AnimationPlayer
 		var fraction: float = fractions[i]
-		var t := GubAnimator.DRINK_CLIP_START + fraction 			* (GubAnimator.DRINK_CLIP_END - GubAnimator.DRINK_CLIP_START)
+		var t := BogAnimator.DRINK_CLIP_START + fraction 			* (BogAnimator.DRINK_CLIP_END - BogAnimator.DRINK_CLIP_START)
 		# Nothing in the fists but the bottle, which is D-067's "the drink
 		# empties both hands" as a picture: `_show` with no weapon is exactly
-		# what `_refresh_hand` produces for a channelling Gub.
-		_show(gub, -1)
+		# what `_refresh_hand` produces for a channelling Bog.
+		_show(bog, -1)
 		# `set_potion_grip` is the escape hatch the constants were swept
 		# through before they were pasted: `tune` is a scale and a grip
 		# fraction, and zero means whatever ships.
@@ -2145,18 +2145,18 @@ func _drink(view: String, tune: Vector3 = Vector3.ZERO) -> void:
 				* out_world.normalized()
 			outward = (outward - dir * outward.dot(dir)).normalized()
 			var palm := HeldGear.POTION_PALM + outward * tune.z
-			gub.held_gear.set_potion_grip(tune.x,
+			bog.held_gear.set_potion_grip(tune.x,
 				palm - dir * (tune.y * HeldGear.POTION_HEIGHT
 					* tune.x), HeldGear.POTION_GRIP_ROTATION)
-		gub.held_gear.set_potion(true)
+		bog.held_gear.set_potion(true)
 		_pose(player, skeleton, "Idle", 0.0, "Drink", t)
 		var slot := row * (float(i) - float(fractions.size() - 1) * 0.5) * spread
-		# `Skeleton3D.global_transform` already carries the Gub's own placement,
-		# so this is the world hand and not the hand times the Gub twice — the
-		# bug D-074 found the first time a mode stood Gubs in a row.
+		# `Skeleton3D.global_transform` already carries the Bog's own placement,
+		# so this is the world hand and not the hand times the Bog twice — the
+		# bug D-074 found the first time a mode stood Bogs in a row.
 		var hand := (skeleton.global_transform * skeleton.get_bone_global_pose(
 			skeleton.find_bone(HeldGear.BOW_HAND_BONE))).origin
-		gub.position = slot - (hand if close else Vector3.ZERO)
+		bog.position = slot - (hand if close else Vector3.ZERO)
 		hand = slot if close else hand + slot
 		centre += hand if close else Vector3(slot.x, 1.1, slot.z)
 
@@ -2167,12 +2167,12 @@ func _drink(view: String, tune: Vector3 = Vector3.ZERO) -> void:
 		stamp.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 		stamp.no_depth_test = close
 		if close:
-			# Hung in the world rather than parented, because the Gub carries a
+			# Hung in the world rather than parented, because the Bog carries a
 			# scale and a label placed in its local space lands a metre off.
 			add_child(stamp)
 			stamp.global_position = hand + Vector3(0.0, FIST_FRAME * 0.6, 0.0)
 		else:
-			gub.add_child(stamp)
+			bog.add_child(stamp)
 			stamp.position = Vector3(0.0, 2.30, 0.0)
 	centre /= float(fractions.size())
 

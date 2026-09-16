@@ -1,5 +1,5 @@
 extends Node3D
-## Playable testbed for the Gub: flat ground, a few obstacles, one player.
+## Playable testbed for the Bog: flat ground, a few obstacles, one player.
 ## Development tool, not shipped.
 ##
 ## Run it interactively to feel the movement:
@@ -10,13 +10,13 @@ extends Node3D
 ##   Godot --path . --script tools/snapshot.gd -- res://tools/sandbox.tscn out.png 90 run
 ##
 ## The modes are the keys of DRIVES below. `dive` is the double-jump: it presses
-## jump twice, eight frames apart, and around frame 80 the Gub is mid-dive.
+## jump twice, eight frames apart, and around frame 80 the Bog is mid-dive.
 ## `slide` sprints first and then holds crouch, because a slide has an entry
 ## speed and pressing both from a standing start does nothing at all.
 
-const GUB := preload("res://scenes/player/gub.tscn")
+const BOG := preload("res://scenes/player/bog.tscn")
 
-## Scripted inputs, so a snapshot can catch the Gub mid-stride rather than
+## Scripted inputs, so a snapshot can catch the Bog mid-stride rather than
 ## standing still. Keyed by the mode passed on the command line.
 const DRIVES := {
 	"idle": {},
@@ -30,7 +30,7 @@ const DRIVES := {
 	"ragdoll": {"move_forward": true, "sprint": true, "ragdoll": true},
 }
 
-var _gub: Gub
+var _bog: Bog
 var _drive: Dictionary = {}
 var _frames: int = 0
 
@@ -44,77 +44,77 @@ func _ready() -> void:
 	_build_obstacles()
 	_build_lighting()
 
-	_gub = GUB.instantiate()
-	_gub.name = "LocalGub"
-	add_child(_gub)
-	_gub.global_position = Vector3(0, 1.2, 6)
-	_gub.set_multiplayer_authority(multiplayer.get_unique_id())
-	_gub.display_name = "Sandbox"
-	(_gub.get_node("Nameplate") as Nameplate).set_display_name("Sandbox")
+	_bog = BOG.instantiate()
+	_bog.name = "LocalBog"
+	add_child(_bog)
+	_bog.global_position = Vector3(0, 1.2, 6)
+	_bog.set_multiplayer_authority(multiplayer.get_unique_id())
+	_bog.display_name = "Sandbox"
+	(_bog.get_node("Nameplate") as Nameplate).set_display_name("Sandbox")
 
 	if _drive.is_empty():
 		SceneFlow.recapture_cursor("sandbox")
 	else:
-		# The Gub reads the keyboard itself now, and in a scripted snapshot run
+		# The Bog reads the keyboard itself now, and in a scripted snapshot run
 		# the keyboard is empty — which would zero the pose being driven below.
-		_gub.reads_local_input = false
+		_bog.reads_local_input = false
 
 
 func _physics_process(_delta: float) -> void:
-	if _gub == null:
+	if _bog == null:
 		return
 	_frames += 1
 
 	if not _drive.is_empty():
 		# Feed the scripted inputs straight into the body, bypassing Input so
 		# this works in a windowless-ish snapshot run.
-		_gub.input_direction = Vector2(0, -1) if _drive.get("move_forward", false) else Vector2.ZERO
-		_gub.wants_sprint = _drive.get("sprint", false)
-		_gub.wants_crouch = _drive.get("crouch", false)
-		# A slide needs a running start: `Gub._handle_slide` will not begin one
-		# below SLIDE_ENTRY_SPEED, so crouch is only pressed once the Gub has
+		_bog.input_direction = Vector2(0, -1) if _drive.get("move_forward", false) else Vector2.ZERO
+		_bog.wants_sprint = _drive.get("sprint", false)
+		_bog.wants_crouch = _drive.get("crouch", false)
+		# A slide needs a running start: `Bog._handle_slide` will not begin one
+		# below SLIDE_ENTRY_SPEED, so crouch is only pressed once the Bog has
 		# landed from its 1.2 m drop and reached full sprint. Frame 40 in, the
 		# slide starts; it lasts SLIDE_DURATION, so ticks 45-100 are the slide.
 		if _drive.get("slide", false) and _frames >= 40:
-			_gub.wants_crouch = true
+			_bog.wants_crouch = true
 		if _drive.get("jump", false) and _frames % 48 == 0:
-			_gub.request_jump()
+			_bog.request_jump()
 		# Jump, then jump again eight frames later while still on the way up.
-		# The second press is the dive (`Gub._can_dive`), so a snapshot from
-		# about frame 80 catches the Gub mid-leap with the full clip running.
-		# Frame 30 and not frame 1: the Gub is dropped in from 1.2 m and has to
+		# The second press is the dive (`Bog._can_dive`), so a snapshot from
+		# about frame 80 catches the Bog mid-leap with the full clip running.
+		# Frame 30 and not frame 1: the Bog is dropped in from 1.2 m and has to
 		# be standing on something before a press counts as a ground jump.
 		if _drive.get("dive", false) and (_frames == 30 or _frames == 38):
-			_gub.request_jump()
+			_bog.request_jump()
 		if _drive.get("primary_attack", false) and _frames == 20:
-			(_gub.get_node("AnimationTree") as GubAnimator).play_throw()
+			(_bog.get_node("AnimationTree") as BogAnimator).play_throw()
 		if _drive.get("ragdoll", false) and _frames == 24:
 			_kill_for_test()
 		return
 
-	_gub.input_direction = Input.get_vector("move_left", "move_right",
+	_bog.input_direction = Input.get_vector("move_left", "move_right",
 		"move_forward", "move_back")
-	_gub.wants_sprint = Input.is_action_pressed("sprint")
-	_gub.wants_crouch = Input.is_action_pressed("crouch")
+	_bog.wants_sprint = Input.is_action_pressed("sprint")
+	_bog.wants_crouch = Input.is_action_pressed("crouch")
 	if Input.is_action_just_pressed("jump"):
-		_gub.request_jump()
+		_bog.request_jump()
 	if Input.is_action_just_pressed("primary_attack"):
-		(_gub.get_node("AnimationTree") as GubAnimator).play_throw()
+		(_bog.get_node("AnimationTree") as BogAnimator).play_throw()
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("pause"):
 		get_tree().quit()
-	if event.is_action_pressed("respawn") and _gub != null and _gub.alive:
+	if event.is_action_pressed("respawn") and _bog != null and _bog.alive:
 		_kill_for_test()
 
 
-## Stand-in for taking a spear: drop a corpse and take the Gub out of play.
+## Stand-in for taking a spear: drop a corpse and take the Bog out of play.
 func _kill_for_test() -> void:
-	var direction := _gub.facing()
-	GubRagdoll.spawn_from(_gub, self, direction * 2.4 + Vector3.UP * 0.6, "Spine1")
-	_gub.alive = false
-	_gub.visible = false
+	var direction := _bog.facing()
+	BogRagdoll.spawn_from(_bog, self, direction * 2.4 + Vector3.UP * 0.6, "Spine1")
+	_bog.alive = false
+	_bog.visible = false
 
 
 # ------------------------------------------------------------------ stage ---

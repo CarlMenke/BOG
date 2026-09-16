@@ -130,35 +130,43 @@ check "match rules" "match_rules: PASS" \
 # Headless, the whole procedural layout without a scene tree, about ten seconds.
 check "the hollow's forest and pads" "island_report: PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/island_report.tscn -- 20260904 4
-# The mushroom as cover, which is the only thing about it that matters and the
+# The shield as cover, which is the only thing about it that matters and the
 # one thing nothing checked until D-039. Three assertions out of one run, and
-# the order of them is the point: a spear thrown at a Gub standing behind a
-# mushroom does not kill it, the *same* throw with the mushroom withered does,
-# and a Gub walking into one is held off at the edge of the cap.
+# the order of them is the point: a spear thrown at a Bog standing behind a
+# shield does not kill it, the *same* throw with the shield withered does,
+# and a Bog walking into one is held off at the face of it.
 #
 # The middle one is not a nicety. "Did not die" passes for a spear that has
 # stopped killing anybody at all — a broken launch, a dummy already dead, a
 # `report_kill` that never arrived — so without a control on the same geometry
-# the first assertion would go green on a mushroom that stops nothing. Which is
-# what the check it supplements did for this whole session: `mushroom deploys`
-# asserts `snapshot: wrote`, proving a PNG exists, while the collision cap sat
-# 31 cm above the head of the tallest thing it was meant to be hiding.
+# the first assertion would go green on a shield that stops nothing. Which is
+# what the check it supplements did for this whole session: `shield deploys`
+# asserts `snapshot: wrote`, proving a PNG exists, while the mushroom's
+# collision cap sat 31 cm above the head of the tallest thing it was meant to
+# be hiding.
 #
-# The mode plants the mushroom half a metre off the line of fire, and that is
-# the other half of why this is worth anything. Lined up perfectly, the 0.55 m
-# stem blocks the shot on its own, so a dead-centre throw is stopped by a
-# mushroom whose cap is a metre above the fight.
+# The mode plants the shield half a metre off the line of fire, and that is
+# the other half of why this is worth anything. It was written for the
+# mushroom, where lining the shot up perfectly meant the 0.55 m stem blocked it
+# on its own and the canopy a metre above the fight was never asked anything.
+# On a slab it asks the other question — whether a wall 1.23 m across is still
+# cover once a fight has moved you a step off your own centre line.
+#
+# The profile the mode prints alongside is the shield's shape, measured with
+# rays rather than read off its constants: 1.22-1.24 m blocked at every height
+# from 0.15 m to 1.65 m and nothing at 1.80 m, which is a wall standing on the
+# ground with a Bog's antennae over the top of it (D-079).
 #
 # Headless, and it quits itself around tick 350: it drives its own sequence and
 # waits on the throw gate between the two spears rather than on a frame count.
-# The picture of a spear stopping dead against a cap is a separate, earlier
-# frame:
+# The picture of a spear stopping dead against the boards is a separate,
+# earlier frame:
 #     ... --script tools/snapshot.gd -- res://tools/combat_range.tscn \
-#         out/mushroom_cover.png 100 cover
-check "mushroom stops a spear" "cover PASS" \
+#         out/shield_cover.png 100 cover
+check "shield stops a spear" "cover PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- cover
-also "mushroom stops a spear" "control PASS"
-also "mushroom stops a spear" "solid PASS"
+also "shield stops a spear" "control PASS"
+also "shield stops a spear" "solid PASS"
 # Twelve throws, with the shaft required to be back in the fist at the end of
 # every one of them — and then the fist is emptied by hand while the throw gate
 # still says armed, and has to refill itself. The first half is the bug as the
@@ -221,9 +229,9 @@ check "the bow's two ends" "bow PASS" \
 also "the bow's two ends" "letter PASS"
 also "the bow's two ends" "snap PASS"
 also "the bow's two ends" "full PASS"
-# The charge as a tell, on a Gub nobody is driving (D-065). Everything that
+# The charge as a tell, on a Bog nobody is driving (D-065). Everything that
 # makes a draw work does so on the client holding the key, and none of it says a
-# word about the seven Gubs whose charge has to arrive over a wire — which is
+# word about the seven Bogs whose charge has to arrive over a wire — which is
 # the half D-025 cares about, because a tell only the archer can see is not a
 # tell.
 #
@@ -231,16 +239,16 @@ also "the bow's two ends" "full PASS"
 # two skeletons to agree about how far the string is back to within a
 # centimetre, at five charge levels. Two controls sit on the same line. The draw
 # has to have moved the hands at least 0.20 m, or "they agree" is satisfied by
-# two Gubs standing still; and the synchroniser's own property list has to carry
-# `sync_draw`, because every Gub in this testbed is in one process and the wire
+# two Bogs standing still; and the synchroniser's own property list has to carry
+# `sync_draw`, because every Bog in this testbed is in one process and the wire
 # is never involved — without that, a build that had forgotten to replicate the
 # field would pass every pose row and be invisible to every real client.
-check "a remote Gub draws the same bow" "draw PASS" \
+check "a remote Bog draws the same bow" "draw PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- draw
 # The feet, round the compass (D-066). The most visible animation fault this
-# game had was a Gub running sideways at full speed playing a *forward* run
+# game had was a Bog running sideways at full speed playing a *forward* run
 # cycle, and the honest measurement of it is not an angle — it is how fast the
-# foot that is on the ground is sliding along it. So the mode drives a Gub held
+# foot that is on the ground is sliding along it. So the mode drives a Bog held
 # facing one way, as it is held while aiming, through eight bearings at walking
 # and at running speed, and takes the slower of its two toes every tick.
 #
@@ -268,7 +276,7 @@ check "a remote Gub draws the same bow" "draw PASS" \
 # 0.54, which is the whole argument for there being two lines here.
 #
 # `crouch` is the control in D-039's sense and it is one that has to come out
-# *badly*: a crouching Gub still has one clip behind a line, so its bearings
+# *badly*: a crouching Bog still has one clip behind a line, so its bearings
 # spread 0.21 to 1.41 across the compass. If they ever stop disagreeing, this
 # measurement has stopped being able to see a skate and the sixteen lines above
 # it mean nothing. `--fixed-fps 60` so every tick is the game's own length;
@@ -281,7 +289,7 @@ also "feet planted in eight directions" "sideways PASS"
 also "feet planted in eight directions" "mirror PASS"
 also "feet planted in eight directions" "crouch PASS"
 # The torso that aims (D-066), swept through everything a player can point it
-# at. D-065 shipped a bow pointing **91 degrees off the Gub's own facing** —
+# at. D-065 shipped a bow pointing **91 degrees off the Bog's own facing** —
 # an archer stands side-on and the whole angle lives above a pelvis the layer
 # mask throws away — and left the number in `draw`'s own output for this step
 # to drive down.
@@ -309,7 +317,7 @@ also "the torso tracks the crosshair" "release PASS"
 # grip could raise it, because every one of them takes the string's V off the
 # drawing fingers. A tilt that only exists while the bow is *carried* meets no
 # string at all, and this is the table that says so: the worst limb tip over the
-# twelve clips a Gub carries a bow around in, which has to stay 0.15 m clear.
+# twelve clips a Bog carries a bow around in, which has to stay 0.15 m clear.
 #
 # **It stopped being the whole answer in D-070 and is kept because it is the
 # interesting half.** A carried bow wears a *pose* now, and what the game
@@ -327,14 +335,14 @@ check "the bow's carry tilt earns it" "carry PASS" \
 # The Elder's invincibility, asserted against a real spear rather than in logic
 # (D-040). `match_rules` can prove that `report_kill` refuses the kill; only this
 # can prove that a shaft launched at a body fourteen metres away arrives, is
-# turned aside, and leaves the Gub standing — and that is the assertion it would
+# turned aside, and leaves the Bog standing — and that is the assertion it would
 # hurt most to have wrong, because an Elder that quietly dies to the first spear
 # is a twenty-second power-up that does not exist.
 #
-# Three verdicts out of one run, and the same reasoning the mushroom's have.
+# Three verdicts out of one run, and the same reasoning the shield's have.
 # `ward` is the rule; `expiry` is the robe burning out **on its own clock**, in
 # a real match loop rather than by a harness winding the row back; and `control`
-# is the same throw at the same Gub with the robe gone, which is what stops
+# is the same throw at the same Bog with the robe gone, which is what stops
 # "did not die" being satisfied by a spear that never left the hand.
 #
 # Both halves were run against the code without them first (D-015): with the
@@ -350,16 +358,16 @@ check "a spear cannot kill the Elder" "ward PASS" \
 also "a spear cannot kill the Elder" "expiry PASS"
 also "a spear cannot kill the Elder" "control PASS"
 # A respawn hands back nothing (D-032, D-038, D-043). A player: "you spawn with
-# either an item or the elder randomly". The player dies holding a mushroom and
+# either an item or the elder randomly". The player dies holding a shield and
 # a dummy dies as the Elder holding one too, both off their spawn pads with loot
 # lying on both corpses; a second after both come back, nobody may hold, wear or
 # have picked up anything.
 #
-# The dummy is the half that caught it. It is a remote Gub, and the mode plays
+# The dummy is the half that caught it. It is a remote Bog, and the mode plays
 # its client 200 ms behind the host — still dead, still publishing the corpse,
 # a snapshot every other tick — which is the window the bug lived in: the
 # host's live copy was put back on its own loot and walked into it. Against the
-# code without `Gub.sync_life` this fails with the dummy holding a mushroom and
+# code without `Bog.sync_life` this fails with the dummy holding a shield and
 # wearing the robe. `tools/net_loopback.gd` cannot open that window at all: a
 # loopback round trip is shorter than a physics tick.
 #
@@ -371,37 +379,37 @@ check "a respawn hands back nothing" "respawn PASS" \
 # the control for the last.
 #
 # `partial` is the new thing itself: 35 then 40 through `report_damage` leaves a
-# Gub on its feet with 25, with the host's number, the body's number and the bar
+# Bog on its feet with 25, with the host's number, the body's number and the bar
 # over its head all agreeing. `lethal` is the third hit taking it to exactly
 # zero and dying *normally* — a corpse on the ground and the same
 # `player_killed` the kill feed is built out of. `elder` is D-040 restated as a
 # number: 55 at an Elder takes nothing at all and still flashes the ward, which
 # is the one piece of feedback that hit produces. `respawn` is a life beginning
-# full, on a Gub that died on zero.
+# full, on a Bog that died on zero.
 #
 # `spear` is the one that would hurt most to lose and the reason this mode ends
-# with a real throw: a spear thrown at a Gub on full health has to kill it, in
+# with a real throw: a spear thrown at a Bog on full health has to kill it, in
 # one, still. Every other line here would pass on a damage model that had
 # quietly turned the spear into a two-shot — which is exactly what a health
 # system is most likely to break, and why the spear's damage is a constant equal
-# to a whole Gub rather than a branch that says "die".
+# to a whole Bog rather than a branch that says "die".
 #
 # Run against the code without the parts they check: with `revive_at` not
 # restoring health `respawn` fails; with the Elder's refusal taken out `partial`
 # and `lethal` fail loudly (every hit wards instead). Headless, and it quits
 # itself around tick 230.
-check "damage leaves a Gub standing" "partial PASS" \
+check "damage leaves a Bog standing" "partial PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- health
-also "damage leaves a Gub standing" "lethal PASS"
-also "damage leaves a Gub standing" "elder PASS"
-also "damage leaves a Gub standing" "respawn PASS"
-also "damage leaves a Gub standing" "spear PASS"
+also "damage leaves a Bog standing" "lethal PASS"
+also "damage leaves a Bog standing" "elder PASS"
+also "damage leaves a Bog standing" "respawn PASS"
+also "damage leaves a Bog standing" "spear PASS"
 # The heal potion, end to end (D-067). Six verdicts out of one run, and the
 # order is the usual one of each being the control for the last.
 #
 # `drop` is the fifth `Pickup.Kind` coming out of a real death and being
 # collected by a real `Area3D` overlap — a dummy standing on the corpse, which
-# is the only way a Gub with no client behind it ever picks anything up.
+# is the only way a Bog with no client behind it ever picks anything up.
 #
 # `channel` is the thing the feature *is*, and it is three readings of one
 # drink: no health at all on the frame of the click, some of it half way
@@ -415,11 +423,11 @@ also "damage leaves a Gub standing" "spear PASS"
 # what is kept is the half that had actually arrived. The last of those is the
 # line that would fail if the heal ever went back to landing in one lump.
 #
-# `moved` is the other rule and the edge case it was written for. A Gub that runs
-# loses the drink at `GubCombat.CHANNEL_MOVE_SPEED`; a Gub *lured* at four and a
+# `moved` is the other rule and the edge case it was written for. A Bog that runs
+# loses the drink at `BogCombat.CHANNEL_MOVE_SPEED`; a Bog *pulled* at four and a
 # half metres a second keeps it. Without the second half, the rule could be
 # written about displacement instead of about intent and nothing would notice —
-# and a lure that silently cancelled a drink would be the best answer to one.
+# and a magnet that silently cancelled a drink would be the best answer to one.
 #
 # `death` is D-032 restated for a fifth carried thing, and `config` is the three
 # new lobby dials through `to_dict`/`apply_dict` and out the far side of both
@@ -434,8 +442,8 @@ also "a potion heals over two seconds" "channel PASS"
 # drink empty both of them — `has_spear()` and `has_bow()` each grew a
 # `not is_channelling()` clause, put in the **gate** so that the hand obeys a
 # drink rather than only the throw refusing one — and proved it with a contact
-# sheet of a Gub raising nothing. An empty hand is a weak thing to assert: it is
-# also what a broken attachment, a missing model and a Gub that never started
+# sheet of a Bog raising nothing. An empty hand is a weak thing to assert: it is
+# also what a broken attachment, a missing model and a Bog that never started
 # drinking all look like. So this reads the fists half way through the channel
 # and requires a **bottle in the drinking one** and the spear, the bow, the arrow
 # and the great sword all out of both, and then requires, one frame after the arm
@@ -452,7 +460,7 @@ also "a potion heals over two seconds" "config PASS"
 # nothing in this mode can be placed until somebody has measured where the blade
 # actually is. `Swing` turns the body through a whole revolution inside the
 # skeleton, and the mode prints what that costs: at the release the blade is
-# **55 to 66 degrees off the Gub's own facing** (the spread across runs is where
+# **55 to 66 degrees off the Bog's own facing** (the spread across runs is where
 # the fade-in lands against a body doing 222 degrees a second), so a sweep taken
 # along `-basis.z` would point at empty grass every time and would look correct
 # in every code review. Every dummy after that is stood on the bearing the
@@ -463,7 +471,7 @@ also "a potion heals over two seconds" "config PASS"
 # swing rather than at either end of it: the sword is there from the click to
 # the last frame of the spin and the spear and the bow are not, and outside that
 # window all three are the other way round. `release` is the timing read two
-# ways off one swing — the kill lands `GubAnimator.SWING_RELEASE_TIME` after the
+# ways off one swing — the kill lands `BogAnimator.SWING_RELEASE_TIME` after the
 # click to within a frame and a half, within three ticks of the blade's own
 # full extension — and it carries the measurement the reach dial is fitted to,
 # 1.43 m of blade against a 1.43 m dial. That second reading is the only line in
@@ -494,7 +502,7 @@ check "the great sword fits both fists" "fit PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" --script tools/snapshot.gd -- \
     res://tools/preview_sword.tscn "$GODOT_LOG_DIR/sword_measure.png" 4 measure
 also "the great sword fits both fists" "blade PASS"
-# **Every carried weapon out of the grass and out of the Gub** (D-070), under the
+# **Every carried weapon out of the grass and out of the Bog** (D-070), under the
 # layer the game actually composes.
 #
 # This replaces the sword's own carry check and is stronger than it was.
@@ -502,18 +510,18 @@ also "the great sword fits both fists" "blade PASS"
 # own bare arms, which is how every weapon in this game was carried until a carry
 # pose existed — and the tilt it swept, `SWORD_CARRY_TILT`, is gone: a clip drawn
 # holding a great sword leaves a tilt nothing to do. Now `UPPER_BODY_BONES` takes
-# its pose from a looping carry clip in every clip a Gub walks around in, so the
+# its pose from a looping carry clip in every clip a Bog walks around in, so the
 # height of a limb tip or a blade is a function of the *composed* pose, and this
 # is the only tool that composes it — a bone at a time, exactly as the `carry`
 # Blend2 does.
 #
 # Two floors, both of them D-065's: nothing may come within 0.15 m of the ground
-# or 0.06 m of the Gub's own **skinned trunk**, over twelve clips and twenty-four
+# or 0.06 m of the Bog's own **skinned trunk**, over twelve clips and twenty-four
 # samples of each, with the carry loop walked across its own length underneath so
 # that a row is the worst of two cycles beating rather than one frame held
 # against another. The trunk is the real mesh — every head- and torso-weighted
 # vertex, skinned by the formula the GPU runs — because the three small
-# ellipsoids an earlier pass stood in for a Gub with are what let a shaft ship
+# ellipsoids an earlier pass stood in for a Bog with are what let a shaft ship
 # through the chin.
 #
 # `derived PASS` is the second line and is about **constants**:
@@ -537,7 +545,7 @@ also "every carried weapon clears the ground" "derived PASS"
 # the 0.22 m that used to point up the forearm now points across the body. D-035
 # measured the bottom of the letter at 0.23 m off the ground and wrote it into a
 # comment; it is 0.126 m now, it is a check, and the pose it is measured in is
-# the one a Gub holding a letter is actually in — a hold disarms it, so the carry
+# the one a Bog holding a letter is actually in — a hold disarms it, so the carry
 # layer is off for the whole of one.
 also "every carried weapon clears the ground" "card PASS"
 # And `level PASS`, which is the **fourth** number and the one this file was
@@ -551,7 +559,7 @@ also "every carried weapon clears the ground" "card PASS"
 # two steps later by somebody measuring something else.
 also "every carried weapon clears the ground" "level PASS"
 # And `palm PASS`, which is the **fifth** and is about the hand rather than the
-# Gub (D-074). Everything above asks where the spear is relative to the body, the
+# Bog (D-074). Everything above asks where the spear is relative to the body, the
 # floor or the horizon, and none of it can see the thing the user actually said:
 # *"the spear visually is just outside the hand... it appears as if its attached
 # to the back of the hand."* A shaft riding the knuckles is exactly as far from
@@ -583,7 +591,7 @@ also "every carried weapon clears the ground" "palm PASS"
 # does not; `HeldGear.POTION_PALM` is the argument and this is the check.
 #
 # It reads 0.050 m of 0.066 allowed, and the 0.050 is spent rather than wasted:
-# a bottle centred in that mitten spends half its belly inside the Gub's own
+# a bottle centred in that mitten spends half its belly inside the Bog's own
 # stomach, because the drinking arm rests against a body that is a pear.
 also "every carried weapon clears the ground" "bottle PASS"
 # **A grip is still the grip its own clips solve for** (D-073), which is the
@@ -618,14 +626,14 @@ check "the great sword's grip still fits its clips" "hilt PASS" \
 # left mouse button, and the thing that makes that non-trivial is that the four
 # weapons do not read it the same way: a spear, a swing and the Elder's bolt fire
 # on the **press** and a bow charges while it is **held** and fires on the
-# **release**. So the mode presses the one action on a Gub carrying each in turn
-# — moving the weapon the way the lobby moves it, `Gub.weapon` and then
+# **release**. So the mode presses the one action on a Bog carrying each in turn
+# — moving the weapon the way the lobby moves it, `Bog.weapon` and then
 # `refresh_hand()` — and requires the right thing to have started on the tick
 # after: a windup, a draw, a spin, and a windup again for the Elder.
 #
 # `Input.action_press` and not `try_throw_spear`, which is the opposite of what
 # every other mode in `combat_range` does and is the whole point of this one. The
-# question is about the poll in `GubCombat._process` — one action, asked
+# question is about the poll in `BogCombat._process` — one action, asked
 # unconditionally, four weapons refusing themselves — so the press has to be a
 # real press or the poll is not what is being checked.
 #
@@ -633,7 +641,7 @@ check "the great sword's grip still fits its clips" "hilt PASS" \
 # to fake: the bow's round holds the button for forty ticks, requires the draw to
 # still be running on every one of them and to have reached past half charge, and
 # then requires letting go to have loosed. Written with a one-tick release first,
-# it passed against a Gub that had snap-fired at 0.02 charge and spent the rest
+# it passed against a Bog that had snap-fired at 0.02 charge and spent the rest
 # of the round on a cooldown. Headless, about four seconds.
 check "one button for every weapon" "primary PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- primary
@@ -658,7 +666,7 @@ also "one button for every weapon" "hold PASS"
 check "no two controls share a key" "controls PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" --script tools/snapshot.gd -- \
     res://tools/hud_range.tscn "$GODOT_LOG_DIR/controls.png" 40 controls
-# A shaft standing in a Gub who is still alive, and then in the corpse that Gub
+# A shaft standing in a Bog who is still alive, and then in the corpse that Bog
 # becomes (D-062). This is the half of the damage model that is not a number:
 # until now a projectile that hit somebody who lived had nowhere to go, because
 # `_stick_in` hid it and waited for a corpse, and the Elder was the only case
@@ -668,20 +676,20 @@ check "no two controls share a key" "controls PASS" \
 # The spear is launched by hand with nothing listening for its hit, so it damages
 # nobody — which is the only way to get a *living* victim with a shaft in it in a
 # build whose only weapon is a one-shot. `embed` then moves the dummy two metres
-# and requires the shaft to arrive with it: a spear parked in the air where a Gub
-# used to be looks identical to one riding the Gub until the Gub moves. `adopt`
+# and requires the shaft to arrive with it: a spear parked in the air where a Bog
+# used to be looks identical to one riding the Bog until the Bog moves. `adopt`
 # kills that dummy and requires the same shaft to end up hanging off a physical
-# bone of the corpse, with nothing left waiting on the Gub's own list — a shaft
+# bone of the corpse, with nothing left waiting on the Bog's own list — a shaft
 # on an invisible list is the bug `SpearProjectile._glance_off` was written to
 # avoid and the one this mechanism could quietly reintroduce.
 #
 # With the ride removed, `embed` fails with the shaft 2.00 m adrift; with the
 # hand-over removed, `adopt` fails with the shaft still parented to the arena.
 # Headless, and it quits itself around tick 40.
-check "a shaft rides a living Gub" "embed PASS" \
+check "a shaft rides a living Bog" "embed PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- embed
-also "a shaft rides a living Gub" "adopt PASS"
-# Bunny hopping (D-052). The local Gub runs the range as itself, as the Elder
+also "a shaft rides a living Bog" "adopt PASS"
+# Bunny hopping (D-052). The local Bog runs the range as itself, as the Elder
 # and as a capture carrier: ten hops pressed on the first ground tick have to
 # climb past 1.15x run speed and stop at the 1.3x cap, while running, one jump,
 # a hop pressed a quarter-second late and a hop out of a dive roll may not beat
@@ -698,9 +706,9 @@ check "bunny hops carry, up to a cap" "bhop PASS" \
 # D-052's measurement repeated with a sword in hand, and what it asserts is that
 # there is one ceiling and not two.
 #
-# Two subjects. A Gub at a dead stop chains eight swings: the first leaves it at
+# Two subjects. A Bog at a dead stop chains eight swings: the first leaves it at
 # 2.00 m/s (the clip's own 0.917 plus `SPIN_GAIN` of run speed) and the last
-# starts from **7.02**, which is 1.30x run and is exactly the cap. A Gub that
+# starts from **7.02**, which is 1.30x run and is exactly the cap. A Bog that
 # builds 7.02 with ten timed hops first and then swings has to *keep* it — if
 # `begin_spin` ever went back to simply setting the clip's own speed, that is
 # the line that notices and every other line here still passes. Neither may go
@@ -708,19 +716,19 @@ check "bunny hops carry, up to a cap" "bhop PASS" \
 #
 # Headless, and **not** `--fixed-fps`, which is the one place this differs from
 # `bhop` above. A hop is timed in ticks and a swing is timed on the wall clock —
-# `Gub.is_spinning()` and `MatchConfig.sword_recharge` are both
-# `Time.get_ticks_msec` deadlines, like every other cooldown in `GubCombat` — so
+# `Bog.is_spinning()` and `MatchConfig.sword_recharge` are both
+# `Time.get_ticks_msec` deadlines, like every other cooldown in `BogCombat` — so
 # at a forced tick rate the simulation runs far ahead of the clock the spin is
-# waiting on and a Gub advances thirty times as far through a swing that never
+# waiting on and a Bog advances thirty times as far through a swing that never
 # ends. Twenty-odd seconds of real time is what the honest version costs.
 check "swings chain into the hop budget" "chain PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- chain
-# Gubs in their team's colour (D-046), read off the material the renderer will
-# draw with rather than off what the script meant to set. One Gub per team has
-# to be in exactly its nameplate colour, a free-for-all Gub has to be back on the
+# Bogs in their team's colour (D-046), read off the material the renderer will
+# draw with rather than off what the script meant to set. One Bog per team has
+# to be in exactly its nameplate colour, a free-for-all Bog has to be back on the
 # imported yellow, the Elder's robe has to keep its purple over a tinted body,
 # a corpse has to die in the colour it lived in, and a lobby roster change has to
-# repaint the Gub whose team moved. The corpse half fails against a ragdoll that
+# repaint the Bog whose team moved. The corpse half fails against a ragdoll that
 # copies the mesh's own material, and the lobby half against a backdrop that
 # only recolours the plate. Headless, it quits itself on tick 12. The lineup:
 #     ... --resolution 1800x640 --script tools/snapshot.gd -- \
@@ -732,7 +740,7 @@ also "team colours on the body" "team_tint: corpse PASS"
 also "team colours on the body" "team_tint: PASS"
 # Which side you are on, said plainly (D-047). A player: "it should be obvious
 # what team you are on and who your teammates are". Through the real spawn path,
-# with a wall between the local Gub's camera and a teammate and an enemy forty
+# with a wall between the local Bog's camera and a teammate and an enemy forty
 # metres behind it — the ray that proves the wall is in the way is a verdict of
 # its own, so this cannot pass on open air. The teammate's plate has to ignore
 # the depth test, be up and at full alpha out there; the enemy's, beside it, has
@@ -741,17 +749,17 @@ also "team colours on the body" "team_tint: PASS"
 # say TEAM 1 in team 1's colour. Against `set_ally(false)` the ally half fails;
 # against `set_ally(true)` the enemy half does, and so does the free-for-all run,
 # which also wants the chip hidden and every plate at its old size. Headless,
-# both quit on tick 30. The picture, from the Gub's own camera:
+# both quit on tick 30. The picture, from the Bog's own camera:
 #     ... --resolution 1600x900 --script tools/snapshot.gd -- #         res://tools/team_plates.tscn out/team_plates.png 40
 # The lobby weapon pick, which is a roster key and therefore a *wire* feature
 # before it is a UI one (D-069). `match_rules` already covers the half that is a
-# Gub — the gate, the hand and the three overrides that take a weapon away — so
+# Bog — the gate, the hand and the three overrides that take a weapon away — so
 # this covers the half that is a row: the default for a row that never heard of
 # weapons, the request going through the host and coming back on the rebroadcast,
 # a bogus ordinal refused into a spear, the lock the moment Start is pressed, a
 # rematch keeping the pick, and the real lobby scene collapsing to the strip and
 # back. Its `ring` stage is the one that matters most and is the cheapest to
-# lose: three **remote** Gubs in the backdrop, each holding only what its row
+# lose: three **remote** Bogs in the backdrop, each holding only what its row
 # says, which is the lobby half of "show only the weapon you selected".
 #
 # Headless; it instances the real lobby and the real glade and quits itself in
@@ -789,7 +797,7 @@ check "free-for-all letter carriers" "letter_carriers: ffa PASS"     "$GODOT" --
 # The camera, kept out of the scenery (D-045). A player: "too frequently the
 # camera is inside meshes and stuff when there are meshes behind the character".
 # Seven legs — a wall on each shoulder walked along, a corner, under a canopy and
-# at its edge, a wall at the Gub's back with the view swung and flicked through
+# at its edge, a wall at the Bog's back with the view swung and flicked through
 # it, and a low tunnel walked through — 1,700 frames, each asked three ways
 # whether the lens is inside collision: a point query, a near-plane sphere, and a
 # ray from the eye (is it behind a wall). Against the old spring arm 942 of the
@@ -810,9 +818,9 @@ also "camera stays out of the scenery" "aim PASS"
 # those is the absence of a call rather than a fault inside one.
 check "full playthrough" "playthrough: PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/playthrough.tscn
-# Capture G·U·B's bases and letters on this map (D-051), from the same run: two
+# Capture B·O·G's bases and letters on this map (D-051), from the same run: two
 # bases on distinct pads well apart, each team with pads of its own, and three
-# letter points on a real floor with a Gub's head room, outside both bases and
+# letter points on a real floor with a Bog's head room, outside both bases and
 # apart. This map declares no objectives of its own, so this is the fallback
 # being proven playable; Rust and Kopje Crossing carry the same line below, and
 # Lantern Wharf carries it for a layout the map declares itself (D-056).
@@ -839,7 +847,7 @@ also "safari playthrough" "arena: Kopje Crossing built from"
 also "safari playthrough" "playthrough: capture layout PASS"
 # And on Lantern Wharf, the small built map (D-056): a box yard laid out of a
 # table like the savanna, so the same three lines — and a fourth, because it is
-# the first map to declare its own Capture G·U·B bases and letters rather than
+# the first map to declare its own Capture B·O·G bases and letters rather than
 # leave them to the fallback, and a layout that quietly fell back would still
 # pass the third.
 check "wharf playthrough" "playthrough: PASS" \
@@ -856,9 +864,9 @@ check "yacht playthrough" "playthrough: PASS" \
 also "yacht playthrough" "arena: Halcyon Wake built from"
 also "yacht playthrough" "playthrough: capture layout PASS"
 also "yacht playthrough" "capture layout on 'yacht' — declared bases"
-# A Capture G·U·B match standing up in the real arena (D-051): `arena.gd` draws
+# A Capture B·O·G match standing up in the real arena (D-051): `arena.gd` draws
 # a ring per team, the host settles three cards onto the map once the physics
-# has stepped, and every Gub spawns on a pad of its own team's. The rules
+# has stepped, and every Bog spawns on a pad of its own team's. The rules
 # themselves — carry, bank, the enemy base doing nothing, a dead carrier's drop
 # and its return, an enemy recovering it, winning — are `match_rules`, in a box
 # with a floor. Headless, a few seconds. The picture from above Team 1's base:
@@ -898,20 +906,20 @@ check "ragdoll survives landing" "ragdoll_stability: PASS" \
 # margin — the same margin the 110 had over the old release, retuned down with
 # it rather than left behind as slack. Worth saying out loud because a failure
 # the other way would have read as a broken throw and not as a warmup that was
-# too short. The lure's 132 below needs no allowance: a lure leaves on the click.
+# too short. The magnet's 132 below needs no allowance: a magnet leaves on the click.
 check "spear kills" "killed Dummy 1" \
     "$GODOT" --path "$GODOT_ROOT" --resolution 640x360 --script tools/snapshot.gd -- \
     res://tools/combat_range.tscn "$GODOT_LOG_DIR/hit.png" 95 hit
-check "lure catches" "combat_range: lure caught 1" \
+check "magnet catches" "combat_range: magnet caught 1" \
     "$GODOT" --path "$GODOT_ROOT" --resolution 640x360 --script tools/snapshot.gd -- \
-    res://tools/combat_range.tscn "$GODOT_LOG_DIR/lure.png" 132 lure
+    res://tools/combat_range.tscn "$GODOT_LOG_DIR/magnet.png" 132 magnet
 # The Elder, end to end and in a world with something standing in it: a robe
 # rolled out of a real death, walked over, and one bolt at a dummy fourteen
 # metres away. `match_rules` proves the state machine — the robe makes an Elder,
 # the clock ends it, the cooldown gates a second cast — but it has no geometry
 # and nothing to hit, so the one thing it cannot prove is that the bolt kills
 # anybody. That is exactly the failure a screenshot also cannot see: a bolt
-# drawn beautifully past a Gub who is still standing looks identical to one that
+# drawn beautifully past a Bog who is still standing looks identical to one that
 # worked, which is why the mode prints its own verdict.
 #
 # 90 ticks, and the margin in it is now much larger than it was. The robe drops
@@ -932,12 +940,12 @@ check "lightning kills" "lightning PASS"     "$GODOT" --path "$GODOT_ROOT" --res
 #     ... --script tools/snapshot.gd -- res://tools/combat_range.tscn #         out/blast.png 43 blast
 check "lightning blast radius" "blast PASS"     "$GODOT" --path "$GODOT_ROOT" --resolution 640x360 --script tools/snapshot.gd --     res://tools/combat_range.tscn "$GODOT_LOG_DIR/blast.png" 140 blast
 # Kept, and now honest about what it is: this is the *placement* path —
-# `try_place_mushroom`, the two validation rays, the broadcast, the eruption —
+# `try_place_shield`, the two validation rays, the broadcast, the eruption —
 # and `snapshot: wrote` is all it has ever asserted. Fine as half a check and
-# disastrous as the whole one. "mushroom stops a spear" above is the other half.
-check "mushroom deploys" "snapshot: wrote" \
+# disastrous as the whole one. "shield stops a spear" above is the other half.
+check "shield deploys" "snapshot: wrote" \
     "$GODOT" --path "$GODOT_ROOT" --resolution 640x360 --script tools/snapshot.gd -- \
-    res://tools/combat_range.tscn "$GODOT_LOG_DIR/mushroom.png" 40 mushroom
+    res://tools/combat_range.tscn "$GODOT_LOG_DIR/shield.png" 40 shield
 # One of each letter on the ground, measured rather than looked at (D-041).
 # `match_rules` builds real cards headless, so it already proves the builder
 # does not throw; what it has no way of seeing is that what came back is a mesh
@@ -957,7 +965,7 @@ check "letter cards are meshes" "cards PASS" \
 # around 240. The picture worth looking at is the same mode at 130:
 #     ... --resolution 1600x900 --script tools/snapshot.gd -- \
 #         res://tools/hud_range.tscn out/reload_timer.png 130 reload_timer
-# The first square on the ability bar is whichever weapon this Gub actually
+# The first square on the ability bar is whichever weapon this Bog actually
 # brought (D-069). It has swapped to a bolt for an Elder since D-038; it now
 # swaps for a lobby pick too, because two players in three would otherwise spend
 # a match watching a Spear tile that is dark for all of it and times a recharge
@@ -1029,23 +1037,23 @@ check "a config reaches the clipboard" "capture: PASS" \
 also "a config reaches the clipboard" "capture: fields PASS"
 also "a config reaches the clipboard" "capture: clipboard PASS"
 also "a config reaches the clipboard" "capture: saved PASS"
-# Holds W and requires the Gub to have gone somewhere. Movement was wired into
+# Holds W and requires the Bog to have gone somewhere. Movement was wired into
 # the testbeds and nowhere else, so every testbed could be walked around while
 # the real arena could not, and the abilities — which read their own keys —
 # kept working and made it look like input was fine.
 check "walking with the keyboard" "walk PASS" \
     "$GODOT" --path "$GODOT_ROOT" --resolution 640x360 --script tools/snapshot.gd -- \
     res://tools/combat_range.tscn "$GODOT_LOG_DIR/walk.png" 200 walk
-# Pulls the peer out from under a live Gub and keeps ticking it, which is what
+# Pulls the peer out from under a live Bog and keeps ticking it, which is what
 # leaving a match does: the peer is nulled at once and the arena survives the
-# fade. `Gub.is_local` asked the missing peer for an id on every one of those
+# fade. `Bog.is_local` asked the missing peer for an id on every one of those
 # frames, from three call sites, for thirteen frames, every time.
 check "leaving a match cleanly" "leave PASS" \
     "$GODOT" --path "$GODOT_ROOT" --resolution 640x360 --script tools/snapshot.gd -- \
     res://tools/combat_range.tscn "$GODOT_LOG_DIR/leave.png" 200 leave
 # Rust's eight spawn pads, checked with the physics rather than with eyes: a ray
-# down onto layer 1 that has to find a floor under every marker, and a Gub-sized
-# capsule that has to fit where the Gub will stand. Rendered rather than
+# down onto layer 1 that has to find a floor under every marker, and a Bog-sized
+# capsule that has to fit where the Bog will stand. Rendered rather than
 # headless because the map's collision is built in `_ready` from world-space
 # triangles and the physics has to actually tick for any of it to be there —
 # and because the same run writes the top-down picture, which is the only way
@@ -1061,9 +1069,9 @@ check "rust spawns and collision" "preview_map: PASS" \
 # built" rather than "some geometry exists".
 check "safari spawns and collision" "preview_map: PASS"     "$GODOT" --path "$GODOT_ROOT" --resolution 900x1100 --script tools/snapshot.gd --     res://tools/preview_map.tscn "$GODOT_LOG_DIR/safari_top.png" 30 top     map=res://scenes/world/maps/safari.tscn
 # And the thing that makes the savanna a map rather than a pile of rocks: every
-# landing has the rock the table promises under it, a Gub fits on it, and it can
-# be reached from the ground on the Gub's real jump arc, which the report reads
-# off `Gub` rather than typing. A change to the jump that strands a platform
+# landing has the rock the table promises under it, a Bog fits on it, and it can
+# be reached from the ground on the Bog's real jump arc, which the report reads
+# off `Bog` rather than typing. A change to the jump that strands a platform
 # fails here instead of in a match. About six seconds, so it earns its place.
 check "safari parkour reachability" "parkour_report: PASS"     "$GODOT" --path "$GODOT_ROOT" --resolution 1000x1000 --script tools/snapshot.gd --     res://tools/parkour_report.tscn "$GODOT_LOG_DIR/safari_parkour.png" 30 top
 # Lantern Wharf's eight pads through the same tool. Its floor for "the geometry
@@ -1092,7 +1100,7 @@ check "yacht spawns and collision" "preview_map: PASS" \
 # the main deck by hops and leaps alone, the mast is out of reach of every jump,
 # no eye-to-eye line runs past 21 m on the main deck or 38 m from a landing, no
 # pad sees the other base's pads, and over every edge of the deck there is
-# nothing between a falling Gub and the void half a metre under the sea.
+# nothing between a falling Bog and the void half a metre under the sea.
 check "yacht parkour and overboard" "parkour_report: PASS" \
     "$GODOT" --path "$GODOT_ROOT" --resolution 1000x1000 --script tools/snapshot.gd -- \
     res://tools/parkour_report.tscn "$GODOT_LOG_DIR/yacht_parkour.png" 30 top \

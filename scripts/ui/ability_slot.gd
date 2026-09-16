@@ -43,7 +43,7 @@ extends Control
 ##   weapon is genuinely growing back, a fill that climbs clockwise from twelve
 ##   o'clock and the seconds left printed over the glyph. The caller decides
 ##   when that is; this file only draws what it is handed.
-## * `set_stock` — the mushroom, the lure and the heal potion. They are carried
+## * `set_stock` — the shield, the magnet and the heal potion. They are carried
 ##   stock (D-032, D-067), so the count is the readout, and an empty slot is the
 ##   ordinary state at the start of every life rather than a fault to be alarmed
 ##   by. The potion's `busy` is its channel rather than a use-delay, which is
@@ -60,11 +60,11 @@ extends Control
 ## slot's exported `kind`, and inserting one in the middle would silently turn
 ## every tile in the scene into a different tile.
 ## The five glyphs this square can draw, plus the two the weapon select added
-## (D-069). The first slot on the bar is whichever weapon this Gub actually
+## (D-069). The first slot on the bar is whichever weapon this Bog actually
 ## brought, the way it has always been the bolt for an Elder — so a bow player
 ## reads their own recharge off it instead of watching a spear tile that will
 ## never light.
-enum Kind { SPEAR, MUSHROOM, LURE, LIGHTNING, POTION, BOW, SWORD }
+enum Kind { SPEAR, SHIELD, MAGNET, LIGHTNING, POTION, BOW, SWORD }
 
 const SIZE := 62.0
 const RADIUS := 5.0
@@ -74,8 +74,8 @@ const RADIUS := 5.0
 ## and missing an entry is how the bolt keeps its drawn glyph.
 const TILE_ART := {
 	Kind.SPEAR: "res://resources/ui/tiles/spear.png",
-	Kind.MUSHROOM: "res://resources/ui/tiles/mushroom.png",
-	Kind.LURE: "res://resources/ui/tiles/lure.png",
+	Kind.SHIELD: "res://resources/ui/tiles/shield.png",
+	Kind.MAGNET: "res://resources/ui/tiles/magnet.png",
 	Kind.POTION: "res://resources/ui/tiles/heal_potion.png",
 	Kind.BOW: "res://resources/ui/tiles/bow.png",
 	Kind.SWORD: "res://resources/ui/tiles/greatsword.png",
@@ -84,7 +84,7 @@ const TILE_ART := {
 ## Which photograph a *weapon* wears, so the lobby's picker and the first square
 ## on the bar show the same prop. A table indexed by a weapon rather than a
 ## `match`, which is D-069's rule and the reason `Loadout.CARRY_CLIPS` is one
-## too: nothing should have to branch on which weapon a Gub brought.
+## too: nothing should have to branch on which weapon a Bog brought.
 const WEAPON_KIND := {
 	Loadout.Weapon.SPEAR: Kind.SPEAR,
 	Loadout.Weapon.BOW: Kind.BOW,
@@ -111,7 +111,7 @@ const ART_EMPTY := 0.20
 ## note on `COUNT_LEFT` below is the record of somebody doing exactly that — and
 ## a photograph cannot, because it is framed by a rule rather than by a
 ## draughtsman. So the tile gets a foot: a veil, not a bar, dark enough that a
-## white "2" and a grey "Q" read over a red mushroom and thin enough that the
+## white "2" and a grey "Q" read over weathered planks and thin enough that the
 ## prop still runs behind it.
 const FOOT_HEIGHT := 19.0
 const FOOT_TINT := Color(0.02, 0.027, 0.04, 0.70)
@@ -119,7 +119,8 @@ const FOOT_TINT := Color(0.02, 0.027, 0.04, 0.70)
 ## Where the carried count sits: bottom-left, which is the one corner of the
 ## square that no glyph reaches into and that the key cap — bottom-right — does
 ## not want. Measured against all three shapes, whose leftmost extents at this
-## height are the mushroom cap at x=16 and the lure's lower spikes at x=24.
+## height are the shield's left stile at x=17 and the crystal's lower spikes at
+## x=24 — drawn glyphs, from before the tiles became photographs (D-076).
 const COUNT_FONT_SIZE := 22
 const COUNT_LEFT := 6.0
 const COUNT_BASELINE := 57.0
@@ -130,7 +131,7 @@ const COUNT_BASELINE := 57.0
 const TIMER_FONT_SIZE := 22
 const TIMER_OUTLINE := 8
 const TIMER_BASELINE := 35.0
-## How much of the Gub's yellow the recovered part of the fill carries. Enough to
+## How much of the Bog's yellow the recovered part of the fill carries. Enough to
 ## see the wedge from the corner of the eye, little enough that the dark glyph
 ## under it still reads as "not yet".
 const SWEEP_ALPHA := 0.26
@@ -233,7 +234,7 @@ func recharge_text() -> String:
 
 
 ## Carried stock. `busy` is the short floor between two placements
-## (`mushroom_use_delay`, `lure_use_delay`) and only dims the slot — it never
+## (`shield_use_delay`, `magnet_use_delay`) and only dims the slot — it never
 ## draws a number, because it is a cap on how fast a stack can be emptied and
 ## not a resource anybody plans a fight around.
 func set_stock(count: int, busy: bool) -> void:
@@ -330,7 +331,7 @@ func _tint() -> Color:
 	if _count == 0:
 		return UIPalette.faded(UIPalette.TEXT, 0.16)
 	if _lit:
-		return UIPalette.GUB
+		return UIPalette.BOG
 	return UIPalette.faded(UIPalette.TEXT, 0.34)
 
 
@@ -360,7 +361,7 @@ func _draw_sweep(progress: float) -> void:
 		var angle := -PI * 0.5 + TAU * progress * float(i) / float(steps)
 		var dir := Vector2(cos(angle), sin(angle))
 		points.append(c + dir * (half / maxf(absf(dir.x), absf(dir.y))))
-	draw_colored_polygon(points, UIPalette.faded(UIPalette.GUB, SWEEP_ALPHA))
+	draw_colored_polygon(points, UIPalette.faded(UIPalette.BOG, SWEEP_ALPHA))
 
 
 func _draw_timer() -> void:
@@ -385,18 +386,25 @@ func _draw_glyph(tint: Color) -> void:
 			draw_line(tail, neck, tint, 2.4)
 			draw_colored_polygon(PackedVector2Array([
 				tip, neck + Vector2(-4.5, -1.0), neck + Vector2(1.0, 4.5)]), tint)
-		Kind.MUSHROOM:
-			draw_rect(Rect2(c + Vector2(-3, -1), Vector2(6, 14)), tint, true)
-			# The cap is a fan rather than a half-circle primitive so it can be
-			# a shallow dome instead of a semicircle.
-			var cap := PackedVector2Array()
-			for i in 13:
-				var t := float(i) / 12.0
-				var angle := PI + t * PI
-				cap.append(c + Vector2(cos(angle) * 15.0, sin(angle) * 11.0 - 1.0))
-			cap.append(c + Vector2(15, -1))
-			draw_colored_polygon(cap, tint)
-		Kind.LURE:
+		Kind.SHIELD:
+			# A barricade of horizontal boards on two uprights, which is what
+			# the prop is: five planks with daylight between them and a stile
+			# down each edge. The dome-on-a-stalk that used to be drawn here
+			# was a mushroom and stopped being true of anything the day the
+			# model was swapped (D-079). Only ever seen if `shield.png` is
+			# missing — the tile a player looks at is the photograph.
+			for i in 5:
+				var plank := -14.0 + float(i) * 6.0
+				draw_rect(Rect2(c + Vector2(-14, plank), Vector2(28, 4.5)),
+					tint, true)
+			draw_rect(Rect2(c + Vector2(-12, -14), Vector2(3.5, 28)), tint, true)
+			draw_rect(Rect2(c + Vector2(8.5, -14), Vector2(3.5, 28)), tint, true)
+		Kind.MAGNET:
+			# A starburst, which was drawn for the crystal and is left alone for
+			# the magnet (D-078): both props are round things that pull, and
+			# six lines out of a disc is the one shape that says so. Only ever
+			# seen if `magnet.png` is missing — the tile a player looks at is
+			# the photograph.
 			draw_circle(c + Vector2(0, 2), 7.0, tint)
 			for i in 6:
 				var angle := TAU * float(i) / 6.0

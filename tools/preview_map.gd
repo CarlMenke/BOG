@@ -13,13 +13,13 @@ extends Node3D
 ##     pads looking at the middle of the arena, which is the only framing a
 ##     player will ever actually have.
 ##   * **Checks** every pad against the physics the match will use: a ray down
-##     onto layer 1 that has to find a floor, and a Gub-sized capsule that has
-##     to fit where the Gub will stand. Those two are the whole difference
+##     onto layer 1 that has to find a floor, and a Bog-sized capsule that has
+##     to fit where the Bog will stand. Those two are the whole difference
 ##     between "the marker looks fine in the render" and "the marker is inside
 ##     a shipping container".
 ##
 ## The `probe` view scans the floor on a grid instead and prints it as three
-## ASCII maps: how high the ground is, whether a Gub fits standing there, and
+## ASCII maps: how high the ground is, whether a Bog fits standing there, and
 ## how far you could see toward the middle of the map from it. The third one is
 ## the one that earns its place — two of Rust's first eight pads passed every
 ## geometric test and opened onto a container wall a metre in front of them.
@@ -41,12 +41,12 @@ extends Node3D
 ## should not need a second copy of this file.
 const DEFAULT_MAP := "res://scenes/world/maps/rust.tscn"
 
-## What a Gub is, physically. Taken from `Gub` rather than typed, so a change to
+## What a Bog is, physically. Taken from `Bog` rather than typed, so a change to
 ## the character's size fails this check instead of quietly invalidating it.
-const CAPSULE_RADIUS := Gub.CAPSULE_RADIUS
-const CAPSULE_HEIGHT := Gub.STAND_HEIGHT
-## Where the capsule's centre sits above the Gub's origin — the offset on the
-## `Collision` node in `gub.tscn`. A test run at the pad itself would be a
+const CAPSULE_RADIUS := Bog.CAPSULE_RADIUS
+const CAPSULE_HEIGHT := Bog.STAND_HEIGHT
+## Where the capsule's centre sits above the Bog's origin — the offset on the
+## `Collision` node in `bog.tscn`. A test run at the pad itself would be a
 ## capsule buried half a metre in the floor and would fail on every pad.
 const CAPSULE_LIFT := 0.775
 
@@ -165,7 +165,7 @@ func _check_build() -> void:
 	_want("eight spawn pads", _spawns.size() == MatchConfig.MAX_PLAYERS)
 
 
-## Every pad, against the physics a Gub will actually meet there.
+## Every pad, against the physics a Bog will actually meet there.
 func _check_spawns() -> void:
 	var space := get_world_3d().direct_space_state
 	for i in _spawns.size():
@@ -183,8 +183,8 @@ func _check_spawns() -> void:
 		var drop := INF if hit.is_empty() else at.y - floor_y
 		_want("pad %d stands on a floor (%.2f m below it)" % [i, drop], not hit.is_empty())
 
-		# And room to stand. The same capsule `gub.tscn` carries, at the height
-		# `gub.tscn` carries it at.
+		# And room to stand. The same capsule `bog.tscn` carries, at the height
+		# `bog.tscn` carries it at.
 		var capsule := CapsuleShape3D.new()
 		capsule.radius = CAPSULE_RADIUS
 		capsule.height = CAPSULE_HEIGHT
@@ -197,7 +197,7 @@ func _check_spawns() -> void:
 
 		# Facing the middle. Not a rendering nicety: a player whose first frame
 		# is a wall has to turn around before they can read the map.
-		var want_yaw := Gub.yaw_towards(
+		var want_yaw := Bog.yaw_towards(
 			(_centre - at).normalized() * Vector3(1.0, 0.0, 1.0))
 		var off := rad_to_deg(absf(angle_difference(pad.basis.get_euler().y, want_yaw)))
 		_want("pad %d faces the middle (%.0f deg off)" % [i, off], off < 60.0)
@@ -207,7 +207,7 @@ func _check_spawns() -> void:
 			_want("pads %d and %d are apart (%.1f m)" % [i, j, gap],
 				gap >= PAD_SEPARATION)
 
-		# How far a Gub standing here can actually see down its own nose.
+		# How far a Bog standing here can actually see down its own nose.
 		# Reported rather than asserted: Rust is a yard full of shipping
 		# containers and some pads are always going to open onto one, but a pad
 		# with three metres of sightline is a pad that should be moved, and
@@ -229,7 +229,7 @@ func _check_spawns() -> void:
 ##
 ## Two maps, because the two questions are different. The first is *how high the
 ## ground is*, which is what tells the main plane at 1.70 apart from the second
-## tier and the catwalk footings. The second is *whether a Gub fits*, which is
+## tier and the catwalk footings. The second is *whether a Bog fits*, which is
 ## the one that matters and which no amount of looking at heights will answer —
 ## a pad can be on perfectly flat floor and still be inside a barrel.
 func _probe() -> void:
@@ -283,14 +283,14 @@ func _probe() -> void:
 	print("probe: heights — '-' is the main plane at 1.7, digits are whole metres,")
 	print("       ' ' is no floor within reach of the scan")
 	_print_grid(heights, x0, z0, columns)
-	print("probe: clearance — '.' a Gub fits, '#' something is in the way")
+	print("probe: clearance — '.' a Bog fits, '#' something is in the way")
 	_print_grid(clearance, x0, z0, columns)
 	print("probe: sightline toward the middle at eye height, in fives of metres —")
 	print("       '0' is a wall in your face, '9' is forty-five metres of yard")
 	_print_grid(sightlines, x0, z0, columns)
 
 
-## How far a Gub standing here could see toward the middle of the map. The one
+## How far a Bog standing here could see toward the middle of the map. The one
 ## thing a top-down picture cannot tell you and a coordinate certainly cannot:
 ## a pad can be on flat open floor with a container three metres in front of it.
 func _sight_from(space: PhysicsDirectSpaceState3D, foot: Vector3) -> float:
@@ -355,7 +355,7 @@ func _draw_pads() -> void:
 		stick.mesh = box
 		stick.material_override = _flat(tint.darkened(0.35))
 		# Pushed forward along the pad's own -Z, which is the direction
-		# `revive_at` will point the Gub in.
+		# `revive_at` will point the Bog in.
 		stick.transform = Transform3D(pad.basis, pad.origin + Vector3.UP * 1.0)
 		stick.translate_object_local(Vector3(0.0, 0.0, -1.7))
 		pads.add_child(stick)
@@ -398,7 +398,7 @@ func _build_camera() -> void:
 		# out again — otherwise the shot is a full-screen coloured stick and the
 		# view it was taken for is behind it.
 		_hide_pad(index)
-		# Eye height on the pad, looking where the Gub spawned there is looking.
+		# Eye height on the pad, looking where the Bog spawned there is looking.
 		var eye := _spawns[index].origin + Vector3.UP * 1.45
 		camera.fov = 75.0
 		camera.look_at_from_position(eye, _centre + Vector3.UP * 0.6, Vector3.UP)

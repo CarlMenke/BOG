@@ -19,7 +19,7 @@ extends SceneTree
 ##
 ## Printed rather than judged, so the same run answers the next question too.
 
-const GUB := "res://art/generated/gub.glb"
+const BOG := "res://art/generated/bog.glb"
 
 var _player: AnimationPlayer
 var _skeleton: Skeleton3D
@@ -42,9 +42,9 @@ func _initialize() -> void:
 	var bone_name := args[1] if args.size() > 1 else "RightHand"
 	_step = float(args[2]) if args.size() > 2 else 1.0 / 60.0
 
-	var scene := load(GUB) as PackedScene
+	var scene := load(BOG) as PackedScene
 	if scene == null:
-		push_error("hand_track: cannot load %s" % GUB)
+		push_error("hand_track: cannot load %s" % BOG)
 		_failed = true
 		return
 	var model := scene.instantiate()

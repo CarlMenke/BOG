@@ -16,7 +16,7 @@ render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabl
 // readability bug, which is what heat haze in a shooter usually is:
 //
 //   * **`strength` is in screen-UV units at the panel's own alpha**, and it is
-//     set low enough that a Gub seen through a panel moves by a couple of
+//     set low enough that a Bog seen through a panel moves by a couple of
 //     pixels, not by a silhouette's width. A target that dissolves is a bug;
 //     a target whose edge crawls is weather.
 //   * **The panels stand over surfaces, not over lanes.** They are placed

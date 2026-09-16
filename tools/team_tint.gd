@@ -1,13 +1,13 @@
 extends Node3D
-## Gubs in team colours (D-046): the check, and the picture. Development tool,
+## Bogs in team colours (D-046): the check, and the picture. Development tool,
 ## not shipped.
 ##
 ## Headless, it is the check, and quits itself on tick 12:
 ##
 ##   Godot --headless --path . tools/team_tint.tscn
 ##
-## Through the snapshot it is the lineup — one Gub per team colour, a
-## free-for-all Gub in the imported yellow, and a tinted Gub wearing the robe:
+## Through the snapshot it is the lineup — one Bog per team colour, a
+## free-for-all Bog in the imported yellow, and a tinted Bog wearing the robe:
 ##
 ##   Godot --path . --resolution 1800x640 --script tools/snapshot.gd -- \
 ##       res://tools/team_tint.tscn out/team_tint.png 40 [studio|dusk|noon]
@@ -15,18 +15,18 @@ extends Node3D
 ## What it asserts, all off the material the renderer will actually draw with
 ## (`get_active_material`), never off what the script meant to set:
 ##
-##   teams    — every Gub's body is in exactly its team's nameplate colour.
-##   ffa      — a TEAM_NONE Gub is back on the imported material, including one
+##   teams    — every Bog's body is in exactly its team's nameplate colour.
+##   ffa      — a TEAM_NONE Bog is back on the imported material, including one
 ##              that was on a team a moment ago.
 ##   robe     — the Elder's robe is on its own purple material, while the body
 ##              under it stays in the team colour.
-##   corpse   — a ragdoll of a tinted Gub is still in that colour, and a ragdoll
+##   corpse   — a ragdoll of a tinted Bog is still in that colour, and a ragdoll
 ##              of a yellow one is still yellow.
-##   lobby    — `GubBackdrop.set_roster` repaints a Gub whose team changed, the
+##   lobby    — `BogBackdrop.set_roster` repaints a Bog whose team changed, the
 ##              path a player switching team in the lobby takes. Headless only:
 ##              the backdrop brings its own camera and glade.
 
-const GUB := preload("res://scenes/player/gub.tscn")
+const BOG := preload("res://scenes/player/bog.tscn")
 const TEAMS := 8
 const SPACING := 1.05
 const CHECK_TICK := 12
@@ -38,9 +38,9 @@ const ISLAND_ENV := "res://resources/config/arena_env.tres"
 const RUST_ENV := "res://resources/config/rust_env.tres"
 
 var _light: String = "studio"
-var _team_gubs: Array[Gub] = []
-var _ffa_gub: Gub
-var _elder: Gub
+var _team_bogs: Array[Bog] = []
+var _ffa_bog: Bog
+var _elder: Bog
 var _ticks: int = 0
 var _failed: bool = false
 
@@ -55,17 +55,17 @@ func _ready() -> void:
 	var count := TEAMS + 2
 	var x := -SPACING * float(count - 1) * 0.5
 	for team in TEAMS:
-		var gub := _make_gub("Team %d" % (team + 1), x)
-		gub.set_team_tint(team)
-		_team_gubs.append(gub)
+		var bog := _make_bog("Team %d" % (team + 1), x)
+		bog.set_team_tint(team)
+		_team_bogs.append(bog)
 		x += SPACING
-	_ffa_gub = _make_gub("Free-for-all", x)
+	_ffa_bog = _make_bog("Free-for-all", x)
 	# On a team first, then off it: the neutral case has to put the imported
 	# material *back*, not merely never have replaced it.
-	_ffa_gub.set_team_tint(3)
-	_ffa_gub.set_team_tint(MatchConfig.TEAM_NONE)
+	_ffa_bog.set_team_tint(3)
+	_ffa_bog.set_team_tint(MatchConfig.TEAM_NONE)
 	x += SPACING
-	_elder = _make_gub("Elder, Team %d" % (ELDER_TEAM + 1), x)
+	_elder = _make_bog("Elder, Team %d" % (ELDER_TEAM + 1), x)
 	_elder.set_team_tint(ELDER_TEAM)
 	_elder.set_elder(true)
 
@@ -78,22 +78,22 @@ func _ready() -> void:
 	cam.make_current()
 
 
-func _make_gub(label: String, x: float) -> Gub:
-	var gub := GUB.instantiate() as Gub
-	gub.name = label.replace(" ", "_").replace(",", "")
-	gub.display_name = label
-	# Remote before it enters the tree, as `GubBackdrop` does it, so its rig does
+func _make_bog(label: String, x: float) -> Bog:
+	var bog := BOG.instantiate() as Bog
+	bog.name = label.replace(" ", "_").replace(",", "")
+	bog.display_name = label
+	# Remote before it enters the tree, as `BogBackdrop` does it, so its rig does
 	# not take the viewport.
-	gub.peer_id = 8900 + get_tree().get_nodes_in_group("gubs").size()
-	gub.set_multiplayer_authority(gub.peer_id)
-	add_child(gub)
-	gub.revive_at(Transform3D(Basis(Vector3.UP, Gub.yaw_towards(Vector3.BACK)), Vector3(x, 0.0, 0.0)))
-	gub.sync_grounded = true
-	gub.sync_velocity = Vector3.ZERO
-	var plate := gub.get_node_or_null("Nameplate") as Nameplate
+	bog.peer_id = 8900 + get_tree().get_nodes_in_group("bogs").size()
+	bog.set_multiplayer_authority(bog.peer_id)
+	add_child(bog)
+	bog.revive_at(Transform3D(Basis(Vector3.UP, Bog.yaw_towards(Vector3.BACK)), Vector3(x, 0.0, 0.0)))
+	bog.sync_grounded = true
+	bog.sync_velocity = Vector3.ZERO
+	var plate := bog.get_node_or_null("Nameplate") as Nameplate
 	if plate != null:
 		plate.set_display_name(label)
-	return gub
+	return bog
 
 
 func _physics_process(_delta: float) -> void:
@@ -114,17 +114,17 @@ func _physics_process(_delta: float) -> void:
 
 func _check_teams() -> void:
 	var bad := []
-	for team in _team_gubs.size():
+	for team in _team_bogs.size():
 		var want := Nameplate.colour_for_team(team)
-		var got: Variant = Gub.tint_of(_team_gubs[team].body_mesh)
+		var got: Variant = Bog.tint_of(_team_bogs[team].body_mesh)
 		if not (got is Color and (got as Color).is_equal_approx(want)):
 			bad.append("team %d wants %s, body is %s" % [team, want, got])
 	_verdict("teams", bad.is_empty(), "; ".join(bad))
 
 
 func _check_ffa() -> void:
-	var mesh := _ffa_gub.body_mesh
-	var ok := mesh != null and Gub.tint_of(mesh) == null \
+	var mesh := _ffa_bog.body_mesh
+	var ok := mesh != null and Bog.tint_of(mesh) == null \
 		and mesh.get_active_material(0) == mesh.mesh.surface_get_material(0)
 	_verdict("ffa", ok, "active material %s" % (mesh.get_active_material(0) if mesh else null))
 
@@ -137,9 +137,9 @@ func _check_robe() -> void:
 		_verdict("robe", false, "the Elder is not wearing a robe")
 		return
 	var robe_material := cloth.get_active_material(0)
-	var untouched := Gub.tint_of(cloth) == null \
+	var untouched := Bog.tint_of(cloth) == null \
 		and robe_material == cloth.mesh.surface_get_material(0)
-	var body: Variant = Gub.tint_of(_elder.body_mesh)
+	var body: Variant = Bog.tint_of(_elder.body_mesh)
 	var body_ok := body is Color \
 		and (body as Color).is_equal_approx(Nameplate.colour_for_team(ELDER_TEAM))
 	_verdict("robe", untouched and body_ok and cloth != _elder.body_mesh,
@@ -148,15 +148,15 @@ func _check_robe() -> void:
 
 func _check_corpses() -> void:
 	var team := 5
-	var source := _team_gubs[team]
-	var corpse := GubRagdoll.spawn_from(source, self, Vector3(0.0, 0.0, -2.0), "Spine1")
+	var source := _team_bogs[team]
+	var corpse := BogRagdoll.spawn_from(source, self, Vector3(0.0, 0.0, -2.0), "Spine1")
 	var body := _corpse_body(corpse)
-	var got: Variant = Gub.tint_of(body)
+	var got: Variant = Bog.tint_of(body)
 	var tinted := got is Color and (got as Color).is_equal_approx(Nameplate.colour_for_team(team))
 
-	var plain := GubRagdoll.spawn_from(_ffa_gub, self, Vector3(0.0, 0.0, -2.0), "Spine1")
+	var plain := BogRagdoll.spawn_from(_ffa_bog, self, Vector3(0.0, 0.0, -2.0), "Spine1")
 	var plain_body := _corpse_body(plain)
-	var yellow := plain_body != null and Gub.tint_of(plain_body) == null \
+	var yellow := plain_body != null and Bog.tint_of(plain_body) == null \
 		and plain_body.get_active_material(0) is BaseMaterial3D
 
 	# Out of the picture: they are the proof, not the subject.
@@ -167,30 +167,30 @@ func _check_corpses() -> void:
 			plain_body.get_active_material(0) if plain_body else null])
 
 
-func _corpse_body(corpse: GubRagdoll) -> MeshInstance3D:
+func _corpse_body(corpse: BogRagdoll) -> MeshInstance3D:
 	for mesh in corpse.find_children("*", "MeshInstance3D", true, false):
-		if mesh.name == Gub.BODY_MESH_NAME:
+		if mesh.name == Bog.BODY_MESH_NAME:
 			return mesh
 	return null
 
 
 func _check_lobby() -> void:
-	var backdrop := GubBackdrop.new()
+	var backdrop := BogBackdrop.new()
 	add_child(backdrop)
 	backdrop.set_roster([{"name": "A", "team": 0}, {"name": "B", "team": 1}])
-	var gubs: Array = backdrop.get("_gubs")
-	if gubs.size() < 2:
-		_verdict("lobby", false, "the backdrop stood up %d Gubs, not 2" % gubs.size())
+	var bogs: Array = backdrop.get("_bogs")
+	if bogs.size() < 2:
+		_verdict("lobby", false, "the backdrop stood up %d Bogs, not 2" % bogs.size())
 		return
-	var first := _tint_matches(gubs[0], 0) and _tint_matches(gubs[1], 1)
+	var first := _tint_matches(bogs[0], 0) and _tint_matches(bogs[1], 1)
 	# A switches to team 4, B leaves teams altogether.
 	backdrop.set_roster([{"name": "A", "team": 3}, {"name": "B", "team": MatchConfig.TEAM_NONE}])
-	var second := _tint_matches(gubs[0], 3) and Gub.tint_of((gubs[1] as Gub).body_mesh) == null
+	var second := _tint_matches(bogs[0], 3) and Bog.tint_of((bogs[1] as Bog).body_mesh) == null
 	_verdict("lobby", first and second, "first roster %s, after the switch %s" % [first, second])
 
 
-func _tint_matches(gub: Gub, team: int) -> bool:
-	var got: Variant = Gub.tint_of(gub.body_mesh)
+func _tint_matches(bog: Bog, team: int) -> bool:
+	var got: Variant = Bog.tint_of(bog.body_mesh)
 	return got is Color and (got as Color).is_equal_approx(Nameplate.colour_for_team(team))
 
 

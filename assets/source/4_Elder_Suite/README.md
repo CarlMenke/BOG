@@ -28,10 +28,10 @@ spear's throw, only against a clip that is a cast rather than a throw.
 ## What every clip in every pack has to be
 
 The same upload. These clips land on **one** skeleton, so each one has to come
-off *the Gub as uploaded to Mixamo*, in that same Adobe account, downloaded
+off *the Bog as uploaded to Mixamo*, in that same Adobe account, downloaded
 again with this animation applied to it. A stock Mixamo character, a CC0 pack
-from anywhere else, or even the same Gub uploaded a second time gives a
-different vertex count or a bind pose a fraction out, and `build_gub.py` refuses
+from anywhere else, or even the same Bog uploaded a second time gives a
+different vertex count or a bind pose a fraction out, and `build_bog.py` refuses
 it on the first import (`assert_same_character`) rather than shipping a subtly
 broken skin in one clip. There is no retarget stage here to bridge that gap —
 deliberately, because the five things this pipeline does that Godot's
@@ -46,19 +46,19 @@ put 105 files in `_rejected/`.
 ## It is declared, and here is what was done with it
 
 `Standing1HMagicAttack1.fbx` is `Cast` in `PACKS` since **D-064**, aligned on
-0.467. `gub_animator.gd` plays **0.467-1.600** of it and the bolt leaves at
+0.467. `bog_animator.gd` plays **0.467-1.600** of it and the bolt leaves at
 **0.983** — the frame the hand stops going forward, which on this clip is
 neither its peak speed (0.783) nor its furthest reach (1.333, in the recovery).
 At the default `lightning_delay` that window is played at 2.58x.
 
 Anything else dropped in here still does nothing on its own. A folder somebody
 dropped files into is not a promise; a line in `PACKS` is. Add a `Clip(...)` for
-each new file in this pack's entry in `tools/build_gub.py`, with its clip name,
+each new file in this pack's entry in `tools/build_bog.py`, with its clip name,
 whether it loops, and its alignment reference. Until then the file is skipped
 and the build says so.
 
-    bash tools/build_gub.sh -- --list-packs   # what the pipeline thinks is here
-    bash tools/build_gub.sh                   # rebuild art/generated/gub.glb
+    bash tools/build_bog.sh -- --list-packs   # what the pipeline thinks is here
+    bash tools/build_bog.sh                   # rebuild art/generated/bog.glb
 
 Files sitting here that `PACKS` does not name are reported by both, which is
 what "I downloaded the clips and nothing changed" looks like from the inside.

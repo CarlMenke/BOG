@@ -28,11 +28,11 @@
 ;                ends. Each faces the middle.
 ;   Bases        Team 1 north, Team 2 south, each in the bay between two towers
 ;                against its back wall, behind the spine tower (D-051).
-;   Letters      G, U, B on the middle line: G at the crossroads in the centre,
-;                U and B in the pockets against the west and east walls, so
+;   Letters      B, O, G on the middle line: B at the crossroads in the centre,
+;                O and G in the pockets against the west and east walls, so
 ;                every card is the same distance from both bases.
 ;
-; `tools/preview_map.gd` stands a Gub on every pad, `tools/parkour_report.gd`
+; `tools/preview_map.gd` stands a Bog on every pad, `tools/parkour_report.gd`
 ; walks the jump graph, proves the tall stacks are out of reach and measures the
 ; longest sightline, and `tools/playthrough.gd` plans the capture layout off the
 ; declared bases — all four are in `tools/smoke_test.sh`.
@@ -106,11 +106,11 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 15.5)
 
 [node name="Letters" type="Node3D" parent="."]
 
-[node name="G" type="Marker3D" parent="Letters"]
+[node name="B" type="Marker3D" parent="Letters"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
 
-[node name="U" type="Marker3D" parent="Letters"]
+[node name="O" type="Marker3D" parent="Letters"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -15.5, 0, 0)
 
-[node name="B" type="Marker3D" parent="Letters"]
+[node name="G" type="Marker3D" parent="Letters"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15.5, 0, 0)

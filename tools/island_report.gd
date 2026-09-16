@@ -131,7 +131,7 @@ func _verdict(label: String, ok: bool) -> void:
 
 
 ## Walk a grid over the whole map and describe the ground: how high it goes, how
-## steep it gets, and how much of it a Gub could actually run on.
+## steep it gets, and how much of it a Bog could actually run on.
 func _sample_surface(island: IslandGenerator) -> void:
 	var reach := island.extent()
 	var step := 0.5

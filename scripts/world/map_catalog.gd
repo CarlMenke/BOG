@@ -76,7 +76,7 @@ const MAPS: Array[Dictionary] = [
 		"kind": Kind.STATIC,
 		"scene": "res://scenes/world/maps/wharf.tscn",
 		# Built from a table like Kopje Crossing, and the small one: a 36 m box
-		# yard with two declared Capture G·U·B bases (D-056).
+		# yard with two declared Capture B·O·G bases (D-056).
 		"loading_line": "Lighting the floodlights",
 	},
 	{

@@ -3,7 +3,7 @@ extends Node3D
 ## and the code that gets your friends in.
 ##
 ## Like the menu, the root is a `Node3D` — the roster is not only a list of
-## names, it is a ring of real Gubs standing round the fire behind the panels,
+## names, it is a ring of real Bogs standing round the fire behind the panels,
 ## wearing the same nameplates you will be reading across the island in a
 ## minute (PLAN 1.5). The list and the ring are driven from the same
 ## `Net.players` dictionary, so they cannot disagree.
@@ -33,7 +33,7 @@ const SHOW_EMPTY_SLOTS := true
 ## the caption under it is the label.
 const WEAPON_ICON := 84
 
-@onready var _backdrop: GubBackdrop = %Backdrop
+@onready var _backdrop: BogBackdrop = %Backdrop
 @onready var _player_list: VBoxContainer = %PlayerList
 @onready var _player_count: Label = %PlayerCount
 @onready var _code_label: Label = %CodeLabel
@@ -161,7 +161,7 @@ func _announce_roster_changes() -> void:
 		if not now.has(peer_id):
 			# The name is gone from the roster by now, so this can only ever say
 			# that somebody left. Better than a stale name that might be wrong.
-			_chat.add_system("A Gub left the lobby.")
+			_chat.add_system("A Bog left the lobby.")
 	_known_peers = now
 
 
@@ -194,14 +194,14 @@ func _player_row(peer_id: int, teams: bool) -> Control:
 	if teams:
 		stripe.color = UIPalette.team_colour(Net.player_team(peer_id))
 	else:
-		stripe.color = UIPalette.GUB if peer_id == Net.local_id() else UIPalette.LINE_STRONG
+		stripe.color = UIPalette.BOG if peer_id == Net.local_id() else UIPalette.LINE_STRONG
 	box.add_child(stripe)
 
 	var name_label := Label.new()
 	name_label.text = Net.player_name(peer_id)
 	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	if peer_id == Net.local_id():
-		name_label.add_theme_color_override("font_color", UIPalette.GUB)
+		name_label.add_theme_color_override("font_color", UIPalette.BOG)
 	box.add_child(name_label)
 
 	if peer_id == 1:
@@ -217,7 +217,7 @@ func _player_row(peer_id: int, teams: bool) -> Control:
 
 	# What they are bringing, in the row as well as in the ring (D-069). The ring
 	# is the better read and is the reason the feature is shaped the way it is,
-	# but eight Gubs at four metres is not a list you can scan — and "who else
+	# but eight Bogs at four metres is not a list you can scan — and "who else
 	# took the sword" is a question a player asks before they ready up.
 	var weapon := Label.new()
 	weapon.theme_type_variation = "TinyLabel"
@@ -316,8 +316,8 @@ func _rebuild_team_picker() -> void:
 ##
 ## Two ways to pick, and both are the *same* request. A click picks. Moving onto
 ## a button with the arrow keys or a stick also picks, which is the decision's
-## own *"the Gub swaps weapons live as you move through it"* — a strip you have
-## to arrow onto and then confirm would make the ring's Gub a preview of
+## own *"the Bog swaps weapons live as you move through it"* — a strip you have
+## to arrow onto and then confirm would make the ring's Bog a preview of
 ## something that had not happened, and the point of the ring is that it shows
 ## what the roster says.
 ##
@@ -497,7 +497,7 @@ func _why_not_startable() -> String:
 			return "Waiting on %s." % Net.player_name(peer_id)
 	if Net.config.mode == MatchConfig.Mode.TEAMS:
 		if Net.config.random_teams:
-			return "Random teams need at least two Gubs." if Net.player_count() < 2 else ""
+			return "Random teams need at least two Bogs." if Net.player_count() < 2 else ""
 		var occupied := {}
 		for peer_id: int in Net.peer_ids():
 			occupied[Net.player_team(peer_id)] = true

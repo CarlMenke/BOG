@@ -9,15 +9,15 @@ extends Node
 ##
 ## Everything here is host-authoritative. Clients receive results and display
 ## them; they never decide a kill, a respawn or a score. The one thing clients
-## do own is their own Gub's movement (docs/DECISIONS.md D-004), which is why
+## do own is their own Bog's movement (docs/DECISIONS.md D-004), which is why
 ## respawning teleports via an RPC to the owner rather than by the host setting
 ## a position it does not control.
 ##
 ## Everything here asks `Net.local_id()` rather than `multiplayer.get_unique_id()`
 ## directly. They are the same answer while a session exists, and only the first
 ## has one when it does not: leaving nulls the peer immediately while `SceneFlow`
-## fades for FADE_OUT seconds, and the HUD reaches `local_gub()` three times a
-## frame throughout. `Gub.is_local()` carries the same guard for the same reason.
+## fades for FADE_OUT seconds, and the HUD reaches `local_bog()` three times a
+## frame throughout. `Bog.is_local()` carries the same guard for the same reason.
 
 signal phase_changed(phase: Phase)
 signal scores_changed()
@@ -35,7 +35,7 @@ signal letters_changed(peer_id: int)
 ## `_letter_holds` when this fires, and a signal that carries a copy of it is a
 ## copy waiting to disagree.
 ##
-## Fires on **every** peer, not just the holder's, because a Gub standing in the
+## Fires on **every** peer, not just the holder's, because a Bog standing in the
 ## open ten seconds from a letter is the whole tension of the mode and has to
 ## read from across the clearing (D-035).
 signal letter_hold_changed(peer_id: int)
@@ -50,7 +50,7 @@ signal letter_hold_changed(peer_id: int)
 ## the only one of the two a card produces. Both fire on every peer.
 signal letter_picked_up(peer_id: int, letter: int)
 signal letter_banked(peer_id: int, letter: int)
-## Capture G·U·B only (D-051), and events in the same sense as the two above: a
+## Capture B·O·G only (D-051), and events in the same sense as the two above: a
 ## dead carrier's letter hit the ground, and a letter went home to its spawn —
 ## after lying dropped too long, or straight away when a carrier died where no
 ## card could land. Both fire on every peer. `letter_returned` names no peer,
@@ -67,7 +67,7 @@ signal elder_changed(peer_id: int)
 
 enum Phase { IDLE, WARMUP, PLAYING, POST_MATCH }
 
-const GUB_SCENE := preload("res://scenes/player/gub.tscn")
+const BOG_SCENE := preload("res://scenes/player/bog.tscn")
 const PICKUP_SCENE := preload("res://scenes/items/pickup.tscn")
 
 ## Letters are a three-bit mask on the player's stats row, not a set.
@@ -75,21 +75,28 @@ const PICKUP_SCENE := preload("res://scenes/items/pickup.tscn")
 ## A mask because `stats` is replicated whole, as a Dictionary, on every score
 ## change — an int costs three bits of that and an `Array[String]` costs an
 ## allocation per player per push. It is also what the HUD wants: three lamps
-## lit or unlit is `mask & LETTER_G`, with no membership test and no ordering to
+## lit or unlit is `mask & LETTER_B`, with no membership test and no ordering to
 ## get wrong.
-const LETTER_G := 1
-const LETTER_U := 2
-const LETTER_B := 4
+##
+## **The bits are numbered in reading order**, low to high: bit 0 is the first
+## letter of the word and bit 2 is the last. Nothing in the code depends on
+## that — every consumer goes through `LETTERS` or `letter_name` — but a mask
+## printed as a number in a log line or a saved lobby is read by a person, and
+## 5 meaning "B and G, no O" only parses at a glance if the bits sit in the
+## order the word does (D-080).
+const LETTER_B := 1
+const LETTER_O := 2
+const LETTER_G := 4
 ## All three. The win condition is one comparison against this.
-const LETTER_ALL := LETTER_G | LETTER_U | LETTER_B
-## Index order for the uniform roll and for rendering. G, U, B, left to right,
+const LETTER_ALL := LETTER_B | LETTER_O | LETTER_G
+## Index order for the uniform roll and for rendering. B, O, G, left to right,
 ## the way the word reads — which is emphatically *not* an order they have to be
 ## collected in (D-033).
-const LETTERS: Array[int] = [LETTER_G, LETTER_U, LETTER_B]
+const LETTERS: Array[int] = [LETTER_B, LETTER_O, LETTER_G]
 
 ## How far above the death point the drop's ground query starts, and how far
-## down it looks. A Gub dies standing, or mid-ragdoll, or on a slope, so the ray
-## starts above head height and is allowed to fall a Gub's height or so before
+## down it looks. A Bog dies standing, or mid-ragdoll, or on a slope, so the ray
+## starts above head height and is allowed to fall a Bog's height or so before
 ## giving up — past that the death happened over a drop and an item left there
 ## would hang in the air.
 const DROP_RAY_UP := 1.4
@@ -118,8 +125,8 @@ var void_height: float = VOID_HEIGHT
 ## peer_id -> {kills, deaths, letters, lives_left, alive, respawn_at,
 ##             last_attacker, last_attacker_at}
 var stats: Dictionary = {}
-## peer_id -> Gub
-var gubs: Dictionary = {}
+## peer_id -> Bog
+var bogs: Dictionary = {}
 
 var _players_root: Node = null
 var _spawn_points: Array[Transform3D] = []
@@ -139,8 +146,8 @@ var _pickups: Dictionary = {}
 var _next_pickup_id: int = 1
 
 ## peer_id -> {letter: int, ends_at: float}, on every peer. A row exists exactly
-## while that Gub is holding a card up, which is what `is_holding_letter` asks
-## and what `GubCombat` gates the throw on (D-035).
+## while that Bog is holding a card up, which is what `is_holding_letter` asks
+## and what `BogCombat` gates the throw on (D-035).
 ##
 ## `ends_at` is in local `_now()` seconds on whichever machine wrote it, so the
 ## host's row and a client's row for the same hold differ by the latency of one
@@ -165,7 +172,7 @@ var _letter_holds: Dictionary = {}
 ## `reset` and a fresh warmup — never by a departure.
 var _team_letters: Dictionary = {}
 
-## peer_id -> {ends_at: float}, on every peer, for exactly as long as that Gub
+## peer_id -> {ends_at: float}, on every peer, for exactly as long as that Bog
 ## is the Elder.
 ##
 ## A row rather than a bare `true` since D-040, because the robe is now a clock:
@@ -175,7 +182,7 @@ var _team_letters: Dictionary = {}
 ## the same split — the client's copy exists so the HUD can count down without
 ## asking, and **only the host's copy can end one**. `is_elder` is the presence
 ## of the row and never `remaining <= 0`, so a client whose clock runs out early
-## shows zero and waits rather than taking a robe off a Gub the host still says
+## shows zero and waits rather than taking a robe off a Bog the host still says
 ## is wearing one.
 ##
 ## A set rather than a field on the `stats` row, and the difference matters.
@@ -190,7 +197,7 @@ var _team_letters: Dictionary = {}
 ## rule would mean a robe that refuses to be collected.
 var _elders: Dictionary = {}
 
-## Capture G·U·B (D-051). What the arena's map declared, handed over before
+## Capture B·O·G (D-051). What the arena's map declared, handed over before
 ## `register_arena`, and the layout planned from it and the spawn pads. The
 ## layout exists on every peer, because every peer draws the bases; it is
 ## planned whatever the win condition, because it costs a loop over eight pads
@@ -255,13 +262,13 @@ func register_arena(players_root: Node, spawn_points: Array[Transform3D]) -> voi
 	#
 	# The island is *generated*, and that blocks the main thread for two to six
 	# seconds on each machine independently. The host used to begin the warmup
-	# the moment its own build finished, which meant it spawned Gubs and started
+	# the moment its own build finished, which meant it spawned Bogs and started
 	# replicating their positions while other peers were still building — so the
 	# unreliable position updates arrived at a client that had not yet processed
 	# the reliable RPC creating the node they address, and every client logged
-	# `Node not found: "Arena/Players/Gub_N/Sync"` on every match start.
+	# `Node not found: "Arena/Players/Bog_N/Sync"` on every match start.
 	#
-	# Worse than the noise: `_create_gub` is sent once and never re-sent, so a
+	# Worse than the noise: `_create_bog` is sent once and never re-sent, so a
 	# peer still building when it arrives could miss a spawn permanently and
 	# spend the match in an empty arena, including its own body. That never bit
 	# because the RPC queues behind the blocking build rather than being dropped
@@ -294,7 +301,7 @@ func _try_begin_warmup() -> void:
 	# An arena that is actually standing, not merely the last one registered.
 	# `reset` forgets the old players root, but a root can also be on its way out
 	# of the tree without anybody having said so, and a warmup begun into it
-	# spawns every Gub into a scene about to be freed and leaves the phase at
+	# spawns every Bog into a scene about to be freed and leaves the phase at
 	# WARMUP — so the arena that registers next returns early here and the
 	# match never has a body in it.
 	if phase != Phase.IDLE or not _arena_is_standing():
@@ -325,21 +332,21 @@ func _on_left_lobby(_reason: int, _message: String) -> void:
 	reset()
 
 
-## Somebody disconnected. Take their Gub out of the world on every machine, and
+## Somebody disconnected. Take their Bog out of the world on every machine, and
 ## take their row out of the scoring, so the match can still end.
 ##
 ## The win check has to run again afterwards. In a lives match the leaver may
-## have been the only thing standing between someone else and "last Gub
+## have been the only thing standing between someone else and "last Bog
 ## standing", and without this the match simply never ends — everyone waits on a
 ## player who closed the game.
 func _on_player_left(peer_id: int) -> void:
-	var gub: Gub = gubs.get(peer_id)
+	var bog: Bog = bogs.get(peer_id)
 	# A disconnect is a death, as far as a letter hold is concerned (D-035):
 	# nothing is awarded and the card goes back on the ground where the body
-	# was. Read before the Gub is freed, because the body is the only thing that
+	# was. Read before the Bog is freed, because the body is the only thing that
 	# knows where "there" is — and if it is already gone, `Vector3.INF` tells
 	# `_interrupt_letter_hold` there is nowhere to put the card.
-	var last_spot := gub.global_position if is_instance_valid(gub) else Vector3.INF
+	var last_spot := bog.global_position if is_instance_valid(bog) else Vector3.INF
 	if Net.is_host and phase == Phase.PLAYING:
 		_interrupt_letter_hold(peer_id, last_spot)
 	# And on every peer, host included, the row goes whatever the phase is. A
@@ -353,12 +360,12 @@ func _on_player_left(peer_id: int) -> void:
 	# a robe is consumed rather than re-dropped (D-038). So the row simply goes,
 	# on every peer, host included, whatever the phase. Leaving it would be a
 	# twenty-second countdown belonging to somebody who has closed the game, and
-	# a `gubs` entry it cannot be taken off.
+	# a `bogs` entry it cannot be taken off.
 	if _elders.erase(peer_id):
 		elder_changed.emit(peer_id)
-	if is_instance_valid(gub):
-		gub.queue_free()
-	gubs.erase(peer_id)
+	if is_instance_valid(bog):
+		bog.queue_free()
+	bogs.erase(peer_id)
 	stats.erase(peer_id)
 	_arena_ready.erase(peer_id)
 	scores_changed.emit()
@@ -368,10 +375,10 @@ func _on_player_left(peer_id: int) -> void:
 
 
 func reset() -> void:
-	for gub: Gub in gubs.values():
-		if is_instance_valid(gub):
-			gub.queue_free()
-	gubs.clear()
+	for bog: Bog in bogs.values():
+		if is_instance_valid(bog):
+			bog.queue_free()
+	bogs.clear()
 	stats.clear()
 	_team_letters.clear()
 	# The nodes themselves belong to the arena's `spawned_items` and go with it;
@@ -423,7 +430,7 @@ func _begin_warmup() -> void:
 	_sync_phase.rpc(Phase.WARMUP, _phase_timer, time_left)
 	_sync_phase(Phase.WARMUP, _phase_timer, time_left)
 	for peer_id: int in Net.peer_ids():
-		_spawn_gub(peer_id)
+		_spawn_bog(peer_id)
 	_push_scores()
 
 
@@ -518,22 +525,22 @@ func _tick_respawns() -> void:
 ## Falling off the island. Checked on the host for everyone, because a client
 ## that has fallen is often the one least able to report it.
 func _tick_void() -> void:
-	for peer_id: int in gubs.keys():
-		var gub: Gub = gubs[peer_id]
-		if not is_instance_valid(gub) or not gub.alive:
+	for peer_id: int in bogs.keys():
+		var bog: Bog = bogs[peer_id]
+		if not is_instance_valid(bog) or not bog.alive:
 			continue
-		if gub.global_position.y > void_height:
+		if bog.global_position.y > void_height:
 			continue
 		var entry: Dictionary = stats.get(peer_id, {})
-		# If someone lured or spooked you off the edge moments ago, they get it.
+		# If someone pulled or spooked you off the edge moments ago, they get it.
 		var attacker: int = entry.get("last_attacker", 0)
 		var recent: bool = _now() - float(entry.get("last_attacker_at", -999.0)) < ASSIST_WINDOW
-		# The one death in the game that is not damage. Nothing hit this Gub;
+		# The one death in the game that is not damage. Nothing hit this Bog;
 		# the map has taken it, and a bar cannot be whittled down by a fall.
 		# `report_kill` is that sentence — a body's worth, through the same door
 		# as everything else, and refused by nothing (see `damage_refusal`).
-		report_kill(peer_id, attacker if recent else peer_id, Gub.Cause.VOID,
-			gub.global_position, Vector3.DOWN, "")
+		report_kill(peer_id, attacker if recent else peer_id, Bog.Cause.VOID,
+			bog.global_position, Vector3.DOWN, "")
 
 
 # ------------------------------------------------------------------ spawns ---
@@ -542,21 +549,21 @@ func _next_spawn(peer_id: int = 0) -> Transform3D:
 	var pool := _spawn_pool(peer_id)
 	if pool.is_empty():
 		return Transform3D.IDENTITY
-	# Walk the list rather than picking at random, so two Gubs cannot land on
+	# Walk the list rather than picking at random, so two Bogs cannot land on
 	# the same pad on the same frame.
 	var best := pool[_spawn_cursor % pool.size()]
 	_spawn_cursor += 1
 
 	# Prefer a pad with nobody standing near it. Spawning face to face with an
-	# armed Gub is the cheapest death in the game.
+	# armed Bog is the cheapest death in the game.
 	var safest := best
 	var safest_distance := -1.0
 	for i in pool.size():
 		var candidate := pool[(_spawn_cursor + i) % pool.size()]
 		var nearest := INF
-		for gub: Gub in gubs.values():
-			if is_instance_valid(gub) and gub.alive:
-				nearest = minf(nearest, candidate.origin.distance_to(gub.global_position))
+		for bog: Bog in bogs.values():
+			if is_instance_valid(bog) and bog.alive:
+				nearest = minf(nearest, candidate.origin.distance_to(bog.global_position))
 		if nearest > safest_distance:
 			safest_distance = nearest
 			safest = candidate
@@ -565,8 +572,8 @@ func _next_spawn(peer_id: int = 0) -> Transform3D:
 	return safest
 
 
-## The pads `peer_id` may spawn on. Every pad, except in Capture G·U·B, where a
-## Gub spawns on the pads nearest its own team's base (D-051) — a carrier's
+## The pads `peer_id` may spawn on. Every pad, except in Capture B·O·G, where a
+## Bog spawns on the pads nearest its own team's base (D-051) — a carrier's
 ## teammates come back next to the base they are defending, and nobody opens a
 ## match standing in the other team's. A team with no pads of its own, and
 ## `peer_id` 0 (a card with nowhere else to go), use every pad.
@@ -582,16 +589,16 @@ func _spawn_pool(peer_id: int) -> Array[Transform3D]:
 	return pool if not pool.is_empty() else _spawn_points
 
 
-func _spawn_gub(peer_id: int) -> void:
+func _spawn_bog(peer_id: int) -> void:
 	var spawn := _next_spawn(peer_id)
 	var life := _life_of(peer_id)
-	_create_gub.rpc(peer_id, spawn, life)
-	_create_gub(peer_id, spawn, life)
+	_create_bog.rpc(peer_id, spawn, life)
+	_create_bog(peer_id, spawn, life)
 
 
-## Which life a Gub is about to begin, as the host counts it: its deaths so far.
+## Which life a Bog is about to begin, as the host counts it: its deaths so far.
 ##
-## Handed to `Gub.revive_at` on every peer, so that every copy of one Gub agrees
+## Handed to `Bog.revive_at` on every peer, so that every copy of one Bog agrees
 ## which life a snapshot belongs to and can refuse one from a life that is over
 ## (D-043). Deaths rather than a counter of its own, because it is already the
 ## host's number, it only ever goes up, and every respawn follows exactly one of
@@ -602,31 +609,31 @@ func _life_of(peer_id: int) -> int:
 
 
 @rpc("authority", "call_remote", "reliable")
-func _create_gub(peer_id: int, spawn: Transform3D, life: int) -> void:
-	if not _arena_is_standing() or gubs.has(peer_id):
+func _create_bog(peer_id: int, spawn: Transform3D, life: int) -> void:
+	if not _arena_is_standing() or bogs.has(peer_id):
 		return
-	var gub := GUB_SCENE.instantiate() as Gub
-	gub.name = "Gub_%d" % peer_id
-	gub.peer_id = peer_id
-	gub.display_name = Net.player_name(peer_id)
-	gub.team = Net.player_team(peer_id)
+	var bog := BOG_SCENE.instantiate() as Bog
+	bog.name = "Bog_%d" % peer_id
+	bog.peer_id = peer_id
+	bog.display_name = Net.player_name(peer_id)
+	bog.team = Net.player_team(peer_id)
 	# Off this peer's own copy of the roster, exactly as the name and the team
 	# above are, which is why the weapon needed no replication of its own
 	# (D-069): the roster is broadcast whole before `_begin_match` and both are
 	# reliable on one channel, so every machine already has the row this reads
 	# by the time it builds anything. What that buys is that the lobby ring and
-	# the match are one code path — `GubBackdrop` seeds the same field from the
-	# same row, and `GubCombat` is the only thing that reads it.
-	gub.weapon = Net.player_weapon(peer_id)
+	# the match are one code path — `BogBackdrop` seeds the same field from the
+	# same row, and `BogCombat` is the only thing that reads it.
+	bog.weapon = Net.player_weapon(peer_id)
 	# Ownership is set *before* the node enters the tree, which is also what
 	# Godot's own spawner pattern does. Set it afterwards and every child whose
 	# `_ready` branches on `is_local()` runs once believing it belongs to this
-	# client: in particular each remote Gub's camera rig makes itself current, so
-	# the last Gub spawned steals the viewport and the player spends the match
+	# client: in particular each remote Bog's camera rig makes itself current, so
+	# the last Bog spawned steals the viewport and the player spends the match
 	# looking out of somebody else's head.
-	gub.set_multiplayer_authority(peer_id)
+	bog.set_multiplayer_authority(peer_id)
 	# ...with one node held back: `Combat` belongs to the **host** on every
-	# machine, including the machine that owns the Gub.
+	# machine, including the machine that owns the Bog.
 	#
 	# The owner decides *when* it wants to throw; the host decides *whether* the
 	# throw happened, and the `_do_*` calls that make an ability real are
@@ -634,21 +641,21 @@ func _create_gub(peer_id: int, spawn: Transform3D, life: int) -> void:
 	# against whoever owns the node it *lands on*, so while `Combat` belonged to
 	# the client every one of those broadcasts was refused on arrival — on every
 	# peer, including the thrower's own. A non-host's spear never left their
-	# hand, their mushroom and lure appeared for nobody, and the only thing that
+	# hand, their shield and magnet appeared for nobody, and the only thing that
 	# still worked was the local cooldown prediction, so it looked like a
 	# rendering problem rather than a networking one. The host's own abilities
-	# were fine purely because for the host's Gub the owner and the host are the
+	# were fine purely because for the host's Bog the owner and the host are the
 	# same peer.
 	#
 	# Non-recursive on purpose. `Combat` has no children today, but the flag is
 	# the statement: exactly one node changes hands, and the
 	# `MultiplayerSynchronizer` beside it must keep belonging to the peer whose
 	# position it publishes.
-	var combat := gub.get_node_or_null("Combat")
+	var combat := bog.get_node_or_null("Combat")
 	if combat != null:
 		combat.set_multiplayer_authority(1, false)
 
-	_players_root.add_child(gub)
+	_players_root.add_child(bog)
 	# `revive_at` rather than assigning the transform: it also seeds the
 	# replicated fields, one by one and by hand. Without that, every other peer's
 	# copy starts with `sync_position` at the arena origin and visibly slides in
@@ -656,23 +663,23 @@ func _create_gub(peer_id: int, spawn: Transform3D, life: int) -> void:
 	# `sync_grounded` is worse, because the value a remote copy would compute for
 	# itself is permanently false and the owner's never changes, so ON_CHANGE
 	# replication has nothing to correct it with. See D-029.
-	gub.revive_at(spawn, life)
-	gub.grant_invulnerability(config().spawn_protection)
+	bog.revive_at(spawn, life)
+	bog.grant_invulnerability(config().spawn_protection)
 
-	var shown_team := gub.team if config().mode == MatchConfig.Mode.TEAMS \
+	var shown_team := bog.team if config().mode == MatchConfig.Mode.TEAMS \
 		else MatchConfig.TEAM_NONE
 	# The body and the plate always agree, including in free-for-all, where both
 	# are neutral (D-046).
-	gub.set_team_tint(shown_team)
-	var plate := gub.get_node_or_null("Nameplate") as Nameplate
+	bog.set_team_tint(shown_team)
+	var plate := bog.get_node_or_null("Nameplate") as Nameplate
 	if plate != null:
-		plate.set_display_name(gub.display_name)
+		plate.set_display_name(bog.display_name)
 		plate.set_team(shown_team)
 		plate.set_ally(is_teammate(peer_id))
 		# You do not need a label telling you your own name.
 		plate.visible = peer_id != Net.local_id()
 
-	gubs[peer_id] = gub
+	bogs[peer_id] = bog
 	if not stats.has(peer_id):
 		stats[peer_id] = _new_stats()
 
@@ -685,7 +692,7 @@ func _respawn(peer_id: int) -> void:
 	entry["last_attacker"] = 0
 	# Belt and braces for D-038, and free when there is nothing to do. Nothing
 	# that can kill an Elder leaves the robe on today — the void ends it in
-	# `report_kill` — but a Gub coming back from a death is the one Gub that
+	# `report_kill` — but a Bog coming back from a death is the one Bog that
 	# certainly should not be wearing one, so it is said here rather than
 	# trusted. Through `_end_elder`, before the respawn goes out, so the row and
 	# the cloth come off together on every peer and in that order.
@@ -698,13 +705,13 @@ func _respawn(peer_id: int) -> void:
 
 @rpc("authority", "call_remote", "reliable")
 func _do_respawn(peer_id: int, spawn: Transform3D, life: int) -> void:
-	var gub: Gub = gubs.get(peer_id)
-	if not is_instance_valid(gub):
+	var bog: Bog = bogs.get(peer_id)
+	if not is_instance_valid(bog):
 		return
-	gub.visible = true
-	gub.revive_at(spawn, life)
-	gub.grant_invulnerability(config().spawn_protection)
-	var combat := gub.get_node_or_null("Combat") as GubCombat
+	bog.visible = true
+	bog.revive_at(spawn, life)
+	bog.grant_invulnerability(config().spawn_protection)
+	var combat := bog.get_node_or_null("Combat") as BogCombat
 	if combat != null:
 		combat.reset()
 	if peer_id == Net.local_id():
@@ -716,21 +723,21 @@ func _do_respawn(peer_id: int, spawn: Transform3D, life: int) -> void:
 
 ## Host only. **The single place a hit is decided** (D-062).
 ##
-## Everything that can hurt a Gub comes through here, and the questions that
+## Everything that can hurt a Bog comes through here, and the questions that
 ## decide whether a hit does anything are asked once, in `damage_refusal`: is
 ## there a match on, is the victim there to be hit, are they protected, are they
 ## on the attacker's team, are they the Elder. Asking them in one place is the
 ## whole point of the function — the alternative is every weapon repeating the
 ## rules and the newest weapon getting one of them wrong.
 ##
-## **`report_kill` is this function with `Gub.MAX_HEALTH` in it**, and a death
+## **`report_kill` is this function with `Bog.MAX_HEALTH` in it**, and a death
 ## is what happens when the number runs out. That order matters: it makes "a
 ## spear always kills" a number rather than a branch. There is no
 ## `if weapon == SPEAR: die` anywhere to be softened by a future lobby dial,
 ## and no `starting_health` slider for the number to be measured against — see
-## `Gub.MAX_HEALTH`.
+## `Bog.MAX_HEALTH`.
 ##
-## `amount` is in the units of `Gub.MAX_HEALTH`: 100 is a body's worth, and a
+## `amount` is in the units of `Bog.MAX_HEALTH`: 100 is a body's worth, and a
 ## bow's 20–80 is a fifth to four fifths of one.
 ##
 ## `point`, `blow` and `bone` describe the hit rather than the death, and they
@@ -744,14 +751,14 @@ func _do_respawn(peer_id: int, spawn: Transform3D, life: int) -> void:
 ## the Elder — *"damage to an Elder is zero"* is the same rule D-040 always had,
 ## said as a number.
 func report_damage(victim_id: int, attacker_id: int, amount: float,
-		cause: Gub.Cause, point: Vector3, blow: Vector3, bone: String) -> float:
+		cause: Bog.Cause, point: Vector3, blow: Vector3, bone: String) -> float:
 	if not Net.is_host:
 		return 0.0
 	# A heal is not a negative hit. Whatever wants to put health back asks for
 	# it by name — `report_heal` below, which is what the potion drinks through
 	# (D-067) — rather than by sending a negative through the door that checks
 	# friendly fire, spawn protection and the robe, none of which mean anything
-	# about a Gub topping itself up.
+	# about a Bog topping itself up.
 	if amount <= 0.0:
 		return 0.0
 
@@ -760,7 +767,7 @@ func report_damage(victim_id: int, attacker_id: int, amount: float,
 		# Exactly what `note_attack` is for, and this is its clearest case: an
 		# attacker who hurt somebody without killing them is credited if the
 		# victim goes off the edge shortly afterwards. An Elder shoved by a
-		# lightning bolt or lured over a ledge is precisely that, and the void
+		# lightning bolt or pulled over a ledge is precisely that, and the void
 		# is the only death it has.
 		if attacker_id != victim_id:
 			note_attack(victim_id, attacker_id)
@@ -805,8 +812,8 @@ func report_damage(victim_id: int, attacker_id: int, amount: float,
 	# victim is treated as being at full health every time: `report_kill`'s
 	# hundred still kills it, and anything less than a body's worth cannot
 	# whittle down a body that does not exist.
-	var victim: Gub = gubs.get(victim_id)
-	var left := Gub.MAX_HEALTH - amount
+	var victim: Bog = bogs.get(victim_id)
+	var left := Bog.MAX_HEALTH - amount
 	if is_instance_valid(victim):
 		left = victim.health - amount
 	if left > 0.0:
@@ -825,7 +832,7 @@ func report_damage(victim_id: int, attacker_id: int, amount: float,
 ## which the comment at the top of that function has said since D-062. The two
 ## are not opposites: `report_damage` asks whether the *attacker* is allowed to
 ## hurt this victim — friendly fire, spawn protection, the robe — and every one
-## of those questions is meaningless about a Gub topping itself up. It also
+## of those questions is meaningless about a Bog topping itself up. It also
 ## *is* the hit feedback, and a heal that ran through it would shake the
 ## drinker's camera and put a hitmarker in somebody's ears.
 ##
@@ -834,7 +841,7 @@ func report_damage(victim_id: int, attacker_id: int, amount: float,
 ## corrected by the next one rather than being permanently out by a subtraction.
 ##
 ## Returns how much health was actually restored, which is not always what was
-## asked for: a Gub 10 from full that drinks 40 is healed 10. The caller needs
+## asked for: a Bog 10 from full that drinks 40 is healed 10. The caller needs
 ## that number, because the potion is spent over the channel and what has been
 ## delivered so far is what an interruption keeps.
 func report_heal(peer_id: int, amount: float) -> float:
@@ -842,14 +849,14 @@ func report_heal(peer_id: int, amount: float) -> float:
 		return 0.0
 	if phase != Phase.PLAYING or not is_alive(peer_id):
 		return 0.0
-	var gub: Gub = gubs.get(peer_id)
+	var bog: Bog = bogs.get(peer_id)
 	# No body, nothing to heal — the same answer `report_damage` gives a row
 	# with nobody standing in the world, and for the same reason: health lives
-	# on the Gub and a bookkeeping row has nowhere to write it down.
-	if not is_instance_valid(gub):
+	# on the Bog and a bookkeeping row has nowhere to write it down.
+	if not is_instance_valid(bog):
 		return 0.0
-	var before := gub.health
-	var after := minf(Gub.MAX_HEALTH, before + amount)
+	var before := bog.health
+	var after := minf(Bog.MAX_HEALTH, before + amount)
 	if is_equal_approx(after, before):
 		return 0.0
 	_do_heal.rpc(peer_id, after)
@@ -861,24 +868,24 @@ func report_heal(peer_id: int, amount: float) -> float:
 ## or a `note_attack`: nobody attacked anybody.
 @rpc("authority", "call_remote", "reliable")
 func _do_heal(peer_id: int, health: float) -> void:
-	var gub: Gub = gubs.get(peer_id)
-	if is_instance_valid(gub):
-		gub.set_health(health)
+	var bog: Bog = bogs.get(peer_id)
+	if is_instance_valid(bog):
+		bog.set_health(health)
 
 
 ## Stop `peer_id` drinking, wherever that is being decided from. Host only, and
-## a no-op for a Gub that is not.
+## a no-op for a Bog that is not.
 ##
-## Here rather than in `GubCombat` because the two things that break a channel
+## Here rather than in `BogCombat` because the two things that break a channel
 ## from outside it — a landed hit and a letter hold — are both decided in this
 ## file, and neither of them should have to know how a combat node is reached.
 func _break_channel(peer_id: int) -> void:
 	if not Net.is_host:
 		return
-	var gub: Gub = gubs.get(peer_id)
-	if not is_instance_valid(gub):
+	var bog: Bog = bogs.get(peer_id)
+	if not is_instance_valid(bog):
 		return
-	var combat := gub.get_node_or_null("Combat") as GubCombat
+	var combat := bog.get_node_or_null("Combat") as BogCombat
 	if combat != null:
 		combat.host_break_channel()
 
@@ -911,7 +918,7 @@ enum Refusal {
 ##
 ## The order is load-bearing:
 ##
-## **Protection before everything.** A protected Gub is not hit at all, by
+## **Protection before everything.** A protected Bog is not hit at all, by
 ## anyone, for any reason, and nothing is drawn on them.
 ##
 ## **Friendly fire before the Elder**, and the ward is why. A shot stopped
@@ -932,21 +939,21 @@ enum Refusal {
 ## so.
 ##
 ## **The void is refused by nothing at all**, and that carve-out is not a
-## nicety: a Gub that cannot die to the void falls past the bottom of the island
+## nicety: a Bog that cannot die to the void falls past the bottom of the island
 ## for ever, alive, unreachable and unrespawnable. So the one thing that can end
 ## an Elder early is the map itself.
 ##
 ## That last rule is now stated **once, first**, which fixes a bug it is worth
 ## naming because nothing had ever run into it. Spawn protection and the robe
 ## each carved the void out for themselves; friendly fire did not, and it was
-## asked of every cause. So in Teams with friendly fire off, a Gub lured or
+## asked of every cause. So in Teams with friendly fire off, a Bog pulled or
 ## shoved off the edge by a team-mate inside `ASSIST_WINDOW` was reported to the
 ## void with a team-mate as its killer — and refused, every frame, for as long
 ## as it kept falling. The credit rule (`_tick_void` naming the last attacker)
 ## and the friendly-fire rule are both right on their own; the bug was only ever
 ## in the order.
 func damage_refusal(victim_id: int, attacker_id: int,
-		cause: Gub.Cause = Gub.Cause.UNKNOWN) -> Refusal:
+		cause: Bog.Cause = Bog.Cause.UNKNOWN) -> Refusal:
 	# The warmup is not a fight. The host has always refused damage outside
 	# PLAYING, and asking it here rather than in `report_damage` is what lets
 	# every peer know it too — otherwise a spear thrown during the countdown
@@ -956,9 +963,9 @@ func damage_refusal(victim_id: int, attacker_id: int,
 	if not is_alive(victim_id):
 		return Refusal.DEAD
 	# The map itself, refused by nothing.
-	if cause == Gub.Cause.VOID:
+	if cause == Bog.Cause.VOID:
 		return Refusal.NONE
-	var victim: Gub = gubs.get(victim_id)
+	var victim: Bog = bogs.get(victim_id)
 	if is_instance_valid(victim) and victim.is_invulnerable():
 		return Refusal.PROTECTED
 	# Friendly fire is off by default, so a team-mate's spear simply stops.
@@ -973,24 +980,24 @@ func damage_refusal(victim_id: int, attacker_id: int,
 ## Would a hit from `attacker_id` land on `victim_id` at all? The question a
 ## projectile asks itself, on every peer, at the moment it reaches a body.
 func damage_would_land(victim_id: int, attacker_id: int,
-		cause: Gub.Cause = Gub.Cause.UNKNOWN) -> bool:
+		cause: Bog.Cause = Bog.Cause.UNKNOWN) -> bool:
 	return damage_refusal(victim_id, attacker_id, cause) == Refusal.NONE
 
 
-## What is left of one Gub, in the units of `Gub.MAX_HEALTH`.
+## What is left of one Bog, in the units of `Bog.MAX_HEALTH`.
 ##
 ## Zero for a peer with nothing standing in the world — a spectator, a peer that
 ## has not spawned yet, a row in a harness — which is the same answer `is_alive`
 ## gives for the same peer, and the same answer anything drawing a bar wants.
 func health_of(peer_id: int) -> float:
-	var gub: Gub = gubs.get(peer_id)
-	return gub.health if is_instance_valid(gub) else 0.0
+	var bog: Bog = bogs.get(peer_id)
+	return bog.health if is_instance_valid(bog) else 0.0
 
 
-## Host only. Kill this Gub outright: a body's worth of damage, through the
+## Host only. Kill this Bog outright: a body's worth of damage, through the
 ## same door as everything else (D-062).
 ##
-## Kept, rather than replaced by its callers writing `Gub.MAX_HEALTH` out, for
+## Kept, rather than replaced by its callers writing `Bog.MAX_HEALTH` out, for
 ## two reasons. It is what "this hit kills, full stop" should look like at a
 ## call site — the void, and any weapon whose contract is one shot — and the
 ## harnesses stage dozens of deaths through it (`tools/match_rules.gd`,
@@ -1000,19 +1007,19 @@ func health_of(peer_id: int) -> float:
 ## Every refusal `report_damage` makes it still makes here: spawn protection,
 ## friendly fire and the Elder's ward all answer a hundred exactly as they
 ## answer twenty.
-func report_kill(victim_id: int, killer_id: int, cause: Gub.Cause,
+func report_kill(victim_id: int, killer_id: int, cause: Bog.Cause,
 		point: Vector3, blow: Vector3, bone: String) -> void:
-	report_damage(victim_id, killer_id, Gub.MAX_HEALTH, cause, point, blow, bone)
+	report_damage(victim_id, killer_id, Bog.MAX_HEALTH, cause, point, blow, bone)
 
 
 ## Host only. The single place a death is decided — which is now *this* kill
 ## rather than a decision of its own: everything that can refuse a death was
 ## asked in `report_damage` on the way here, and reaching this line means the
-## last of a Gub's health has gone.
+## last of a Bog's health has gone.
 ##
 ## Private on purpose. A weapon that wants somebody dead says so in damage, and
 ## `report_kill` above is the way to say "all of it".
-func _kill(victim_id: int, killer_id: int, cause: Gub.Cause,
+func _kill(victim_id: int, killer_id: int, cause: Bog.Cause,
 		point: Vector3, blow: Vector3, bone: String) -> void:
 	var entry: Dictionary = stats[victim_id]
 	entry["alive"] = false
@@ -1069,13 +1076,13 @@ func _kill(victim_id: int, killer_id: int, cause: Gub.Cause,
 ## the hitmarker, the same way `_apply_death` decides who hears it for a kill.
 @rpc("authority", "call_remote", "reliable")
 func _do_damage(victim_id: int, attacker_id: int, health: float) -> void:
-	var victim: Gub = gubs.get(victim_id)
+	var victim: Bog = bogs.get(victim_id)
 	if not is_instance_valid(victim):
 		return
 	victim.set_health(health)
 	if victim_id == Net.local_id():
 		# Much smaller than a death's 1.4. Being hit should be felt and should
-		# not take the crosshair off the Gub who hit you — a kick big enough to
+		# not take the crosshair off the Bog who hit you — a kick big enough to
 		# spoil the answering shot would make the first hit of a fight decide it.
 		_shake(victim, 0.45)
 	elif attacker_id == Net.local_id():
@@ -1087,17 +1094,17 @@ func _do_damage(victim_id: int, attacker_id: int, health: float) -> void:
 
 
 @rpc("authority", "call_remote", "reliable")
-func _apply_death(victim_id: int, killer_id: int, cause: Gub.Cause,
+func _apply_death(victim_id: int, killer_id: int, cause: Bog.Cause,
 		point: Vector3, blow: Vector3, bone: String) -> void:
-	var victim: Gub = gubs.get(victim_id)
+	var victim: Bog = bogs.get(victim_id)
 	if is_instance_valid(victim):
 		victim.kill(killer_id, cause)
 		# The corpse is a separate, local, cosmetic thing (D-010).
-		if cause != Gub.Cause.VOID:
+		if cause != Bog.Cause.VOID:
 			# Passed through untouched: the ragdoll owns how a blow becomes
 			# motion, and scaling it here as well would mean two files had to
 			# agree on how hard a spear hits.
-			GubRagdoll.spawn_from(victim, victim.get_parent(), blow, bone)
+			BogRagdoll.spawn_from(victim, victim.get_parent(), blow, bone)
 		victim.visible = false
 
 	if is_instance_valid(victim):
@@ -1113,15 +1120,15 @@ func _apply_death(victim_id: int, killer_id: int, cause: Gub.Cause,
 		# spear itself is gone. It is deliberately 2D — it is feedback about
 		# your own action, not a sound anyone else could hear.
 		AudioDirector.play_2d(AudioDirector.HITMARKER)
-		_shake(gubs.get(killer_id), 0.35)
+		_shake(bogs.get(killer_id), 0.35)
 
 
-## Kick the camera of one Gub, if that Gub still exists and is the one this
+## Kick the camera of one Bog, if that Bog still exists and is the one this
 ## client is looking through.
-func _shake(gub: Gub, strength: float) -> void:
-	if not is_instance_valid(gub):
+func _shake(bog: Bog, strength: float) -> void:
+	if not is_instance_valid(bog):
 		return
-	var rig := gub.get_node_or_null("CameraRig") as GubCamera
+	var rig := bog.get_node_or_null("CameraRig") as BogCamera
 	if rig != null:
 		rig.shake(strength)
 
@@ -1143,7 +1150,7 @@ func _same_team(a: int, b: int) -> bool:
 
 # ------------------------------------------------------------------- drops ---
 
-## One item falls out of every death. This is where everything a Gub can gain
+## One item falls out of every death. This is where everything a Bog can gain
 ## now comes from (D-032): abilities are not granted by a timer any more, so a
 ## match with nobody dying in it is a match where nobody is armed with anything
 ## but a spear.
@@ -1153,24 +1160,24 @@ func _same_team(a: int, b: int) -> bool:
 ##
 ## The dropped item is an **independent roll**, not the victim's carried stock.
 ## What they were holding is simply lost. Dropping the actual inventory would
-## make a player who had hoarded six mushrooms the most profitable thing on the
+## make a player who had hoarded six shields the most profitable thing on the
 ## map to kill, and the hoard would then bounce between two people who keep
 ## killing each other — stock has to leave the economy when its owner does, or
 ## nothing is ever really spent.
 ##
-## Nothing drops for a `VOID` death: the Gub fell off the map, and an item
+## Nothing drops for a `VOID` death: the Bog fell off the map, and an item
 ## spawned where it was is an item that falls too. A self-kill does drop. A
 ## death is a death, and making suicide the one death that costs the map an item
 ## is a rule nobody would guess and everybody would notice.
-func _drop_loot(cause: Gub.Cause, point: Vector3) -> void:
-	if cause == Gub.Cause.VOID:
+func _drop_loot(cause: Bog.Cause, point: Vector3) -> void:
+	if cause == Bog.Cause.VOID:
 		return
 	var spot := _drop_spot(point)
 	if spot == Vector3.INF:
 		return
 
 	# **The roll order is letter, then robe, then potion, then the remainder
-	# split evenly between mushroom and lure**, and it is written down here
+	# split evenly between shield and magnet**, and it is written down here
 	# because it is exactly the kind of thing that silently changes the balance
 	# of the game when somebody reorders it for tidiness. The three named chances
 	# are taken off the top in that order and what is left is halved; move the
@@ -1178,8 +1185,8 @@ func _drop_loot(cause: Gub.Cause, point: Vector3) -> void:
 	# than the dial in the lobby says it does.
 	#
 	# **The potion is a named chance and not a third share of the remainder**
-	# (D-067). Splitting what is left three ways would have taken the mushroom
-	# and the lure from ~49% of drops each to ~30% each, and no dial in the lobby
+	# (D-067). Splitting what is left three ways would have taken the shield
+	# and the magnet from ~49% of drops each to ~30% each, and no dial in the lobby
 	# would have moved to say so. Named, `potion_drop_chance`'s default of 0.30
 	# produces exactly that same three-way split — so the economy is the one the
 	# even split would have given, and it is now a slider rather than an
@@ -1200,11 +1207,11 @@ func _drop_loot(cause: Gub.Cause, point: Vector3) -> void:
 	var named := letter_chance + robe_chance + potion_chance
 	var remainder := maxf(0.0, 1.0 - named)
 	var roll := randf()
-	var kind := Pickup.Kind.LURE
+	var kind := Pickup.Kind.MAGNET
 	var letter := 0
 	if roll < letter_chance:
 		kind = Pickup.Kind.LETTER
-		# Uniform over G, U and B, with no reference to anybody's progress
+		# Uniform over B, O and G, with no reference to anybody's progress
 		# (D-033). A card is a card.
 		letter = LETTERS[randi() % LETTERS.size()]
 	elif roll < letter_chance + robe_chance:
@@ -1212,7 +1219,7 @@ func _drop_loot(cause: Gub.Cause, point: Vector3) -> void:
 	elif roll < named:
 		kind = Pickup.Kind.POTION
 	elif roll < named + remainder * 0.5:
-		kind = Pickup.Kind.MUSHROOM
+		kind = Pickup.Kind.SHIELD
 
 	_spawn_drop(kind, letter, spot)
 
@@ -1234,7 +1241,7 @@ func _spawn_drop(kind: Pickup.Kind, letter: int, spot: Vector3) -> int:
 
 
 ## Settle the death point onto the ground, or `Vector3.INF` if there is none
-## under it. The same shape as `GubCombat._mushroom_spot`'s ground query and for
+## under it. The same shape as `BogCombat._shield_spot`'s ground query and for
 ## the same reason: an item floating over a gorge is an item nobody can reach,
 ## and skipping the drop is a better answer than teasing the lobby with one.
 func _drop_spot(point: Vector3) -> Vector3:
@@ -1252,7 +1259,7 @@ func _drop_spot(point: Vector3) -> Vector3:
 ## The 3D world the match is being played in, or null when there is not one.
 ##
 ## `tools/match_rules.gd` registers a plain `Node` as its players root on
-## purpose — it is about the bookkeeping and never spawns a Gub — so there is no
+## purpose — it is about the bookkeeping and never spawns a Bog — so there is no
 ## space to cast a ray in, and asking for one would be a `SCRIPT ERROR` on every
 ## kill it scores. A null here means "no world", and the only caller treats that
 ## as "no drop" rather than as a failure.
@@ -1264,7 +1271,7 @@ func _world() -> World3D:
 
 
 ## Everything a match spawns goes into one container so the arena can sweep it
-## between rounds. The same group `GubCombat._spawn_root` looks for, and the
+## between rounds. The same group `BogCombat._spawn_root` looks for, and the
 ## same fallback.
 func _spawn_root() -> Node:
 	var root := get_tree().get_first_node_in_group("spawned_items")
@@ -1273,8 +1280,8 @@ func _spawn_root() -> Node:
 
 ## Drop the index rows for items that have already been taken or have rotted.
 ## They are harmless — every reader guards with `is_instance_valid` — but there
-## is one per death for the length of a match, and the same broom `GubCombat`
-## sweeps its mushroom list with costs nothing here.
+## is one per death for the length of a match, and the same broom `BogCombat`
+## sweeps its shield list with costs nothing here.
 ##
 ## Written as a rebuild rather than `Dictionary.filter`, which Godot 4.7 does
 ## not have: it exists on Array and not on Dictionary, and reaching for it cost
@@ -1305,12 +1312,12 @@ func _spawn_pickup(id: int, kind: int, letter: int, spot: Vector3) -> void:
 	_pickups[id] = pickup
 
 
-## A living Gub has walked into a drop. Called by the **host's** copy of the
+## A living Bog has walked into a drop. Called by the **host's** copy of the
 ## pickup, directly — the overlap already happened on the host, so there is
 ## nothing to request.
 ##
 ## This is the one place a drop is awarded, which is what makes "collected once"
-## true: two Gubs entering on the same physics frame both arrive here, and the
+## true: two Bogs entering on the same physics frame both arrive here, and the
 ## second finds the item already taken.
 func claim_pickup(pickup_id: int, peer_id: int) -> void:
 	if not Net.is_host or phase != Phase.PLAYING:
@@ -1323,7 +1330,7 @@ func claim_pickup(pickup_id: int, peer_id: int) -> void:
 
 	match pickup.kind:
 		Pickup.Kind.LETTER when is_capture():
-			# Capture G·U·B (D-051). One letter carried at a time, and a letter
+			# Capture B·O·G (D-051). One letter carried at a time, and a letter
 			# the carrier's team has already banked is not picked up at all:
 			# the card stays where it is. Returning before `_take_pickup` is
 			# what leaves it there.
@@ -1333,7 +1340,7 @@ func claim_pickup(pickup_id: int, peer_id: int) -> void:
 		Pickup.Kind.LETTER:
 			# **One hold at a time** (D-035). A card walked over while a hold is
 			# already running is left exactly where it is — not consumed, not
-			# queued — for this Gub to come back to or for somebody else to
+			# queued — for this Bog to come back to or for somebody else to
 			# reach first. Returning here rather than falling through is what
 			# leaves it on the ground.
 			if is_holding_letter(peer_id):
@@ -1342,10 +1349,10 @@ func claim_pickup(pickup_id: int, peer_id: int) -> void:
 			# grants nothing and vanishes anyway (D-033), and anything else
 			# starts the hold that now stands between a card and a letter.
 			_begin_letter_hold(peer_id, pickup.letter)
-		Pickup.Kind.MUSHROOM:
-			_grant_ability(peer_id, "grant_mushroom")
-		Pickup.Kind.LURE:
-			_grant_ability(peer_id, "grant_lure")
+		Pickup.Kind.SHIELD:
+			_grant_ability(peer_id, "grant_shield")
+		Pickup.Kind.MAGNET:
+			_grant_ability(peer_id, "grant_magnet")
 		Pickup.Kind.POTION:
 			# Stock, like the other two, and pointedly **not** a heal on touch
 			# (D-067). Granting the health here would make standing on a fresh
@@ -1365,15 +1372,15 @@ func claim_pickup(pickup_id: int, peer_id: int) -> void:
 	_take_pickup(pickup_id, peer_id)
 
 
-## Hand one item to a Gub's combat node. Host side only: `GubCombat` owns the
+## Hand one item to a Bog's combat node. Host side only: `BogCombat` owns the
 ## stock and broadcasts the new count itself, because it is the host's node on
 ## every machine (D-024) and is therefore the only thing whose word on it the
 ## other peers will accept.
 func _grant_ability(peer_id: int, method: String) -> void:
-	var gub: Gub = gubs.get(peer_id)
-	if not is_instance_valid(gub):
+	var bog: Bog = bogs.get(peer_id)
+	if not is_instance_valid(bog):
 		return
-	var combat := gub.get_node_or_null("Combat") as GubCombat
+	var combat := bog.get_node_or_null("Combat") as BogCombat
 	if combat != null:
 		combat.call(method, 1)
 
@@ -1387,7 +1394,7 @@ func _take_pickup(pickup_id: int, peer_id: int) -> void:
 
 
 ## Take an item off the ground with nobody collecting it, on every peer. The
-## host's word that a dropped Capture G·U·B card has lain long enough (D-051);
+## host's word that a dropped Capture B·O·G card has lain long enough (D-051);
 ## it withers where it lies, and the same letter is spawned at home.
 @rpc("authority", "call_remote", "reliable")
 func _withdraw_pickup(pickup_id: int) -> void:
@@ -1525,26 +1532,26 @@ static func _bit_count(mask: int) -> int:
 ## which.
 static func letter_name(letter: int) -> String:
 	match letter:
-		LETTER_G:
-			return "G"
-		LETTER_U:
-			return "U"
 		LETTER_B:
 			return "B"
+		LETTER_O:
+			return "O"
+		LETTER_G:
+			return "G"
 		_:
 			return "?"
 
 
 # -------------------------------------------------------------- the hold ---
 
-## Picking up a card does not give you the letter. It starts a hold: the Gub
+## Picking up a card does not give you the letter. It starts a hold: the Bog
 ## holds the card up for `letter_hold_time` seconds, cannot throw a spear for
 ## any of them, and only then is the letter actually theirs (D-035).
 ##
-## **It lives here rather than on the Gub** because it is match state. It has to
+## **It lives here rather than on the Bog** because it is match state. It has to
 ## survive being watched by seven peers who collected nothing, it ends in
 ## `award_letter` which is already here, and — the part that matters — the host
-## has to be the only machine that can finish one. A hold on `GubCombat` would
+## has to be the only machine that can finish one. A hold on `BogCombat` would
 ## be a countdown running on the client that stands to gain from it.
 
 
@@ -1576,7 +1583,7 @@ func _begin_letter_hold(peer_id: int, letter: int) -> void:
 		return
 	# The card goes in the hand the bottle was in (D-067). A hold already takes
 	# the spear and the bow away for the same reason (D-035), and the drink is
-	# the third thing that comes out of that fist — so a Gub that walks over a
+	# the third thing that comes out of that fist — so a Bog that walks over a
 	# card mid-channel puts the potion down, spent, keeping whatever had arrived.
 	# Asked on the host, which is the only machine that can start a hold at all.
 	_break_channel(peer_id)
@@ -1609,13 +1616,13 @@ func _tick_letter_holds() -> void:
 ## treated identically. Host only.
 ##
 ## **The card is not destroyed.** It lands at `at` as a fresh pickup carrying
-## the same letter, free for anyone including the Gub that just lost it. At an
+## the same letter, free for anyone including the Bog that just lost it. At an
 ## 8% drop rate a letter can be a hundred deaths from being replaced, so a card
 ## that evaporates every time its carrier is killed is a mode that stops being
 ## winnable — and "kill the carrier and take the card" is the fight this whole
 ## mechanic exists to create. Deleting it would leave only the first half.
 ##
-## `Vector3.INF` means there is nowhere to put it — a peer whose Gub was already
+## `Vector3.INF` means there is nowhere to put it — a peer whose Bog was already
 ## gone by the time the disconnect was noticed — and then, and only then, the
 ## card is discarded.
 func _interrupt_letter_hold(peer_id: int, at: Vector3) -> void:
@@ -1630,10 +1637,10 @@ func _interrupt_letter_hold(peer_id: int, at: Vector3) -> void:
 		return
 	# The ground under the corpse, or — when there is none — a spawn pad.
 	#
-	# `_drop_loot` simply skips a drop it cannot settle, and for a mushroom that
-	# is right: one more mushroom exists after the next death. A letter does
+	# `_drop_loot` simply skips a drop it cannot settle, and for a shield that
+	# is right: one more shield exists after the next death. A letter does
 	# not. So a card that would otherwise be lost over a gorge, or to the void a
-	# lured carrier was just knocked into, is put back on a pad instead: the
+	# pulled carrier was just knocked into, is put back on a pad instead: the
 	# pads are the one set of points on any map that are guaranteed to be
 	# standable and reachable, and a card that turns up somewhere slightly
 	# arbitrary is a far smaller problem than a letter that leaves the match.
@@ -1676,7 +1683,7 @@ func _clear_letter_holds() -> void:
 		letter_hold_changed.emit(peer_id)
 
 
-## Is this Gub holding a card up right now?
+## Is this Bog holding a card up right now?
 ##
 ## The presence of the row, deliberately, and never `remaining > 0`: a client's
 ## countdown can reach zero a round trip before the host's does, and a hand that
@@ -1686,7 +1693,7 @@ func is_holding_letter(peer_id: int) -> bool:
 	return _letter_holds.has(peer_id)
 
 
-## Seconds left on this Gub's hold, or 0.0 if it is not holding one. Never
+## Seconds left on this Bog's hold, or 0.0 if it is not holding one. Never
 ## negative, so a HUD can divide by `Net.config.letter_hold_time` and get a
 ## fraction it can sweep a ring with.
 func letter_hold_remaining(peer_id: int) -> float:
@@ -1695,7 +1702,7 @@ func letter_hold_remaining(peer_id: int) -> float:
 	return maxf(0.0, float(_letter_holds[peer_id]["ends_at"]) - _now())
 
 
-## Which letter bit is being held up, or 0 if none — one of `LETTER_G/U/B`, so
+## Which letter bit is being held up, or 0 if none — one of `LETTER_B/O/G`, so
 ## `letter_name` turns it straight into the glyph on the card.
 func letter_hold_letter(peer_id: int) -> int:
 	if not _letter_holds.has(peer_id):
@@ -1703,13 +1710,13 @@ func letter_hold_letter(peer_id: int) -> int:
 	return int(_letter_holds[peer_id]["letter"])
 
 
-# ---------------------------------------------------------- capture G·U·B ---
+# ---------------------------------------------------------- capture B·O·G ---
 
 ## Capture the flag with the three letters (D-051). The user: *"capture the flag
 ## game mode with the letters, you have to pick up the letter and drop it in
 ## your base, there are only 3 and dont drop from users dying"*.
 ##
-## **Three cards, spawned once, never rolled.** G, U and B go out at their home
+## **Three cards, spawned once, never rolled.** B, O and G go out at their home
 ## points when the match starts and there are never more than three: no corpse
 ## drops a letter in this mode (`_drop_loot` only rolls cards under LETTERS).
 ##
@@ -1776,12 +1783,12 @@ func _try_spawn_capture_letters() -> void:
 	_spawn_capture_letters()
 
 
-## Host only. Settle the home points and spawn G, U and B on them.
+## Host only. Settle the home points and spawn B, O and G on them.
 func _spawn_capture_letters() -> void:
 	_capture_pending = false
 	_capture.clear()
 	if _capture_layout == null or _capture_layout.letters.size() < LETTERS.size():
-		push_warning("MatchState: no letter points for Capture G·U·B")
+		push_warning("MatchState: no letter points for Capture B·O·G")
 		return
 	var world := _world()
 	var homes := _capture_layout.settle_letters(
@@ -1810,7 +1817,7 @@ func _send_capture_home(letter: int, announce: bool) -> void:
 		_announce_capture(0, letter)
 
 
-## Host only, from `claim_pickup`, which has checked that this Gub is alive,
+## Host only, from `claim_pickup`, which has checked that this Bog is alive,
 ## carrying nothing, and on a team that still needs this letter.
 func _begin_capture_carry(peer_id: int, letter: int) -> void:
 	var entry: Dictionary = _capture.get(letter, {})
@@ -1849,13 +1856,13 @@ func _tick_capture() -> void:
 	for peer_id: int in _letter_holds.keys():
 		if not _letter_holds.has(peer_id) or phase != Phase.PLAYING:
 			continue
-		var gub: Gub = gubs.get(peer_id)
-		# Alive twice over: the host's row and the body. A dead Gub's body keeps
+		var bog: Bog = bogs.get(peer_id)
+		# Alive twice over: the host's row and the body. A dead Bog's body keeps
 		# its collision where it fell (D-043), and a carrier killed on the edge of
 		# the other team's base must not bank from the ground there.
-		if not is_alive(peer_id) or not is_instance_valid(gub) or not gub.alive:
+		if not is_alive(peer_id) or not is_instance_valid(bog) or not bog.alive:
 			continue
-		if _capture_layout.in_base(Net.player_team(peer_id), gub.global_position):
+		if _capture_layout.in_base(Net.player_team(peer_id), bog.global_position):
 			_bank_capture(peer_id)
 	if phase != Phase.PLAYING:
 		return
@@ -1893,7 +1900,7 @@ func _announce_capture(peer_id: int, letter: int) -> void:
 
 # ---------------------------------------------------------------- the elder ---
 
-## Picking the robe up makes that Gub the Elder **for `elder_duration` seconds**
+## Picking the robe up makes that Bog the Elder **for `elder_duration` seconds**
 ## (D-040), during which it cannot be killed by anything but the void.
 ##
 ## **This supersedes D-038's "until it dies"**, and the two halves are one
@@ -1903,21 +1910,21 @@ func _announce_capture(peer_id: int, letter: int) -> void:
 ## the counter-play to an Elder is no longer killing it, it is surviving it, and
 ## twenty seconds is a length of time you can decide to spend behind a rock.
 ##
-## It lives here rather than on the Gub for the reasons the letter hold does: it
+## It lives here rather than on the Bog for the reasons the letter hold does: it
 ## is match state, it has to survive being watched by seven peers who picked up
 ## nothing, and the host has to be the only machine that can grant or end one.
-## A flag on `GubCombat` would be a weapon the client that benefits from it gets
-## to declare it has — and a *clock* on `GubCombat` would be a countdown running
+## A flag on `BogCombat` would be a weapon the client that benefits from it gets
+## to declare it has — and a *clock* on `BogCombat` would be a countdown running
 ## on the machine that wants it to run slowly.
 ##
 ## Three things end one and they all run the same teardown: the clock
 ## (`_tick_elders`), a void death (`report_kill`), and a disconnect
-## (`_on_player_left`). Nothing else does — not a respawn, not a mushroom, not
+## (`_on_player_left`). Nothing else does — not a respawn, not a shield, not
 ## finishing a letter hold.
 ##
 ## **Expiry is not a death.** Letters live on the `stats` row and are untouched;
-## the mushrooms and lures in `GubCombat` are untouched too, because nothing
-## calls `reset()`. A Gub that has just spent twenty seconds as the Elder walks
+## the shields and magnets in `BogCombat` are untouched too, because nothing
+## calls `reset()`. A Bog that has just spent twenty seconds as the Elder walks
 ## away with everything it walked in with, plus its spear back.
 
 
@@ -1953,8 +1960,8 @@ func _tick_elders() -> void:
 ## The host's word on who is wearing the robe, applied on every peer.
 ##
 ## This is both halves at once: the row that the rules read and the cloth that
-## the players see. Keeping them in one call is what stops a Gub being the Elder
-## in the bookkeeping and a plain Gub on somebody's screen — which would be the
+## the players see. Keeping them in one call is what stops a Bog being the Elder
+## in the bookkeeping and a plain Bog on somebody's screen — which would be the
 ## worst available bug here, because the robe is the only warning anybody gets.
 ##
 ## `seconds` is ignored when taking one off, and is deliberately still a
@@ -1966,9 +1973,9 @@ func _do_set_elder(peer_id: int, wearing: bool, seconds: float) -> void:
 		_elders[peer_id] = {"ends_at": _now() + seconds}
 	elif not _elders.erase(peer_id):
 		return
-	var gub: Gub = gubs.get(peer_id)
-	if is_instance_valid(gub):
-		gub.set_elder(wearing)
+	var bog: Bog = bogs.get(peer_id)
+	if is_instance_valid(bog):
+		bog.set_elder(wearing)
 	elder_changed.emit(peer_id)
 
 
@@ -1980,21 +1987,21 @@ func _do_set_elder(peer_id: int, wearing: bool, seconds: float) -> void:
 ## putting it on both would have been two copies of one rule waiting to
 ## disagree about which hits count.
 ##
-## The point rather than the Gub's position: a spear turned aside at the shin
+## The point rather than the Bog's position: a spear turned aside at the shin
 ## and one turned aside at the head should not flash in the same place, and the
 ## whole job of this is to say *where* the thing that did not kill you hit.
 @rpc("authority", "call_remote", "reliable")
 func _do_ward(peer_id: int, point: Vector3) -> void:
-	var gub: Gub = gubs.get(peer_id)
+	var bog: Bog = bogs.get(peer_id)
 	WardFlash.burst(_spawn_root(), point)
 	# A kick for the Elder only, and a small one. Being shot at and surviving it
 	# is information the player wants — an Elder with its back to a fight has no
 	# other way to learn there is one — and it is deliberately far below the 1.4
 	# a death is worth: this is a nudge, not an event.
-	_shake(gub, WardFlash.SHAKE)
+	_shake(bog, WardFlash.SHAKE)
 
 
-## Drop every robe locally. Used when the whole match is torn down — a Gub
+## Drop every robe locally. Used when the whole match is torn down — a Bog
 ## wearing one into the next match would be an Elder nobody earned.
 func _clear_elders() -> void:
 	if _elders.is_empty():
@@ -2002,24 +2009,24 @@ func _clear_elders() -> void:
 	var were := _elders.keys()
 	_elders.clear()
 	for peer_id: int in were:
-		var gub: Gub = gubs.get(peer_id)
-		if is_instance_valid(gub):
-			gub.set_elder(false)
+		var bog: Bog = bogs.get(peer_id)
+		if is_instance_valid(bog):
+			bog.set_elder(false)
 		elder_changed.emit(peer_id)
 
 
-## Is this Gub the Elder right now? Safe to ask about a peer with no row, which
-## is what `GubCombat` does three times a frame for every Gub in the match.
+## Is this Bog the Elder right now? Safe to ask about a peer with no row, which
+## is what `BogCombat` does three times a frame for every Bog in the match.
 ##
 ## The presence of the row, deliberately, and never `elder_remaining() > 0`: a
 ## client's countdown can reach zero a round trip before the host's does, and a
-## Gub that took its own robe off on that frame would be a Gub the host still
+## Bog that took its own robe off on that frame would be a Bog the host still
 ## refuses to let throw a spear.
 func is_elder(peer_id: int) -> bool:
 	return _elders.has(peer_id)
 
 
-## Seconds left on this Gub's robe, or 0.0 if it is not wearing one. Never
+## Seconds left on this Bog's robe, or 0.0 if it is not wearing one. Never
 ## negative, so the HUD can divide by `MatchConfig.elder_duration` and get a
 ## fraction to fill a bar with — the same contract `letter_hold_remaining` has,
 ## because it is read by the same kind of control for the same reason.
@@ -2101,8 +2108,8 @@ func _check_win() -> void:
 		MatchConfig.WinCondition.TIME_ONLY:
 			pass
 		MatchConfig.WinCondition.LETTERS:
-			# This comment used to say a team whose three members hold G, U and
-			# B between them had won nothing, because the card game ends on one
+			# This comment used to say a team whose three members hold B, O and
+			# G between them had won nothing, because the card game ends on one
 			# hand with the whole word in it. Playtesting said otherwise — the
 			# user's note was that spelling should be scored per team — and
 			# D-049 reverses it: in Teams the letters pool, so the test is the
@@ -2190,17 +2197,17 @@ func _sync_finish(summary: Dictionary) -> void:
 	# A hold still running when the whistle goes grants nothing (D-035). The
 	# match is over; nobody is owed the last two seconds of it. Cleared on every
 	# peer rather than left to expire, so the results screen is not shown over a
-	# Gub still counting down to a letter it can never have.
+	# Bog still counting down to a letter it can never have.
 	_clear_letter_holds()
 	_stop_publishing()
 	match_finished.emit(summary)
 
 
-## Every Gub on this machine stops sending its position, on every peer, the
+## Every Bog on this machine stops sending its position, on every peer, the
 ## moment the match is over.
 ##
 ## What ends a match is one reliable message; what follows it is every peer
-## freeing its Gubs, and not at the same moment — the host on its own REMATCH,
+## freeing its Bogs, and not at the same moment — the host on its own REMATCH,
 ## a client when that broadcast reaches it, a client that walks itself to the
 ## lobby whenever it likes. A `MultiplayerSynchronizer` still publishing at a
 ## peer that has already freed its copy costs that peer two engine errors per
@@ -2209,31 +2216,31 @@ func _sync_finish(summary: Dictionary) -> void:
 ## a second, and every rematch logged a burst on the host.
 ##
 ## So the senders stop first, here, while every copy still exists. Nothing is
-## lost: the results screen covers the arena, and a rematch builds new Gubs whose
+## lost: the results screen covers the arena, and a rematch builds new Bogs whose
 ## synchronizers start public again.
 func _stop_publishing() -> void:
-	for gub: Gub in gubs.values():
-		if not is_instance_valid(gub):
+	for bog: Bog in bogs.values():
+		if not is_instance_valid(bog):
 			continue
-		var sync := gub.get_node_or_null("Sync") as MultiplayerSynchronizer
+		var sync := bog.get_node_or_null("Sync") as MultiplayerSynchronizer
 		if sync != null:
 			sync.public_visibility = false
 
 
-## Every Gub still standing, best-scoring first, optionally excluding one peer.
+## Every Bog still standing, best-scoring first, optionally excluding one peer.
 ##
 ## This is the spectator's channel list (PLAN 6.5). Ordering it by score rather
 ## than by peer id means the first thing a dead player is shown is whoever is
 ## currently winning, which is the most interesting camera in the match and the
 ## one they would have picked.
-func living_gubs(exclude_id: int = 0) -> Array[Gub]:
-	var out: Array[Gub] = []
+func living_bogs(exclude_id: int = 0) -> Array[Bog]:
+	var out: Array[Bog] = []
 	for peer_id: int in ranking():
 		if peer_id == exclude_id:
 			continue
-		var gub: Gub = gubs.get(peer_id)
-		if is_instance_valid(gub) and gub.alive:
-			out.append(gub)
+		var bog: Bog = bogs.get(peer_id)
+		if is_instance_valid(bog) and bog.alive:
+			out.append(bog)
 	return out
 
 
@@ -2241,7 +2248,7 @@ func living_gubs(exclude_id: int = 0) -> Array[Gub]:
 ## is what lets a teammate's nameplate through the scenery (D-047). Never true in
 ## free-for-all, and never true of yourself.
 ##
-## Read off the roster rather than off the local Gub, so a teammate who spawns
+## Read off the roster rather than off the local Bog, so a teammate who spawns
 ## before this player's own body exists is still recognised as one. Teams are
 ## fixed for the length of a match — a pick only moves in the lobby — so the
 ## answer given at spawn holds until the next spawn asks again.
@@ -2253,7 +2260,7 @@ func is_teammate(peer_id: int) -> bool:
 	return mine >= 0 and Net.player_team(peer_id) == mine
 
 
-## The Gub this client is driving, or null while dead or spectating.
-func local_gub() -> Gub:
-	var gub: Gub = gubs.get(Net.local_id())
-	return gub if is_instance_valid(gub) else null
+## The Bog this client is driving, or null while dead or spectating.
+func local_bog() -> Bog:
+	var bog: Bog = bogs.get(Net.local_id())
+	return bog if is_instance_valid(bog) else null

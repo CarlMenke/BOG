@@ -1,5 +1,5 @@
 extends SceneTree
-## Write `resources/ui/gub_theme.tres` from `UITheme.build()`. Development tool,
+## Write `resources/ui/bog_theme.tres` from `UITheme.build()`. Development tool,
 ## not shipped.
 ##
 ## The theme is described in code (see the header of `scripts/ui/ui_theme.gd`
@@ -8,7 +8,7 @@ extends SceneTree
 ##
 ##     Godot --headless --path . --script tools/bake_theme.gd
 
-const OUT_PATH := "res://resources/ui/gub_theme.tres"
+const OUT_PATH := "res://resources/ui/bog_theme.tres"
 
 
 func _initialize() -> void:

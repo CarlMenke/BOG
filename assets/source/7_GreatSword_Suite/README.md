@@ -20,7 +20,7 @@ are below the table.
 
 Three clips, all With Skin, all 0.0 from `GUB_2/Idle.fbx`'s bind pose. Measured
 by `tools/audit_source_packs.py`, plus the body's yaw — measured the way
-`build_gub.py` measures facing, as the yaw of the left-hip→right-hip line, not
+`build_bog.py` measures facing, as the yaw of the left-hip→right-hip line, not
 off the Hips bone's own quaternion, which carries the rig's rest orientation and
 whose "yaw" is not the body's. That column is the one this pack lives or dies on:
 
@@ -41,9 +41,9 @@ one weapon along: an equip animation for one prop and none for the other three i
 two rules about the same hand.
 
 `GreatSwordJumpAttack` was downloaded for the airborne case and **is not
-declared**, and the measurement is why. `build_gub.py`'s own airborne table gives
+declared**, and the measurement is why. `build_bog.py`'s own airborne table gives
 it a peak foot clearance of **0.130 m**, feet leaving at 0.712 s and back down at
-0.860 — 0.148 s in the air, 13 cm up, with the hips rising 0.163 m. A Gub's real
+0.860 — 0.148 s in the air, 13 cm up, with the hips rising 0.163 m. A Bog's real
 jump is 1.69 m over about 0.70 s. It is a lunging chop with a skip in it, not an
 aerial attack, and played while a body is actually airborne it would land, plant
 and recover a metre and a half above the floor. It also travels 2.334 m over
@@ -59,7 +59,7 @@ the grounded one.
 built around that rather than surprised by it. Read the two numbers together:
 the body travels 1.712 m over the clip *and* turns through **a whole revolution
 and five degrees**, overshooting to 415° mid-swing before settling back. That is
-a spinning advance — the Gub turns away from the target, comes round, and
+a spinning advance — the Bog turns away from the target, comes round, and
 arrives 1.7 m from where it started, facing roughly where it began.
 
 `lock_root_motion` will take the 1.7 m of translation away, because it locks the
@@ -73,14 +73,14 @@ The two things that follow from that, and what D-068 did about each:
 - the hit resolves at a **release moment measured off the clip** — 1.067 s, the
   peak hand speed — and the body's facing at that moment is nowhere near its
   facing at the click. Measured in a running match through the bone attachment,
-  the blade at the release is **55–66° off the Gub's own facing**, so the sweep is
+  the blade at the release is **55–66° off the Bog's own facing**, so the sweep is
   taken from `HeldGear.sword_blade()` (which reads the `BoneAttachment3D`, the
   only thing that sees the modifier stack — D-066) and never from `-basis.z`;
 - the 1.7 m is **kept, by the physics body**. `lock_root_motion` still clamps the
   Hips — it has to, or the mesh walks away from the capsule it is standing on —
   and the clip declares an `advance_as`, which means the metres are not
-  discarded: the build prints them as `Gub.SPIN_ADVANCE` and
-  `Gub._handle_movement` drives the capsule through exactly that distance over
+  discarded: the build prints them as `Bog.SPIN_ADVANCE` and
+  `Bog._handle_movement` drives the capsule through exactly that distance over
   exactly this clip's length, which is what keeps the feet planted.
 
 The in-place alternative measures **1.183 s, 0.092 m peak, 0.0° net turn and
@@ -118,10 +118,10 @@ spear idle of its own is one download and would close it.
 ## What every clip in every pack has to be
 
 The same upload. These clips land on **one** skeleton, so each one has to come
-off *the Gub as uploaded to Mixamo*, in that same Adobe account, downloaded
+off *the Bog as uploaded to Mixamo*, in that same Adobe account, downloaded
 again with this animation applied to it. A stock Mixamo character, a CC0 pack
-from anywhere else, or even the same Gub uploaded a second time gives a
-different vertex count or a bind pose a fraction out, and `build_gub.py` refuses
+from anywhere else, or even the same Bog uploaded a second time gives a
+different vertex count or a bind pose a fraction out, and `build_bog.py` refuses
 it on the first import (`assert_same_character`) rather than shipping a subtly
 broken skin in one clip. There is no retarget stage here to bridge that gap —
 deliberately, because the five things this pipeline does that Godot's
@@ -136,12 +136,12 @@ put 105 files in `_rejected/`.
 ## Dropping files in here does nothing on its own
 
 A folder somebody dropped files into is not a promise; a line in `PACKS` is. Add
-a `Clip(...)` for each file in this pack's entry in `tools/build_gub.py`, with
+a `Clip(...)` for each file in this pack's entry in `tools/build_bog.py`, with
 its clip name, whether it loops, and its alignment reference. Until then the
 pack is skipped and the build says so.
 
-    bash tools/build_gub.sh -- --list-packs   # what the pipeline thinks is here
-    bash tools/build_gub.sh                   # rebuild art/generated/gub.glb
+    bash tools/build_bog.sh -- --list-packs   # what the pipeline thinks is here
+    bash tools/build_bog.sh                   # rebuild art/generated/bog.glb
 
 Files sitting here that `PACKS` does not name are reported by both, which is
 what "I downloaded the clips and nothing changed" looks like from the inside.

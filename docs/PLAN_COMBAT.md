@@ -27,16 +27,16 @@ Asked and answered before any of it was written down, so no step has to guess:
 
 | | decision |
 |---|---|
-| **Healing** | The heal potion is carried stock, like a mushroom or a lure (D-032), and drinking it is **channelled** — about 2 s, standing still. Not instant on pickup: that makes standing on a fresh corpse the strongest play in the game and removes every decision from healing. |
+| **Healing** | The heal potion is carried stock, like a shield or a magnet (D-032), and drinking it is **channelled** — about 2 s, standing still. Not instant on pickup: that makes standing on a fresh corpse the strongest play in the game and removes every decision from healing. |
 | **Letter hold** | A letter hold disarms the **bow as well as the spear**. One rule, not two, and it keeps "empty hands means harmless" honest (D-035). |
 | **Bow vs. Elder** | `LIGHTNING_RANGE` is **raised to match the bow's flat band**, so the Elder keeps owning the point-and-click range. See the note under step 6 — that constant is derived, not typed, and raising it invalidates the derivation. |
 | **Damage curve** | Arrow damage is **weighted toward the end of the draw**. Most of the 20→80 arrives in the last third, so a snap shot is genuinely bad and a full draw is worth waiting for. |
-| **Animation source** | **Mixamo first.** The Gub already is a Mixamo rig. Buy a pack only if Mixamo cannot produce a readable throw. |
+| **Animation source** | **Mixamo first.** The Bog already is a Mixamo rig. Buy a pack only if Mixamo cannot produce a readable throw. |
 | **Elder balance** | **Nothing comes down to compensate** for the longer bolt range. Ship it and playtest. |
 | **Locomotion** | **One neutral set, with weapons layered over it by upper-body mask** — not per-weapon full-body locomotion. The stance packs that were downloaded (`longbow/`, `magic/`) are kept, but as **upper-body overlay sources**: a longbow walk's spine-up content is the bow carry pose, and its legs are not wanted. See step 8. |
 | **Great sword** | A **heavy melee one-shot** — the spear's role at melee range. Slow windup, big damage, **no blocking, no combos, no impact reactions**. See step 9. |
 | **Sword moves forward** | The spin **advances**, it is not clamped in place. The user's words: *"the melee can spin forward, not in place, to give it some more range."* So the physics body produces the clip's 1.712 m rather than `lock_root_motion` deleting it — the one clip in the project where that is true, and step 9 owns the exception. |
-| **Attacking airborne** | **Every attack works in the air.** Layered attacks (spear, bow, drink) already do and need nothing: they are filtered to `Spine1` and up, so the legs keep the air-arc pose — the user's *"maybe the legs just don't walk"*, which is what already happens. The sword is the exception and **cannot** be a layer; a 365° body spin is not maskable, so it is a full-body state that replaces the air pose. There is no grounded check anywhere in `gub_combat.gd` today and none should be added. |
+| **Attacking airborne** | **Every attack works in the air.** Layered attacks (spear, bow, drink) already do and need nothing: they are filtered to `Spine1` and up, so the legs keep the air-arc pose — the user's *"maybe the legs just don't walk"*, which is what already happens. The sword is the exception and **cannot** be a layer; a 365° body spin is not maskable, so it is a full-body state that replaces the air pose. There is no grounded check anywhere in `bog_combat.gd` today and none should be added. |
 | **Potion colour** | The heal potion **stays purple**. There is no mana in this game for it to be confused with, and the ambiguity is only against other games' conventions. |
 | **Forward locomotion** | **`GUB_2`'s existing `Run` and `Walk` stay.** The user likes the run and it is what the game is built on — aligned, measured, shipping. Step 8 adds only the directions that do not exist. See the mixed-family note in step 8. |
 | **Editing clips** | **Every step may trim, window, cut and retime its clips freely** — the user's own words: *"you can trim and cut and speed up the animations as needed."* This is standing permission and it is what the graph already does (the throw is a 1.60 s window of a 3.83 s clip played at 1.6x). It is **not** permission to leave a clip and the code that reads it disagreeing: a window or a rate that moves must move `THROW_RELEASE_TIME` and its kin *by derivation*, never by retyping. That is the whole of D-025. |
@@ -52,8 +52,8 @@ its own planning.
 
 **One at a time, except where this document says otherwise.** Wave 0's three
 steps are explicitly fenced to disjoint files and may run together. Everything
-after it is sequential, because it all lands in `gub_combat.gd`,
-`gub_animator.gd`, `match_state.gd` and `docs/DECISIONS.md` — the exact overlap
+after it is sequential, because it all lands in `bog_combat.gd`,
+`bog_animator.gd`, `match_state.gd` and `docs/DECISIONS.md` — the exact overlap
 that produced three agents all claiming D-040 in one day.
 
 **The gate is the definition of done.** `bash tools/smoke_test.sh` — 100 checks
@@ -77,10 +77,10 @@ length.
 ## BEFORE WAVE 1 — the assets, which are yours to fetch
 
 Steps 4 onward are gated on clips that do not exist yet, and they cannot be
-downloaded by an agent. `build_gub.py:372` refuses to build unless every source
+downloaded by an agent. `build_bog.py:372` refuses to build unless every source
 file shares a body — same vertex count, same bone list, same vertex groups,
 bind poses agreeing within `1e-5`. The eight files in `assets/source/GUB_2/`
-are *the Gub as uploaded to Mixamo*, exported eight times. New clips must come
+are *the Bog as uploaded to Mixamo*, exported eight times. New clips must come
 from **that same uploaded character**, in that same Adobe account. A generic
 Mixamo download, or a CC0 pack from anywhere else, fails that assertion on the
 first import and would need a retarget stage this pipeline does not have.
@@ -115,10 +115,10 @@ asks rather than reaching.
 
 ### Step 1 — Make the animation pipeline multi-pack
 
-*Fence: `tools/build_gub.py`, `tools/build_gub.sh`, `assets/source/` folder
+*Fence: `tools/build_bog.py`, `tools/build_bog.sh`, `assets/source/` folder
 layout. Nothing under `scripts/`.*
 
-`build_gub.py` builds one `gub.glb` from one folder and one `CLIPS` tuple
+`build_bog.py` builds one `bog.glb` from one folder and one `CLIPS` tuple
 (`:152`, `:177`). It needs to build from **several** source folders, each with
 its own per-clip rules, so that a spear pack, a bow pack and a locomotion pack
 are separate things on disk that land on the one skeleton.
@@ -131,7 +131,7 @@ stops the feet skating), applies a per-clip vertical rule with a floor check,
 and aligns facing (D-008/D-029). None of that comes from a bone map. The
 pipeline stays; only its shape changes.
 
-Also decide and implement whether the output stays one `gub.glb` or becomes one
+Also decide and implement whether the output stays one `bog.glb` or becomes one
 mesh plus animation-only `.glb`s loaded with `add_animation_library()`. The
 Elder already proves a second file can bind to the same skeleton
 (`build_elder.py`), so the pattern exists.
@@ -149,9 +149,9 @@ still green.
 ### Step 2 — Health, damage, and the bars that show it
 
 *Fence: `scripts/game/match_state.gd`, `scripts/game/match_config.gd`,
-`scripts/player/gub.gd`, `scripts/player/nameplate.gd`, `scripts/ui/hud.gd`,
+`scripts/player/bog.gd`, `scripts/player/nameplate.gd`, `scripts/ui/hud.gd`,
 `scripts/items/spear_projectile.gd`. Nothing in `tools/build_*`, nothing in
-`gub_animator.gd`.*
+`bog_animator.gd`.*
 
 There is no health in this game today, and `report_kill` (`match_state.gd:709`)
 is the single place a death is decided. It has exactly **four** call sites: the
@@ -173,19 +173,19 @@ node, same visibility rules, no new system. Your own health goes on the HUD.
 **The thing this breaks that nobody expects:** `SpearProjectile._stick_in`
 buries the shaft in the victim and hands it to a corpse, and `_glance_off`
 exists only because the Elder created a "this hit did not kill" case that
-nothing handled. A projectile that damages a Gub who lives has no corpse to be
+nothing handled. A projectile that damages a Bog who lives has no corpse to be
 adopted by, and there are about to be a lot of those. Solve it here, before the
 bow arrives and needs it: a projectile should be able to stick in a **living**
 victim and ride the skeleton, transferring to a ragdoll if one later arrives.
-`Gub.embed_spear()` almost does this already; the gate requiring death is the
-change. A Gub with three arrows in it and a short bar is the best read in the
+`Bog.embed_spear()` almost does this already; the gate requiring death is the
+change. A Bog with three arrows in it and a short bar is the best read in the
 game and it comes free.
 
 *Done when:* a combat-range mode lands partial damage and asserts the victim
 lives with the expected health, lands enough to kill and asserts a normal death
 with a corpse and a feed line, asserts a spear is still one shot, asserts an
 Elder takes zero and still flashes its ward, and asserts a respawn restores full
-health. Health survives the wire — a remote Gub's bar matches the host's number.
+health. Health survives the wire — a remote Bog's bar matches the host's number.
 Plus a decision record.
 
 ### Step 3 — Bow, arrow and potion through the prop pipeline
@@ -229,7 +229,7 @@ Today: `Throw` is 3.83 s, the graph plays its 0.50–2.10 s window at 1.6x, and
 the release sits at 1.633 s of clip — `(1.633 - 0.50) / 1.6 = 0.708 s` after the
 click. That is the delay that feels wrong.
 
-Getting to 0.5 s is nearly free: `GubAnimator.throw_rate_for_release()` already
+Getting to 0.5 s is nearly free: `BogAnimator.throw_rate_for_release()` already
 exists and the Elder already uses it. **But speeding the current clip up makes
 the tell worse, not better** — the complaint is that the release is not legible,
 and playing an illegible motion 42% faster does not fix that.
@@ -288,7 +288,7 @@ rate.
 
 *Depends on: step 4.*
 
-Forced by step 4, not optional. `GubCombat.windup_rate()` plays **the spear's
+Forced by step 4, not optional. `BogCombat.windup_rate()` plays **the spear's
 own clip** at 5.67x to land the bolt at 0.2 s. That works today only because a
 sped-up baseball throw still reads as a throw. A javelin plant-and-extend at
 5.67x will not, and `THROW_RATE_MAX = 8.0` is the only thing between it and
@@ -315,10 +315,10 @@ Four things that are not obvious and must be in that plan:
 **The charge has to be visible to your opponent.** D-025's own words: *"a tell
 only the thrower can see is not a tell."* So the draw is a held pose **indexed
 by charge**, not run on a clock — architecturally the same move as `arc_time()`
-in `gub_animator.gd`, which indexes the jump clips by where the body is in its
+in `bog_animator.gd`, which indexes the jump clips by where the body is in its
 arc. That pattern is proven and the animator's header explains why it cannot
 freeze. A continuous draw level has to replicate; the cheapest honest way is a
-synced float on `Gub` alongside `sync_crouching` and `sync_sliding`, not a
+synced float on `Bog` alongside `sync_crouching` and `sync_sliding`, not a
 serial with a local clock.
 
 **The hand rule breaks.** `held_spear.gd` "owns the hand" and is the single
@@ -344,7 +344,7 @@ a record that *answers* the old comment rather than deleting it, the way D-049
 answered `_check_win`'s.
 
 *Done when:* a combat-range mode fires at minimum and maximum draw and asserts
-the damage and flight of each; the draw pose is verified on a *remote* Gub, not
+the damage and flight of each; the draw pose is verified on a *remote* Bog, not
 only a local one; a letter hold refuses the draw; the Elder's new range is
 derived in a comment rather than typed; and the lobby dials round-trip. Decision
 record.
@@ -353,8 +353,8 @@ record.
 
 *Depends on: steps 2 and 3.*
 
-A fifth `Pickup.Kind` (`pickup.gd:33`), dropped on death like a mushroom or a
-lure. Note the header's warning: a kind inserted in the middle of that enum
+A fifth `Pickup.Kind` (`pickup.gd:33`), dropped on death like a shield or a
+magnet. Note the header's warning: a kind inserted in the middle of that enum
 turns every drop already in flight into a different object — **append**.
 
 Carried stock, spent with a key, healing **channelled over about 2 s while
@@ -399,7 +399,7 @@ it means giving up the run they explicitly chose to keep.
 ⚠️ **`LeftStrafe` is not a strafe, and that measurement reverses the obvious
 assumption.** The angle between where the body faces and where it actually
 travels, off three independent measures (shoulder line, foot direction, and the
-hip line `build_gub.py` itself uses):
+hip line `build_bog.py` itself uses):
 
 | clip | shoulders | feet | hip line | speed |
 |---|---:|---:|---:|---:|
@@ -441,7 +441,7 @@ Watch the interaction with D-025 and D-045: rotating the spine must not move
 where a spear or an arrow actually goes, since aim is read at the release from
 the camera, not from the body.
 
-*Done when:* a range mode walks a Gub in eight directions at walk and run speed
+*Done when:* a range mode walks a Bog in eight directions at walk and run speed
 and asserts no foot skate beyond a stated threshold; a mode aims through a full
 vertical and horizontal sweep and asserts the torso tracks without the release
 point moving. Decision record.
@@ -490,7 +490,7 @@ fallback), so it stays — but two consequences are not optional:
   translation. It does **nothing to yaw**, and `align_facing` applies only one
   constant rotation. **The full revolution survives into the game.** So the
   body's facing at the release is nowhere near its facing at the click, and the
-  shape sweep must be taken off the **animated skeleton**, not off the Gub's own
+  shape sweep must be taken off the **animated skeleton**, not off the Bog's own
   basis. A sweep along `-basis.z` would point somewhere the sword is not.
 - **The advance is kept** (decision above). This is the one clip in the project
   whose horizontal travel is *not* clamped, so it needs an explicit exception to
@@ -538,7 +538,7 @@ case ever wants its own animation. One download, not needed to start.
 There is **no sheathe clip** anywhere in the pack. If the sword is ever holstered
 that is a fresh Mixamo search, not a re-download.
 
-**`7_GreatSword_Suite/` is not in `PACKS` yet.** `build_gub.py` cannot see its two
+**`7_GreatSword_Suite/` is not in `PACKS` yet.** `build_bog.py` cannot see its two
 clips and `--list-packs` does not even nag about them. Adding that one `Pack(...)`
 line is this step's job.
 
@@ -572,17 +572,17 @@ Wave 1, one by one:         +--> [4] spear <-+            |
 step 7, deliberately: two of step 6's visible defects were its to fix and both
 are (D-066). Step 7 is closed out as D-067 — the potion is carried stock, the
 heal arrives *over* the channel so an interrupted drink keeps the fraction that
-had landed, and being lured is pointedly not moving. Step 9 is closed out as
+had landed, and being pulled is pointedly not moving. Step 9 is closed out as
 D-068 — the great sword is a one-shot that *advances*, its sweep is read off the
 bone attachment because the clip turns the body 365° inside its own skeleton
-(**55–66° off the Gub's facing at the release**, measured), and chained swings feed
+(**55–66° off the Bog's facing at the release**, measured), and chained swings feed
 D-052's momentum budget under D-052's ceiling: **7.02 m/s top sustainable speed,
 which is 1.30x run, from a standing start and from a full-speed hop chain
 alike**.
 
-Step 6's handover is closed. The composed bow pointed **91° off the Gub's own
+Step 6's handover is closed. The composed bow pointed **91° off the Bog's own
 facing** — an archer stands side-on, and the whole of that angle lives above a
-pelvis the layer mask throws away — and `GubAim`, a `SkeletonModifier3D` over
+pelvis the layer mask throws away — and `BogAim`, a `SkeletonModifier3D` over
 three spine bones, brings it to **3°** while also giving the torso the pitch a
 `CharacterBody3D` has never had. `tools/combat_range.tscn -- draw` still prints
 the number every run, and `-- spine` sweeps it. The 1.71 m longbow that ploughed
@@ -603,7 +603,7 @@ aim-strafe families are handed.** Every right strafe in every pack is a −37 to
 the character's own right. There is no right-hand strafe to download at any
 price.
 
-So the right-hand run pole is **built** rather than downloaded: `build_gub.py`
+So the right-hand run pole is **built** rather than downloaded: `build_bog.py`
 gained `mirror_of`, and `StrafeRight` is `StandingRunLeft.fbx` reflected in the
 rig's own sagittal plane. Running sideways went 0.98 and 0.93 to **0.43 and
 0.30** of body speed, symmetric within 0.13, and the gate grew two checks for it.
@@ -663,8 +663,8 @@ weapon you have selected in both the game and the lobby."*
 |---|---|
 | **Lock-in** | The pick is **locked when the host presses Start**, alongside the map and the teams. Free to change while people are still joining. |
 | **Host restriction** | **None.** All three are always available. No dial, and no failure mode where a player cannot pick something and is not told why. |
-| **Layout** | The panel stack **collapses** to reveal the Gub in the glade, with a weapon strip under it; the Gub swaps weapons live as you move through it. Menu navigation and weapon selection are separate surfaces, which is what the user asked for. |
-| **Default** | The spear — what every Gub carries today, so a player who never opens the picker notices nothing. |
+| **Layout** | The panel stack **collapses** to reveal the Bog in the glade, with a weapon strip under it; the Bog swaps weapons live as you move through it. Menu navigation and weapon selection are separate surfaces, which is what the user asked for. |
+| **Default** | The spear — what every Bog carries today, so a player who never opens the picker notices nothing. |
 
 **Where it goes.** `Net.players` is already `peer_id -> {name, team, ready}`,
 host-authoritative and rebroadcast whole rather than diffed. `weapon` is one more
@@ -672,20 +672,20 @@ key in that dictionary, with the same lifecycle `team` has and the same request 
 host → rebroadcast path (D-004). Nothing about the lobby's authority model
 changes.
 
-**Why "in the game and the lobby" is one feature and not two.** `GubBackdrop`
-instances ordinary `gub.tscn` as **remote** Gubs — deliberately, so the menu is
-one more place the remote-Gub path gets looked at before eight people rely on it.
+**Why "in the game and the lobby" is one feature and not two.** `BogBackdrop`
+instances ordinary `bog.tscn` as **remote** Bogs — deliberately, so the menu is
+one more place the remote-Bog path gets looked at before eight people rely on it.
 So `HeldGear` reading a loadout instead of assuming a spear is the whole job, and
 the lobby inherits it.
 
-**What it changes underneath.** `has_spear()` is described in `gub_combat.gd` as
+**What it changes underneath.** `has_spear()` is described in `bog_combat.gd` as
 *"the one gate"* — the throw asks it, and the hand is drawn from it. It becomes
 loadout-gated, `has_sword()` joins it and `has_bow()` beside it, and the
 existing overrides stay exactly as they are: the Elder replaces whatever you
 picked (D-038), a letter hold disarms it (D-035), and a drink empties both fists
 (D-067). The gate keeps being one gate.
 
-**The balance consequence, stated rather than discovered.** Today every Gub has a
+**The balance consequence, stated rather than discovered.** Today every Bog has a
 spear and the bow and sword are additions. Once a player picks *one*, the three
 have to hold up against each other for the first time: a one-shot you must lead,
 a 20-80 draw that out-ranges everything, and a melee one-shot that is also the
@@ -693,18 +693,18 @@ best mobility in the game. That is the playtest the plan's closing note already
 asks for, and this step makes it the only thing worth testing.
 
 *Done when:* a pick round-trips host → client → host and survives a rematch; a
-Gub shows only its chosen weapon in the lobby ring and in a match, verified on a
-**remote** Gub rather than only a local one; the picker collapses and restores;
+Bog shows only its chosen weapon in the lobby ring and in a match, verified on a
+**remote** Bog rather than only a local one; the picker collapses and restores;
 an Elder still overrides the pick and a letter hold still disarms it; and a
-player who never touches the picker plays a spear Gub identical to today's.
+player who never touches the picker plays a spear Bog identical to today's.
 
 **Done, as D-069.** The weapon is one more key in `Net.players`, with `team`'s
-lifecycle and `team`'s request → host → rebroadcast path, so `_create_gub` reads
+lifecycle and `team`'s request → host → rebroadcast path, so `_create_bog` reads
 it off the local roster on the line under the name and no packet was added.
 `has_spear()` grew a **fourth clause** rather than a fourth gate — `carries(...)`
 beside the Elder, the letter and the drink, the identical line on `has_bow()` and
-`has_sword()` — and nothing anywhere branches on which weapon a Gub has. The
-three cooldowns needed nothing: they were already independent, and a Gub now
+`has_sword()` — and nothing anywhere branches on which weapon a Bog has. The
+three cooldowns needed nothing: they were already independent, and a Bog now
 spends one of them.
 
 Two things fell out that were not in the brief. The great sword is **carried
@@ -712,8 +712,8 @@ between swings** now, because the one reason D-068 gave for hiding it was the
 absence of this step, and an empty-handed swordsman wears the tell this game
 reserves for harmless; that cost a measured carry tilt, swept by
 `preview_sword -- carry` and in the gate. And two hands were a frame late — at
-spawn and at a drink — which was invisible while every Gub had a spear and is a
-shaft in a bow Gub's fist once it is not.
+spawn and at a drink — which was invisible while every Bog had a spear and is a
+shaft in a bow Bog's fist once it is not.
 
 Gate **100 → 107**; `net_test.sh` green.
 
@@ -733,7 +733,7 @@ The ability tiles are photographs of the seven real `.glb`s, baked by
 the geometric mean of a silhouette's on-screen width and height is 66% of the
 tile, capped at 88% on the longer side, slender props on the diagonal. Not "the
 longest axis is the same fraction", which is the rule that makes a 7.5:1 arrow a
-hairline and a 1.2:1 mushroom a block. The lobby's weapon strip wears the same
+hairline and a 1.2:1 shield a block. The lobby's weapon strip wears the same
 pictures. **The slider bug was real and worse than reported**: at the panel's
 worst label `bow_drop_full` measured a **zero-pixel** track. The unit moved under
 the slider and the narrowest track in the panel is now 320 px, measured across
@@ -780,7 +780,7 @@ pass that quietly restores what they removed is a regression wearing a nice font
 > of icons"
 
 Every tile subject already exists as a built `.glb` in `art/generated/`: spear,
-bow, arrow, greatsword, mushroom, lure, heal_potion. Render them.
+bow, arrow, greatsword, shield, magnet, heal_potion. Render them.
 
 Bake them rather than rendering at runtime — that is D-003's argument and D-016's
 (*"generated means diffable, tunable from a single number, and reproducible on
@@ -790,7 +790,7 @@ any machine"*), and it is how every other generated asset in this repo works.
 The thing that will make or break it: **one camera, one light rig, one framing
 budget for all seven**, so they read as a set rather than seven unrelated
 photographs. A prop's longest axis should occupy the same fraction of the tile
-whether it is a 1.26 m sword or a mushroom. Say what the rule is and check it.
+whether it is a 1.26 m sword or a shield. Say what the rule is and check it.
 
 ### 14.3 The slider rows are broken and it is a real bug
 
@@ -844,7 +844,7 @@ middle one.*
 The user's words: *"for the spear idle, the spear should be horizontal not
 vertical."*
 
-Three things, one step, because all three turn on "which weapon is this Gub
+Three things, one step, because all three turn on "which weapon is this Bog
 carrying" — a question that only started existing with D-069. **Per-weapon carry
 poses**, from `BowIdle.fbx` and `GreatSwordIdle.fbx`, as upper-body layers over
 the locomotion plane rather than four blend spaces. **The spear laid flat**,
@@ -857,7 +857,7 @@ D-068.
 **Done, as D-070.** The carry is one `Blend2` filtered to `UPPER_BODY_BONES` with
 an `AnimationNodeTransition` under it, pointed at `Loadout.CARRY_CLIPS` — the one
 table in the game indexed by a weapon, and a table rather than a `match`
-precisely so D-069's *"nothing branches on which weapon a Gub has"* survives.
+precisely so D-069's *"nothing branches on which weapon a Bog has"* survives.
 `SWORD_CARRY_TILT` is **deleted** (the pose replaces it: −0.351 m untilted →
 +0.187 m posed) and `CARRY_TILT` is **kept** (+0.032 m posed alone, +0.251 m with
 both), on one rule — a tilt is a rotation away from where the clip's hands are
@@ -876,7 +876,7 @@ against them.
 
 One button carries two meanings without a branch, because the three `try_`
 functions are all called on the press and refuse themselves, and `release_draw()`
-is already a no-op for a Gub that was not drawing — **the gates are the branch**.
+is already a no-op for a Bog that was not drawing — **the gates are the branch**.
 
 Gate **107 → 113**; `net_test.sh` green.
 
@@ -949,7 +949,7 @@ number and the number is the deliverable.
 
 ***Done, as D-073 — and the diagnosis below is wrong, which is what the step was
 told to check.*** The angle is real and the user's eye was good: the blade leaves
-the fists at **+45° to the Gub's right in `Idle`**, +42 in `Walk`, +35 in `Run`.
+the fists at **+45° to the Bog's right in `Idle`**, +42 in `Walk`, +35 in `Run`.
 But the two hilt lines are only **10.5°** apart, so the stale fit accounts for a
 quarter of it. The bearing is `SwordCarry`'s own fist line, and re-fitting the
 grip to that clip takes the blade to **+51°** — further right, not less — while
@@ -978,13 +978,13 @@ characters right. both in the lobby and in game."*
 `SWORD_GRIP_ROTATION`, `SWORD_GRIP_OFFSET` and `SWORD_SCALE` in `held_gear.gd`
 are **one rigid transform, fitted to one clip's fists**. D-068 derived them by
 fitting the hilt line between `SWORD_FORE_HAND` (0.850) and `SWORD_REAR_HAND`
-(0.980), with the scale taken from the Gub's fist *span* — and it did that
+(0.980), with the scale taken from the Bog's fist *span* — and it did that
 against the **swing**, because `GreatSwordHighSpinAttack` was the only sword clip
 that existed.
 
 D-070 then introduced `GreatSwordIdle` as the carry pose and **kept the swing's
 grip**. A rigid transform fitted to one hand arrangement, asked to serve a second
-one, skews. That is what ~35° to the Gub's right looks like.
+one, skews. That is what ~35° to the Bog's right looks like.
 
 Confirm this before fixing it: measure the fist separation and the hilt line in
 both clips and say how far apart they actually are. If the numbers do not explain
@@ -1001,7 +1001,7 @@ that is already driving the pose.
 Two things that must survive it:
 
 - **The reach and the hit geometry are measured off the blade** (D-068): the
-  sweep reads the `BoneAttachment3D`, not the Gub's basis, and `sword_reach`
+  sweep reads the `BoneAttachment3D`, not the Bog's basis, and `sword_reach`
   1.43 m was measured *with* the animation. A grip that moves at the release
   moves the reach. Re-run `preview_sword -- measure` and `combat_range -- sword`,
   which already fails past 0.10 m of drift.
@@ -1118,7 +1118,7 @@ and to.
 
 ## Step 17 — The heal potion goes in the hand it is drunk with
 
-**Done, as D-075.** `HeldGear` has a fifth prop and `GubCombat._refresh_hand`
+**Done, as D-075.** `HeldGear` has a fifth prop and `BogCombat._refresh_hand`
 has a fifth call. The bottle is `art/generated/heal_potion.glb` at 0.30 in the
 **left** fist — the drinking hand D-067 measured off the clip — for exactly the
 length of the channel, and it is the same GLB `Pickup` puts on the ground, still
@@ -1145,16 +1145,16 @@ the sword's fit residual is 0.154 against 0.160 as D-074 left it, the spear read
 0.050 palm / +0.281 floor / 0.142 trunk, the bow +0.251 / 0.121, the great sword
 +0.205 / 0.142.
 
-`POTION_PALM` is that centre **plus five centimetres out of the Gub**, which is
+`POTION_PALM` is that centre **plus five centimetres out of the Bog**, which is
 D-074's move run backwards: it took a shaft 3 cm *in* off the knuckles, and this
-takes a bottle 5 cm *out*, because a Gub is a pear and its drinking arm rests on
+takes a bottle 5 cm *out*, because a Bog is a pear and its drinking arm rests on
 its own stomach. `bottle` reads 0.050 of `PALM_MAX`'s 0.066.
 
 The grip is one frame of one clip and the clip does the rest. Stood upright at
-the frame the drink window **opens**, the bottle reads +90° at the Gub's side,
+the frame the drink window **opens**, the bottle reads +90° at the Bog's side,
 −47° mouth-down into the face for the 0.7 s the head is back, and +78° as the arm
 falls. Stood upright at the **lips** instead it reads −51 and −49 at the two
-edges of the window, so a Gub picks the bottle up upside down and pours it out
+edges of the window, so a Bog picks the bottle up upside down and pours it out
 before it drinks.
 
 Gate **118 → 120**: `bottle PASS` is `palm` asked of the other hand, and
@@ -1170,9 +1170,9 @@ the tell, which is the same sentence the spear and the bow already make.
 
 *What it leaves open:* `POTION_SCALE` has no check, and D-075 says plainly why —
 *does the lip reach the mouth* was written, measured and deleted, because it
-reads 0.005–0.015 m at every scale from 0.20 to 0.50 on a Gub whose head is a
+reads 0.005–0.015 m at every scale from 0.20 to 0.50 on a Bog whose head is a
 0.40 m blob and whose drinking hand is at its face by the middle of the clip. It
-is an eye call off the sheet. And the bottle is now a tell: a Gub drinking in the
+is an eye call off the sheet. And the bottle is now a tell: a Bog drinking in the
 open is 0.30 m of bright purple held up beside its head, which is the argument
 for having drawn it and is also the first time this game has made *being
 mid-action* visible from across a clearing. Only a playtest says whether that is

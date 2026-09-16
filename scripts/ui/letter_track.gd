@@ -1,6 +1,6 @@
 class_name LetterTrack
 extends Control
-## G, U and B — the three you need, and the one you are standing still for
+## B, O and G — the three you need, and the one you are standing still for
 ## (PLAN 6.1, D-033, D-035).
 ##
 ## Only ever on screen under the two letter conditions, LETTERS and CAPTURE. The HUD hides the whole
@@ -18,8 +18,8 @@ extends Control
 ## deliberate** (D-036). It is not the recharge ring wearing a different hat: a
 ## hold is a single ten-second commitment rather than a rhythm you throw on,
 ## there is no windup for it to be misread against, and it is nowhere near your
-## aim. A Gub that cannot throw for ten seconds with nothing on screen saying
-## how much longer is a Gub whose player thinks the game has broken.
+## aim. A Bog that cannot throw for ten seconds with nothing on screen saying
+## how much longer is a Bog whose player thinks the game has broken.
 ##
 ## Nobody else's hold appears here. The lit card in their fist is the tell and
 ## it is an in-world one on purpose — the announcement is meant to be made to
@@ -63,7 +63,7 @@ var _hold_fill: float = 0.0
 ## Whole seconds still to stand there. Never 0 while a hold is running — see
 ## `set_state`.
 var _hold_seconds: int = 0
-## Capture G·U·B (D-051): the card up is a carry with no clock, so the lamp is
+## Capture B·O·G (D-051): the card up is a carry with no clock, so the lamp is
 ## full and the caption says where to take it rather than how long is left.
 var _carrying: bool = false
 
@@ -78,7 +78,7 @@ func _ready() -> void:
 ##
 ## The seconds shown never reach zero while a hold is running. A client's copy
 ## of the clock can expire a round trip before the host's does, and "0" sitting
-## over a Gub that still cannot throw reads as the game having stopped
+## over a Bog that still cannot throw reads as the game having stopped
 ## responding — where "1" reads as the last moment of a wait, which is what it
 ## is. `ceili` gives that for free everywhere except the exact end, and `maxi`
 ## covers the end.
@@ -136,9 +136,9 @@ func _draw_lamp(rect: Rect2, bit: int) -> void:
 		tint = UIPalette.AMBER
 		border = UIPalette.faded(UIPalette.AMBER, 0.85)
 	elif _letters & bit != 0:
-		draw_rect(rect, UIPalette.faded(UIPalette.GUB, LIT_WASH), true)
-		tint = UIPalette.GUB
-		border = UIPalette.faded(UIPalette.GUB, 0.85)
+		draw_rect(rect, UIPalette.faded(UIPalette.BOG, LIT_WASH), true)
+		tint = UIPalette.BOG
+		border = UIPalette.faded(UIPalette.BOG, 0.85)
 	draw_rect(rect, border, false, 1.5)
 
 	# `MatchState.letter_name` rather than a table of our own, so the lamp and

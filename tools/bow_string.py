@@ -23,7 +23,7 @@ atlas, so any UV invented for it would sample wood.
 
 **Why a blend shape rather than a bone chain.** One float. `set_blend_shape_value`
 on one node against the draw fraction is the same index-a-pose-by-a-continuous-
-value move `gub_animator.gd` already makes for the jump arcs, and it needs no
+value move `bog_animator.gd` already makes for the jump arcs, and it needs no
 second skeleton, no `Skin`, no second `AnimationPlayer` and nothing on the wire
 beyond the draw fraction that has to replicate regardless. A bone chain would
 buy the ability to bend the string in ways a bow's string does not bend.

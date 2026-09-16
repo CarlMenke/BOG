@@ -49,7 +49,7 @@ Adobe account, and then:
 
 Then run the auditor before writing a `Clip(...)` for it:
 
-    bash tools/build_gub.sh   # only after the audit is clean
+    bash tools/build_bog.sh   # only after the audit is clean
     "$BLENDER" --background --python tools/audit_source_packs.py -- 5_Locomotion
 
 A file that comes back `skin  no` was downloaded the wrong way again.
@@ -152,7 +152,7 @@ Mixamo's **Magic Locomotion Pack** — the `Standing *` family, and the pack tha
 | Longbow Locomotion | +116.0° | −45.8° | +126.5° | −46.3° |
 | Magic Locomotion | **+76.5°** | −37.6° | **+94.4°** | −38.8° |
 
-A right-hand strafe pole cannot be bought. It has to be mirrored, and `build_gub.py`'s `mirror_of` is how (D-071).
+A right-hand strafe pole cannot be bought. It has to be mirrored, and `build_bog.py`'s `mirror_of` is how (D-071).
 
 (`Standing Run Back` and `Standing Walk Back` were this entry's old shopping list. They are no longer wanted: `RunningBackward.fbx` and `WalkingBackward.fbx` closed the backward axis at D-066 and plant at 0.16 and 0.23 of body speed.)
 

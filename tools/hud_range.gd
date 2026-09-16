@@ -4,7 +4,7 @@ extends Node
 ##
 ## PLAN 4 has not happened yet, so there is no island to play the HUD over. This
 ## instances `tools/combat_range.tscn` — which already stands up a genuine
-## offline match with a local Gub, spawned opponents and a working camera — and
+## offline match with a local Bog, spawned opponents and a working camera — and
 ## hangs `scenes/ui/hud.tscn` on top of it, exactly the way the arena is meant
 ## to. Every number the HUD shows therefore comes from the real `MatchState`,
 ## and only the *events* are staged.
@@ -41,7 +41,7 @@ extends Node
 ##
 ## `weapon_tiles` is the second mode here that prints a verdict and sits in the
 ## gate (D-069). The first square on the ability bar is whichever weapon the
-## local Gub actually brought — it has always swapped to a bolt for an Elder, and
+## local Bog actually brought — it has always swapped to a bolt for an Elder, and
 ## now it swaps for a lobby pick too — so this stands the same HUD up three times
 ## with three loadouts and requires the glyph, the caption **and the key cap** to
 ## follow. The cap is the half that is easy to get wrong and impossible to see in
@@ -150,7 +150,7 @@ func _stage() -> void:
 	_populate_roster()
 	# Every mode but one. `hud_cooldown` is the bar with *nothing* available —
 	# spear recharging, both stacks at zero — which is not a corner case but
-	# what a Gub looks like for the first minute of every life since D-032, and
+	# what a Bog looks like for the first minute of every life since D-032, and
 	# the one shot that proves an empty slot reads as empty rather than as
 	# broken. The full bar is covered by `hud` and the mixed case by `hud_hold`.
 	if _mode != "hud_cooldown":
@@ -221,7 +221,7 @@ func _populate_roster() -> void:
 			"lives_left": Net.config.lives, "alive": i != 3,
 			"respawn_at": 0.0, "last_attacker": 0, "last_attacker_at": -999.0,
 		}
-	# The local Gub needs a score of its own or every screen shows a zero.
+	# The local Bog needs a score of its own or every screen shows a zero.
 	var mine: Dictionary = MatchState.stats.get(1, {})
 	if not mine.is_empty():
 		mine["kills"] = 7
@@ -233,7 +233,7 @@ func _populate_roster() -> void:
 	Net.roster_changed.emit()
 
 
-## Hand out G/U/B masks, so the lamps, the scoreboard column and the results
+## Hand out B/O/G masks, so the lamps, the scoreboard column and the results
 ## table have a spread to draw instead of six empty rows.
 ##
 ## Deliberately not "everybody has two". The interesting read on all three of
@@ -243,16 +243,16 @@ func _populate_roster() -> void:
 ##
 ## **A completed set is only dealt to the results mode**, and that is a scar.
 ## Dealt to every letters mode, it took the *live* ones down with it: the first
-## real kill in `hud_hold` ran `_check_win`, which found a row holding G, U and
-## B and quite correctly ended the match — so the mode that exists to photograph
+## real kill in `hud_hold` ran `_check_win`, which found a row holding B, O and
+## G and quite correctly ended the match — so the mode that exists to photograph
 ## a hold photographed the results screen instead. A staged roster is still real
 ## state, and the win check does not care that a tool wrote it.
 func _deal_letters(mine: Dictionary) -> void:
-	var deal := [MatchState.LETTER_U | MatchState.LETTER_B,
+	var deal := [MatchState.LETTER_O | MatchState.LETTER_B,
 		MatchState.LETTER_G | MatchState.LETTER_B,
-		MatchState.LETTER_U, 0, MatchState.LETTER_G]
+		MatchState.LETTER_O, 0, MatchState.LETTER_G]
 	if _mode == "results_letters":
-		deal[0] = MatchState.LETTER_G | MatchState.LETTER_U | MatchState.LETTER_B
+		deal[0] = MatchState.LETTER_B | MatchState.LETTER_O | MatchState.LETTER_G
 	for i in EXTRA.size():
 		var row: Dictionary = MatchState.stats.get(EXTRA_BASE + i, {})
 		if not row.is_empty():
@@ -265,7 +265,7 @@ func _deal_letters(mine: Dictionary) -> void:
 	# already holding two would fail to produce the picture two times in three,
 	# and would do it silently.
 	mine["letters"] = 0 if _mode == "hud_hold" \
-		else MatchState.LETTER_G | MatchState.LETTER_U
+		else MatchState.LETTER_G | MatchState.LETTER_O
 
 
 ## The Teams deal. The local player (team 0) and the extras alternate teams, so
@@ -275,11 +275,11 @@ func _deal_letters(mine: Dictionary) -> void:
 ## exactly the OR of the rows, and they are written into `_team_letters` the way
 ## `_sync_letters` would have written them.
 ##
-## Team 0 pools to G·U and is one B short: the picture worth taking is a team
+## Team 0 pools to O·G and is one B short: the picture worth taking is a team
 ## lamp lit by a letter the local player never touched. Only the results mode
 ## completes the word, for the scar `_deal_letters` records.
 func _deal_team_letters(mine: Dictionary) -> void:
-	var deal := [0, MatchState.LETTER_B, MatchState.LETTER_U, 0, 0]
+	var deal := [0, MatchState.LETTER_B, MatchState.LETTER_O, 0, 0]
 	if _mode == "results_letters_teams":
 		deal[0] = MatchState.LETTER_B
 	for i in EXTRA.size():
@@ -299,13 +299,13 @@ func _deal_team_letters(mine: Dictionary) -> void:
 ## the causes can be mixed — a spear kill, a fall, and one involving the local
 ## player, which is the row that has to stand out.
 func _stage_kills() -> void:
-	MatchState.player_killed.emit(EXTRA_BASE + 3, EXTRA_BASE, Gub.Cause.SPEAR)
-	MatchState.player_killed.emit(EXTRA_BASE + 1, EXTRA_BASE + 1, Gub.Cause.VOID)
-	MatchState.player_killed.emit(EXTRA_BASE + 2, 1, Gub.Cause.SPEAR)
-	MatchState.player_killed.emit(1, EXTRA_BASE, Gub.Cause.SPEAR)
+	MatchState.player_killed.emit(EXTRA_BASE + 3, EXTRA_BASE, Bog.Cause.SPEAR)
+	MatchState.player_killed.emit(EXTRA_BASE + 1, EXTRA_BASE + 1, Bog.Cause.VOID)
+	MatchState.player_killed.emit(EXTRA_BASE + 2, 1, Bog.Cause.SPEAR)
+	MatchState.player_killed.emit(1, EXTRA_BASE, Bog.Cause.SPEAR)
 
 
-## Throw a real spear, so the spear tile is dark because a real `GubCombat` says
+## Throw a real spear, so the spear tile is dark because a real `BogCombat` says
 ## so rather than because this tool set a flag.
 func _stage_throw() -> void:
 	var combat := _local_combat()
@@ -313,9 +313,9 @@ func _stage_throw() -> void:
 		combat.try_throw_spear()
 
 
-## Two mushrooms and one lure into the local Gub's pack.
+## Two shields and one magnet into the local Bog's pack.
 ##
-## Not decoration. A Gub spawns carrying nothing (D-032), so without this every
+## Not decoration. A Bog spawns carrying nothing (D-032), so without this every
 ## reference shot of the ability bar is two empty slots — a real state, and the
 ## least informative one to photograph. Handed over exactly the way
 ## `tools/combat_range.gd` hands one over: through the host-only `grant_*` the
@@ -325,8 +325,8 @@ func _stock_the_bar() -> void:
 	var combat := _local_combat()
 	if combat == null:
 		return
-	combat.grant_mushroom(2)
-	combat.grant_lure(1)
+	combat.grant_shield(2)
+	combat.grant_magnet(1)
 	# And a potion, so the fourth tile is photographed carrying something too
 	# (D-067). One rather than two: the stock numbers on the bar should differ
 	# from each other, or a reference shot cannot show that each tile reads its
@@ -337,13 +337,13 @@ func _stock_the_bar() -> void:
 ## Collect a letter card for real, and then stand there holding it.
 ##
 ## The card comes out of an actual death with `letter_drop_chance` forced to 1
-## so the roll cannot come up a mushroom, and it is claimed by the player's own
+## so the roll cannot come up a shield, and it is claimed by the player's own
 ## body walking into the `Pickup` area. That is the same chain
 ## `tools/combat_range.gd letter` exercises, and it is why neither of them
 ## writes into `MatchState._letter_holds` by hand: a hold staged directly would
 ## draw identically and would prove nothing about the thing being drawn.
 func _stage_hold() -> void:
-	var player := MatchState.local_gub()
+	var player := MatchState.local_bog()
 	var victim := _a_dummy()
 	if player == null or victim == 0:
 		return
@@ -353,7 +353,7 @@ func _stage_hold() -> void:
 	Net.config.letter_drop_chance = 1.0
 	# The drop lands where the blow struck rather than at the body, so the card
 	# can be put down in front of the player without moving anybody.
-	MatchState.report_kill(victim, Net.local_id(), Gub.Cause.SPEAR,
+	MatchState.report_kill(victim, Net.local_id(), Bog.Cause.SPEAR,
 		player.global_position + player.facing() * 1.2, Vector3.FORWARD * 18.0, "Spine1")
 
 
@@ -361,7 +361,7 @@ func _stage_hold() -> void:
 ## something to draw (D-062).
 ##
 ## Through `MatchState.report_damage` like any weapon, rather than by writing
-## `Gub.health` — the same argument `_stage_hold` and `_stage_elder` make. A
+## `Bog.health` — the same argument `_stage_hold` and `_stage_elder` make. A
 ## number staged directly would draw identically and would prove nothing about
 ## the thing being drawn, and this way the picture also shows what the *plates*
 ## do, since the damage lands on the dummies as well.
@@ -370,28 +370,28 @@ func _stage_hold() -> void:
 ## which is the case worth looking at: green is unmistakable and red is nearly
 ## empty, and the middle is where legibility is actually decided.
 func _stage_hurt() -> void:
-	var player := MatchState.local_gub()
+	var player := MatchState.local_bog()
 	if player == null or MatchState.phase != MatchState.Phase.PLAYING:
 		return
-	MatchState.report_damage(1, EXTRA_BASE, 62.0, Gub.Cause.SPEAR,
+	MatchState.report_damage(1, EXTRA_BASE, 62.0, Bog.Cause.SPEAR,
 		player.body_centre(), Vector3.FORWARD * 6.0, "Spine1")
 	# ...and the range's dummies hurt by different amounts, so the plates in the
-	# same frame are not all one colour. Found by walking `MatchState.gubs`
+	# same frame are not all one colour. Found by walking `MatchState.bogs`
 	# rather than by naming the range's own peer ids, which are its business.
 	var hurt := [38.0, 82.0]
 	var at := 0
-	for peer_id: int in MatchState.gubs:
+	for peer_id: int in MatchState.bogs:
 		if peer_id == Net.local_id() or at >= hurt.size():
 			continue
-		var dummy := MatchState.gubs[peer_id] as Gub
+		var dummy := MatchState.bogs[peer_id] as Bog
 		if dummy == null or not dummy.alive:
 			continue
-		MatchState.report_damage(peer_id, 1, hurt[at], Gub.Cause.SPEAR,
+		MatchState.report_damage(peer_id, 1, hurt[at], Bog.Cause.SPEAR,
 			dummy.body_centre(), Vector3.FORWARD * 6.0, "Spine1")
 		at += 1
 
 
-## Put the robe on the local Gub, for real, and then stand there wearing it.
+## Put the robe on the local Bog, for real, and then stand there wearing it.
 ##
 ## The same argument `_stage_hold` makes, one feature along: the robe comes out
 ## of an actual death with `elder_drop_chance` forced to 1 and is claimed by the
@@ -404,7 +404,7 @@ func _stage_hurt() -> void:
 ## as a *bolt*: an Elder has no spear (D-038), and until now nothing in this file
 ## had ever put one on screen.
 func _stage_elder() -> void:
-	var player := MatchState.local_gub()
+	var player := MatchState.local_bog()
 	var victim := _a_dummy()
 	if player == null or victim == 0:
 		return
@@ -412,22 +412,22 @@ func _stage_elder() -> void:
 		push_warning("hud_range: nothing to wear — the match has not started yet")
 		return
 	Net.config.elder_drop_chance = 1.0
-	MatchState.report_kill(victim, Net.local_id(), Gub.Cause.SPEAR,
+	MatchState.report_kill(victim, Net.local_id(), Bog.Cause.SPEAR,
 		player.global_position + player.facing() * 1.2, Vector3.FORWARD * 18.0, "Spine1")
 
 
 ## The spear tile's recharge readout, measured over one real throw (D-054).
 ##
 ## Read off the tile itself -- `recharge_progress()` and `recharge_text()` are
-## what `_draw` draws -- rather than recomputed from `GubCombat`, because the
+## what `_draw` draws -- rather than recomputed from `BogCombat`, because the
 ## thing under test is the HUD's choice of *when* to hand the tile a timer, and
 ## recomputing it here would be testing a copy of that choice.
-## The first tile is the weapon this Gub picked (D-069).
+## The first tile is the weapon this Bog picked (D-069).
 ##
 ## Three loadouts through the one HUD, because the tile is not rebuilt per
 ## weapon — `AbilitySlot.set_kind` mutates the square that is already there, and
 ## the thing most likely to rot is a field it forgets to move. So this drives the
-## real refresh by changing `Gub.weapon` under it, the way the lobby's pick does
+## real refresh by changing `Bog.weapon` under it, the way the lobby's pick does
 ## before the body is ever built, and reads the square back.
 ##
 ## The Elder is checked last and is the reason the key cap is asserted at all: it
@@ -447,8 +447,8 @@ const CONTROL_BINDINGS := {
 	"primary_attack": "LMB",
 	"aim": "RMB",
 	"drink_potion": "F",
-	"place_mushroom": "Q",
-	"throw_lure": "E",
+	"place_shield": "Q",
+	"throw_magnet": "E",
 	"respawn": "R",
 	"jump": "",
 	"sprint": "",
@@ -546,9 +546,9 @@ func _control_key(event: InputEvent) -> String:
 func _run_weapon_tiles() -> void:
 	var slot := _hud.get_node("%SpearSlot") as AbilitySlot
 	var combat := _local_combat()
-	var gub: Gub = MatchState.gubs.get(1)
-	if slot == null or combat == null or not is_instance_valid(gub):
-		print("hud_range: no weapon tile or local Gub - weapon_tiles FAIL")
+	var bog: Bog = MatchState.bogs.get(1)
+	if slot == null or combat == null or not is_instance_valid(bog):
+		print("hud_range: no weapon tile or local Bog - weapon_tiles FAIL")
 		return
 
 	var failures := PackedStringArray()
@@ -558,7 +558,7 @@ func _run_weapon_tiles() -> void:
 		[Loadout.Weapon.SWORD, AbilitySlot.Kind.SWORD, "Sword", "primary_attack"],
 	]
 	for row: Array in want:
-		gub.weapon = row[0]
+		bog.weapon = row[0]
 		combat.refresh_hand()
 		combat.cooldowns_changed.emit()
 		await RenderingServer.frame_pre_draw
@@ -592,7 +592,7 @@ func _run_weapon_tiles() -> void:
 	# Back to the sword the loop left it on, so the picture this mode also takes
 	# is of a weapon a player can pick rather than of a robe that has just burned
 	# out.
-	gub.weapon = Loadout.Weapon.SWORD
+	bog.weapon = Loadout.Weapon.SWORD
 	combat.cooldowns_changed.emit()
 
 	if failures.is_empty():
@@ -608,7 +608,7 @@ func _run_reload_timer() -> void:
 	var crosshair := _hud.get_node("%Crosshair") as Crosshair
 	var combat := _local_combat()
 	if slot == null or crosshair == null or combat == null:
-		print("hud_range: no spear tile, crosshair or local Gub - reload_timer FAIL")
+		print("hud_range: no spear tile, crosshair or local Bog - reload_timer FAIL")
 		return
 	_check_formatting()
 	_check_crosshair(crosshair, "before the throw")
@@ -725,21 +725,21 @@ func _expect(ok: bool, failure: String) -> void:
 		_reload_failures.append(failure)
 
 
-## Somebody for the local Gub to kill. Found rather than named: the combat range
+## Somebody for the local Bog to kill. Found rather than named: the combat range
 ## owns those peer ids, and a copy of the number in this file would be a second
 ## place to change the day it moves.
 func _a_dummy() -> int:
-	for peer_id: int in MatchState.gubs:
+	for peer_id: int in MatchState.bogs:
 		if peer_id != Net.local_id():
 			return peer_id
 	return 0
 
 
-func _local_combat() -> GubCombat:
-	var gub := MatchState.local_gub()
-	if gub == null:
+func _local_combat() -> BogCombat:
+	var bog := MatchState.local_bog()
+	if bog == null:
 		return null
-	return gub.get_node_or_null("Combat") as GubCombat
+	return bog.get_node_or_null("Combat") as BogCombat
 
 
 func _summary() -> Dictionary:

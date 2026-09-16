@@ -7,14 +7,14 @@ extends CanvasLayer
 ##     [node name="HUD" parent="." instance=ExtResource("res://scenes/ui/hud.tscn")]
 ##
 ## It reaches into no arena node and holds no reference to one. Everything it
-## shows comes from `MatchState`, `Net` and the local Gub's own `GubCombat`, so
+## shows comes from `MatchState`, `Net` and the local Bog's own `BogCombat`, so
 ## it works over any scene that has registered an arena — including
 ## `tools/hud_range.tscn`, which is how every screen in it was looked at.
 ##
 ## Four things are read every frame rather than driven by signals: the ability
 ## bar, the clock, the seconds left on a letter hold, and the seconds left on the
 ## Elder's robe. Three of those are wall-clock deadlines with no per-frame signal
-## to hang off — inside `GubCombat` for the bar, on the host for the other two —
+## to hang off — inside `BogCombat` for the bar, on the host for the other two —
 ## and the clock is broadcast twice a second, so polling is both simpler and
 ## smoother than the alternative.
 ## Everything else — kills, scores, phases, deaths, letters — arrives as a signal
@@ -48,8 +48,8 @@ const HEALTH_BAR := Vector2(224.0, 22.0)
 @onready var _elder: ElderTrack = %Elder
 @onready var _abilities: HBoxContainer = %Abilities
 @onready var _spear_slot: AbilitySlot = %SpearSlot
-@onready var _mushroom_slot: AbilitySlot = %MushroomSlot
-@onready var _lure_slot: AbilitySlot = %LureSlot
+@onready var _shield_slot: AbilitySlot = %ShieldSlot
+@onready var _magnet_slot: AbilitySlot = %MagnetSlot
 @onready var _potion_slot: AbilitySlot = %PotionSlot
 @onready var _banner: Control = %Banner
 @onready var _banner_title: Label = %BannerTitle
@@ -65,10 +65,10 @@ const HEALTH_BAR := Vector2(224.0, 22.0)
 ## `MatchConfig.warmup_time`. Both sides start it from the same RPC, so they
 ## agree to within a round trip, which is well inside what a countdown needs.
 var _phase_clock: float = 0.0
-## Seconds until the local Gub respawns, from `local_death`.
+## Seconds until the local Bog respawns, from `local_death`.
 var _respawn_clock: float = 0.0
-## Index into `MatchState.living_gubs()` while spectating (PLAN 6.5). Held as an
-## index rather than as a reference to the Gub because the list changes under us
+## Index into `MatchState.living_bogs()` while spectating (PLAN 6.5). Held as an
+## index rather than as a reference to the Bog because the list changes under us
 ## constantly — the player being watched dies, respawns, or leaves — and an index
 ## degrades into "somebody else" where a stale reference degrades into a crash.
 var _spectate_index: int = 0
@@ -197,8 +197,8 @@ func _on_resumed() -> void:
 	pass  # the pause menu has already handed the cursor back
 
 
-## Typing releases the cursor, which is what actually stops the Gub looking
-## around and throwing spears: `GubCamera` and `GubCombat` both check
+## Typing releases the cursor, which is what actually stops the Bog looking
+## around and throwing spears: `BogCamera` and `BogCombat` both check
 ## `SceneFlow.cursor_is_free()` before acting on input.
 func _begin_chat() -> void:
 	_chat.set_input_visible(true)
@@ -229,10 +229,10 @@ func _tick_clocks(delta: float) -> void:
 		SceneFlow.recapture_cursor("chat")
 
 
-## Armed means "there is a living Gub behind this crosshair", and since D-036
-## that is the whole of what the crosshair says. Whether that Gub has a spear is
+## Armed means "there is a living Bog behind this crosshair", and since D-036
+## that is the whole of what the crosshair says. Whether that Bog has a spear is
 ## answered by the spear in its hand, which is drawn off the one gate the throw
-## is (`GubCombat.has_spear`) — so there is nothing here to divide, and no
+## is (`BogCombat.has_spear`) — so there is nothing here to divide, and no
 ## denominator left to get wrong for a third time.
 func _refresh_crosshair() -> void:
 	_crosshair.set_state(_local_combat() != null and MatchState.is_alive(Net.local_id()))
@@ -245,9 +245,9 @@ func _refresh_crosshair() -> void:
 ## out of the middle of the screen and the rule it left behind is that the
 ## middle of the screen is for aiming; a health readout is exactly the thing
 ## that gets put there next. A red edge on the screen was the other candidate
-## and is worse for this game: Gubs are small, bright and fast against a dark
+## and is worse for this game: Bogs are small, bright and fast against a dark
 ## forest, and washing the edges of the frame red hurts the one thing a hurt
-## player needs most, which is seeing the Gub that is hurting them.
+## player needs most, which is seeing the Bog that is hurting them.
 ##
 ## **A number as well as a bar.** The bar is what you glance at; the number is
 ## what tells you whether the next arrow kills you, and with damage running from
@@ -255,18 +255,18 @@ func _refresh_crosshair() -> void:
 ## only — nobody else's number is ever shown as a number, because a bar over a
 ## body is a read and a number over a body is a spreadsheet.
 ##
-## Unlike the plate over a Gub's head, this is **always** up while you are
+## Unlike the plate over a Bog's head, this is **always** up while you are
 ## alive. A missing bar on your own screen is indistinguishable from a bar you
 ## have not looked at, and "am I hurt" has to be answerable without remembering.
 func _refresh_health() -> void:
-	var gub := MatchState.local_gub()
-	var alive := gub != null and MatchState.is_alive(Net.local_id())
+	var bog := MatchState.local_bog()
+	var alive := bog != null and MatchState.is_alive(Net.local_id())
 	_health.visible = alive and MatchState.phase != MatchState.Phase.IDLE
 	if not _health.visible:
 		return
-	var fraction := gub.health_fraction()
-	var shown := maxi(1, ceili(gub.health)) if gub.health > 0.0 else 0
-	# Rounded *up*, so the last sliver of a Gub is a 1 and never a 0. A player
+	var fraction := bog.health_fraction()
+	var shown := maxi(1, ceili(bog.health)) if bog.health > 0.0 else 0
+	# Rounded *up*, so the last sliver of a Bog is a 1 and never a 0. A player
 	# reading "0" while still standing believes the HUD has broken; the same
 	# rule the letter and Elder countdowns use for the same reason.
 	if shown != _health_shown:
@@ -379,7 +379,7 @@ func _refresh_abilities() -> void:
 	#   ring D-036 threw away. Timed from the release, the sweep starts empty
 	#   and the number starts at the full recharge, which is the truth.
 	# * Not during a hold or a capture carry (D-051 made a carry a hold with no
-	#   clock). A recharge that reaches zero over a Gub still holding a card
+	#   clock). A recharge that reaches zero over a Bog still holding a card
 	#   would be a countdown to nothing; the lamps are that player's timer.
 	#
 	# For an Elder the tile is a different weapon and the same sentence: the
@@ -388,7 +388,7 @@ func _refresh_abilities() -> void:
 	var spear_timed := not combat.is_winding_up() and not combat.is_holding_letter()
 	if combat.is_elder():
 		# "Bolt" rather than "Lightning": the tile is 62 px wide and the other
-		# three labels are Spear, Shield and Lure. A caption that overhangs its
+		# three labels are Spear, Shield and Magnet. A caption that overhangs its
 		# own square would be the one thing on this bar that does not line up.
 		_spear_slot.set_kind(AbilitySlot.Kind.LIGHTNING, "Bolt")
 		_spear_slot.set_armed(combat.has_lightning(),
@@ -397,7 +397,7 @@ func _refresh_abilities() -> void:
 	elif combat.carries(Loadout.Weapon.BOW):
 		# And for everybody else the tile is *their* weapon, on the same
 		# sentence again (D-069). Before the lobby pick this branch could not
-		# exist, because every Gub had a spear and the bow and the sword were
+		# exist, because every Bog had a spear and the bow and the sword were
 		# extras with no tile of their own. Now two players in three would be
 		# looking at a Spear tile that is dark for the whole match and times a
 		# recharge they are not spending — which is the exact misinformation
@@ -423,18 +423,18 @@ func _refresh_abilities() -> void:
 	# dims the tile, because it is a floor on spend rate and not something worth
 	# timing a fight around. Note what is *not* passed: no totals — the spear
 	# tile is the only thing on this bar that divides (D-054).
-	_mushroom_slot.set_stock(combat.mushroom_count(), combat.mushroom_use_cooldown() > 0.0)
-	_lure_slot.set_stock(combat.lure_count(), combat.lure_use_cooldown() > 0.0)
+	_shield_slot.set_stock(combat.shield_count(), combat.shield_use_cooldown() > 0.0)
+	_magnet_slot.set_stock(combat.magnet_count(), combat.magnet_use_cooldown() > 0.0)
 	# The potion's `busy` is its own channel and not a use-delay (D-067): there
 	# is no second clock on this one, because the two seconds a drink takes are
 	# already the floor on how fast a stack can be emptied. So the tile is dark
-	# for exactly as long as the Gub is standing there drinking, which is the
+	# for exactly as long as the Bog is standing there drinking, which is the
 	# other half of the tell — the animation is what your opponent sees and this
 	# is what you see.
 	_potion_slot.set_stock(combat.potion_count(), combat.is_channelling())
 
 
-## The G/U/B lamps and the hold, for the local player only.
+## The B/O/G lamps and the hold, for the local player only.
 ##
 ## Polled here as well as driven by the two signals, and both are wanted.
 ## `letters_changed` is what lights a lamp on the frame the host says so; the
@@ -449,7 +449,7 @@ func _refresh_letters() -> void:
 	if not show:
 		return
 	var me := Net.local_id()
-	# A Capture G·U·B carry is a hold with no clock (D-051): the lamp is full
+	# A Capture B·O·G carry is a hold with no clock (D-051): the lamp is full
 	# from the moment the card is picked up, and the caption says where to take
 	# it instead of how long is left. `letter_hold_remaining` is INF for one, so
 	# it is not handed to a control that would divide by it.
@@ -493,11 +493,11 @@ func _refresh_clock() -> void:
 		UIPalette.AMBER if MatchState.time_left <= 30.0 else UIPalette.TEXT)
 
 
-func _local_combat() -> GubCombat:
-	var gub := MatchState.local_gub()
-	if gub == null:
+func _local_combat() -> BogCombat:
+	var bog := MatchState.local_bog()
+	if bog == null:
 		return null
-	return gub.get_node_or_null("Combat") as GubCombat
+	return bog.get_node_or_null("Combat") as BogCombat
 
 
 # ------------------------------------------------------------------- score ---
@@ -520,7 +520,7 @@ func _refresh_score() -> void:
 		var tail := "you lead" if leader == me and mine > 0 \
 			else "%s %d" % [Net.player_name(leader), MatchState.kills(leader)]
 		_score_line.text = "[center][color=#%s]%d%s[/color]  [color=#4a545f]·[/color]  %s[/center]" % [
-			UIPalette.GUB.to_html(false), mine, target, tail]
+			UIPalette.BOG.to_html(false), mine, target, tail]
 
 	_refresh_team_chip()
 	_refresh_lives()
@@ -565,7 +565,7 @@ func _refresh_lives() -> void:
 	for i in config.lives:
 		var pip := ColorRect.new()
 		pip.custom_minimum_size = Vector2(16, 5)
-		pip.color = UIPalette.GUB if i < left else UIPalette.faded(UIPalette.TEXT, 0.16)
+		pip.color = UIPalette.BOG if i < left else UIPalette.faded(UIPalette.TEXT, 0.16)
 		_lives.add_child(pip)
 
 
@@ -588,7 +588,7 @@ func _on_phase_changed(phase: int) -> void:
 		MatchState.Phase.PLAYING:
 			_phase_clock = 0.0
 			_flash = FLASH_TIME
-			_show_banner("FIGHT", "", UIPalette.GUB)
+			_show_banner("FIGHT", "", UIPalette.BOG)
 		MatchState.Phase.POST_MATCH:
 			_phase_clock = 0.0
 			_flash = 0.0
@@ -623,7 +623,7 @@ func _on_letters_changed(_peer_id: int) -> void:
 
 ## Somebody else's hold still gets nothing on the lamps, but since D-050 it gets
 ## a line in the feed: the lit card in a fist is only a tell to whoever can see
-## the fist, and a letter is the rarest thing in the match. The Gub carrying it
+## the fist, and a letter is the rarest thing in the match. The Bog carrying it
 ## gets a marker over its head on every screen as well (`CarrierMarker`).
 func _on_letter_picked_up(peer_id: int, letter: int) -> void:
 	_kill_feed.add_event([peer_id, "picked up",
@@ -635,7 +635,7 @@ func _on_letter_banked(peer_id: int, letter: int) -> void:
 		[MatchState.letter_name(letter), Pickup.LETTER_COLOUR]])
 
 
-## Capture G·U·B (D-051). A carrier's death already has a kill row; this is the
+## Capture B·O·G (D-051). A carrier's death already has a kill row; this is the
 ## row that says the card is now on the ground and whose it was, which is what
 ## both teams run towards.
 func _on_letter_dropped(peer_id: int, letter: int) -> void:
@@ -670,17 +670,17 @@ func _on_local_respawn() -> void:
 
 # -------------------------------------------------------------- spectating ---
 
-## The local Gub's own rig, which keeps the viewport even while its Gub is
-## hidden. Null once the match has torn its Gubs down.
-func _local_rig() -> GubCamera:
-	var gub := MatchState.local_gub()
-	if gub == null:
+## The local Bog's own rig, which keeps the viewport even while its Bog is
+## hidden. Null once the match has torn its Bogs down.
+func _local_rig() -> BogCamera:
+	var bog := MatchState.local_bog()
+	if bog == null:
 		return null
-	return gub.get_node_or_null("CameraRig") as GubCamera
+	return bog.get_node_or_null("CameraRig") as BogCamera
 
 
 func _begin_spectating() -> void:
-	var living := MatchState.living_gubs(Net.local_id())
+	var living := MatchState.living_bogs(Net.local_id())
 	if living.is_empty():
 		return
 	_spectating = true
@@ -697,7 +697,7 @@ func _end_spectating() -> void:
 
 
 func _step_spectator(direction: int) -> void:
-	var living := MatchState.living_gubs(Net.local_id())
+	var living := MatchState.living_bogs(Net.local_id())
 	if living.is_empty():
 		return
 	_spectate_index = posmod(_spectate_index + direction, living.size())
@@ -710,7 +710,7 @@ func _step_spectator(direction: int) -> void:
 func _apply_spectator() -> void:
 	if not _spectating:
 		return
-	var living := MatchState.living_gubs(Net.local_id())
+	var living := MatchState.living_bogs(Net.local_id())
 	var rig := _local_rig()
 	if living.is_empty() or rig == null:
 		_spectate_label.visible = false
@@ -724,7 +724,7 @@ func _apply_spectator() -> void:
 	_spectate_label.visible = true
 
 
-## Out of lives, in a mode that has them. The distinction matters: a dead Gub is
+## Out of lives, in a mode that has them. The distinction matters: a dead Bog is
 ## back in three seconds and an eliminated one is done, and telling someone
 ## "respawning in 3" when they are not is worse than saying nothing.
 func _is_eliminated() -> bool:

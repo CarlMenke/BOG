@@ -18,7 +18,7 @@ extends StaticMap
 ##               crate, which is all the verticality the map has.
 ##   towers      three containers, 7.8 m, and the perimeter walls. The things
 ##               that cut sightlines, and out of reach of every jump in the
-##               Gub's kit, the one-tick dive included — `tools/parkour_report`
+##               Bog's kit, the one-tick dive included — `tools/parkour_report`
 ##               fails the build if one can be reached (`off_limits`).
 ##
 ## There is no two-high stack anywhere, and that is deliberate. The dive off a
@@ -61,7 +61,7 @@ extends StaticMap
 ##                sheets drifting through it (`wharf_ambience.gd`).
 ##   the port     forty-odd stacks, a ship, a shed, five gantries and a
 ##                lighthouse outside the walls — all of it tall, because tall is
-##                the only thing a Gub inside a 7.8 m wall can see.
+##                the only thing a Bog inside a 7.8 m wall can see.
 ##   the sky      `wharf_sky.tres` on the island's shader: a sun disc that
 ##                follows this map's `Sun`, cloud that drifts, the first stars.
 ##
@@ -76,7 +76,7 @@ extends StaticMap
 ## Half the yard's width. The walls' inner faces stand on these lines.
 const HALF := 18.0
 
-## A container, as length x height x width. A Gub is 1.55 m tall, so a single
+## A container, as length x height x width. A Bog is 1.55 m tall, so a single
 ## box is a head and a half over one and a crate is chest height.
 const BOX_LENGTH := 6.0
 const BOX_HEIGHT := 2.6
@@ -124,17 +124,17 @@ const BOXES: Array[Dictionary] = [
 	# Against the side walls, closing the corners' diagonals.
 	{"label": "wall west", "at": Vector2(-15.0, -6.0), "axis": "x", "tiers": 3, "paint": [5, 4, 3]},
 	{"label": "wall east", "at": Vector2(15.0, -6.0), "axis": "x", "tiers": 3, "paint": [4, 1, 6]},
-	# The middle: four towers round a crossroads, with G standing in it.
+	# The middle: four towers round a crossroads, with B standing in it.
 	{"label": "centre west", "at": Vector2(-4.0, -3.0), "axis": "x", "tiers": 3, "paint": [6, 0, 1]},
 	{"label": "centre east", "at": Vector2(4.0, -3.0), "axis": "x", "tiers": 3, "paint": [2, 3, 0]},
-	# On the centre line, each placed once: the climbable boxes beside U and B.
+	# On the centre line, each placed once: the climbable boxes beside O and G.
 	{"label": "flank west", "at": Vector2(-11.5, 0.0), "axis": "z", "tiers": 1, "paint": [0]},
 	{"label": "flank east", "at": Vector2(11.5, 0.0), "axis": "z", "tiers": 1, "paint": [5]},
 ]
 
 ## Crates, north half, as (x, z). Same mirror rule as the boxes. Each is laid
 ## flush against something: a crate with a gap under a metre beside a box is a
-## slot a Gub gets stuck in, and flush it is a step.
+## slot a Bog gets stuck in, and flush it is a step.
 const CRATES: Array[Vector2] = [
 	# The steps onto the yard boxes, from the base side.
 	Vector2(-8.0, -9.45), Vector2(8.0, -9.45),
@@ -904,7 +904,7 @@ func _port_water(parent: Node3D) -> void:
 ## a spot with no shadows, aimed flat out of a lantern 21.5 m up, and it is
 ## deliberately *above* the fight: at that height and that pitch the beam grazes
 ## the top tier of the walls and the fog over head height and reaches no part of
-## the yard a Gub can stand on. A sweeping light that lit players would be a
+## the yard a Bog can stand on. A sweeping light that lit players would be a
 ## lighting change on a timer, which on a competitive map is a rule.
 ##
 ## Its volumetric fog energy is high — the beam is 40 m of thin air away and the

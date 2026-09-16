@@ -15,15 +15,15 @@ extends Control
 ## is honest about the throw, and the thing sitting under your aim is the worst
 ## place in the game to put a number that needs interpreting.
 ##
-## The honest indicator already exists and is better: **the spear in the Gub's
+## The honest indicator already exists and is better: **the spear in the Bog's
 ## own hand.** `held_gear.gd` is driven straight off the same
-## `GubCombat.has_spear()` the throw is gated on, which since D-035 covers the
+## `BogCombat.has_spear()` the throw is gated on, which since D-035 covers the
 ## recharge and a letter hold in one expression. One truth, drawn where everyone
-## — including the Gub facing you — can already see it.
+## — including the Bog facing you — can already see it.
 ##
 ## What is left is armed or not, and that is kept because it is not a timer and
-## never was: it says whether there is a living Gub behind this crosshair at
-## all. Alive, the ticks are the Gub's own yellow and the centre is a filled
+## never was: it says whether there is a living Bog behind this crosshair at
+## all. Alive, the ticks are the Bog's own yellow and the centre is a filled
 ## dot; dead or spectating, they go grey and the centre empties, because a
 ## crosshair with nothing behind it invites you to aim.
 ##
@@ -69,7 +69,7 @@ func set_state(is_armed: bool) -> void:
 	queue_redraw()
 
 
-## Flash the hitmarker. Called when this client's Gub gets a kill.
+## Flash the hitmarker. Called when this client's Bog gets a kill.
 func strike() -> void:
 	_mark = MARK_FADE
 	set_process(true)
@@ -85,7 +85,7 @@ func _process(delta: float) -> void:
 
 func _draw() -> void:
 	var centre := size * 0.5
-	var tint := UIPalette.GUB if armed else UIPalette.faded(UIPalette.TEXT, 0.5)
+	var tint := UIPalette.BOG if armed else UIPalette.faded(UIPalette.TEXT, 0.5)
 
 	# Four ticks. The vertical pair is drawn the same length as the horizontal
 	# one; a "T" crosshair reads as broken rather than as deliberate at this size.

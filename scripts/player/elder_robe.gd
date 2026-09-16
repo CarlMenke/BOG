@@ -1,17 +1,17 @@
 class_name ElderRobe
 extends Node
-## The robe and hat a Gub wears while it is the Elder.
+## The robe and hat a Bog wears while it is the Elder.
 ##
 ## This is the *gameplay* half of D-037, which built the asset and deliberately
 ## stopped there. `art/generated/elder.glb` is a purple robe and a wizard hat
 ## with no animation data at all: one `MeshInstance3D`, one `Skin` that binds by
-## bone **name**, and a copy of the Gub's skeleton to have been bound against.
-## Wearing it is therefore not "spawn a second Gub" — it is re-parenting that
-## one mesh onto the Gub's own `Skeleton3D` and letting the clips it is already
+## bone **name**, and a copy of the Bog's skeleton to have been bound against.
+## Wearing it is therefore not "spawn a second Bog" — it is re-parenting that
+## one mesh onto the Bog's own `Skeleton3D` and letting the clips it is already
 ## playing move the cloth for free.
 ##
 ## **The attach is the one `tools/preview_elder.gd` proves**, line for line, and
-## deliberately so. That tool resolves all 49 bind names against a live Gub's
+## deliberately so. That tool resolves all 49 bind names against a live Bog's
 ## skeleton and prints the verdict, which is the check that the robe binds at
 ## all; a second, subtly different attach path here would mean the thing that is
 ## checked and the thing that ships are not the same thing. If this ever stops
@@ -20,7 +20,7 @@ extends Node
 ## Three details in that attach are each load-bearing:
 ##
 ## * the mesh keeps its `skin`, and its `skeleton` NodePath is left at the
-##   default `".."`, which now resolves to the Gub's skeleton rather than the
+##   default `".."`, which now resolves to the Bog's skeleton rather than the
 ##   one it shipped beside;
 ## * its transform is cleared, because a skinned mesh is drawn in skeleton space
 ##   and a leftover parent transform is a silent double-move;
@@ -28,7 +28,7 @@ extends Node
 ##   scene the moment a node changes parent and an owner is of no use to
 ##   something re-parented at runtime.
 ##
-## **It is worn on every peer's copy of that Gub, not just the owner's** — the
+## **It is worn on every peer's copy of that Bog, not just the owner's** — the
 ## robe is the tell that tells everyone else who is dangerous, so it is put on
 ## by `MatchState._do_set_elder`, which runs everywhere (D-038).
 ##
@@ -48,20 +48,20 @@ const MESH_NAME := "Elder"
 var _cloth: MeshInstance3D
 
 
-## Dress `gub` and return the node that remembers it, or null if the rig would
+## Dress `bog` and return the node that remembers it, or null if the rig would
 ## not take the robe.
 ##
 ## Static and returning the node rather than being constructed by the caller,
 ## because the failure case has to be *no robe at all* rather than an
-## `ElderRobe` that quietly holds nothing: a Gub that is the Elder in the rules
-## and a plain Gub on screen is the worst outcome available here, and a null is
+## `ElderRobe` that quietly holds nothing: a Bog that is the Elder in the rules
+## and a plain Bog on screen is the worst outcome available here, and a null is
 ## a thing the caller can see.
-static func don(gub: Gub) -> ElderRobe:
-	if gub == null:
+static func don(bog: Bog) -> ElderRobe:
+	if bog == null:
 		return null
-	var skeleton := gub.find_child("Skeleton3D", true, false) as Skeleton3D
+	var skeleton := bog.find_child("Skeleton3D", true, false) as Skeleton3D
 	if skeleton == null:
-		push_warning("ElderRobe: %s has no Skeleton3D to bind to" % gub.name)
+		push_warning("ElderRobe: %s has no Skeleton3D to bind to" % bog.name)
 		return null
 
 	var wardrobe := MODEL.instantiate() as Node3D
@@ -85,7 +85,7 @@ static func don(gub: Gub) -> ElderRobe:
 	var robe := ElderRobe.new()
 	robe.name = "ElderRobe"
 	robe._cloth = cloth
-	gub.add_child(robe)
+	bog.add_child(robe)
 	return robe
 
 
@@ -99,7 +99,7 @@ func doff() -> void:
 
 
 ## Is the cloth actually on the rig? Asked by `tools/match_rules.gd`, because
-## "this Gub is the Elder" and "this Gub is wearing a robe" are two claims and
+## "this Bog is the Elder" and "this Bog is wearing a robe" are two claims and
 ## the interesting bug is the one where they disagree.
 func is_worn() -> bool:
 	return is_instance_valid(_cloth) and _cloth.is_inside_tree()

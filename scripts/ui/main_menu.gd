@@ -4,7 +4,7 @@ extends Node3D
 ##
 ## The scene root is a `Node3D` rather than a `Control` because the menu is not
 ## a picture of the game, it is the game with a UI in front of it — a live
-## `GubBackdrop` with a real Gub standing in a real glade, lit by the arena's
+## `BogBackdrop` with a real Bog standing in a real glade, lit by the arena's
 ## own environment. Everything the player can touch lives on a `CanvasLayer`
 ## above it.
 ##
@@ -16,7 +16,7 @@ extends Node3D
 ## puts its own eight-second clock on the connection itself.
 const CONNECT_HINT := "Connecting..."
 
-@onready var _backdrop: GubBackdrop = %Backdrop
+@onready var _backdrop: BogBackdrop = %Backdrop
 @onready var _name_edit: LineEdit = %NameEdit
 @onready var _host_button: Button = %HostButton
 @onready var _join_button: Button = %JoinButton
@@ -101,7 +101,7 @@ func _commit_name() -> void:
 	_push_name_to_backdrop()
 
 
-## The Gub on screen wears the name in the box, live. It is the clearest
+## The Bog on screen wears the name in the box, live. It is the clearest
 ## possible answer to "is this field the name other people will see?"
 func _push_name_to_backdrop() -> void:
 	var shown := Net.sanitize_name(_name_edit.text)

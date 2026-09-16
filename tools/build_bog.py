@@ -1,0 +1,3314 @@
+"""Build the Bog — one skinned mesh, one skeleton, every clip — from packs of Mixamo FBX.
+
+`assets/source/GUB_2/` holds the same character exported eight times, one animation
+per file: Idle, Walking, Run, CrouchWalking, Slide, JumpOne, JumpTwo, Throw — seven
+of which are still declared, the throw having been replaced out of the spear suite
+(D-063) while its file stays where it is. Each
+file carries a full copy of the mesh (8814 verts), the 49-bone `mixamorig:`
+skeleton and a 2048² base-colour JPEG. Godot wants the opposite shape: one
+`art/generated/bog.glb` with every clip in it, so one AnimationPlayer can blend
+between them. This script is that conversion, and it is the only place the Bog's
+art is prepared — re-running it is always safe and never touches `assets/`.
+
+Clips arrive in batches, months apart, and every batch is downloaded by hand: a
+spear suite, a bow suite, an Elder cast, the strafes, a drink. So the source is
+not one folder but a list of **packs** — `PACKS` below — each one a folder under
+`assets/source/` and the clips declared to be in it, each clip carrying its own
+rules. Every pack is imported into the one Blender session, measured against the
+same body and landed on the one skeleton, because every interesting thing this
+script does is cross-clip and therefore cross-pack.
+
+Run it as:
+
+    "$BLENDER" --background --python tools/build_bog.py [-- --emission FLOAT]
+    "$BLENDER" --background --python tools/build_bog.py [-- --body FILE]
+    "$BLENDER" --background --python tools/build_bog.py [-- --list-packs]
+
+or `bash tools/build_bog.sh` to have Blender located for you. `--emission`
+defaults to 0.15 (see *Material* below), so a plain rebuild reproduces the
+asset that is in the tree. `--body` defaults to `BODY` and takes a file under
+`assets/source/`; `--body -` keeps the Mixamo mesh instead, which is the
+pre-swap body and is there for an A/B (see *Body* below). `--list-packs` audits
+`assets/source/` against the table, says which body a build would use, and
+exits without building anything — the question to ask after dropping a
+hand-downloaded batch into a folder.
+
+What it does, and why each step is needed:
+
+*Packs, and the difference between an empty one and a broken one.* A pack that
+declares clips is a **promise**: its folder must exist and every file it names
+must be in it, or the build stops and prints the pack, the folder and every
+missing file. A pack that declares none is a **placeholder** — a labelled place
+for a download that has not happened yet — and it is skipped, out loud, with a
+line in the log. There is no third state and no `optional` flag, because a flag
+is one more thing that can disagree with the table beside it: the clips are the
+flag. That is what makes "never a silently smaller build" something you can
+check rather than hope for — the only way a clip is missing from `bog.glb` is
+that nobody wrote it down, and the `-- packs` section of the log says how many
+clips came from how many packs before a single file is opened. A folder holding
+`.fbx` files the table does not name is reported in the same pass: that is what
+"I downloaded the clips and nothing changed" looks like from in here, and it is
+the single most likely thing to go wrong next.
+
+*Consolidate.* Every file of every pack is imported into one scene, their bind
+poses and meshes compared (they must be identical, or the clips would not be
+talking about the same body), then all but one of the armatures and meshes are
+deleted and their actions re-targeted onto the survivor. Actions address bones by
+name, so this is a rename problem, not a re-rig problem.
+
+That comparison is **across packs, not within one**. The reference is the first
+clip of the first pack — `GUB_2/Idle.fbx`, the donor character as uploaded
+to Mixamo — and every other file in every other pack is measured against it:
+same vertex count, same bone list, same vertex groups, bind poses agreeing to
+1e-5. A clip taken from a different Mixamo character, or from that same body
+re-uploaded, or from a CC0 pack anywhere else, fails there on its first import
+instead of shipping a subtly broken skin in one clip and nowhere else.
+`assert_same_character` is the one assertion that guarantees every clip in the
+file is talking about the same body, and because it is the failure a
+hand-downloaded pack actually hits, its messages say what a replacement download
+has to be rather than only that this one was wrong.
+
+*Strip `mixamorig:`.* Godot mangles the colon in a bone name to an underscore,
+so every script naming a bone would have to spell `mixamorig_RightHand`. The
+prefix goes here, once, and the vertex groups and every fcurve data path are
+checked afterwards to prove the rename reached them.
+
+*Scale to 1.80 m and bake it.* Blender's FBX importer leaves the armature at
+rotation (90°,0,0) and scale 0.01, which makes the Bog 9.5 mm tall. The whole
+transform is baked into the rest data so both objects export at identity — but
+**Blender does not scale pose-bone `location` fcurves when the armature's scale
+is applied**, so every location curve is multiplied by the same factor by hand
+(≈1.90 from the 0.01 import scale). Rotation keys are bone-local and need
+nothing. §2 of the design spec measured the whole rig at this scale; the numbers
+are re-printed here so a regression is visible in the log rather than in game.
+
+*Body.* The Bog the game shows is **not the mesh inside those FBX any more**.
+`assets/source/BOG.glb` — the `BODY` constant below — is a static sculpt with
+one mesh, no skin, no skeleton and no clips, and the `-- body` stage fits it
+over the donor, transfers the donor's skin weights onto it face by face and
+throws the donor's mesh away. The Mixamo files are still every clip and still
+the whole skeleton; what they are not any more is the body. Four things settled
+that:
+
+- *Re-uploading the new body to Mixamo would mean downloading every clip again
+  by hand* — one file per animation, thirty-odd of them across seven packs, out
+  of a rig with a new rest pose — and `assert_same_character` would then be
+  comparing each one against a body that no longer exists. One pack is an
+  afternoon of clicking through a browser. All of them is the rest of the week.
+- *A nearest-face weight transfer keeps the skeleton, untouched.* Not one bone
+  moves, so every number in this file and every constant measured against the
+  rig — the 1.80 m, the authored speeds, the grip offsets in `held_gear.gd`,
+  the ragdoll segments, the windows `bog_animator.gd` cuts out of each clip —
+  is still measured against the thing it was measured against. The body is the
+  only thing that changed, which is the whole reason this is a stage here
+  rather than a new pipeline.
+- *Bone heat and post-transfer smoothing were both tried and both rejected.*
+  `parent_set(type='ARMATURE_AUTO')` fails outright on this mesh — "failed to
+  find solution", and every vertex group comes out empty — and
+  `vertex_group_smooth` after a successful transfer tears the surface along the
+  seams it is meant to heal. Neither is worth a second run.
+- *The new body's belly hangs lower than the Bog's*: its crotch sits at 0.229 of
+  its height where the Bog's is at 0.327, so the bottom of that belly comes out
+  thigh-weighted and wobbles a little in `Run`. That is **accepted**, and the
+  alternative is why. Meeting it would mean moving the leg joints — which moves
+  the Hips curves every clip is built on, and every height constant in the game
+  with them. A centimetre of belly against re-measuring the whole rig.
+
+*Lock the root motion.* Every clip but Idle and JumpOne travels, because Mixamo
+bakes the travel into the Hips: Run covers 1.94 m per cycle, JumpTwo leaps 4.6 m.
+Left in, the mesh slides out of the CharacterBody3D carrying it. The Hips
+`location` curve is locked to its first key on the two horizontal axes (bone
+index 0 sideways, 2 forward — the Hips bone is vertical in rest, so index 1 is
+up) for every clip. The travel is printed on the way out: that is the speed each
+clip was *authored* at, and `bog.gd` matches its playback rate to it so the feet
+grip instead of skating.
+
+*The vertical rule, one answer per clip.* Walk/Run/CrouchWalk/Idle bob 11 cm or
+less and Slide drops half a metre — that is pose, and it stays. Only the two
+jumps rise above standing (JumpOne 0.46 m, JumpTwo 0.62 m), and whether that rise
+belongs to the animation or to the physics body is **not the same question for
+both clips**, which is why the rise a clip keeps is written on the clip — the
+`rise_kept` field of `Clip` in `PACKS` below, the rule the rest of the repo still
+calls `VERTICAL_RISE_KEPT` — and not decided once for the build:
+
+*JumpOne keeps the clamp* (0.0). It is a vertical hop whose pelvis rise is
+exactly the ballistic motion the physics capsule already performs, so leaving it
+in would do the arc twice and launch the Bog through ceilings. Held down, the
+legs tuck under a pelvis that stays put while the downward half of the curve —
+the landing absorb — still plays, because the body is standing on the floor by
+then and cannot produce it.
+
+*JumpTwo keeps its full rise* (1.0). It is a front somersault, and its rise is
+not a second copy of the physics arc but the clearance the rotation needs: with
+the pelvis pinned, the inverted body's head and hands go 0.41 m below the floor
+from clip 1.00 to 1.60 s and the dive touches down upside-down. The raw clip is
+self-consistent — the hands plant on the ground at ~1.17–1.45 s precisely
+because the hips are high — so the rise stays, and during the dive the animation
+rides that much above the physics capsule, which reads as a bigger leap rather
+than as a body punched through the floor.
+
+Because that is a judgement about one clip at a time, it is checked rather than
+trusted: once the vertical is processed, every bone head is sampled over each
+jump and the deepest one is measured against the clip's own `floor_limit`,
+reported either side
+of the frame the hands take the ground so the log says plainly which side of the
+landing a dip happened on. With the rise kept, JumpTwo's flight clears the floor
+and only the authored ground roll dips under it (−0.167 m, a knuckle at 1.40 s);
+with the rise clamped, the same measurement reads −0.410 m in mid-air. The
+limits sit in that gap.
+
+*Align the facing.* The clips were authored at different resting yaws (Idle sits
+50° off the rest pose, CrouchWalk 38°, JumpTwo +19° at the moment the game starts
+using it). One clip at a time this is invisible; the moment an AnimationTree
+blends two of them the body swings sideways on every state change. This is D-008
+again, on new source. Facing is measured by forward kinematics — the yaw of the
+line from the left hip joint to the right one, the one pair of joints that stays
+put while the arms and torso animate — and corrected with a yaw on the Hips
+rotation keys. Motion *within* a clip is untouched, so the throw still winds the
+body up and the slide still goes sideways. The reference moment is the mean over
+the cycle for a loop, and the first frame of the window the game actually plays
+for a one-shot: a jump aligned on its take-off frame is a jump that leaves the
+ground pointing where the player is going.
+
+*Close the loops.* Idle/Walk/Run/CrouchWalk are cycles whose last frame repeats
+their first (verified: within 6 mm of bone-relative agreement). The final key is
+dropped so the loop does not hold that pose twice — see DROP_LOOP_TAIL for the
+trade-off. The clip length therefore comes out one frame shorter than the source.
+
+*Synthesise CrouchIdle.* There is no crouching-in-place clip, and a BlendSpace1D
+needs something at speed 0 or the Bog keeps walking on the spot when the player
+crouches and stops. CrouchWalking frame 37 (t = 0.600 s) is the one frame of the
+cycle with both feet flat on the ground 0.27 m apart, so it becomes a two-key
+one-second hold.
+
+*Material.* One Principled BSDF, base colour from the packed JPEG downscaled to
+1024² (the Bog is never seen closer than a couple of metres and eight of them
+share this texture), roughness 0.9, metallic 0. The texture is also wired into
+Emission Color at `--emission` strength, **default 0.15**: the old asset was a
+pre-shaded emission texture and was always readable at night (D-027), while this
+one, lit only by the moon and the torches, measured 1.5–2× the luminance of the
+undergrowth it stands in — a near-silhouette wherever no torch reaches, with the
+still pre-shaded spear in its hand brighter than its owner. 0.15 lifts the body
+off that background at a spear's range without turning it into a lamp when a
+torch does reach it. It stays an argument rather than a constant so that night
+readability is re-judged by rebuilding the asset instead of by editing a material
+inside a scene file, and 0.0 gives back a plain base-colour PBR material.
+
+The image is named `basecolor` and the file `bog.glb` on purpose: Godot extracts
+an embedded texture as `<glb name>_<image name>`, and the extension follows the
+format of the embedded image rather than being chosen by Godot. This one stays
+the source JPEG (re-encoding a photographic atlas as PNG triples the file for no
+visible gain), so what the import step drops in the tree is
+`art/generated/bog_basecolor.jpg` and its `.import` — not a `.png`. Anything
+naming that file has to spell the `.jpg`.
+
+*How a looping clip says so.* Godot can be told per animation in the `.import`
+file (`_subresources` with `settings/loop_mode`), and it does work — but the
+importer then rewrites that file with every default it can think of for each
+animation named there, all 256 possible slices apiece: 348 KB of generated noise
+in the tree instead of 1.1 KB, rewritten on every import, and the answer to "does
+this clip loop?" split across two files that nobody re-syncs. So the five loops
+are declared in the GLB instead, by exporting them under Godot's own name suffix
+(`Idle-loop`): the scene importer strips the suffix and sets LOOP_LINEAR, which
+leaves `_subresources` empty and the `loop` field of each clip in `PACKS` below
+as the only place the loop flags are written down. `nodes/use_name_suffixes` has to stay true in
+`bog.glb.import`, or the clips arrive in Godot still called `Idle-loop`.
+
+*One file, not a mesh plus animation-only libraries.* Godot can load clips out of
+a second GLB with `AnimationPlayer.add_animation_library()`, and
+`tools/build_elder.py` already proves a second file can bind to this very
+skeleton, so "the mesh here, each pack's clips beside it" was a real option and
+it was measured rather than waved off. The usual argument for splitting is that
+clips are small and a mesh with a texture is not. **On this asset that is
+false.** The 1,528,180-byte `bog.glb` in the tree is 584 KB of animation (38%),
+522 KB of mesh, 115 KB of texture, 3 KB of inverse bind matrices and 341 KB
+(22%) of JSON that is almost entirely animation channel and sampler bookkeeping
+— 49 bones × 9 clips × 3 channels. Nine clips already outweigh the body they
+move, and every pack in the plan makes that worse, so the size argument runs the
+other way from the way it is usually told. What settled it is that splitting
+buys nothing this pipeline actually wants:
+
+- *It saves no build time.* The 14 s is dominated by importing FBX and sampling
+  every bone of every frame twice — once to measure the authored motion, once to
+  check the floor — and that happens per clip no matter what is written at the
+  end. The glTF export is 4 s of it and would still have to run.
+- *Everything before the export is one Blender session anyway.* The bind-pose
+  comparison needs every pack open at once, the 1.903149 scale factor comes off
+  the mesh, and the facing correction is measured against the consolidated
+  armature's rest pose. Splitting would change only `stage_nla` and `export_glb`,
+  which is exactly why it can be done later if it is ever worth it.
+- *`tools/build_elder.py` reads the clips out of `bog.glb`* and plays every one
+  of them to check the robe hem does not walk through a knee. Split them out and
+  that check quietly gets weaker, or a second script grows a list of files to
+  keep in step with this one — the duplicated-search failure `find_blender.sh`
+  exists to avoid, in a worse place.
+- *Loading libraries costs runtime code that does not exist today.* An `.import`
+  per animation file, an `add_animation_library` in `bog_animator.gd`, and
+  `REQUIRED_CLIPS` becoming a question spanning several files rather than one
+  check against one AnimationPlayer.
+
+So it stays one file — and rather than leave that as a paragraph that goes stale,
+the export step reads the GLB it just wrote back in and prints the split, so the
+trade can be re-judged from a build log. The number to watch is the JSON chunk:
+it grows with bones × clips × channels and is already the second largest thing in
+the file.
+"""
+
+import collections
+import json
+import math
+import os
+import struct
+import sys
+import time
+
+import bpy
+from mathutils import Matrix, Quaternion, Vector
+
+# ---------------------------------------------------------------------------
+# What is being built
+# ---------------------------------------------------------------------------
+
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SOURCE_ROOT = os.path.join(REPO, "assets", "source")
+OUT_PATH = os.path.join(REPO, "art", "generated", "bog.glb")
+
+# Mixamo exports at 60 fps and Blender numbers frames from 1, so a key on frame
+# N is at (N-1)/60 seconds. Every time in this file is in seconds unless it is
+# called a frame.
+FPS = 60
+
+PREFIX = "mixamorig:"
+HIPS = "Hips"
+HIP_JOINTS = ("LeftUpLeg", "RightUpLeg")
+
+## The other pair a clip's facing can be taken off — the two clavicle roots,
+## which is the chest rather than the pelvis (D-066).
+##
+## `HIP_JOINTS` is the default and stays the default: on a forward cycle the two
+## lines agree to within seven degrees (`Run` measures -10.2° off its travel by
+## the hips and -5.7° by the chest), and the pelvis is the steadier of the two
+## because it does not carry the arm swing. On a **sidestep** they disagree by
+## more than twenty, and they disagree in the one direction that matters: the
+## pelvis turns into the step and the chest does not, which is what a sidestep
+## *is*. Aligning `LeftStrafe` by its pelvis leaves it travelling 8.6° off
+## forward — a Bog jogging very slightly to one side — where the same clip
+## aligned by its chest travels 27.5° off, which is the number the plan's own
+## table reports and the number the decision to use these clips was taken on.
+##
+## The two rest lines lie within 1.96° of each other on the scaled rig
+## (-176.03° by the hips, -174.07° by the chest, printed by `align_facing`), and
+## each clip is turned onto the rest line of its **own** pair — so swapping one
+## for the other is a change of reference and not a two-degree offset smuggled
+## in with it.
+CHEST_JOINTS = ("LeftShoulder", "RightShoulder")
+
+# 1.80 m. The old Bog was 1.81 m, and the collision capsule (STAND_HEIGHT 1.55)
+# and eye height in `bog.gd` are tuned to that, so matching it keeps the whole
+# body-and-camera rig valid. Everything else in this script is derived from it.
+TARGET_HEIGHT = 1.80
+
+# ---------------------------------------------------------------------------
+# The packs, and the rules that ride on each clip
+#
+# A **pack** is one folder under `assets/source/` and the clips declared to be in
+# it. A **clip** is one FBX file together with every per-clip rule the pipeline
+# needs, written beside the file rather than in a table keyed by the clip's name
+# somewhere further down. Those rules used to be three parallel structures —
+# `CLIPS`, `VERTICAL_RISE_KEPT`, `FLOOR_LIMIT` — and a `check_tables` whose whole
+# job was to catch a clip renamed in one of them and not the others. With the
+# rule on the clip there is no name left to get wrong:
+#
+#   VERTICAL_RISE_KEPT[clip]  is now  clip.rise_kept
+#   FLOOR_LIMIT[clip]         is now  clip.floor_limit
+#
+# (Anything in the repo still naming the old constants — `bog_animator.gd` cites
+# VERTICAL_RISE_KEPT where it explains why the two jumps are scrubbed
+# differently — means this block.)
+#
+# The first pack is the body of record: `assert_same_character` measures every
+# other file in every other pack against its first clip, so `GUB_2/Idle.fbx` is
+# what "the same Bog" means here. Declaring a clip is a promise that the file is
+# there; declaring none is a placeholder folder waiting for a download, and
+# `resolve_packs` is where those two come apart.
+# ---------------------------------------------------------------------------
+
+# The alignment reference is the moment whose facing is made to match the rest
+# pose. For a cycle that is the mean over the whole clip, because a walk sways
+# ±10° either side of where it is going and picking one frame would bake half a
+# sway in. For a one-shot it is the first frame of the window `bog_animator.gd`
+# plays, so the pose that appears when the OneShot fires is the aligned one.
+LOOP_MEAN = None
+
+
+class Clip(collections.namedtuple(
+        "Clip", "file name loop align face rise_kept floor_limit authored_as "
+                "advance_as mirror_of")):
+    """One source file, the name it takes in Godot, and its per-clip rules.
+
+    `file`         the FBX, inside its pack's folder. **None** on a clip that
+                   names a `mirror_of`, which has no file of its own.
+    `name`         the animation's name in `bog.glb`, and so in
+                   `bog_animator.gd`'s REQUIRED_CLIPS. One namespace across every
+                   pack, because every clip lands in one AnimationPlayer.
+    `loop`         exported with LOOP_SUFFIX, so Godot marks it LOOP_LINEAR.
+    `align`        LOOP_MEAN, or a time in seconds — see the comment above.
+    `face`         the pair of joints whose line *is* this clip's facing, which
+                   `align_facing` turns onto the rest pose's own. None means
+                   HIP_JOINTS, which is what every clip but the four strafes
+                   wants; see CHEST_JOINTS for why a sidestep is the exception.
+    `rise_kept`    how much of the clip's own hips rise above its first key
+                   survives, 0.0..1.0. None means "leave the vertical alone",
+                   which is what everything but the two jumps wants. Setting it
+                   requires a `floor_limit`; see the next comment block.
+    `floor_limit`  how far below the floor the lowest bone head may reach once
+                   the vertical rule has been applied. Setting it runs
+                   `check_ground` on the clip, which can stop the build.
+    `authored_as`  the constant in `bog.gd` that this clip's measured travel
+                   speed feeds, or None. Locking the root motion throws away the
+                   travel Mixamo baked into the Hips, and the whole point of
+                   measuring it first is that it is the speed the feet were drawn
+                   for: `AUTHORED_RUN = 4.314` is this field on Run, and it is
+                   what stops the feet skating. A new locomotion clip that names
+                   no constant is a clip whose authored speed nobody will ever
+                   match, so the field exists to make that omission visible in
+                   the table rather than invisible in the game.
+    `advance_as`   **the travel exception** (D-068), and the one field in this
+                   table that is about a clip's metres surviving rather than its
+                   speed. See the block over `lock_root_motion` for the argument;
+                   in one sentence, a clip that names one is declaring that its
+                   horizontal travel is *not thrown away* — a **one-shot** whose
+                   advance the physics body reproduces for the length of the
+                   clip, so the feet stay planted through a motion that was drawn
+                   moving. The named constant is the metres, and the build prints
+                   it the way `authored_as` prints a speed. `Swing` is the only
+                   clip in the game that names one, and the field exists so that
+                   a second one has to be written down here rather than
+                   discovered in a match.
+
+                   `authored_as` and this are mutually exclusive and
+                   `check_declarations` says so: `authored_as` is a *cycle's*
+                   speed, matched by a playback rate that runs for ever, and
+                   `advance_as` is a *one-shot's* distance, produced once by the
+                   body. A clip claiming both would be claiming to be both kinds
+                   of thing.
+
+    `mirror_of`    **the synthesised clip** (D-071): the name of another clip in
+                   this table that this one is the left-right reflection of.
+                   Such a clip has no `file` — it is built by `mirror_action`
+                   from its source after the rig is scaled and before anything
+                   is measured, so it is measured, locked, aligned, trimmed and
+                   exported exactly like a downloaded one and its numbers appear
+                   in every table beside theirs.
+
+                   It exists because Mixamo's aim-strafe families are **handed**
+                   and no download fixes that; see the note over the strafe poles
+                   in PACKS for the three packs that were measured to establish
+                   it. A mirror is the only way this rig gets a left and a right
+                   strafe that are the same move.
+    """
+    __slots__ = ()
+
+    def __new__(cls, file, name, loop, align, face=None,
+                rise_kept=None, floor_limit=None, authored_as=None,
+                advance_as=None, mirror_of=None):
+        return super().__new__(cls, file, name, loop, align, face,
+                               rise_kept, floor_limit, authored_as, advance_as,
+                               mirror_of)
+
+    def rise(self):
+        """The fraction of the rise to keep — 1.0, untouched, when unset."""
+        return 1.0 if self.rise_kept is None else self.rise_kept
+
+    def facing_joints(self):
+        """The joint pair this clip's facing is read off — hips unless said."""
+        return HIP_JOINTS if self.face is None else self.face
+
+    def synthesised(self):
+        """True for a clip built in Blender rather than imported from an FBX."""
+        return self.mirror_of is not None
+
+
+class Pack(collections.namedtuple("Pack", "folder what clips")):
+    """One folder under `assets/source/`, and what is declared to be in it.
+
+    `what` is a sentence for the log and for the folder's own README: somebody
+    reading `--list-packs` after downloading half a suite needs to be told what
+    the empty folder in front of them is for.
+    """
+    __slots__ = ()
+
+    def __new__(cls, folder, what, clips=()):
+        return super().__new__(cls, folder, what, tuple(clips))
+
+
+# What `rise_kept` and `floor_limit` are for, one clip at a time.
+#
+# 0.0 pins the pelvis flat (the rise is the physics body's job, and doing it in
+# both places at once launches the Bog through ceilings); 1.0 leaves the clip
+# alone; unset is the same as 1.0. Only the two jumps rise above standing at all,
+# and they need opposite answers, for the reasons in the module docstring.
+#
+# `floor_limit` is how far below the floor the lowest bone head may reach once
+# that rule has been applied — the check that each answer is the right one. A
+# centimetre or two under is normal and authored into the Mixamo source (a
+# planted toe joint rests at 0.035 m and Run dips 2 cm), and these two clips go
+# deeper for reasons that are not the pipeline's to fix: JumpOne's push-off
+# extends the legs below the pelvis they are pinned to (−0.141 m at the toe tips
+# at 0.58 s — real, and skipped by the window the animator plays), and JumpTwo
+# ends in a ground roll authored with the hands and back through the plane
+# (−0.167 m at a knuckle at 1.40 s: a human-proportioned roll retargeted onto a
+# body whose head is a 0.8 m blob). Each limit sits just under what its source
+# authors, which is what makes it a check rather than a wish — build JumpTwo with
+# its rise clamped away instead and the same measurement reads −0.410 m, in
+# mid-air, well past the limit. (§P of the fix spec asked for −0.08 on JumpTwo;
+# that was written before the roll was measured and no build of this clip can
+# meet it.) A clip that sets `rise_kept` and no `floor_limit` is refused by
+# `check_declarations`, or its rule would ship unchecked; a `floor_limit` on its
+# own is allowed, and simply floor-checks a clip whose vertical is untouched.
+
+# The mesh the game actually shows, and the one thing in `assets/source/` that
+# is not a pack. It is a file under `assets/source/`, relative to it the way a
+# clip's `file` is relative to its pack's folder, and `fit_body` is the whole of
+# what happens to it. See *Body* in the module docstring for why the packs above
+# are a weight donor now and not the body.
+#
+# `--body -` on the command line means "keep the donor's own mesh", which builds
+# the Bog as it was before the swap. That is an A/B render and nothing else: the
+# two GLBs are the same skeleton, the same clips and the same numbers, and the
+# only difference between them is the shape the skin is on.
+BODY = "BOG.glb"
+
+PACKS = (
+    # `GUB_2` keeps the old name on purpose, and it is the one string in this
+    # file the BOG rename (D-081) put back by hand after the sweep. It is a
+    # folder on disk holding the Mixamo upload of the **old** character, the one
+    # the skeleton and every clip were fitted to; the BOG's mesh was never
+    # uploaded to Mixamo and never will be under the current plan (D-077).
+    # Renaming the folder to `BOG_2` would say those FBX files contain a body
+    # that is not in them, and the next person to open one would find the
+    # donor and think the pipeline was broken. The brand moved; this folder is
+    # a record of a download and stays where it was.
+    Pack("GUB_2",
+         "the donor character as uploaded to Mixamo — the body every other pack "
+         "is measured against, and seven of the eight clips the game shipped "
+         "with",
+         (
+             Clip("Idle.fbx",          "Idle",       True,  LOOP_MEAN),
+             Clip("Walking.fbx",       "Walk",       True,  LOOP_MEAN,
+                  authored_as="AUTHORED_WALK"),
+             Clip("Run.fbx",           "Run",        True,  LOOP_MEAN,
+                  authored_as="AUTHORED_RUN"),
+             Clip("CrouchWalking.fbx", "CrouchWalk", True,  LOOP_MEAN,
+                  authored_as="AUTHORED_CROUCH_WALK"),
+             Clip("Slide.fbx",         "Slide",      False, 0.10),
+             Clip("JumpOne.fbx",       "JumpOne",    False, 0.60,
+                  rise_kept=0.0, floor_limit=-0.15),
+             Clip("JumpTwo.fbx",       "JumpTwo",    False, 0.58,
+                  rise_kept=1.0, floor_limit=-0.20),
+             # `Throw.fbx` was declared here and is not any more (D-063). The
+             # throw the game plays is `2_Spear_Suite/SpearThrowLonger.fbx`
+             # below, under the same name, because a baseball throw's release
+             # frame looked like every frame around it. The file has not moved
+             # and is not going to: putting it back is this one line,
+             #     Clip("Throw.fbx",     "Throw",      False, 0.50),
+             # and deleting the line below. Two clips cannot both be called
+             # Throw — every pack lands in one AnimationPlayer.
+         )),
+
+    # The throw the game plays, and the one pack below that is no longer empty.
+    #
+    # `SpearThrowLonger.fbx` is an overhand delivery with a run-up: 2.833 s, of
+    # which the window `bog_animator.gd` cuts is 1.067-1.900 and the 0.833 s
+    # before it is the approach, which `lock_root_motion` would otherwise have
+    # the Bog run on the spot. `align` is 1.067 for the reason every one-shot's
+    # is: it is the first frame of the window, so the pose that appears when the
+    # OneShot fires is the aligned one.
+    #
+    # The other file in the folder, `SpearThrow.fbx`, is deliberately **not**
+    # declared. It measures identically to the retired `GUB_2/Throw.fbx` — the
+    # same Mixamo animation downloaded a second time — so it is the control the
+    # one below was judged against and not a second candidate. The build reports
+    # it as a file PACKS does not name, which is exactly right.
+    Pack("2_Spear_Suite",
+         "the throw the game plays: an overhand delivery whose release frame "
+         "does not look like the frames around it",
+         (
+             Clip("SpearThrowLonger.fbx", "Throw", False, 1.067),
+         )),
+
+    # Declared and empty. Each folder exists in the tree with a README saying
+    # what belongs in it; none of them builds anything until a `Clip(...)` line
+    # is written into it, which is the point — a folder somebody dropped files
+    # into is not a promise, and a line in this table is.
+    # The bow, and the third pack with something in it (D-065). Two clips out of
+    # five, and which three are missing is the interesting part.
+    #
+    # `StandingDrawArrow.fbx` is 1.017 s of reach-nock-and-pull. The window
+    # `bog_animator.gd` indexes is **0.567-1.017**, the pull alone: at 0.567 the
+    # drawing hand has arrived at the bow and is doing 0.29 m/s, the slowest it
+    # gets anywhere between the reach (4.19 m/s) and the pull (0.95 m/s steady),
+    # and that frame is the arrow meeting the string. Everything before it is
+    # taking an arrow out of a quiver, which is a lovely flourish and cannot be
+    # in the charge: a bow is *carried*, so charge zero has to be nocked at
+    # brace rather than empty-handed — otherwise a snap shot fires an arrow the
+    # Bog is still reaching for. `align` is 0.567 for the reason every one-shot's
+    # is, even though this one is scrubbed rather than fired.
+    #
+    # `StandingAimRecoil.fbx` is the loose. Window 0.167-0.450: 0.167 is the
+    # last frame the hand is on the string (0.54 m/s, the slowest since the
+    # first frame) and 0.183 is the first frame off it (8.06 m/s). One frame,
+    # which is the whole of `BogAnimator.BOW_RELEASE_TIME`.
+    #
+    # **Three files here are deliberately not declared**, the way
+    # `2_Spear_Suite/SpearThrow.fbx` is not:
+    #
+    # * `StandingAimOverdraw.fbx` was expected to be the clip the charge indexes
+    #   into — this pack's README says so and so did the step brief. Measured, it
+    #   cannot be: it **opens fully drawn** (the drawing hand starts at the exact
+    #   pose `StandingDrawArrow` ends on) and creeps 0.116 m over 3.767 s. A
+    #   charge indexed into it would be a bow at full draw at charge zero, which
+    #   is the one thing the tell must never show. What it really is, is the
+    #   *hold* — and a held pose with a slow creep in it is worth having the day
+    #   somebody minds that a Bog at full draw is perfectly still.
+    # * `StandingEquipBow.fbx` and `StandingDisarmBow.fbx` are the bow coming out
+    #   and going away. The bow is carried, like the spear, and appears and
+    #   disappears the way the spear does — as a visibility toggle off the one
+    #   gate in `BogCombat` (D-035, D-065). An equip clip for the bow and none
+    #   for the spear would be two rules about the same hand.
+    #
+    # `BowIdle.fbx` is the **carry** (D-070), and it is the first clip in this
+    # table that is neither a locomotion cycle nor a one-shot: it is a pose,
+    # looped, whose legs are thrown away by `UPPER_BODY_BONES` and whose spine
+    # and arms are the whole of what a Bog holding a longbow looks like when it
+    # is not shooting. `loop` is True and `align` is LOOP_MEAN for `Idle`'s
+    # reason — it is an idle, it sways, and pinning one frame of a sway bakes
+    # half of it into the rest pose.
+    #
+    # It names no `authored_as` and that is not the omission that field exists to
+    # make visible: an authored speed is what a blend point plays its clip at,
+    # and this clip is never a blend point. It is a layer at weight 1 over
+    # whatever the plane below is doing, at rate 1, for ever.
+    Pack("3_Bow_Suite",
+         "the bow the game plays: the pull out of a nock-and-draw, the loose, "
+         "and the pose a Bog carries the thing in",
+         (
+             Clip("StandingDrawArrow.fbx", "Draw",     False, 0.567),
+             Clip("StandingAimRecoil.fbx", "Loose",    False, 0.167),
+             Clip("BowIdle.fbx",           "BowCarry", True,  LOOP_MEAN),
+         )),
+    # The Elder's cast, and the second pack with something in it (D-064).
+    #
+    # `Standing1HMagicAttack1.fbx` is 2.283 s and the one clip in this build
+    # that needs nothing locked: it travels 0.000 m end to end and never gets
+    # more than 0.124 m from where it started, so `lock_root_motion` has nothing
+    # to clamp and the window did not have to be cut after a run-up. The window
+    # `bog_animator.gd` plays is 0.467-1.600 and `align` is its first frame, for
+    # the reason every one-shot's is.
+    #
+    # The rest of Mixamo's *Lite Magic Pack* is in `assets/source/_rejected/`
+    # with its measurements. This was not chosen out of it — it was the only
+    # candidate downloaded With Skin, and the others are there so that a second
+    # opinion is a download nobody has to repeat rather than a search.
+    Pack("4_Elder_Suite",
+         "the Elder's cast: a one-handed throw forward, in place, and the only "
+         "clip here that travels nowhere",
+         (
+             Clip("Standing1HMagicAttack1.fbx", "Cast", False, 0.467),
+         )),
+    # The six directions `GUB_2` never had, and the pack that turns the
+    # locomotion blend space from a line into a plane (D-066).
+    #
+    # All six loop and all six align on LOOP_MEAN, for the reason `Walk` and
+    # `Run` do: a cycle sways either side of where it is going and pinning one
+    # frame of it would bake half a sway into the rest pose.
+    #
+    # Every one of them names an `authored_as`, which on this pack is the whole
+    # point of the field. A blend point plays its clip at `game speed / authored
+    # speed`, so a strafe whose speed nobody measured is a strafe whose feet
+    # skate by exactly the ratio nobody looked at — which is the fault this pack
+    # exists to fix, reintroduced one axis over. Left and right get **separate**
+    # constants rather than one shared number even though the two clips are
+    # mirror images that measure the same to three decimals: they are two files
+    # and two measurements, and a single constant would be an assumption about
+    # Mixamo's mirroring sitting where a measurement is supposed to be.
+    #
+    # **The four strafes are aligned by the chest and not by the pelvis**, which
+    # is the one thing in this table that is not a copy of a line above it. In a
+    # sidestep the pelvis turns into the step and the chest does not, so the two
+    # lines disagree by more than twenty degrees — and `align_facing` turning
+    # the pelvis square to the rest pose drags the travel round with it, leaving
+    # `LeftStrafe` moving 8.6° off forward instead of the 27.5° it is actually
+    # authored at. See CHEST_JOINTS, and D-066 for what it is worth in skate.
+    #
+    # **The two run poles are `StandingRunLeft.fbx` and its own reflection**
+    # (D-071), which is the one arrangement that gives this rig a left and a
+    # right strafe that are the same move.
+    #
+    # D-066 left `StandingRunLeft.fbx` on disk undeclared and called it a set of
+    # one, with three downloads named as what would close it. The three arrived,
+    # and measuring them is what this pack entry is now built on. They are the
+    # **Longbow** pack's clips, not the Magic pack's that `StandingRunLeft.fbx`
+    # came from — frame counts and speeds identify them exactly against
+    # `_rejected/MANIFEST.md` — and, much more to the point, re-measuring every
+    # `Standing *` strafe in both rejected packs says the download was never the
+    # answer. See the table over `mirror_action`: every *right* strafe in every
+    # pack Mixamo has is a -37 to -47 degree diagonal, because the family is
+    # authored around a chest held turned to the character's own right. A pole
+    # meaning -90 has nothing to be served by, in any pack, at any price.
+    #
+    # So the right-hand run pole is built rather than downloaded, and the two
+    # poles are a mirror pair to four decimal places by construction.
+    # `check_mirrored_clip` proves it every build.
+    #
+    # **The walk poles stay on the lowercase pair**, which is the family
+    # boundary D-066 refused to put inside the strafe axis — and it is here on a
+    # measurement rather than on a guess. What it costs is carriage, and the
+    # carriage is 7 mm of hip height and 2.9 deg of torso pitch between
+    # `StrafeWalkLeft` (0.665 m, 5.5 deg) and `StrafeLeft` (0.658 m, 8.4 deg).
+    # `Walk <-> Run`, which this game has shipped from the first day and which is
+    # on screen every time anybody accelerates, is 82 mm and 41.0 deg. The
+    # boundary inside the axis is a twelfth of the one already in it.
+    #
+    # Closing the walk half is **one** download and it is named precisely: the
+    # **Magic Locomotion Pack's** `Standing Walk Left`, With Skin, one clip from
+    # its own page. Measured on the unskinned copy in `_rejected/` against the
+    # skinned `StandingRunLeft.fbx` as the control — the control reproduces to
+    # 0.1 deg, so the number is good — it travels **+94.4 deg** off its chest.
+    # Mirrored the way the run pole is, that is the walk pole this table wants.
+    # `Standing Walk Right` is not on that list and must not be: it measures
+    # -38.8, which is the handedness above.
+    #
+    # The four lowercase strafe files all stay on disk. Two are still built
+    # (the walks); `LeftStrafe.fbx` and `RightStrafe.fbx` are the alternates the
+    # run poles used to be, and the build reports them as files PACKS does not
+    # name, which is exactly right.
+    Pack("5_Locomotion",
+         "strafe left, strafe right and run backward, and their walk equivalents: "
+         "the set that stops the feet skating sideways",
+         (
+             Clip("StandingRunLeft.fbx",    "StrafeLeft",      True, LOOP_MEAN,
+                  CHEST_JOINTS, authored_as="AUTHORED_STRAFE_LEFT"),
+             Clip(None,                     "StrafeRight",     True, LOOP_MEAN,
+                  CHEST_JOINTS, authored_as="AUTHORED_STRAFE_RIGHT",
+                  mirror_of="StrafeLeft"),
+             Clip("LeftStrafeWalking.fbx",  "StrafeWalkLeft",  True, LOOP_MEAN,
+                  CHEST_JOINTS, authored_as="AUTHORED_STRAFE_WALK_LEFT"),
+             Clip("RightStrafeWalking.fbx", "StrafeWalkRight", True, LOOP_MEAN,
+                  CHEST_JOINTS, authored_as="AUTHORED_STRAFE_WALK_RIGHT"),
+             Clip("RunningBackward.fbx",    "RunBack",         True, LOOP_MEAN,
+                  authored_as="AUTHORED_RUN_BACK"),
+             Clip("WalkingBackward.fbx",    "WalkBack",        True, LOOP_MEAN,
+                  authored_as="AUTHORED_WALK_BACK"),
+         )),
+    # The heal potion's drink, and the fourth pack with something in it (D-067).
+    #
+    # `Drinking.fbx` is 6.117 s and is the most nearly motionless clip in the
+    # tree: it travels 0.000 m and the hips never get 12 mm from where they
+    # started, so `lock_root_motion` has nothing to clamp. What it has instead
+    # is **stillness at both ends** — 1.35 s of idle before the bottle comes up
+    # and 2.2 s of it after the arm goes down — and a channel is two seconds, so
+    # the window is most of this step.
+    #
+    # The window `bog_animator.gd` plays is **1.267-4.200**, and both ends are
+    # measured rather than scrubbed to. The drinking hand is the **left** one
+    # (the right hangs at the side for the whole clip, never moving 12 cm), and
+    # the build prints where it starts and stops: it crosses HAND_MOVING at
+    # 1.383 and last crosses it at 3.933, peaking 0.600 m above the hips at
+    # 2.617 with the head thrown back — the bottle at the lips. So the window
+    # opens a tenth of a second of clip before the arm starts up, which is what
+    # DRINK_FADE_IN has to blend out of, and closes a quarter of a second after
+    # it has stopped, which is what DRINK_FADE_OUT runs out over. Same
+    # construction as the throw's window and the cast's, on a clip whose
+    # interesting moment is neither a peak speed nor a furthest extension.
+    #
+    # `align` is 1.267 for the reason every one-shot's is: the alignment
+    # reference is the first frame of the window, so the pose that appears when
+    # the OneShot fires is the aligned one.
+    #
+    # **`face` is left at the hips**, unlike the four strafes (D-066). The chest
+    # reference exists because a sidestep turns the pelvis into the step and the
+    # chest does not, and `align_facing` reading the wrong one drags the clip's
+    # *travel* round with it. This clip has no travel to drag: a Bog standing
+    # still drinking has its hips and its chest pointing the same way through
+    # all 6.117 s of it, and taking the chest here would be swapping a steadier
+    # reference for a noisier one to fix a problem that is not present.
+    Pack("6_Utility",
+         "a drink or a quaff, for the heal potion",
+         (
+             Clip("Drinking.fbx", "Drink", False, 1.267),
+         )),
+    # The great sword's one swing, and the only clip in the game whose travel is
+    # **kept** (D-068).
+    #
+    # `GreatSwordHighSpinAttack.fbx` is 1.867 s and is not an in-place swing: the
+    # body turns through a whole revolution — 350° of spread by the hip line,
+    # overshooting past 415° mid-swing — *and* arrives **1.712 m** from where it
+    # started, at 0.917 m/s. The user chose it over the in-place `great sword
+    # attack` (1.183 s, 0.092 m, 0° net turn, in `_rejected/`) for exactly that:
+    # *"the melee can spin forward, not in place, to give it some more range."*
+    #
+    # So it names an `advance_as`, and that field's whole purpose is this clip.
+    # The Hips are still clamped — they have to be, or the mesh leaves the
+    # capsule it is standing on — and what the declaration changes is that the
+    # 1.712 m is *not discarded*: it is printed at the end of the build as
+    # `Bog.SPIN_ADVANCE`, and `Bog._handle_spin` drives the body through exactly
+    # that distance over exactly this clip's length. See `lock_root_motion` for
+    # why those are two halves of one number and why keeping the fcurve instead
+    # would be the wrong half.
+    #
+    # The window is the **whole clip**, which no other one-shot in this table
+    # can say. The throw opens after a run-up the game can never show and the
+    # cast closes before a recovery a standing body has nowhere to go with; this
+    # clip has neither, because its recovery *is* the advance — the body is still
+    # travelling through the last third of it, and a window cut short would cut
+    # the metres the reach is built on. `align` is 0.000 for the reason every
+    # one-shot's is: the first frame of the window is the pose the OneShot fires
+    # into.
+    #
+    # It is grounded throughout — the build's own airborne table gives it a peak
+    # foot clearance of 0.019 m — which is what lets the physics body carry it:
+    # there is no leap in the clip for the capsule to have to reproduce.
+    #
+    # **Two files here are deliberately not declared**, the way
+    # `2_Spear_Suite/SpearThrow.fbx` and three of the bow's five are not:
+    #
+    # * `GreatSwordJumpAttack.fbx` was downloaded for the airborne case and
+    #   measured for it. It cannot serve: its feet peak **0.130 m** off the
+    #   ground and are down again 0.148 s later, and its hips rise 0.163 m — a
+    #   lunging chop with a skip in it, against a Bog's real jump of 1.69 m over
+    #   0.70 s. Played while a body is actually in the air it would land, plant
+    #   and recover a metre and a half above the floor. It also travels 2.334 m
+    #   over 2.167 s, so taking it would mean a second advance, a second release
+    #   and a second reach for one weapon. The ground swing is full-body and
+    #   already replaces the air pose, so the airborne case costs nothing and
+    #   gets the same numbers (D-068).
+    # * `DrawAGreatSword1.fbx` is the sword coming out: 0.500 s, 0.082 m, −27°.
+    #   The sword is *not carried* — it is in the fists from the click to the end
+    #   of the swing and gone otherwise (D-068) — so there is nothing for a draw
+    #   clip to precede, and the pack has no sheathe to match it with anyway.
+    #   Declaring it would be `StandingEquipBow`'s mistake one weapon along: an
+    #   equip animation for one prop and none for the other two is two rules
+    #   about the same hand.
+    #
+    # `GreatSwordIdle.fbx` is the **carry** (D-070), `BowIdle.fbx`'s twin in this
+    # table and in the graph: a looping pose whose legs nothing reads and whose
+    # shoulders are what two metres of blade hangs off. It answers D-068's own
+    # closing note — *"a shoulder-carry over the locomotion set is the real
+    # answer"* — and it answers D-069's `SWORD_CARRY_TILT`, which said the same
+    # thing about itself in as many words.
+    Pack("7_GreatSword_Suite",
+         "the great sword: one spinning advance that keeps its metres, and the "
+         "pose it is carried in between them",
+         (
+             Clip("GreatSwordHighSpinAttack.fbx", "Swing", False, 0.0,
+                  advance_as="SPIN_ADVANCE"),
+             Clip("GreatSwordIdle.fbx", "SwordCarry", True, LOOP_MEAN),
+         )),
+)
+
+# A palm flat on the floor leaves the wrist joint about this far above it (the
+# hand is a quarter of a metre long on this cartoon body and the joint sits
+# inside the wrist). Only used for reporting: on JumpTwo the hands take the
+# landing, and when they touch is the moment the animator's roll window is cut
+# from, so the number belongs in the build log rather than in somebody's notes.
+HAND_PLANT_CLEARANCE = 0.12
+HAND_JOINTS = ("LeftHand", "RightHand")
+
+# How fast a hand has to be going, in m/s, before the clip is said to be doing
+# something with it. Used to find the two ends of a gesture in a clip that is
+# mostly stillness — `Drink` opens with 1.35 s of idle and closes with 2.2 s of
+# it — so that a window is cut from a measurement rather than from somebody
+# scrubbing a timeline. A tenth of a metre a second is an order of magnitude
+# over the 0.01-0.05 m/s an idle breathes at and an order under the 0.5-0.9 m/s
+# the drink's own raise and lower reach, which is what makes it a threshold with
+# nothing near it rather than a number that has to be tuned.
+HAND_MOVING = 0.10
+
+# How long a hand may pause, in frames, without the gesture being over. A drink
+# stops at the lips — 0.05 m/s for four frames at 3.000 s with the head back,
+# which is the swallow — and a rule that ended the gesture there would cut the
+# window before the arm ever came down. A quarter of a second is long enough to
+# bridge that pause and far shorter than the 1.35 s and 2.2 s of idle either
+# side of the whole thing.
+GESTURE_GAP = int(round(0.25 * FPS))
+
+# How a looping clip tells Godot it loops.
+#
+# Godot's scene importer reads suffixes off imported names (`nodes/use_name_
+# suffixes`, on by default and on in `bog.glb.import`): an animation exported as
+# `Idle-loop` arrives as `Idle` with loop_mode LOOP_LINEAR. The alternative is to
+# declare `settings/loop_mode` per clip in `_subresources` in the .import file —
+# which works, but Godot then rewrites that file with every default it can think
+# of for each animation it mentions, all 256 possible slices apiece: 348 KB of
+# generated noise in the tree instead of 1.1 KB. It also splits the answer to
+# "does this clip loop?" across two files that nobody re-syncs. Here the `loop`
+# field of each clip in PACKS is the only place it is written down. The cost is that the names
+# inside the GLB carry the suffix; the names in Godot do not.
+LOOP_SUFFIX = "-loop"
+
+# CrouchIdle: (source clip, source frame, frames to hold).
+CROUCH_IDLE = ("CrouchWalk", 37, FPS)
+
+# Dropping the duplicate final key of a cycle costs one frame of the cycle: the
+# loop then steps from frame N-1 straight back to frame 1, which is a normal
+# one-frame step taken in zero time. Keeping it would give a mathematically
+# perfect loop *if* Godot wraps t == length to 0 rather than drawing it, which
+# is not worth betting the whole asset on — if it draws it, the first pose is
+# held for two frames every cycle, which is the stutter this avoids. The
+# authored speed is identical either way (one frame less time, one frame less
+# travel), so nothing downstream changes. Set False to keep the tail key.
+DROP_LOOP_TAIL = True
+
+# A foot is "off the ground" once its toe joint is this far above where it rests.
+# 5 cm is above the noise in a planted foot (the toe joint sits at 0.035 m and
+# wobbles by 5 mm) and below any real step.
+FOOT_CLEARANCE = 0.05
+# §2's take-off and landing times were measured with a much larger clearance;
+# both are printed so the two can be compared without re-deriving them.
+FOOT_CLEARANCE_WIDE = 0.30
+
+# "Low" is below this fraction of the clip's own standing hip height (the slide
+# and the dive's landing roll get down to a quarter of it), and "standing again"
+# is back above this one.
+LOW_FRACTION = 0.40
+STANDING_FRACTION = 0.90
+
+# Texture edge in the exported GLB. Eight Bogs share this one image, the Bog is
+# never seen closer than a couple of metres, and the source 2048² JPEG is well
+# over a megabyte on its own — most of what each FBX weighs. At 1024² it is
+# about 115 KB of a 1.5 MB file.
+TEXTURE_EDGE = 1024
+
+ROUGHNESS = 0.9
+METALLIC = 0.0
+
+
+def log(msg=""):
+    print(msg, flush=True)
+
+
+# ---------------------------------------------------------------------------
+# Layered-action plumbing
+#
+# Blender 5.x actions are layered and slotted: `action.fcurves` does not exist
+# any more, the curves live in
+# `action.layers[].strips[].channelbags[].fcurves`, and which channelbag applies
+# to which datablock is decided by a *slot*. Every action here comes from the FBX
+# importer with exactly one layer, one strip and one slot, so these helpers
+# flatten that away rather than pretending to support the general case.
+# ---------------------------------------------------------------------------
+
+def iter_fcurves(action):
+    for layer in action.layers:
+        for strip in layer.strips:
+            for bag in strip.channelbags:
+                for fcurve in bag.fcurves:
+                    yield fcurve
+
+
+def bone_curves(action, bone, prop):
+    """The fcurves of one pose-bone property, ordered by array index."""
+    path = 'pose.bones["%s"].%s' % (bone, prop)
+    found = {}
+    for fcurve in iter_fcurves(action):
+        if fcurve.data_path == path:
+            found[fcurve.array_index] = fcurve
+    return [found[i] for i in sorted(found)]
+
+
+def key_frames(fcurve):
+    return [kp.co.x for kp in fcurve.keyframe_points]
+
+
+def linearise(fcurve):
+    """Make a rewritten curve mean exactly what its keys say.
+
+    Every curve here is baked at 60 fps and re-sampled at 60 fps on export, so
+    the shape between keys is never read — but a Bezier handle left over from
+    before a rewrite can still bend the value *at* a key, and on a clamped curve
+    it overshoots the clamp. Flattening to linear removes the question.
+    """
+    for kp in fcurve.keyframe_points:
+        kp.interpolation = 'LINEAR'
+        kp.handle_left = kp.co
+        kp.handle_right = kp.co
+    fcurve.update()
+
+
+def action_frame_span(action):
+    """(first, last) integer frame covered by an action's keys."""
+    lo, hi = None, None
+    for fcurve in iter_fcurves(action):
+        for kp in fcurve.keyframe_points:
+            lo = kp.co.x if lo is None else min(lo, kp.co.x)
+            hi = kp.co.x if hi is None else max(hi, kp.co.x)
+    return int(round(lo)), int(round(hi))
+
+
+# ---------------------------------------------------------------------------
+# 0. What is on disk, against what the table says is on disk
+# ---------------------------------------------------------------------------
+
+# Every one of `assert_same_character`'s failures means the same thing, and it is
+# the failure a hand-downloaded pack actually hits, so it is said once and said
+# in full. The person reading it is standing in front of a browser with a Mixamo
+# account open and needs to be told what to download, not only that this file was
+# wrong.
+SAME_CHARACTER = (
+    "\n    Every clip has to come off the *same upload*: the Bog as uploaded to "
+    "Mixamo, in that\n    same Adobe account, downloaded again with the new "
+    "animation applied to it. A stock\n    Mixamo character, a CC0 pack from "
+    "anywhere else, or even the same Bog uploaded a\n    second time gives a "
+    "different vertex count or a bind pose a fraction out, and this\n    "
+    "pipeline has no retarget stage to bridge that — which is the whole reason "
+    "it can do\n    the five things Godot's import-time retargeter cannot."
+    "\n    Export settings, matching assets/source/GUB_2: FBX Binary, With Skin, "
+    "60 fps,\n    no keyframe reduction, one animation per file."
+)
+
+
+def pack_folder(pack):
+    return os.path.join(SOURCE_ROOT, pack.folder)
+
+
+def source_name(pack, clip):
+    """How a source file is named in every log line and every error."""
+    return "%s/%s" % (pack.folder, clip.file)
+
+
+def resolve_packs():
+    """Audit `assets/source/` against PACKS, and say what is going to be built.
+
+    This runs before Blender opens a single file, so the ways a pack can be
+    wrong are reported together and in full rather than one import at a time.
+
+    *A pack that declares clips is a promise.* A missing folder, or any named
+    file that is not in it, stops the build here with the pack, the folder and
+    every missing file listed — not merely the first, because somebody who has
+    just unpacked a download wants the whole list in one go.
+
+    *A pack that declares none is a placeholder.* It is skipped, and the skip is
+    printed with what the folder is for, because the one thing this must never do
+    is quietly build a smaller asset than the table describes.
+
+    Either way, a folder holding `.fbx` files the table does not name is
+    reported. That is what "I downloaded the clips and nothing changed" looks
+    like from in here, and with five empty packs waiting for hand-downloads it is
+    the single most likely thing to go wrong next.
+    """
+    selection = []
+    broken = []
+    for pack in PACKS:
+        folder = pack_folder(pack)
+        here = sorted(f for f in os.listdir(folder)
+                      if f.lower().endswith(".fbx")) if os.path.isdir(folder) else []
+        declared = set(c.file for c in pack.clips if c.file is not None)
+        extra = [f for f in here if f not in declared]
+
+        if not pack.clips:
+            log("  %-15s declared, no clips yet — skipped" % (pack.folder + "/"))
+            log("  %-15s   for: %s" % ("", pack.what))
+            if not os.path.isdir(folder):
+                log("  %-15s   the folder is not in the tree yet" % "")
+            elif extra:
+                log("  %-15s   %d FBX here that PACKS does not name: %s"
+                    % ("", len(extra), ", ".join(extra)))
+                log("  %-15s   nothing is built from them until a Clip(...) line "
+                    "names them" % "")
+            continue
+
+        if not os.path.isdir(folder):
+            broken.append("%s/ is not in the tree, but %d clip%s %s declared in it"
+                          % (pack.folder, len(pack.clips),
+                             "" if len(pack.clips) == 1 else "s",
+                             "is" if len(pack.clips) == 1 else "are"))
+            continue
+        missing = [c.file for c in pack.clips
+                   if c.file is not None
+                   and not os.path.isfile(os.path.join(folder, c.file))]
+        if missing:
+            broken.append("%s/ is missing %d of the %d files it declares: %s"
+                          % (pack.folder, len(missing), len(pack.clips),
+                             ", ".join(missing)))
+            continue
+
+        log("  %-15s %d clip%s: %s"
+            % (pack.folder + "/", len(pack.clips),
+               "" if len(pack.clips) == 1 else "s",
+               ", ".join(c.name + (" (mirror of %s)" % c.mirror_of
+                                   if c.synthesised() else "")
+                         for c in pack.clips)))
+        if extra:
+            log("  %-15s   %d FBX here that PACKS does not name: %s"
+                % ("", len(extra), ", ".join(extra)))
+        selection.append(pack)
+
+    if broken:
+        raise SystemExit(
+            "these packs declare clips that are not on disk:\n    %s\n"
+            "Every pack is a folder under assets/source/. A pack that is not "
+            "ready yet declares\nno clips at all and is skipped; naming a file "
+            "that is not there is how a build ends\nup quietly smaller than the "
+            "table says, so it stops here instead." % "\n    ".join(broken))
+    if not selection:
+        raise SystemExit("no pack declares a clip, so there is nothing to build")
+    clips = [c for p in selection for c in p.clips]
+    log("  %d clips from %d of %d packs" % (len(clips), len(selection), len(PACKS)))
+    return selection
+
+
+# ---------------------------------------------------------------------------
+# 1-2. Import every declared file and prove they are all the same character
+# ---------------------------------------------------------------------------
+
+def import_sources(selection):
+    """Import every declared FBX, returning [(pack, clip, armature, mesh, action)].
+
+    In table order: pack by pack, clip by clip, so the first entry is the first
+    clip of the first pack and everything downstream that says "the reference"
+    means that one.
+    """
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    scene = bpy.context.scene
+    scene.render.fps = FPS
+    scene.render.fps_base = 1.0
+
+    # One column width for the whole run, so a long pack name does not stagger
+    # the block and the numbers stay in line whatever is being built.
+    width = max(len(source_name(p, c)) for p in selection for c in p.clips
+                if not c.synthesised())
+    imported = []
+    for pack in selection:
+        for clip in pack.clips:
+            # A mirrored clip is built from another clip's action once the rig
+            # is scaled, not read off a file; see `mirror_action`.
+            if clip.synthesised():
+                continue
+            where = source_name(pack, clip)
+            path = os.path.join(pack_folder(pack), clip.file)
+            if not os.path.isfile(path):
+                raise SystemExit("missing source: %s" % path)
+            before_objects = set(bpy.data.objects.keys())
+            before_actions = set(bpy.data.actions.keys())
+            bpy.ops.import_scene.fbx(filepath=path, use_anim=True)
+            objects = [bpy.data.objects[n] for n in bpy.data.objects.keys()
+                       if n not in before_objects]
+            actions = [bpy.data.actions[n] for n in bpy.data.actions.keys()
+                       if n not in before_actions]
+
+            armatures = [o for o in objects if o.type == 'ARMATURE']
+            meshes = [o for o in objects if o.type == 'MESH']
+            if len(armatures) != 1 or len(meshes) != 1 or len(actions) != 1:
+                raise SystemExit("%s: expected 1 armature, 1 mesh and 1 action, "
+                                 "got %d/%d/%d%s"
+                                 % (where, len(armatures), len(meshes),
+                                    len(actions), SAME_CHARACTER))
+            first, last = action_frame_span(actions[0])
+            log("  imported %-*s -> %-11s %d verts, %d bones, frames %d..%d (%.3f s)"
+                % (width, where, clip.name, len(meshes[0].data.vertices),
+                   len(armatures[0].data.bones), first, last, (last - first) / FPS))
+            imported.append((pack, clip, armatures[0], meshes[0], actions[0]))
+    return imported
+
+
+def assert_same_character(imported):
+    """Refuse to build unless every file, in every pack, shares one body.
+
+    This is the assertion that makes packs legitimate. The clips only mean
+    anything on one skeleton, and a silently different bind pose would show up as
+    a subtly broken skin in one clip and nowhere else — so it is checked
+    **across packs**, not within one, against the first clip of the first pack.
+    Nothing here cares which pack a file came from except when it has to name it.
+    """
+    ref_pack, ref_clip, ref_arm, ref_mesh, _ = imported[0]
+    reference = source_name(ref_pack, ref_clip)
+    ref_bones = [b.name for b in ref_arm.data.bones]
+    ref_groups = sorted(g.name for g in ref_mesh.vertex_groups)
+    worst = 0.0
+    for pack, clip, arm, mesh, _action in imported[1:]:
+        where = source_name(pack, clip)
+        if len(mesh.data.vertices) != len(ref_mesh.data.vertices):
+            raise SystemExit("%s: %d verts, %s has %d%s"
+                             % (where, len(mesh.data.vertices), reference,
+                                len(ref_mesh.data.vertices), SAME_CHARACTER))
+        if [b.name for b in arm.data.bones] != ref_bones:
+            raise SystemExit("%s: skeleton differs from %s%s"
+                             % (where, reference, SAME_CHARACTER))
+        if sorted(g.name for g in mesh.vertex_groups) != ref_groups:
+            raise SystemExit("%s: vertex groups differ from %s%s"
+                             % (where, reference, SAME_CHARACTER))
+        for name in ref_bones:
+            a = ref_arm.data.bones[name].matrix_local
+            b = arm.data.bones[name].matrix_local
+            for row in range(4):
+                for col in range(4):
+                    worst = max(worst, abs(a[row][col] - b[row][col]))
+    packs = len(set(p.folder for p, _c, _a, _m, _x in imported))
+    log("  %d files across %d pack%s agree with %s: %d verts, %d bones, "
+        "%d vertex groups, bind pose within %.2g"
+        % (len(imported), packs, "" if packs == 1 else "s", reference,
+           len(ref_mesh.data.vertices), len(ref_bones), len(ref_groups), worst))
+    if worst > 1e-5:
+        raise SystemExit("bind poses differ by %.4g — these are not the same "
+                         "rig%s" % (worst, SAME_CHARACTER))
+
+
+def consolidate(imported):
+    """Keep one armature and one mesh; every action moves onto the survivor.
+
+    An action addresses bones by name through `pose.bones["..."]`, so an action
+    imported alongside the seventh armature drives the first one unchanged.
+    Nothing is re-rigged here; every duplicate body is deleted. A pack adds
+    duplicate bodies, not a second skeleton — which is why several packs cost
+    nothing at all downstream of this function.
+    """
+    _pack, _clip, arm, mesh, _ = imported[0]
+    actions = {}
+    for _p, clip, other_arm, other_mesh, action in imported:
+        action.name = clip.name
+        actions[clip.name] = action
+        if other_arm is arm:
+            continue
+        if other_arm.animation_data:
+            other_arm.animation_data.action = None
+        bpy.data.objects.remove(other_mesh, do_unlink=True)
+        bpy.data.objects.remove(other_arm, do_unlink=True)
+
+    arm.name = "Armature"
+    arm.data.name = "Armature"
+    mesh.name = "Bog"
+    mesh.data.name = "Bog"
+    if arm.animation_data is None:
+        arm.animation_data_create()
+    arm.animation_data.action = None
+
+    for obj in list(bpy.data.objects):
+        if obj not in (arm, mesh):
+            bpy.data.objects.remove(obj, do_unlink=True)
+
+    # Each file also brought its own copy of the mesh data, the armature data,
+    # the material and the 2048² JPEG, and deleting an *object* deletes none of
+    # them. They have to go in dependency order — an orphaned mesh datablock
+    # still counts as a user of its material, and that material as a user of its
+    # image — or nothing is collected at all.
+    dropped = []
+    for collection in (bpy.data.meshes, bpy.data.armatures,
+                       bpy.data.materials, bpy.data.images):
+        gone = 0
+        for datablock in list(collection):
+            if datablock.users == 0:
+                collection.remove(datablock)
+                gone += 1
+        dropped.append("%d %s" % (gone, collection.rna_type.identifier
+                                  .replace("BlendData", "").lower()))
+    log("  kept 1 armature + 1 mesh; dropped orphaned %s" % ", ".join(dropped))
+    log("  %d actions: %s" % (len(actions), ", ".join(actions)))
+    return arm, mesh, actions
+
+
+# ---------------------------------------------------------------------------
+# 3. Names
+# ---------------------------------------------------------------------------
+
+def strip_bone_prefix(arm, mesh, actions):
+    """Drop `mixamorig:` from bones, vertex groups and every fcurve data path.
+
+    Renaming a bone normally propagates to the vertex groups and to the animation
+    data of every object using the armature — but only seven of these eight
+    actions were ever assigned to this armature, and none of them is assigned
+    now, so the sweep afterwards is the part that actually does the work. It is
+    kept in that order rather than hand-rewriting first, so that if a future
+    Blender does propagate, this still ends up in one consistent state.
+    """
+    renamed = 0
+    for bone in arm.data.bones:
+        if bone.name.startswith(PREFIX):
+            bone.name = bone.name[len(PREFIX):]
+            renamed += 1
+    fixed_groups = 0
+    for group in mesh.vertex_groups:
+        if group.name.startswith(PREFIX):
+            group.name = group.name[len(PREFIX):]
+            fixed_groups += 1
+    fixed_curves = 0
+    for action in actions.values():
+        for fcurve in iter_fcurves(action):
+            if PREFIX in fcurve.data_path:
+                fcurve.data_path = fcurve.data_path.replace(PREFIX, "")
+                fixed_curves += 1
+
+    left = [b.name for b in arm.data.bones if PREFIX in b.name]
+    left += [g.name for g in mesh.vertex_groups if PREFIX in g.name]
+    for action in actions.values():
+        left += [f.data_path for f in iter_fcurves(action) if PREFIX in f.data_path]
+    if left:
+        raise SystemExit("%d names still carry the prefix, e.g. %s" % (len(left), left[0]))
+    log("  stripped '%s' from %d bones; fixed %d vertex groups and %d fcurve paths by hand"
+        % (PREFIX, renamed, fixed_groups, fixed_curves))
+    log("  vertex groups: %d of %d bones deform the mesh"
+        % (len(mesh.vertex_groups), len(arm.data.bones)))
+
+
+# ---------------------------------------------------------------------------
+# 4. Scale, and the fcurves Blender will not scale for you
+# ---------------------------------------------------------------------------
+
+def mesh_height(mesh, matrix):
+    zs = [(matrix @ v.co).z for v in mesh.data.vertices]
+    return min(zs), max(zs)
+
+
+def scale_to_height(arm, mesh, actions):
+    """Bake the import transform and TARGET_HEIGHT into the rest data.
+
+    The FBX importer hands over a 9.5 mm character rotated 90° about X. Both
+    objects share that one world matrix, so the whole thing can be pushed into
+    the armature's bones and the mesh's vertices, leaving both objects at
+    identity — which is what makes `root_scale = 1.0` in the .import file
+    honest, and what makes a BoneAttachment3D's local space metres.
+
+    Pose-bone `location` is stored in armature units in the bone's own rest
+    basis, and nothing in Blender rescales it when the rest data is scaled, so
+    every location curve is multiplied here. Rotations are bone-local and are
+    already right.
+    """
+    world = arm.matrix_world.copy()
+    drift = max(abs(world[r][c] - mesh.matrix_world[r][c])
+                for r in range(4) for c in range(4))
+    if drift > 1e-6:
+        raise SystemExit("mesh and armature do not share a transform (%.3g)" % drift)
+
+    low, high = mesh_height(mesh, world)
+    factor = TARGET_HEIGHT / (high - low)
+    matrix = Matrix.Scale(factor, 4) @ world
+    scale = matrix.to_scale()
+    if max(abs(s - scale.x) for s in scale) > 1e-6:
+        raise SystemExit("import transform is not a uniform scale: %s" % (scale,))
+
+    arm.data.transform(matrix)
+    mesh.data.transform(matrix)
+    arm.matrix_basis = Matrix.Identity(4)
+    mesh.matrix_basis = Matrix.Identity(4)
+    mesh.matrix_parent_inverse = Matrix.Identity(4)
+    # `matrix_world` is a cached product of the parent chain; without this the
+    # measurements below would still be reading the 0.01 import scale.
+    bpy.context.view_layer.update()
+    for obj in (arm, mesh):
+        stale = max(abs(obj.matrix_world[r][c] - (1.0 if r == c else 0.0))
+                    for r in range(4) for c in range(4))
+        if stale > 1e-6:
+            raise SystemExit("%s did not end up at identity (%.3g)" % (obj.name, stale))
+
+    curves = 0
+    for action in actions.values():
+        for fcurve in iter_fcurves(action):
+            if not fcurve.data_path.endswith(".location"):
+                continue
+            for kp in fcurve.keyframe_points:
+                kp.co.y *= scale.x
+                kp.handle_left.y *= scale.x
+                kp.handle_right.y *= scale.x
+            fcurve.update()
+            curves += 1
+
+    log("  imported %.5f m tall; scaled by %.4f in world (%.6f in armature units)"
+        % (high - low, factor, scale.x))
+    log("  baked the transform into rest data and scaled %d location fcurves" % curves)
+    return scale.x
+
+
+def report_rest_pose(arm, mesh):
+    """Re-print §2's measurements so a regression shows up in the log."""
+    low, high = mesh_height(mesh, mesh.matrix_world)
+    size = [max((mesh.matrix_world @ v.co)[i] for v in mesh.data.vertices)
+            - min((mesh.matrix_world @ v.co)[i] for v in mesh.data.vertices)
+            for i in range(3)]
+    log("  mesh bbox %.3f wide, %.3f deep, %.3f tall; feet at z=%+.4f"
+        % (size[0], size[1], size[2], low))
+    heights = ("Hips", "Spine", "Spine1", "Spine2", "Neck", "Head", "HeadTop_End",
+               "LeftUpLeg", "LeftLeg", "LeftFoot", "LeftToeBase")
+    log("  rest heights " + "  ".join(
+        "%s %.3f" % (n, arm.data.bones[n].head_local.z) for n in heights))
+    log("  rest arm span LeftArm %.3f  LeftForeArm %.3f  LeftHand %.3f (x from centre)"
+        % tuple(arm.data.bones[n].head_local.x
+                for n in ("LeftArm", "LeftForeArm", "LeftHand")))
+    toe = arm.data.bones["LeftToeBase"].head_local - arm.data.bones["LeftFoot"].head_local
+    log("  LeftFoot -> LeftToeBase points (%+.3f, %+.3f, %+.3f) in Blender "
+        "(-Y is front, so this is +Z in Godot)" % (toe.x, toe.y, toe.z))
+    if abs(size[2] - TARGET_HEIGHT) > 1e-3 or abs(low) > 1e-3:
+        raise SystemExit("mesh is %.4f tall with feet at %.4f — wanted %.2f at 0"
+                         % (size[2], low, TARGET_HEIGHT))
+
+
+# ---------------------------------------------------------------------------
+# 4b. The body, which is a different file from the clips (see *Body* above)
+#
+# Everything in this section runs on the rig the section above just finished:
+# metres, names stripped, both objects at identity, rest data baked. That is the
+# only state in which the fit below means anything — it is a fit of one mesh to
+# another mesh's landmarks, and both of them have to be in the same units and
+# the same pose before a landmark is a number.
+#
+# Nothing here touches a bone. That is not an accident of implementation, it is
+# the decision: the skeleton, the rest pose, every clip and every constant
+# measured against them survive this stage untouched, and what changes is which
+# vertices the vertex groups are on.
+# ---------------------------------------------------------------------------
+
+# A vertex is "on an arm" if it is further out sideways than this fraction of
+# the widest point. On a T-posed body that is the two arms and nothing else, and
+# the mean of it is the **arm centre-line** — the one landmark both bodies share
+# that is neither the feet (which say nothing about proportion) nor the top of
+# the head (which on the new body is a pair of antennae and on the old one is
+# not). The fit is to the skeleton, so it is made at the height the shoulders
+# actually are.
+ARM_FRACTION = 0.6
+
+# Where the front is read off: everything above this fraction of the body's own
+# height, which on both of these bodies is **the antenna**.
+#
+# The plan for this stage said to read it off the snout, in a band across the
+# head, and `check_donor_orientation` is what proved that does not work — which
+# is the entire reason that check is here and is worth the twenty lines. Neither
+# of these bodies has a face that sticks out further than the rest of it: the
+# Bog is a teardrop with a big rounded back, and measured across its head it
+# leans **backward** by 6 cm, the wrong way, because the back of the skull has
+# more of it in it than the muzzle does. The one thing on either body that is
+# unambiguously at the front is the antenna, and both of them have exactly one,
+# and both of them curve forward over the face.
+#
+# So the rule is the top tenth against the body's own mid-plane, and it is not a
+# knife edge either way: the Bog's crown sits 15.0% of its depth forward of
+# centre and reaches four times further forward than back, and the new body's
+# 4.2% and 4.3:1. The number is anywhere between the top twentieth and the top
+# fifth for both bodies, which is what makes a tenth a choice rather than a fit.
+CROWN_BAND = 0.90
+
+# How far the fitted body may be from TARGET_HEIGHT before the build stops. The
+# fit is to the arm centre-line and **not** to a height (§2's 1.80 m is the
+# donor's, and the antennae land where they land — about 1.757 m), so this is a
+# sanity rail rather than a target: 15% either way catches a body imported at
+# the wrong scale or measured on the wrong axis, and passes a body that is
+# simply shaped differently.
+BODY_HEIGHT_TOLERANCE = 0.15
+
+# Weights per vertex after the transfer, and the total weight a vertex must
+# carry before it is normalised. Four is what the glTF exporter writes
+# (`export_influence_nb`), so limiting here rather than letting the exporter
+# drop them means the weights that survive are the ones this build normalised.
+# Half is the "did the transfer actually reach this vertex" line: a vertex that
+# genuinely sits over the donor's surface comes out near 1.0, and one that the
+# nearest-face lookup missed comes out near 0.
+BODY_INFLUENCES = 4
+BODY_MIN_WEIGHT = 0.5
+
+
+def body_path(body):
+    """Where `--body` points, or None for `--body -` (keep the donor's mesh)."""
+    if body == "-":
+        return None
+    return os.path.join(SOURCE_ROOT, body)
+
+
+def report_body(body):
+    """Say which mesh this build will put the skin on, before it opens one."""
+    path = body_path(body)
+    if path is None:
+        log("  %-15s the donor's own mesh (--body -), i.e. the Bog before the swap"
+            % "body:")
+        return
+    where = os.path.relpath(path, SOURCE_ROOT).replace("\\", "/")
+    if not os.path.isfile(path):
+        raise SystemExit(
+            "--body names %s, which is not in %s.\nThe body is a file under "
+            "assets/source/, the way a clip is a file under its pack's folder; "
+            "`--body -`\nkeeps the Mixamo mesh instead." % (where, SOURCE_ROOT))
+    log("  %-15s %s (%.2f MB), fitted over the donor and given its weights"
+        % ("body:", where, os.path.getsize(path) / 1e6))
+
+
+def world_points(mesh):
+    return [mesh.matrix_world @ v.co for v in mesh.data.vertices]
+
+
+def landmarks(points):
+    """The four numbers a body is fitted by, in its own space.
+
+    `lo`/`hi` are the feet and the top of whatever is on top; `span` is the
+    half-width at the widest, which on a T-pose is a fingertip; `arm` is the
+    centroid of everything past ARM_FRACTION of that, which is the arm
+    centre-line, and it is the landmark the fit is actually made on. `crotch` is
+    the lowest point of the narrow column up the middle of the body, and it is
+    reported rather than fitted to — it is the number that says how much of the
+    belly is going to end up thigh-weighted.
+    """
+    lo = min(p.z for p in points)
+    hi = max(p.z for p in points)
+    height = hi - lo
+    span = max(abs(p.x) for p in points)
+    out = [p for p in points if abs(p.x) > ARM_FRACTION * span]
+    arm = Vector((sum(p.x for p in out), sum(p.y for p in out),
+                  sum(p.z for p in out))) / len(out)
+    column = [p.z for p in points
+              if abs(p.x) < 0.02 * height and 0.2 * height < p.z - lo < 0.6 * height]
+    return {
+        "lo": lo, "hi": hi, "height": height, "span": span, "arm": arm,
+        "crotch": min(column) if column else None,
+    }
+
+
+def measure_yaw(points):
+    """Which horizontal axis the arms lie on, and which way the body faces.
+
+    Neither is typed in. A T-posed body is wider across the arms than it is
+    front-to-back, so **the arm axis is the horizontal axis with the larger
+    extent** — and the front is **the way the crown leans**, measured as the
+    offset of the top CROWN_BAND of the body from the body's own mid-plane along
+    the *other* horizontal axis. See CROWN_BAND for why that is the crown and
+    not the face.
+
+    The mid-plane is the bounding box's, not the centroid's: a body with a heavy
+    back has its mass behind its middle, and measuring the lean of an antenna
+    against that would be measuring the antenna against the rump.
+
+    Returns (axis, sign, lean, reach, size): `axis` is 0 for X or 1 for Y,
+    `sign` is +1 or -1 along the remaining horizontal axis, and `reach` is how
+    far the crown gets either side of the mid-plane — the same fact told without
+    the averaging, so the log can show both.
+    """
+    size = [max(p[i] for p in points) - min(p[i] for p in points) for i in range(3)]
+    axis = 0 if size[0] >= size[1] else 1
+    other = 1 - axis
+    lo = min(p.z for p in points)
+    height = max(p.z for p in points) - lo
+    crown = [p for p in points if p.z - lo >= CROWN_BAND * height]
+    if not crown:
+        raise SystemExit("no vertices in the top %.0f%% of the body — it is not "
+                         "upright" % ((1.0 - CROWN_BAND) * 100.0))
+    mid = (max(p[other] for p in points) + min(p[other] for p in points)) / 2.0
+    lean = sum(p[other] for p in crown) / len(crown) - mid
+    reach = (min(p[other] for p in crown) - mid, max(p[other] for p in crown) - mid)
+    return axis, (1 if lean >= 0.0 else -1), lean, reach, size
+
+
+def yaw_to_pose(axis, sign):
+    """The turn about Z that puts the arms on X and the front on -Y.
+
+    A quarter turn maps (x, y) to (y, -x) and its opposite maps it to (-y, x),
+    so an arm axis already on X needs either nothing or a half turn depending on
+    which way the body faces, and one on Y needs a quarter turn whose direction
+    the facing picks. Four cases, no table.
+    """
+    if axis == 0:
+        return 0.0 if sign < 0 else math.pi
+    return -math.pi / 2.0 if sign > 0 else math.pi / 2.0
+
+
+def check_donor_orientation(mesh):
+    """Refuse to build unless the donor measures the way the rule says it does.
+
+    The rule above is a measurement, and a measurement that is never checked
+    against a known answer is a guess with arithmetic in front of it. The donor
+    is the known answer: it is the Bog as uploaded to Mixamo, arms along X and
+    front along -Y, and if `measure_yaw` says anything else about it then it is
+    not measuring what it is named after and the body it is about to turn would
+    be turned wrongly.
+    """
+    axis, sign, lean, reach, size = measure_yaw(world_points(mesh))
+    log("  donor %.3f x %.3f x %.3f: arms on %s; crown leans %+.3f m along %s "
+        "(reaching %+.3f..%+.3f) -> front is %s%s"
+        % (size[0], size[1], size[2], "XY"[axis], lean, "XY"[1 - axis],
+           reach[0], reach[1], "+-"[sign < 0], "XY"[1 - axis]))
+    if axis != 0 or sign > 0:
+        raise SystemExit(
+            "the donor measures arms on %s and front %s%s, but it is the Bog as "
+            "uploaded to Mixamo\nand is arms-on-X, front-on-minus-Y by "
+            "inspection — its own toes point that way, which\n`report_rest_pose` "
+            "prints two stages above this one. The orientation rule is not\n"
+            "measuring what it is named after, so the body it is about to turn "
+            "would be turned wrongly."
+            % ("XY"[axis], "+-"[sign < 0], "XY"[1 - axis]))
+
+
+def import_body(path):
+    """Import the body GLB and hand back the one mesh in it, at identity.
+
+    glTF arrives Y-up under an empty called `RootNode`, so the import's own
+    transform is baked into the mesh data and the object is unparented and put
+    back at identity — the same shape `scale_to_height` leaves the donor in, and
+    the only state the landmarks below are comparable in.
+
+    Everything this asserts is a thing the rest of the stage would otherwise
+    discover the hard way: a second mesh would make "the body" ambiguous, a
+    modifier or a shape key would mean the vertices measured are not the
+    vertices exported, and an existing vertex group would collide with the
+    donor's names half way through the transfer.
+    """
+    before = set(bpy.data.objects.keys())
+    bpy.ops.import_scene.gltf(filepath=path)
+    fresh = [bpy.data.objects[n] for n in bpy.data.objects.keys()
+             if n not in before]
+    meshes = [o for o in fresh if o.type == 'MESH']
+    if len(meshes) != 1:
+        raise SystemExit("%s holds %d meshes, wanted 1 (the body is one mesh)"
+                         % (os.path.basename(path), len(meshes)))
+    mesh = meshes[0]
+
+    bpy.context.view_layer.update()
+    world = mesh.matrix_world.copy()
+    mesh.data.transform(world)
+    mesh.parent = None
+    mesh.matrix_basis = Matrix.Identity(4)
+    mesh.matrix_parent_inverse = Matrix.Identity(4)
+    for obj in fresh:
+        if obj is not mesh:
+            bpy.data.objects.remove(obj, do_unlink=True)
+    bpy.context.view_layer.update()
+
+    if mesh.modifiers:
+        raise SystemExit("the body arrives with %d modifiers on it"
+                         % len(mesh.modifiers))
+    if mesh.data.shape_keys is not None:
+        raise SystemExit("the body arrives with shape keys on it")
+    if mesh.vertex_groups:
+        raise SystemExit("the body arrives with %d vertex groups on it, which "
+                         "would collide with the donor's" % len(mesh.vertex_groups))
+    if len(mesh.data.materials) != 1:
+        raise SystemExit("the body has %d materials, wanted 1"
+                         % len(mesh.data.materials))
+    images = [n.image for n in mesh.data.materials[0].node_tree.nodes
+              if n.type == 'TEX_IMAGE' and n.image is not None]
+    if len(images) != 1:
+        raise SystemExit("the body's material has %d image textures, wanted 1"
+                         % len(images))
+    if images[0].file_format != 'JPEG':
+        raise SystemExit(
+            "the body's texture is %s and not JPEG. `build_material` names the "
+            "image basecolor.jpg\nand the embedded format decides the extension "
+            "Godot extracts, so art/generated/bog_basecolor.jpg\nwould stop "
+            "being a JPEG and everything naming that file would be naming "
+            "nothing." % images[0].file_format)
+    log("  imported %-15s %d verts, %d polys, %d material, texture '%s' %dx%d %s"
+        % (os.path.basename(path), len(mesh.data.vertices),
+           len(mesh.data.polygons), len(mesh.data.materials), images[0].name,
+           images[0].size[0], images[0].size[1], images[0].file_format))
+    return mesh
+
+
+def fit_to_donor(body, donor):
+    """Scale and place the body so its arm centre-line is the donor's.
+
+    **Not a rescale to TARGET_HEIGHT.** The fit is to the skeleton, and the
+    skeleton's shoulders are at a height the donor's arms are at, so what is
+    matched is the arm centre-line above the feet — feet at the donor's feet,
+    arm centre-line over the donor's arm centre-line in x and y, one uniform
+    scale. What the top of the head then does is not a free variable: the
+    antennae land wherever the proportions put them, and BODY_HEIGHT_TOLERANCE
+    is a rail under that rather than a target for it.
+
+    The turn comes first and is baked in on its own, because every landmark
+    below is read off an axis and reading them before the body is upright and
+    facing the right way would be reading the wrong axis.
+    """
+    axis, sign, lean, reach, size = measure_yaw(world_points(body))
+    yaw = yaw_to_pose(axis, sign)
+    log("  body  %.3f x %.3f x %.3f: arms on %s; crown leans %+.3f m along %s "
+        "(reaching %+.3f..%+.3f) -> front is %s%s"
+        % (size[0], size[1], size[2], "XY"[axis], lean, "XY"[1 - axis],
+           reach[0], reach[1], "+-"[sign < 0], "XY"[1 - axis]))
+    log("  turning it %+.0f° about Z to put the arms on X and the front on -Y"
+        % math.degrees(yaw))
+    body.data.transform(Matrix.Rotation(yaw, 4, 'Z'))
+
+    bog = landmarks(world_points(donor))
+    raw = landmarks(world_points(body))
+    factor = (bog["arm"].z - bog["lo"]) / (raw["arm"].z - raw["lo"])
+    move = Vector((bog["arm"].x - factor * raw["arm"].x,
+                   bog["arm"].y - factor * raw["arm"].y,
+                   bog["lo"] - factor * raw["lo"]))
+    body.data.transform(Matrix.Translation(move) @ Matrix.Scale(factor, 4))
+    fitted = landmarks(world_points(body))
+
+    def crotch_of(marks):
+        if marks["crotch"] is None:
+            return float("nan")
+        return (marks["crotch"] - marks["lo"]) / marks["height"]
+
+    log("  fitted by the arm centre-line: scaled %.4f, moved (%+.3f, %+.3f, %+.3f)"
+        % (factor, move.x, move.y, move.z))
+    log("  donor  %.3f m tall, span %.3f, arm line %.3f above the feet, "
+        "crotch at %.3f of height"
+        % (bog["height"], bog["span"] * 2.0, bog["arm"].z - bog["lo"],
+           crotch_of(bog)))
+    log("  body   %.3f m tall, span %.3f, arm line %.3f above the feet, "
+        "crotch at %.3f of height"
+        % (fitted["height"], fitted["span"] * 2.0,
+           fitted["arm"].z - fitted["lo"], crotch_of(fitted)))
+    log("  ratios body/donor: height %.3f, span %.3f; feet at z=%+.5f"
+        % (fitted["height"] / bog["height"], fitted["span"] / bog["span"],
+           fitted["lo"]))
+    if abs(fitted["lo"]) > 1e-3:
+        raise SystemExit("the fitted body's feet are at %.4f, not 0"
+                         % fitted["lo"])
+    off = abs(fitted["height"] - TARGET_HEIGHT) / TARGET_HEIGHT
+    if off > BODY_HEIGHT_TOLERANCE:
+        raise SystemExit(
+            "the fitted body is %.3f m against a %.2f m rig — %.0f%% out, past "
+            "the %.0f%% rail.\nThe fit is to the arm centre-line, so a miss this "
+            "big is a body measured on the wrong axis\nor imported at the wrong "
+            "scale, not a body that is simply shaped differently."
+            % (fitted["height"], TARGET_HEIGHT, off * 100.0,
+               BODY_HEIGHT_TOLERANCE * 100.0))
+
+
+def transfer_weights(body, donor, arm):
+    """Give the body the donor's skin, face by face.
+
+    `POLYINTERP_NEAREST` asks, for each of the body's vertices, which face of
+    the donor is nearest and what the weights are at that point on it — so the
+    body picks up a blend of the donor's skin rather than one vertex's copy of
+    it, which is what keeps a 9,128-vertex sculpt smooth over an 8,814-vertex
+    donor. The destination groups have to exist first and carry the donor's
+    names, because `layers_vgroup_select_dst='NAME'` matches them by name and
+    silently transfers nothing into a group that is not there.
+
+    Then four influences and a normalise, the same two numbers the exporter
+    would apply on its own — done here so the weights in the file are the
+    weights this build measured, and so the count below is a count of the
+    transfer and not of the export.
+    """
+    # DATA_TRANSFER reads the *evaluated* donor, which is the donor through its
+    # own Armature modifier. No action is assigned by now, but a pose bone keeps
+    # whatever it was last evaluated at — so the rest pose is asked for
+    # explicitly rather than assumed, or the skin would be transferred off a
+    # body frozen in the last frame of the last clip that happened to be
+    # imported.
+    posed = arm.data.pose_position
+    arm.data.pose_position = 'REST'
+    bpy.context.view_layer.update()
+
+    for group in donor.vertex_groups:
+        body.vertex_groups.new(name=group.name)
+
+    for obj in bpy.data.objects:
+        obj.select_set(False)
+    body.select_set(True)
+    bpy.context.view_layer.objects.active = body
+
+    modifier = body.modifiers.new("BodyWeights", 'DATA_TRANSFER')
+    modifier.object = donor
+    modifier.use_vert_data = True
+    modifier.data_types_verts = {'VGROUP_WEIGHTS'}
+    modifier.vert_mapping = 'POLYINTERP_NEAREST'
+    modifier.layers_vgroup_select_src = 'ALL'
+    modifier.layers_vgroup_select_dst = 'NAME'
+    bpy.ops.object.modifier_apply(modifier=modifier.name)
+
+    def thin():
+        return sum(1 for v in body.data.vertices
+                   if sum(g.weight for g in v.groups) < BODY_MIN_WEIGHT)
+
+    after_transfer = thin()
+    bpy.ops.object.vertex_group_limit_total(group_select_mode='ALL',
+                                            limit=BODY_INFLUENCES)
+    after_limit = thin()
+    bpy.ops.object.vertex_group_normalize_all(group_select_mode='ALL',
+                                              lock_active=False)
+    arm.data.pose_position = posed
+    bpy.context.view_layer.update()
+
+    influences = max(len(v.groups) for v in body.data.vertices)
+    log("  transferred %d vertex groups onto %d verts / %d polys by nearest face"
+        % (len(body.vertex_groups), len(body.data.vertices),
+           len(body.data.polygons)))
+    log("  under %.1f total weight before normalising: %d after the transfer, "
+        "%d after limiting to %d influences (max %d per vertex)"
+        % (BODY_MIN_WEIGHT, after_transfer, after_limit, BODY_INFLUENCES,
+           influences))
+    if after_limit:
+        raise SystemExit(
+            "%d vertices carry less than %.1f total weight, so the nearest-face "
+            "lookup missed them.\nNormalising would scale whatever noise they do "
+            "carry up to 1.0 and hang that part of the\nbody off an arbitrary "
+            "bone — which is a hole in the skin that only shows up in one clip."
+            % (after_limit, BODY_MIN_WEIGHT))
+
+
+def bind_body(body, arm):
+    """Parent to the armature and skin to it — the shape the donor mesh had.
+
+    Identity everywhere: the fit is baked into the mesh data, so the object, its
+    parent inverse and the modifier are all doing nothing except saying which
+    armature deforms this. That is what makes `root_scale = 1.0` in the .import
+    file honest, the same way `scale_to_height` does for the donor.
+    """
+    body.parent = arm
+    body.parent_type = 'OBJECT'
+    body.matrix_parent_inverse = Matrix.Identity(4)
+    body.matrix_basis = Matrix.Identity(4)
+    modifier = body.modifiers.new("Armature", 'ARMATURE')
+    modifier.object = arm
+    modifier.use_vertex_groups = True
+    bpy.context.view_layer.update()
+
+
+def drop_donor_mesh(donor, body):
+    """Delete the donor's mesh and purge what it was the only user of.
+
+    The same dependency-ordered sweep `consolidate` does, and for the same
+    reason: an orphaned mesh datablock still counts as a user of its material,
+    and that material as a user of its 2048² JPEG, so removing the object on its
+    own collects nothing at all.
+
+    It happens **before** the rename, not after. Blender will not have two
+    objects called `Bog`, and a body renamed while the donor is still in the
+    file becomes `Bog.001` — which is a Godot node called `Bog001`, a
+    `build_elder.py` that cannot find the mesh it fits a robe to, and no error
+    anywhere.
+    """
+    bpy.data.objects.remove(donor, do_unlink=True)
+    dropped = []
+    for collection in (bpy.data.meshes, bpy.data.materials, bpy.data.images):
+        gone = 0
+        for datablock in list(collection):
+            if datablock.users == 0:
+                collection.remove(datablock)
+                gone += 1
+        dropped.append("%d %s" % (gone, collection.rna_type.identifier
+                                  .replace("BlendData", "").lower()))
+    body.name = "Bog"
+    body.data.name = "Bog"
+    log("  dropped the donor mesh and its orphaned %s; the body is now '%s'"
+        % (", ".join(dropped), body.name))
+
+
+def fit_body(arm, mesh, path):
+    """Put the skin on a different body and hand that body back.
+
+    The donor keeps the skeleton, the rest pose and every clip; what it loses is
+    its mesh. See *Body* in the module docstring for the four reasons this is a
+    weight transfer and not a re-upload, and `fit_to_donor` for why the fit is
+    made at the arms and not at the top of the head.
+    """
+    check_donor_orientation(mesh)
+    body = import_body(path)
+    fit_to_donor(body, mesh)
+    transfer_weights(body, mesh, arm)
+    bind_body(body, arm)
+    drop_donor_mesh(mesh, body)
+    return body
+
+
+# ---------------------------------------------------------------------------
+# Posing the rig so it can be measured
+# ---------------------------------------------------------------------------
+
+def use_action(arm, action):
+    """Make `action` the pose the armature evaluates, so frame_set can sample it."""
+    if arm.animation_data is None:
+        arm.animation_data_create()
+    arm.animation_data.action = action
+    if action is not None and len(action.slots):
+        arm.animation_data.action_slot = action.slots[0]
+
+
+def sample_bones(arm, action, bones):
+    """{bone: [world position per frame]} plus the frame numbers sampled."""
+    use_action(arm, action)
+    first, last = action_frame_span(action)
+    frames = list(range(first, last + 1))
+    tracks = dict((b, []) for b in bones)
+    scene = bpy.context.scene
+    for frame in frames:
+        scene.frame_set(frame)
+        for bone in bones:
+            tracks[bone].append((arm.matrix_world @ arm.pose.bones[bone].matrix).translation.copy())
+    return frames, tracks
+
+
+def rest_facing(arm, joints=HIP_JOINTS):
+    left = arm.data.bones[joints[0]].head_local
+    right = arm.data.bones[joints[1]].head_local
+    return math.atan2(right.y - left.y, right.x - left.x)
+
+
+def wrap_pi(angle):
+    return (angle + math.pi) % (2.0 * math.pi) - math.pi
+
+
+# ---------------------------------------------------------------------------
+# The authored numbers: travel, speed, and the moments the game keys off
+# ---------------------------------------------------------------------------
+
+def measure_clip(arm, action, clip, reference=LOOP_MEAN, joints=HIP_JOINTS):
+    """Everything §2 measured, measured again on the built rig.
+
+    Run before the root motion is locked and the jumps are clamped, because
+    that is what these numbers describe: how far the clip travels (the speed the
+    feet were drawn for) and when the body leaves the ground (the window the
+    animator scrubs). Locking removes the travel; clamping removes the rise; the
+    times stay where they are.
+
+    `reference` is the clip's own `align`, and it is here for the **bearing**
+    (D-066). A one-dimensional blend space only ever needed the travel's
+    *length*; a two-dimensional one is laid out by its direction, and the
+    direction that matters is the one the clip will have after `align_facing`
+    has turned it — relative to the body's own forward at the same reference
+    moment, not to any world axis. So it is computed off `joints` — the very
+    line `align_facing` is about to turn square — which is what makes the number
+    the animator lays a blend point out from the same number the build produces.
+    """
+    bones = ((HIPS, "LeftToeBase", "RightToeBase", "RightHand", "LeftHand",
+              "Head", "Neck")
+             + HIP_JOINTS + tuple(j for j in joints if j not in HIP_JOINTS))
+    frames, tracks = sample_bones(arm, action, bones)
+    hips = tracks[HIPS]
+    n = len(frames)
+    seconds = [(f - frames[0]) / FPS for f in frames]
+    duration = seconds[-1]
+
+    travel = math.hypot(hips[-1].x - hips[0].x, hips[-1].y - hips[0].y)
+    speed = travel / duration if duration > 0 else 0.0
+
+    # Which way those metres go, in degrees off the body's own forward, positive
+    # to the **left** (D-066).
+    #
+    # Forward is this clip's own facing line turned a quarter turn, the same
+    # construction `reach()` below and `align_facing` both use: with the
+    # left-to-right line as the body's right and Z as up, forward is Z x right,
+    # which in Blender's right-handed XY is that line's yaw plus 90°.
+    # Taken at the clip's own alignment reference, because that is the moment
+    # `align_facing` pins to the rest pose — so this is what the travel will be
+    # relative to the Bog's forward once the clip is in the game, and it is the
+    # number a blend point's position is.
+    face_left, face_right = tracks[joints[0]], tracks[joints[1]]
+    side_yaws = [math.atan2(face_right[i].y - face_left[i].y,
+                            face_right[i].x - face_left[i].x)
+                 for i in range(n)]
+    if reference is LOOP_MEAN:
+        face = math.atan2(sum(math.sin(y) for y in side_yaws),
+                          sum(math.cos(y) for y in side_yaws))
+    else:
+        face = side_yaws[min(n - 1, int(round(reference * FPS)))]
+    bearing = 0.0
+    if travel > 1e-4:
+        bearing = math.degrees(wrap_pi(
+            math.atan2(hips[-1].y - hips[0].y, hips[-1].x - hips[0].x)
+            - (face + math.pi / 2.0)))
+
+    # Posture, which is the half of a mixed-family blend space the playback rate
+    # cannot fix (D-066). Hip height is the pelvis above the floor and torso
+    # pitch is the Hips -> Neck line off vertical, both averaged over the whole
+    # clip — a mean rather than any one frame, because what two clips being
+    # blended have to agree about is their carriage and not their phase.
+    #
+    # Absolute rather than measured against a foot: the rig is scaled so the
+    # rest pose's toes sit on z=0 and `lock_root_motion` never touches a clip's
+    # vertical unless its `rise_kept` says to, so a clip authored with its
+    # pelvis ten centimetres higher *renders* ten centimetres higher, and that
+    # is exactly the number that shows up as a Bog rising out of a blend.
+    hip_heights = [hips[i].z for i in range(n)]
+    pitches = []
+    for i in range(n):
+        spine = tracks["Neck"][i] - hips[i]
+        flat = math.hypot(spine.x, spine.y)
+        pitches.append(math.degrees(math.atan2(flat, spine.z)))
+    hip_height = sum(hip_heights) / n
+    torso_pitch = sum(pitches) / n
+
+    ground = min(arm.data.bones["LeftToeBase"].head_local.z,
+                 arm.data.bones["RightToeBase"].head_local.z)
+    clearance = [min(tracks["LeftToeBase"][i].z, tracks["RightToeBase"][i].z) - ground
+                 for i in range(n)]
+
+    def crossing(threshold, rising):
+        """First (or last) time the feet are above `threshold`, interpolated."""
+        span = range(1, n) if rising else range(n - 1, 0, -1)
+        for i in span:
+            a, b = clearance[i - 1], clearance[i]
+            if (a < threshold) != (b < threshold):
+                t = (threshold - a) / (b - a)
+                return seconds[i - 1] + t / FPS
+        return None
+
+    # The window a clip spends near the ground — the slide's low phase, the dive
+    # landing's roll — measured against the clip's own standing height so one
+    # rule fits a crouch and a jump.
+    standing = hips[0].z
+    low = [i for i in range(n) if hips[i].z < LOW_FRACTION * standing]
+    recovered = None
+    if low:
+        for i in range(low[-1], n):
+            if hips[i].z > STANDING_FRACTION * standing:
+                recovered = seconds[i]
+                break
+
+    info = {
+        "clip": clip,
+        "frames": n,
+        "duration": duration,
+        "travel": travel,
+        "speed": speed,
+        "bearing": bearing,
+        "facing": "chest" if joints is CHEST_JOINTS else "hips",
+        "hip_height": hip_height,
+        "torso_pitch": torso_pitch,
+        "hips_first": standing,
+        "hips_min": min(p.z for p in hips),
+        "hips_max": max(p.z for p in hips),
+        "hips_apex": seconds[max(range(n), key=lambda i: hips[i].z)],
+        "airborne": max(clearance),
+        "leave": crossing(FOOT_CLEARANCE, True),
+        "land": crossing(FOOT_CLEARANCE, False),
+        "leave_wide": crossing(FOOT_CLEARANCE_WIDE, True),
+        "land_wide": crossing(FOOT_CLEARANCE_WIDE, False),
+        "low_from": seconds[low[0]] if low else None,
+        "low_to": seconds[low[-1]] if low else None,
+        "stood_up": recovered,
+    }
+
+    # The throwing hand, measured **relative to the hips** and along the body's
+    # own forward rather than in world space against a fixed world axis.
+    #
+    # Both were world-space until the throw clip changed (D-063), and both were
+    # wrong for the same reason. This runs before `lock_root_motion`, so a clip
+    # that travels carries its hand along at the body's speed and turns with it:
+    # `SpearThrowLonger` covers 2.842 m of run-up and swings through 131 deg of
+    # hip yaw while it throws, which put the old `min(hand.y)` "furthest
+    # forward" somewhere in the approach instead of at the extension, and added
+    # the run-up to every hand speed. It mattered less on a clip that travels
+    # 1.7 m and it was never right.
+    #
+    # Hip-relative is also what `tools/preview_clips.py` and
+    # `tools/hand_track.gd` report, so the release printed at the end of this
+    # build is now the same number those two print and the same one
+    # `bog_animator.gd`'s THROW_RELEASE_IN_CLIP is set from — three tools, one
+    # answer, which is the only way that constant can be checked rather than
+    # believed.
+    left, right = tracks[HIP_JOINTS[0]], tracks[HIP_JOINTS[1]]
+    rel = [tracks["RightHand"][i] - hips[i] for i in range(n)]
+    fastest = max(range(1, n), key=lambda i: (rel[i] - rel[i - 1]).length)
+    info["hand_peak"] = (rel[fastest] - rel[fastest - 1]).length * FPS
+    info["hand_peak_at"] = seconds[fastest]
+
+    def reach(i):
+        """How far in front of the hips the hand is, in metres.
+
+        Forward is the hip line turned a quarter turn: `rest_facing` is the yaw
+        of the left-hip -> right-hip line, and the body faces (-y, x) of it.
+        """
+        side = right[i] - left[i]
+        span = math.hypot(side.x, side.y)
+        if span < 1e-6:
+            return 0.0
+        return (rel[i].x * -side.y + rel[i].y * side.x) / span
+
+    info["hand_reach_at"] = seconds[max(range(n), key=reach)]
+
+    # The **drinking** hand, which is the other one and is measured by height
+    # rather than by reach.
+    #
+    # `Drink` is the one clip here whose interesting moments are neither a peak
+    # speed nor a furthest extension: what it is, is 1.35 s of standing still, a
+    # bottle raised to the mouth, a swallow with the head back, and an arm put
+    # down again — with 2.2 s of idle tail after it. The window
+    # `bog_animator.gd` plays is cut from **where the gesture starts and where
+    # it stops**, and those are the two numbers here: the first and last frames
+    # at which the hand is doing more than HAND_MOVING. Printed for every clip
+    # rather than only for that one, because "when does this hand actually move"
+    # is the question anybody cutting a window out of a new utility clip will
+    # ask next.
+    #
+    # Height is `rel.z` and not the `reach()` above: an arm on its way to a
+    # mouth goes up, and its forward component barely changes. The peak is the
+    # bottle at the lips, which is the pose a contact sheet is built around.
+    lefts = [tracks["LeftHand"][i] - hips[i] for i in range(n)]
+    moving = [i for i in range(1, n)
+              if (lefts[i] - lefts[i - 1]).length * FPS > HAND_MOVING]
+    # The **longest run** of those frames rather than the first and last of them,
+    # and a run may have short holes in it. Both halves of that were found the
+    # hard way on this one clip. Taking `moving[-1]` reported a gesture running
+    # to the end of a clip that had been still for two seconds, because the idle
+    # tail twitches over the threshold on its very last frame. Then requiring an
+    # unbroken run cut the gesture in half at 2.967, because **a drink pauses at
+    # the lips** — the hand is doing 0.05 m/s at 3.000 with the head back, which
+    # is the swallow and is the middle of the thing, not the end of it. So runs
+    # closer together than GESTURE_GAP are one gesture.
+    runs = []
+    for i in moving:
+        if runs and i - runs[-1][-1] <= GESTURE_GAP:
+            runs[-1].append(i)
+        else:
+            runs.append([i])
+    best = max(runs, key=len) if runs else []
+    info["off_hand_from"] = seconds[best[0] - 1] if best else None
+    info["off_hand_to"] = seconds[best[-1]] if best else None
+    highest = max(range(n), key=lambda i: lefts[i].z)
+    info["off_hand_high"] = lefts[highest].z
+    info["off_hand_high_at"] = seconds[highest]
+    return info
+
+
+
+# ---------------------------------------------------------------------------
+# 5b. The mirror: a left strafe reflected into a right one (D-071)
+# ---------------------------------------------------------------------------
+#
+# Mixamo's strafes are **handed**, and that is a property of the animation and
+# not of any one download. Measured on this rig, travel in degrees off the
+# chest line, positive to the character's left:
+#
+#     pack                        run left  run right   walk left  walk right
+#     Locomotion (lowercase)         +27.5      -37.4       +35.3      -46.5
+#     Longbow Locomotion            +116.0      -45.8      +126.5      -46.3
+#     Magic Locomotion               +76.5      -37.6       +94.4      -38.8
+#
+# Every *right* strafe in every pack lands between -37 and -47, because the
+# character holds its chest turned to its own right — a bow arm, a casting hand
+# — so stepping right barely turns the torso and stepping left turns it a long
+# way. There is therefore **no right-hand strafe to download** that would serve
+# a pole meaning -90: not in the pack this project already has, and not in
+# either of the two it rejected. The only symmetric pair this rig can be given
+# is a left strafe and its own reflection.
+#
+# What that costs is measured rather than assumed. The rest pose this rig was
+# auto-rigged onto is square to about a centimetre in the plane's position but
+# its limbs are a few degrees out of it, so `check_mirror` prints the residual
+# every build and stops if it grows.
+
+## How far off square the rest pose may be before a mirrored clip is a different
+## move from the one it reflects, in metres on the finished 1.80 m rig.
+MIRROR_LIMIT = 0.03
+
+## The bones that residual is measured over. The fingers are excluded because
+## they are 0.2-0.4 m out of square on this rig *and* carry no tracks at all —
+## the exporter drops constant channels (D-023) — so including them would hold
+## the build to a number about geometry that nothing animates and nothing sees.
+MIRROR_BONES = ("Hips", "Spine", "Spine1", "Spine2", "Neck", "Head",
+                "HeadTop_End", "Shoulder", "Arm", "ForeArm", "Hand",
+                "UpLeg", "Leg", "Foot", "ToeBase", "Toe_End")
+
+
+def mirror_bone(name):
+    """The bone on the other side, or the same bone for one on the centre line."""
+    if name.startswith("Left"):
+        return "Right" + name[4:]
+    if name.startswith("Right"):
+        return "Left" + name[5:]
+    return name
+
+
+def mirror_plane(arm):
+    """The rig's own sagittal plane, as a 4x4 reflection in armature space.
+
+    The normal is the **rest hip line** — the same line `align_facing` reads a
+    clip's facing off, and for the same reason: it is the one pair of joints
+    that gives the body's lateral axis with no arm swing in it. The plane passes
+    through the rest Hips head.
+
+    Fitted rather than assumed to be a world axis. This rig's forward is -86 deg
+    in armature XY, so mirroring about X would be four degrees wrong, and four
+    degrees of wrong mirror is a strafe that walks slowly into the crosshair.
+    """
+    left = arm.data.bones[HIP_JOINTS[0]].head_local
+    right = arm.data.bones[HIP_JOINTS[1]].head_local
+    normal = Vector((right.x - left.x, right.y - left.y, 0.0)).normalized()
+    origin = arm.data.bones[HIPS].head_local
+    basis = Matrix.Identity(3)
+    for i in range(3):
+        for j in range(3):
+            basis[i][j] = (1.0 if i == j else 0.0) - 2.0 * normal[i] * normal[j]
+    plane = basis.to_4x4()
+    plane.translation = origin - basis @ origin
+    return plane, normal, origin
+
+
+def check_mirror(arm):
+    """How square this rig is about its own sagittal plane, and stop if it is not.
+
+    Reported as the worst mirror-pair midpoint off the plane and the worst centre
+    bone off it. Both are distances on the finished rig, so they read as what
+    they are: how far the reflection moves a bone that should not move at all.
+    """
+    plane, normal, origin = mirror_plane(arm)
+    log("  sagittal plane: normal %+.2f deg in armature XY, through the rest "
+        "Hips at z=%.3f m" % (math.degrees(math.atan2(normal.y, normal.x)), origin.z))
+    worst_pair = (0.0, "-")
+    worst_centre = (0.0, "-")
+    for bone in arm.data.bones:
+        if not any(bone.name.endswith(b) for b in MIRROR_BONES):
+            continue
+        other = mirror_bone(bone.name)
+        if other == bone.name:
+            off = abs((bone.head_local - origin).dot(normal))
+            if off > worst_centre[0]:
+                worst_centre = (off, bone.name)
+        elif bone.name.startswith("Left"):
+            mid = (bone.head_local + arm.data.bones[other].head_local) / 2.0
+            off = abs((mid - origin).dot(normal))
+            if off > worst_pair[0]:
+                worst_pair = (off, bone.name[4:])
+    log("  worst mirror pair %.4f m off it (%s), worst centre bone %.4f m (%s)"
+        % (worst_pair[0], worst_pair[1], worst_centre[0], worst_centre[1]))
+    worst = max(worst_pair[0], worst_centre[0])
+    if worst > MIRROR_LIMIT:
+        raise SystemExit(
+            "this rig is %.4f m out of square about its own sagittal plane, past "
+            "the %.3f m\nMIRROR_LIMIT allows. A mirrored clip would be a "
+            "different move from the one it\nreflects, which is the opposite of "
+            "what a mirrored pole is for." % (worst, MIRROR_LIMIT))
+    return plane
+
+
+def mirror_action(arm, source, name, plane):
+    """`source` reflected left-to-right, as a new baked action called `name`.
+
+    Baked pose by pose rather than transformed curve by curve, because a bone's
+    rotation curves are written in its **own** rest frame, and a mirrored bone's
+    rest frame is a reflection of its partner's rather than a rotation of it.
+    Blender carries that difference in the bone roll, and on this rig the pairs
+    are up to thirteen degrees apart. Working in armature space and letting
+    Blender solve each `matrix` back into a local rotation keeps all of that out
+    of the arithmetic here.
+
+    The matrix each bone is given is
+
+        N(b, f) = S . M(b', f) . M(b', rest)^-1 . S . M(b, rest)
+
+    — the mirror of the partner's pose, carried out of the partner's rest frame
+    and into this bone's own. Everything right of the first term is a constant,
+    and it is what makes the identity hold that matters: hand this the rest pose
+    and every bone gets its own rest matrix back exactly, however out of square
+    the rig is. A reflection can therefore never introduce a standing offset. An
+    asymmetric rig costs a little accuracy in the *motion* and nothing at all in
+    the pose that motion starts from.
+    """
+    bones = [b.name for b in arm.data.bones]
+    rest = dict((b, arm.data.bones[b].matrix_local.copy()) for b in bones)
+
+    # Parents before children: `pose_bone.matrix` is solved against the parent's
+    # already-evaluated pose, so a child written before its parent is placed
+    # against the arm the previous frame left behind.
+    order = []
+
+    def walk(bone):
+        order.append(bone.name)
+        for child in bone.children:
+            walk(child)
+
+    for bone in arm.data.bones:
+        if bone.parent is None:
+            walk(bone)
+
+    use_action(arm, source)
+    first, last = action_frame_span(source)
+    frames = list(range(first, last + 1))
+    scene = bpy.context.scene
+    sampled = []
+    for frame in frames:
+        scene.frame_set(frame)
+        sampled.append(dict((b, arm.pose.bones[b].matrix.copy()) for b in bones))
+
+    action = bpy.data.actions.new(name)
+    layer = action.layers.new("Layer")
+    strip = layer.strips.new(type='KEYFRAME')
+    slot = action.slots.new(id_type='OBJECT', name=arm.name)
+    strip.channelbags.new(slot)
+    use_action(arm, action)
+
+    constant = dict((b, rest[mirror_bone(b)].inverted() @ plane @ rest[b])
+                    for b in bones)
+
+    for index, frame in enumerate(frames):
+        scene.frame_set(frame)
+        poses = sampled[index]
+        for bone in order:
+            pose_bone = arm.pose.bones[bone]
+            pose_bone.matrix = plane @ poses[mirror_bone(bone)] @ constant[bone]
+            bpy.context.view_layer.update()
+        for bone in bones:
+            pose_bone = arm.pose.bones[bone]
+            pose_bone.keyframe_insert("location", frame=frame)
+            pose_bone.keyframe_insert("rotation_quaternion", frame=frame)
+            pose_bone.keyframe_insert("scale", frame=frame)
+
+    flips = unwind_quaternions(action)
+    log("  %-11s mirrored from %-11s %d bones over %d frames, %d curves, "
+        "%d sign flips unwound"
+        % (name, source_of(source), len(bones), len(frames),
+           len(list(iter_fcurves(action))), flips))
+    return action
+
+
+def source_of(action):
+    """A readable name for an imported action, whose own is `Armature|mixamo...`."""
+    return action.name.split("|")[0]
+
+
+def unwind_quaternions(action):
+    """Keep every quaternion key on the near side of the one before it.
+
+    A baked quaternion is read off a matrix, and `to_quaternion` is free to
+    return either of the two that mean the same rotation. Left alone, one sign
+    flip mid-cycle is a bone taking the long way round between two frames that
+    are a degree apart — on a mirrored run cycle, a leg through the body.
+    Flipping is exact: q and -q are the same pose, so this changes nothing but
+    the path between two keys.
+    """
+    tracks = {}
+    for fcurve in iter_fcurves(action):
+        if not fcurve.data_path.endswith("rotation_quaternion"):
+            continue
+        tracks.setdefault(fcurve.data_path, {})[fcurve.array_index] = fcurve
+    flips = 0
+    for curves in tracks.values():
+        if len(curves) != 4:
+            continue
+        keys = [curves[i].keyframe_points for i in range(4)]
+        count = min(len(k) for k in keys)
+        for i in range(1, count):
+            dot = sum(keys[c][i].co.y * keys[c][i - 1].co.y for c in range(4))
+            if dot < 0.0:
+                flips += 1
+                for c in range(4):
+                    point = keys[c][i]
+                    point.co.y = -point.co.y
+                    point.handle_left.y = -point.handle_left.y
+                    point.handle_right.y = -point.handle_right.y
+    return flips
+
+
+## What a mirrored clip may differ from its source by, once the sign is taken
+## off the bearing. These are not taste: they are what this rig's own 21 mm of
+## out-of-square (`check_mirror`, above) *produces*, rounded up.
+##
+## The two that come out at zero are the two that have to: travel speed and hip
+## height are reflections of quantities the plane does not touch, and they match
+## to four decimals. The two that do not are the two the plane's fit shows up in
+## — the bearing, which moves by 1.2 deg because the toe pair sits 21 mm off the
+## plane, and the torso pitch, which moves by 2.0 deg because the Neck sits
+## 9.7 mm off it and a 0.28 m torso turns that into two degrees. A limit set
+## just over each is a limit that still catches the faults worth catching: a
+## plane fitted to the wrong axis, or a bone pair that did not swap, moves these
+## by tens of degrees, not by one.
+MIRROR_BEARING_LIMIT = 2.0
+MIRROR_SPEED_LIMIT = 0.01
+MIRROR_HIPS_LIMIT = 0.005
+MIRROR_PITCH_LIMIT = 2.5
+
+
+def check_mirrored_clip(rows, clip):
+    """A mirrored clip has to be its source's reflection in every number we take.
+
+    The build measures both of them anyway, so this costs nothing and catches the
+    whole class of ways a reflection can go quietly wrong — a plane a few degrees
+    off, a bone pair that did not swap, a quaternion that took the long way. A
+    mirror that is right has the *opposite* bearing and the *same* everything
+    else; one that is wrong fails here rather than in a match.
+    """
+    mine, theirs = rows[clip.name], rows[clip.mirror_of]
+    bearing = abs(mine["bearing"] + theirs["bearing"])
+    speed = abs(mine["speed"] - theirs["speed"])
+    hips = abs(mine["hip_height"] - theirs["hip_height"])
+    pitch = abs(mine["torso_pitch"] - theirs["torso_pitch"])
+    log("  %-11s vs %-11s bearing %+.1f vs %+.1f (sum %.2f deg), speed %.3f vs "
+        "%.3f (%.4f m/s)" % (clip.name, clip.mirror_of, mine["bearing"],
+                             theirs["bearing"], bearing, mine["speed"],
+                             theirs["speed"], speed))
+    log("  %-11s    %-11s hips %.3f vs %.3f m (%.4f), pitch %.1f vs %.1f deg (%.2f)"
+        % ("", "", mine["hip_height"], theirs["hip_height"], hips,
+           mine["torso_pitch"], theirs["torso_pitch"], pitch))
+    if (bearing > MIRROR_BEARING_LIMIT or speed > MIRROR_SPEED_LIMIT
+            or hips > MIRROR_HIPS_LIMIT or pitch > MIRROR_PITCH_LIMIT):
+        raise SystemExit(
+            "%s is not the reflection of %s it claims to be: bearings sum to "
+            "%.2f deg\n(should be 0), speeds differ by %.4f m/s, hips by %.4f m, "
+            "torso pitch by %.2f deg.\nA mirrored pole whose move is not the "
+            "same move is worse than no pole at all."
+            % (clip.name, clip.mirror_of, bearing, speed, hips, pitch))
+
+
+
+def report_measurements(rows):
+    log("  clip            frames  length   travel   speed    hips z: first  min    max")
+    for r in rows:
+        log("  %-14s %5d  %6.3f  %6.3f  %6.3f            %.3f  %.3f  %.3f"
+            % (r["clip"], r["frames"], r["duration"], r["travel"], r["speed"],
+               r["hips_first"], r["hips_min"], r["hips_max"]))
+    log()
+    # Direction and carriage, which is what a 2D locomotion space is laid out
+    # from and what it can get wrong (D-066). The bearing says where a blend
+    # point belongs; the two posture columns say what blending two of them
+    # actually costs, because the playback rate handles the speed difference
+    # between two authoring families for free and handles none of this.
+    log("  travel bearing (deg off the body's own forward, + is to its left) "
+        "and carriage:")
+    log("  clip            facing   bearing   hip height   torso pitch")
+    for r in rows:
+        log("  %-14s %-6s  %+7.1f°   %8.3f m   %8.1f°"
+            % (r["clip"], r["facing"], r["bearing"], r["hip_height"],
+               r["torso_pitch"]))
+    log()
+    log("  airborne windows (foot clearance over %.2f m / over %.2f m, which is what "
+        "§2's figures used):" % (FOOT_CLEARANCE, FOOT_CLEARANCE_WIDE))
+    for r in rows:
+        if r["airborne"] < FOOT_CLEARANCE_WIDE:
+            continue
+        log("  %-11s feet leave %.3f / %.3f   apex %.3f (hips %.3f m)   feet touch %.3f / %.3f"
+            % (r["clip"], r["leave"], r["leave_wide"], r["hips_apex"], r["hips_max"],
+               r["land"], r["land_wide"]))
+    log()
+    log("  time spent low (hips under %.0f%% of the clip's standing height, back over %.0f%%):"
+        % (LOW_FRACTION * 100.0, STANDING_FRACTION * 100.0))
+    for r in rows:
+        if r["low_from"] is None:
+            continue
+        log("  %-11s down from %.3f to %.3f (min %.3f m), standing again %s"
+            % (r["clip"], r["low_from"], r["low_to"], r["hips_min"],
+               "%.3f" % r["stood_up"] if r["stood_up"] else "not within the clip"))
+    log()
+    for r in rows:
+        if r["clip"] != "Throw":
+            continue
+        log("  %-11s right hand peaks at %.2f m/s at %.3f s, furthest forward %.3f s"
+            % (r["clip"], r["hand_peak"], r["hand_peak_at"], r["hand_reach_at"]))
+
+
+# ---------------------------------------------------------------------------
+# 5. Root motion
+# ---------------------------------------------------------------------------
+
+def check_ground(arm, action, clip):
+    """Prove the vertical rule left the clip standing on the floor, and say where.
+
+    `rise_kept` is a judgement about one clip, so this is the part that keeps it
+    honest rather than merely documented. Every bone head is sampled in world
+    space over the whole clip; the lowest one anywhere in it is compared with
+    that clip's own `floor_limit` and the build stops if it is deeper. That is
+    the check
+    that catches a pelvis pinned under a body that then rotates over it — the
+    dive's head 0.41 m through the floor — at build time instead of in a render.
+
+    The hands are measured in the same pass because on JumpTwo they are what
+    takes the landing: the window in which they are within HAND_PLANT_CLEARANCE
+    of the floor is the plant, and that is both the moment `bog_animator.gd` cuts
+    its roll window from and the line this report is split on. Everything deep in
+    a correctly built JumpTwo is on the far side of it — the authored roll — and
+    everything on the near side is flight, which is what the rule governs and
+    what must clear the floor. JumpOne never plants a hand, so it reports once.
+    """
+    bones = [b.name for b in arm.data.bones]
+    frames, tracks = sample_bones(arm, action, bones)
+    count = len(frames)
+    seconds = [(f - frames[0]) / FPS for f in frames]
+
+    def deepest(indices):
+        """(z, bone, seconds) of the lowest bone head over those frames."""
+        best = None
+        for i in indices:
+            for bone in bones:
+                if best is None or tracks[bone][i].z < best[0]:
+                    best = (tracks[bone][i].z, bone, seconds[i])
+        return best
+
+    hands = [min(tracks[b][i].z for b in HAND_JOINTS) for i in range(count)]
+    lowest_hand = min(range(count), key=lambda i: hands[i])
+    down = [i for i in range(count) if hands[i] <= HAND_PLANT_CLEARANCE]
+    plant = (seconds[down[0]], seconds[down[-1]]) if down else None
+
+    log("              hands lowest %+.3f m at %.3f s, %s"
+        % (hands[lowest_hand], seconds[lowest_hand],
+           "planted (wrist within %.2f m of the floor) from %.3f to %.3f s"
+           % (HAND_PLANT_CLEARANCE, plant[0], plant[1]) if plant
+           else "never within %.2f m of the floor" % HAND_PLANT_CLEARANCE))
+    phases = ([("airborne, before the plant", range(down[0])),
+               ("from the plant on", range(down[0], count))]
+              if down and down[0] > 0 else [("whole clip", range(count))])
+    for what, indices in phases:
+        low = deepest(indices)
+        log("              lowest joint %s: %+.3f m (%s) at %.3f s"
+            % (what.ljust(26), low[0], low[1], low[2]))
+
+    worst = deepest(range(count))
+    limit = clip.floor_limit
+    log("              deepest anywhere %+.3f m against a %+.3f m limit — %s"
+        % (worst[0], limit, "ok" if worst[0] >= limit else "TOO DEEP"))
+    if worst[0] < limit:
+        raise SystemExit(
+            "%s: %s reaches %+.3f m at %.3f s, past this clip's %+.3f m floor "
+            "limit — rise_kept=%.2f is the wrong rule for it, in PACKS"
+            % (clip.name, worst[1], worst[0], worst[2], limit, clip.rise()))
+    return {"lowest": worst[0], "lowest_bone": worst[1], "lowest_at": worst[2],
+            "hand_min": hands[lowest_hand], "hand_min_at": seconds[lowest_hand],
+            "plant": plant}
+
+
+def lock_root_motion(action, clip):
+    """Lock the Hips' horizontal travel in place, and apply the vertical rule.
+
+    **The travel exception, argued** (D-068). One clip in this game — `Swing` —
+    is supposed to *move the Bog*: the great sword's attack is a spinning
+    advance and the user chose it over an in-place swing precisely so that it
+    would cover ground. It is the one clip whose horizontal metres are kept, and
+    this is the paragraph that says what "kept" can and cannot mean, because the
+    obvious reading of it is the wrong half of a pair.
+
+    There are two places the 1.712 m could live and they are not interchangeable:
+
+    * **In the fcurve** — skip the clamp below for this clip. The Hips then
+      translate inside the skeleton while the `CharacterBody3D` stands still, so
+      the *mesh* walks 1.7 m away from the capsule it is standing on. The camera,
+      the collision, the nameplate and every hit resolved against the body stay
+      behind; the visible Bog snaps back when the one-shot ends. Nothing about
+      that is "the advance is kept" — it is the model coming off its own body.
+    * **In the physics body** — clamp as usual, and drive the capsule through the
+      same 1.712 m over the same 1.867 s (`Bog._handle_spin`). Everything moves
+      together, and the feet stay planted for the same reason `Run`'s do: the
+      clip's legs were drawn cycling against a pelvis advancing at 0.917 m/s, so
+      a body that advances at 0.917 m/s cancels exactly that.
+
+    Doing **both** is the third option and is simply wrong twice: the Bog would
+    cover 3.4 m and the feet would skate through all of it.
+
+    So the clamp stays, on every clip, with no branch in the loop below — and the
+    exception is expressed where it can be checked instead: a clip that names an
+    `advance_as` is declaring that its travel is not being thrown away, and the
+    build prints the number the game has to agree with (see the `=== for bog.gd`
+    block at the end of `main`). That is the same shape `authored_as` already
+    has for a cycle's speed, and it has the property a quiet edit to this
+    function would not: move the clip, or the window, and the printed metres move
+    with it and stop matching the constant.
+
+    Index 1 of the Hips `location` curve is up: the Hips bone is vertical in the
+    rest pose, so its local Y is world Z, and pose translation is applied in the
+    bone's *rest* basis — which is why this holds no matter how the rotation
+    keys turn the pelvis.
+
+    The two horizontal axes are locked to their first key on every clip. The up
+    axis is scaled toward that same first key by whatever fraction of the rise
+    the clip's own `rise_kept` says to keep, so `0.0` is the flat clamp, `1.0`
+    (and unset) is untouched, and anything between is a rise the animation and
+    the physics body share. Only keys *above* the first one move: the downward
+    half of a jump — the landing absorb, the ground roll — is motion the
+    physics body is standing on the floor for and cannot produce, so it is never
+    scaled away.
+    """
+    curves = bone_curves(action, HIPS, "location")
+    if len(curves) != 3:
+        raise SystemExit("%s: Hips has %d location curves, wanted 3"
+                         % (clip.name, len(curves)))
+    first = [c.keyframe_points[0].co.y for c in curves]
+
+    for axis in (0, 2):
+        for kp in curves[axis].keyframe_points:
+            kp.co.y = first[axis]
+        linearise(curves[axis])
+
+    kept = clip.rise()
+    pulled = 0
+    if kept < 1.0:
+        for kp in curves[1].keyframe_points:
+            if kp.co.y > first[1]:
+                kp.co.y = first[1] + (kp.co.y - first[1]) * kept
+                pulled += 1
+        linearise(curves[1])
+    return pulled
+
+
+# ---------------------------------------------------------------------------
+# 6. Facing
+# ---------------------------------------------------------------------------
+
+def clip_facing(arm, action, reference, joints=HIP_JOINTS):
+    """The clip's facing at its reference moment, relative to nothing yet.
+
+    Forward kinematics, not a Euler angle off the root quaternion: the Hips bone
+    carries the rig's own rest orientation and its "yaw" is not the body's. The
+    line between the two hip joints is the one measurement that stays put while
+    the arms and torso animate — except on a sidestep, where the pelvis is the
+    thing that moves and the chest is the thing that stays. `joints` is which
+    line this clip is read off; see CHEST_JOINTS.
+    """
+    frames, tracks = sample_bones(arm, action, joints)
+    left, right = tracks[joints[0]], tracks[joints[1]]
+    yaws = [math.atan2(right[i].y - left[i].y, right[i].x - left[i].x)
+            for i in range(len(frames))]
+    # The rest pose sits at -176°, so raw yaws straddle the ±180° seam and a
+    # plain min/max of them would read as a 360° swing. Everything is reported
+    # relative to the rest facing instead.
+    relative = [wrap_pi(y - rest_facing(arm, joints)) for y in yaws]
+    if reference is LOOP_MEAN:
+        # A circular mean, for the same reason.
+        x = sum(math.cos(y) for y in yaws)
+        z = sum(math.sin(y) for y in yaws)
+        return math.atan2(z, x), min(relative), max(relative)
+    index = min(len(yaws) - 1, int(round(reference * FPS)))
+    return yaws[index], min(relative), max(relative)
+
+
+def rotate_hips_yaw(action, clip, angle):
+    """Turn the whole clip by `angle` about world up, at the Hips.
+
+    The correction is applied inside the Hips bone's own space: the bone is
+    vertical in rest, so a rotation about its local +Y is a rotation about world
+    +Z, and pre-multiplying it onto each key rotates the body without disturbing
+    what the key was already saying. Quaternion multiplication is linear in the
+    components, so the four curves can be rewritten key for key.
+    """
+    curves = bone_curves(action, HIPS, "rotation_quaternion")
+    if len(curves) != 4:
+        raise SystemExit("%s: Hips has %d rotation curves, wanted 4" % (clip, len(curves)))
+    times = [key_frames(c) for c in curves]
+    if any(t != times[0] for t in times[1:]):
+        raise SystemExit("%s: Hips rotation curves are keyed at different times" % clip)
+
+    correction = Quaternion(Vector((0.0, 1.0, 0.0)), angle)
+    for i in range(len(times[0])):
+        turned = correction @ Quaternion([c.keyframe_points[i].co.y for c in curves])
+        for axis in range(4):
+            curves[axis].keyframe_points[i].co.y = turned[axis]
+    for curve in curves:
+        linearise(curve)
+
+
+def align_facing(arm, actions, references):
+    """Make every clip point where the rest pose points, at its reference moment.
+
+    `references` is {clip: (reference moment, the joint pair its facing is read
+    off)}. Almost every clip is read off the hips; the four strafes are read off
+    the chest, and the line below says which so that a sheet of the build log is
+    still a complete account of where each clip ended up pointing (D-066).
+    """
+    log("  rest pose faces %+.2f° by the hip line, %+.2f° by the chest line"
+        % (math.degrees(rest_facing(arm, HIP_JOINTS)),
+           math.degrees(rest_facing(arm, CHEST_JOINTS))))
+    results = []
+    for clip, action in actions.items():
+        reference, joints = references[clip]
+        reference_yaw = rest_facing(arm, joints)
+        before, low, high = clip_facing(arm, action, reference, joints)
+        offset = wrap_pi(before - reference_yaw)
+        rotate_hips_yaw(action, clip, -offset)
+        after, low2, high2 = clip_facing(arm, action, reference, joints)
+        residual = math.degrees(wrap_pi(after - reference_yaw))
+        if abs(residual) > 1.0:
+            raise SystemExit("%s: still %+.2f° off the rest facing after alignment"
+                             % (clip, residual))
+        results.append((clip, math.degrees(offset), residual,
+                        math.degrees(high2 - low2)))
+        log("  %-15s %-9s %-5s was %+7.2f°, turned by %+7.2f°, now %+5.2f° "
+            "(clip turns through %.0f° of real motion)"
+            % (clip, "mean" if reference is LOOP_MEAN else "@%.2fs" % reference,
+               "chest" if joints is CHEST_JOINTS else "hips",
+               math.degrees(offset), -math.degrees(offset), residual,
+               math.degrees(high2 - low2)))
+    return results
+
+
+# ---------------------------------------------------------------------------
+# 7. Loops and CrouchIdle
+# ---------------------------------------------------------------------------
+
+def trim_loop_tail(action, clip):
+    """Drop the cycle's duplicate final frame.
+
+    Some curves carry sub-frame keys (Mixamo hands a few joints three keys per
+    frame), so this removes every key on the final frame rather than "the last
+    key", and the export range is set from the frame numbers, not from what is
+    left of the curves.
+    """
+    first, last = action_frame_span(action)
+    removed = 0
+    for fcurve in iter_fcurves(action):
+        for kp in reversed(list(fcurve.keyframe_points)):
+            if kp.co.x > last - 0.5 and len(fcurve.keyframe_points) > 1:
+                fcurve.keyframe_points.remove(kp)
+                removed += 1
+        fcurve.update()
+    return first, last - 1, removed
+
+
+def synth_crouch_idle(arm, actions, source_clip, frame, hold):
+    """A held crouch, built from the one frame of CrouchWalk with both feet down.
+
+    Sampled after the root motion is locked, so the hips are already where the
+    locked clip puts them and blending CrouchIdle against CrouchWalk does not
+    shift the body.
+    """
+    source = actions[source_clip]
+    action = bpy.data.actions.new("CrouchIdle")
+    layer = action.layers.new("Layer")
+    strip = layer.strips.new(type='KEYFRAME')
+    slot = action.slots.new(id_type='OBJECT', name=arm.name)
+    bag = strip.channelbags.new(slot)
+
+    curves = 0
+    for fcurve in iter_fcurves(source):
+        value = fcurve.evaluate(frame)
+        new = bag.fcurves.new(fcurve.data_path, index=fcurve.array_index)
+        new.keyframe_points.insert(1.0, value)
+        new.keyframe_points.insert(1.0 + hold, value)
+        linearise(new)
+        curves += 1
+
+    use_action(arm, action)
+    bpy.context.scene.frame_set(1)
+    hips = (arm.matrix_world @ arm.pose.bones[HIPS].matrix).translation
+    ground = arm.data.bones["LeftToeBase"].head_local.z
+    toes = [(arm.matrix_world @ arm.pose.bones[b].matrix).translation
+            for b in ("LeftToeBase", "RightToeBase")]
+    log("  CrouchIdle from %s frame %d (t=%.3f): %d curves, 2 keys %.2f s apart"
+        % (source_clip, frame, (frame - 1) / FPS, curves, hold / FPS))
+    log("             hips %.3f m, toes %+.3f/%+.3f above rest, %.3f m apart"
+        % (hips.z, toes[0].z - ground, toes[1].z - ground,
+           math.hypot(toes[0].x - toes[1].x, toes[0].y - toes[1].y)))
+    return action
+
+
+# ---------------------------------------------------------------------------
+# 8. Material
+# ---------------------------------------------------------------------------
+
+def build_material(mesh, emission):
+    """One Principled BSDF over a 1024² base colour, rebuilt from scratch.
+
+    The FBX importer leaves a Normal Map node wired into the BSDF with no image
+    behind it, which is the kind of thing that exports as a silently broken
+    normal texture, so the tree is cleared rather than edited.
+    """
+    if len(mesh.data.materials) != 1:
+        raise SystemExit("mesh has %d materials, wanted 1" % len(mesh.data.materials))
+    material = mesh.data.materials[0]
+
+    # The image is taken from the material that survived consolidation rather
+    # than from bpy.data, so this cannot pick up one of the other seven copies.
+    found = [n.image for n in material.node_tree.nodes
+             if n.type == 'TEX_IMAGE' and n.image is not None]
+    if len(found) != 1:
+        raise SystemExit("%s has %d image textures, wanted 1" % (material.name, len(found)))
+    material.name = "bog"
+    image = found[0]
+    before = tuple(image.size)
+    image.name = "basecolor"
+    # The glTF exporter names an embedded image after the *basename of its
+    # filepath* when that ends in .png/.jpg, and only falls back to the
+    # datablock name — and Godot extracts an embedded texture as
+    # `<glb name>_<glTF image name>`. Without this line the file that lands in
+    # art/generated/ is called `bog_cartoon+monster+3d+model_basecolor.jpg`.
+    # The extension also decides the exported mime type, so it stays .jpg.
+    image.filepath_raw = "//basecolor.jpg"
+    if max(image.size) > TEXTURE_EDGE:
+        image.scale(TEXTURE_EDGE, TEXTURE_EDGE)
+
+    tree = material.node_tree
+    tree.nodes.clear()
+    texture = tree.nodes.new("ShaderNodeTexImage")
+    texture.image = image
+    texture.location = (-400, 0)
+    bsdf = tree.nodes.new("ShaderNodeBsdfPrincipled")
+    bsdf.location = (0, 0)
+    output = tree.nodes.new("ShaderNodeOutputMaterial")
+    output.location = (300, 0)
+    tree.links.new(texture.outputs["Color"], bsdf.inputs["Base Color"])
+    tree.links.new(bsdf.outputs["BSDF"], output.inputs["Surface"])
+    bsdf.inputs["Roughness"].default_value = ROUGHNESS
+    bsdf.inputs["Metallic"].default_value = METALLIC
+    bsdf.inputs["Emission Strength"].default_value = emission
+    if emission > 0.0:
+        tree.links.new(texture.outputs["Color"], bsdf.inputs["Emission Color"])
+    # Wiring it at strength 0 would still export an emissiveTexture with a black
+    # emissiveFactor, which Godot turns into an enabled-but-black emission on the
+    # material: a second texture sample per fragment that can never do anything.
+    # At 0 the socket is left alone instead, so `--emission 0` really is a plain
+    # base-colour PBR material rather than a lit one multiplied by nothing.
+
+    log("  material '%s': base colour '%s' %dx%d -> %dx%d %s, roughness %.2f, "
+        "metallic %.2f, emission %.2f%s"
+        % (material.name, image.name, before[0], before[1], image.size[0],
+           image.size[1], image.file_format, ROUGHNESS, METALLIC, emission,
+           "" if emission > 0.0 else " (not wired)"))
+
+
+# ---------------------------------------------------------------------------
+# 9. Export
+# ---------------------------------------------------------------------------
+
+def stage_nla(arm, actions, ranges, loops):
+    """One NLA track per clip, named after the clip (plus LOOP_SUFFIX if it loops).
+
+    NLA_TRACKS export mode writes one glTF animation per track and takes the
+    animation's name from the track, which is the only way to be sure the clip
+    names in Godot are the ones in the table above. The strip range is set from
+    the frame numbers this script decided on, so a trimmed cycle exports one
+    frame short even though a sub-frame key may survive past its end.
+    """
+    arm.animation_data.action = None
+    for track in list(arm.animation_data.nla_tracks):
+        arm.animation_data.nla_tracks.remove(track)
+    for clip, action in actions.items():
+        first, last = ranges[clip]
+        name = clip + LOOP_SUFFIX if clip in loops else clip
+        track = arm.animation_data.nla_tracks.new()
+        track.name = name
+        strip = track.strips.new(name, int(first), action)
+        if len(action.slots):
+            strip.action_slot = action.slots[0]
+        strip.action_frame_start = first
+        strip.action_frame_end = last
+        strip.frame_start_ui = first
+        strip.frame_end_ui = last
+        log("  track %-16s frames %d..%d (%.4f s)"
+            % (name, first, last, (last - first) / FPS))
+
+
+def export_glb(path):
+    """GLB, Y-up, skinned, one animation per NLA track.
+
+    `export_def_bones=False` keeps every bone including the `*_End` leaves: the
+    ragdoll builder uses HeadTop_End and the toe ends as capsule tips, and
+    `held_spear.gd` hangs off RightHand. `export_optimize_animation_size` drops
+    channels that never change, which is most of the fingers on most clips
+    (D-023). Sampling is forced so what Godot gets is what Blender evaluates,
+    sub-frame keys and all.
+    """
+    if not os.path.isdir(os.path.dirname(path)):
+        os.makedirs(os.path.dirname(path))
+    bpy.ops.export_scene.gltf(
+        filepath=path,
+        export_format='GLB',
+        use_selection=False,
+        use_visible=False,
+        export_yup=True,
+        export_apply=True,
+        export_texcoords=True,
+        export_normals=True,
+        export_tangents=False,
+        export_materials='EXPORT',
+        export_image_format='AUTO',
+        export_jpeg_quality=85,
+        export_skins=True,
+        export_def_bones=False,
+        export_leaf_bone=False,
+        export_influence_nb=4,
+        export_all_influences=False,
+        export_rest_position_armature=True,
+        export_animations=True,
+        export_animation_mode='NLA_TRACKS',
+        export_force_sampling=True,
+        export_frame_range=False,
+        export_frame_step=1,
+        export_anim_slide_to_zero=True,
+        export_optimize_animation_size=True,
+        export_optimize_animation_keep_anim_armature=True,
+        export_bake_animation=False,
+        export_cameras=False,
+        export_lights=False,
+        export_extras=False,
+        export_morph=False,
+    )
+    return os.path.getsize(path)
+
+
+def animation_budget(path):
+    """Read the written GLB back and say how much of it is animation.
+
+    The module docstring argues that this stays one file rather than a mesh plus
+    animation-only libraries, and half of that argument is a set of proportions
+    that move every time a pack is added. So they are measured from the file that
+    was just written instead of asserted in a comment that goes stale: a GLB's
+    JSON chunk names, for every animation, the accessors its samplers read, and
+    an accessor names a buffer view with a byte length. Nothing is needed beyond
+    the standard library and nothing goes back through Blender.
+
+    This is a report and not a rule, so a GLB shaped in a way this does not
+    expect (a future exporter packing Draco, say) returns None and the build
+    carries on. The asset is already written by the time it runs.
+    """
+    with open(path, "rb") as handle:
+        blob = handle.read()
+    if blob[:4] != b"glTF":
+        return None
+    offset, doc, json_bytes = 12, None, 0
+    while offset + 8 <= len(blob):
+        length, kind = struct.unpack_from("<II", blob, offset)
+        if kind == 0x4E4F534A:          # 'JSON'
+            json_bytes = length
+            doc = json.loads(blob[offset + 8:offset + 8 + length].decode("utf-8"))
+            break
+        offset += 8 + length
+    if doc is None:
+        return None
+
+    views = doc.get("bufferViews", [])
+    accessors = doc.get("accessors", [])
+    counted = set()
+
+    def take(index):
+        """A buffer view's bytes, once — several accessors can share one."""
+        if index is None or index in counted:
+            return 0
+        counted.add(index)
+        return views[index].get("byteLength", 0)
+
+    clips = []
+    for anim in doc.get("animations", []):
+        total = 0
+        for sampler in anim.get("samplers", []):
+            for end in ("input", "output"):
+                total += take(accessors[sampler[end]].get("bufferView"))
+        clips.append((anim.get("name", "?"), total))
+    animation = sum(n for _c, n in clips)
+    image = sum(take(im.get("bufferView")) for im in doc.get("images", []))
+    return {"bytes": len(blob), "json": json_bytes, "animation": animation,
+            "image": image, "rest": len(blob) - json_bytes - animation - image,
+            "clips": clips}
+
+
+def report_budget(path):
+    """The split, and the one number that decides whether to revisit the shape."""
+    try:
+        split = animation_budget(path)
+    except Exception as err:            # a report, not a rule — see above
+        log("  (could not read the animation budget back: %s)" % err)
+        return
+    if split is None:
+        log("  (the written GLB is not shaped the way animation_budget expects)")
+        return
+    whole = float(split["bytes"])
+    log("  of that: %.0f%% animation (%d clips), %.0f%% JSON (mostly animation "
+        "channels), %.0f%% texture, %.0f%% mesh and the rest"
+        % (100.0 * split["animation"] / whole, len(split["clips"]),
+           100.0 * split["json"] / whole, 100.0 * split["image"] / whole,
+           100.0 * split["rest"] / whole))
+    biggest = sorted(split["clips"], key=lambda pair: -pair[1])[:4]
+    log("  heaviest clips: %s"
+        % ", ".join("%s %.0f KB" % (name, n / 1000.0) for name, n in biggest))
+
+
+# ---------------------------------------------------------------------------
+
+def parse_args(argv):
+    """Read our own arguments from Blender's command line.
+
+    Blender stops parsing at `--` and hands the rest over. `build_bog.sh` adds
+    a `--` of its own so that both `build_bog.sh --emission 0.25` and the form
+    §7 of the design spec writes, `build_bog.sh -- --emission 0.25`, work; bare
+    separators are skipped here rather than counted.
+
+    The default is the value that shipped: 0.15, picked by rendering the night
+    island and the firing range with it and without it and measuring the Bog
+    against what it stands in. Unlit undergrowth at 20 m went from 1.04× the
+    background's luminance to 1.28× (readable as a character rather than a
+    smudge), while a torch-lit Bog gained only a sixth of its brightness and
+    clipped no pixels — it is still shaded, not a lamp. So a plain `build_bog.sh`
+    reproduces the asset in the tree, and any other number is somebody
+    deliberately re-judging night readability.
+
+    `--body` is the mesh the skin goes on, a file under `assets/source/`, and it
+    defaults to `BODY` — so a plain `build_bog.sh` reproduces the asset in the
+    tree here too. `--body -` keeps the donor's own mesh instead, which is the
+    Bog as it was before the swap; it exists so an A/B is a second build rather
+    than a checkout, and it is not a fallback for a body that fails to fit.
+
+    `--list-packs` prints the same `-- packs` audit a build opens with — the
+    body line included, because "which body is this going to use" is the same
+    question as "which clips" — and then stops, without reading an FBX or
+    writing the GLB. It is the question to ask after dropping a hand-downloaded
+    batch into a folder, and the answer to "is this build about to be smaller
+    than I think it is".
+
+    There is deliberately **no** flag for building a subset of the packs. It
+    would write the real `art/generated/bog.glb` with clips missing from it,
+    which is the one outcome the pack rules above exist to prevent, and the
+    saving would be minutes at most. Iterating on one pack means commenting the
+    others out of `PACKS`, where the change shows up in a diff and cannot be left
+    on by accident.
+    """
+    emission = 0.15
+    listing = False
+    body = BODY
+    argv = argv[argv.index("--") + 1:] if "--" in argv else []
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--":
+            i += 1
+        elif argv[i] == "--emission" and i + 1 < len(argv):
+            emission = float(argv[i + 1])
+            i += 2
+        elif argv[i] == "--body" and i + 1 < len(argv):
+            body = argv[i + 1]
+            i += 2
+        elif argv[i] == "--list-packs":
+            listing = True
+            i += 1
+        else:
+            raise SystemExit("usage: build_bog.py [-- --emission FLOAT] "
+                             "[-- --body FILE|-] [-- --list-packs] (got %r)"
+                             % argv[i])
+    return emission, listing, body
+
+
+def check_declarations():
+    """Catch a PACKS table that cannot mean what it says, before anything opens.
+
+    This is what is left of `check_tables`, and it is a smaller job than that was.
+    Most of what that function guarded against — a clip renamed in `CLIPS` and not
+    in `VERTICAL_RISE_KEPT`, a `FLOOR_LIMIT` keyed on a clip nobody builds — is
+    now unrepresentable: the rules live on the clip, so there is no second place
+    for a name to be stale in. What remains are the things that can only be wrong
+    in the table taken as a whole:
+
+    *Two clips with one name.* Every clip of every pack lands in one
+    AnimationPlayer, so clip names are one flat namespace across packs however
+    separate the folders look. Two packs each declaring a `Throw` would export
+    two NLA tracks called Throw and Godot would keep whichever it read last —
+    silently, and with the wrong one just as likely.
+
+    *A vertical rule with nothing checking it.* `rise_kept` is a judgement about a
+    single clip and `floor_limit` is what keeps it honest; a rise rule with no
+    limit would ship unchecked. That is not hypothetical — it is exactly the
+    failure D-029 records, where clamping JumpTwo's rise put its head 0.41 m
+    through the floor and only a floor check found it.
+
+    *A body of record that builds nothing.* `assert_same_character` measures every
+    file against the first clip of the first pack, so PACKS[0] has to declare one.
+
+    *A CrouchIdle with no source.* The synthesised crouch is cut from a frame of
+    another clip, and that clip has to be in the build.
+    """
+    if not PACKS[0].clips:
+        raise SystemExit("%s declares no clips, but it is the pack every other "
+                         "pack is measured against" % PACKS[0].folder)
+    names = {}
+    mirrors = {}
+    folders = set()
+    for pack in PACKS:
+        for clip in pack.clips:
+            if clip.synthesised():
+                mirrors[clip.name] = clip.mirror_of
+    for pack in PACKS:
+        if pack.folder in folders:
+            raise SystemExit("two packs share the folder %s" % pack.folder)
+        folders.add(pack.folder)
+        files = set()
+        for clip in pack.clips:
+            where = source_name(pack, clip)
+            if clip.name in names:
+                raise SystemExit(
+                    "two clips are called %r: %s and %s. Clip names are one "
+                    "namespace across every pack, because every clip lands in "
+                    "one AnimationPlayer." % (clip.name, names[clip.name], where))
+            names[clip.name] = where
+            # Only files can collide. Two synthesised clips in one pack both
+            # carry `file=None`, and a set of Nones would call the second one a
+            # duplicate of the first.
+            if clip.file is not None:
+                if clip.file in files:
+                    raise SystemExit("%s is declared twice in its pack" % where)
+                files.add(clip.file)
+            if clip.rise_kept is not None:
+                if not 0.0 <= clip.rise_kept <= 1.0:
+                    raise SystemExit("%s: rise_kept=%.2f is outside 0..1"
+                                     % (clip.name, clip.rise_kept))
+                if clip.floor_limit is None:
+                    raise SystemExit(
+                        "%s keeps %.0f%% of its rise and sets no floor_limit, so "
+                        "its vertical rule would ship unchecked"
+                        % (clip.name, clip.rise_kept * 100.0))
+            # A cycle's speed and a one-shot's distance are two different
+            # claims about what happens to a clip's travel, and a clip that made
+            # both would have a playback rate matching feet to a ground speed
+            # *and* a body reproducing its metres once. See `advance_as`.
+            if clip.authored_as is not None and clip.advance_as is not None:
+                raise SystemExit(
+                    "%s names both authored_as=%s and advance_as=%s. A clip's "
+                    "travel is either a cycle's speed or a one-shot's advance, "
+                    "never both." % (clip.name, clip.authored_as, clip.advance_as))
+            # An advance that nothing reproduces is a clip that says it moves the
+            # Bog and does not, which is the failure this field exists to make
+            # visible rather than invisible.
+            if clip.advance_as is not None and clip.loop:
+                raise SystemExit(
+                    "%s is a looping clip with advance_as=%s. An advance is a "
+                    "one-shot's distance, produced once by the body; a cycle's "
+                    "travel is authored_as." % (clip.name, clip.advance_as))
+            if clip.align is not LOOP_MEAN and not isinstance(clip.align, (int, float)):
+                raise SystemExit("%s: align must be LOOP_MEAN or a time in "
+                                 "seconds, not %r" % (clip.name, clip.align))
+            # Which line a clip's facing is read off is a decision about that
+            # clip, and a typo in it would not fail — it would build a Bog that
+            # runs sideways at a slightly wrong angle, which is the exact class
+            # of fault this pack exists to remove.
+            if clip.face is not None and clip.face not in (HIP_JOINTS, CHEST_JOINTS):
+                raise SystemExit("%s: face must be None, HIP_JOINTS or "
+                                 "CHEST_JOINTS, not %r" % (clip.name, clip.face))
+            # A clip is either read off a file or reflected out of another one,
+            # and it has to be exactly one of the two: a mirror with a file would
+            # build the file and silently ignore the reflection, and a clip with
+            # neither is a name with nothing behind it.
+            if clip.synthesised() and clip.file is not None:
+                raise SystemExit(
+                    "%s is the mirror of %s and also names the file %s. A "
+                    "mirrored clip is built from its source, so the file would "
+                    "never be read." % (clip.name, clip.mirror_of, clip.file))
+            if not clip.synthesised() and clip.file is None:
+                raise SystemExit("%s names no file and no mirror_of" % clip.name)
+    # A reflection of a clip nobody builds, or of another reflection, is a
+    # declaration that cannot be carried out. Both are checked here rather than
+    # in `main` so that `--list-packs` says so without opening Blender.
+    for pack in PACKS:
+        for clip in pack.clips:
+            if not clip.synthesised():
+                continue
+            if clip.mirror_of not in names:
+                raise SystemExit("%s is the mirror of %r, which no pack builds"
+                                 % (clip.name, clip.mirror_of))
+            source_clip = mirrors.get(clip.mirror_of)
+            if source_clip is not None:
+                raise SystemExit(
+                    "%s is the mirror of %s, which is itself the mirror of %s.\n"
+                    "Reflecting a reflection is the original clip with two "
+                    "builds' worth of error on it."
+                    % (clip.name, clip.mirror_of, source_clip))
+    source = CROUCH_IDLE[0]
+    if source not in names:
+        raise SystemExit("CrouchIdle is cut from %r, which no pack builds" % source)
+
+
+def main():
+    started = time.time()
+    emission, listing, body = parse_args(list(sys.argv))
+    check_declarations()
+
+    if listing:
+        log("=== build_bog --list-packs  %d packs under %s, nothing will be built"
+            % (len(PACKS), os.path.relpath(SOURCE_ROOT, REPO).replace("\\", "/")))
+        log()
+        resolve_packs()
+        report_body(body)
+        log("\ndone.")
+        return
+
+    log("=== build_bog  Blender %s, target %.2f m, emission %.2f"
+        % (bpy.app.version_string, TARGET_HEIGHT, emission))
+
+    log("\n-- packs")
+    selection = resolve_packs()
+    report_body(body)
+    clips = [c for pack in selection for c in pack.clips]
+    by_name = dict((c.name, c) for c in clips)
+
+    log("\n-- import")
+    imported = import_sources(selection)
+    assert_same_character(imported)
+    arm, mesh, actions = consolidate(imported)
+
+    log("\n-- names")
+    strip_bone_prefix(arm, mesh, actions)
+
+    log("\n-- scale")
+    scale_to_height(arm, mesh, actions)
+    report_rest_pose(arm, mesh)
+
+    # The one stage that changes what the Bog looks like, and the last one that
+    # touches a mesh until the material. It sits here because this is the first
+    # moment the donor is measurable — metres, names stripped, both objects at
+    # identity — and before everything below because everything below is bones:
+    # not one line of the mirroring, the measurement, the root motion, the
+    # facing or the loops reads a vertex.
+    if body_path(body) is not None:
+        log("\n-- body")
+        mesh = fit_body(arm, mesh, body_path(body))
+
+    # Before the measurement and not after it: a mirrored clip is a clip, and
+    # every number this build takes — bearing, speed, carriage, the loop trim,
+    # the facing alignment — has to come off it the same way it comes off a
+    # file. The one clip in the set nobody measured is the one the feet skate on
+    # (D-071).
+    mirrored = [c for c in clips if c.synthesised()]
+    if mirrored:
+        log("\n-- mirrors")
+        plane = check_mirror(arm)
+        for clip in mirrored:
+            actions[clip.name] = mirror_action(arm, actions[clip.mirror_of],
+                                               clip.name, plane)
+
+    log("\n-- authored motion (measured before anything is locked or clamped)")
+    rows = dict((c.name, measure_clip(arm, actions[c.name], c.name, c.align,
+                                      c.facing_joints()))
+                for c in clips)
+    report_measurements([rows[c.name] for c in clips])
+    for clip in mirrored:
+        check_mirrored_clip(rows, clip)
+
+    log("\n-- root motion")
+    ground = {}
+    for clip in clips:
+        pulled = lock_root_motion(actions[clip.name], clip)
+        row = rows[clip.name]
+        note = ""
+        if clip.rise_kept is not None:
+            note = (", %.0f%% of its %.3f m rise kept"
+                    % (clip.rise_kept * 100.0, row["hips_max"] - row["hips_first"]))
+            if pulled:
+                note += " (%d up keys pulled toward %.3f m)" % (pulled, row["hips_first"])
+        # "locked" for every clip, and "locked, and KEPT" for the one that
+        # names an `advance_as`: the Hips are clamped either way — see the
+        # exception argued over `lock_root_motion` — and what the second half
+        # says is that these metres are handed to the physics body rather than
+        # thrown away.
+        log("  %-11s locked %.3f m of travel (%.3f m/s over %.3f s)%s%s"
+            % (clip.name, row["travel"], row["speed"], row["duration"],
+               ", and KEPT as %s" % clip.advance_as if clip.advance_as else "",
+               note))
+        # A floor_limit on its own floor-checks a clip whose vertical was left
+        # alone; a rise_kept cannot exist without one (check_declarations), so
+        # every vertical rule in the build is checked by this line.
+        if clip.floor_limit is not None:
+            ground[clip.name] = check_ground(arm, actions[clip.name], clip)
+
+    log("\n-- CrouchIdle")
+    source_clip, source_frame, hold = CROUCH_IDLE
+    actions["CrouchIdle"] = synth_crouch_idle(arm, actions, source_clip, source_frame, hold)
+
+    log("\n-- facing")
+    references = dict((c.name, (c.align, c.facing_joints())) for c in clips)
+    references["CrouchIdle"] = (LOOP_MEAN, HIP_JOINTS)
+    align_facing(arm, actions, references)
+
+    log("\n-- loops")
+    loops = set(c.name for c in clips if c.loop)
+    loops.add("CrouchIdle")
+    ranges = {}
+    for clip, action in actions.items():
+        first, last = action_frame_span(action)
+        if clip in loops and clip != "CrouchIdle" and DROP_LOOP_TAIL:
+            first, last, removed = trim_loop_tail(action, clip)
+            log("  %-11s loops: dropped %d keys on frame %d, now %d..%d (%.4f s)"
+                % (clip, removed, last + 1, first, last, (last - first) / FPS))
+        else:
+            log("  %-11s %s: frames %d..%d (%.4f s)"
+                % (clip, "loops" if clip in loops else "one-shot", first, last,
+                   (last - first) / FPS))
+        ranges[clip] = (first, last)
+
+    log("\n-- material")
+    build_material(mesh, emission)
+
+    log("\n-- export")
+    log("  %d clips loop; they carry '%s' in the GLB and lose it on import"
+        % (len(loops), LOOP_SUFFIX))
+    stage_nla(arm, actions, ranges, loops)
+    size = export_glb(OUT_PATH)
+    log("  wrote %s  %.2f MB in %.1f s"
+        % (os.path.relpath(OUT_PATH, REPO).replace("\\", "/"), size / 1e6,
+           time.time() - started))
+    report_budget(OUT_PATH)
+
+    # The authored speed of a clip is the speed its feet were drawn for, and the
+    # clip says which constant in `bog.gd` it feeds rather than this loop naming
+    # them: a strafe pack added later gets its number printed here for free, and
+    # a locomotion clip that names no constant is visibly missing from this list.
+    log("\n=== for bog.gd: authored ground speeds (m/s at %.2f m)" % TARGET_HEIGHT)
+    for clip in clips:
+        if clip.authored_as is None:
+            continue
+        row = rows[clip.name]
+        log("    %-26s := %.3f   # %s: %.3f m over %.3f s, bearing %+.1f°"
+            % (clip.authored_as, row["speed"], clip.name, row["travel"],
+               row["duration"], row["bearing"]))
+
+    # And the travel that is *not* thrown away (D-068). Printed under the
+    # authored speeds because it is the same measurement read the other way — a
+    # clip's own metres, which for a cycle become a playback rate and for the
+    # one one-shot that names an `advance_as` become a distance the physics body
+    # reproduces. Length as well as distance, because the two are the halves of
+    # one number: `Bog` drives `SPIN_ADVANCE` over `BogAnimator`'s own window,
+    # and either moving without the other is a Bog whose feet skate.
+    for clip in clips:
+        if clip.advance_as is None:
+            continue
+        row = rows[clip.name]
+        log("    %-26s := %.3f   # %s: KEPT, %.3f m over %.3f s = %.3f m/s"
+            % (clip.advance_as, row["travel"], clip.name, row["travel"],
+               row["duration"], row["speed"]))
+
+    # A moment that never happens in a clip prints as "n/a" rather than
+    # crashing the summary after the asset has already been written. So does a
+    # clip that is not in this build at all: everything below is named by hand
+    # because `bog_animator.gd` names it by hand too, and a table that has moved
+    # on should say so rather than end the run with a KeyError.
+    def at(row, key):
+        return "%.3f" % row[key] if row[key] is not None else "  n/a"
+
+    log("=== for bog_animator.gd: the moments its windows are cut from")
+    for name in ("JumpOne", "JumpTwo"):
+        row, rule = rows.get(name), ground.get(name)
+        if row is None or rule is None:
+            log("    %-11s not in this build" % name)
+            continue
+        log("    %-11s length %.3f  feet leave %s  apex %.3f  feet touch %s%s"
+            % (name, row["duration"], at(row, "leave_wide"), row["hips_apex"],
+               at(row, "land_wide"),
+               "  roll %s..%s, up %s" % (at(row, "low_from"), at(row, "low_to"),
+                                         at(row, "stood_up"))
+               if row["low_from"] is not None else ""))
+        # The same clip after the vertical rule, which is the one the game plays:
+        # the hips apex is the APEX the airborne scrub interpolates through, and
+        # the hand plant is where the landing has to have happened by.
+        kept = by_name[name].rise()
+        log("    %-11s rise kept %3.0f%%, hips %s at the %.3f s apex, hands plant "
+            "%s, lowest joint %+.3f m at %.3f s"
+            % ("", kept * 100.0,
+               "reach %.3f m" % row["hips_max"] if kept > 0.0
+               else "pinned at %.3f m" % row["hips_first"],
+               row["hips_apex"],
+               "%.3f..%.3f" % rule["plant"] if rule["plant"] else "never",
+               rule["lowest"], rule["lowest_at"]))
+    row = rows.get("Slide")
+    if row is None:
+        log("    %-11s not in this build" % "Slide")
+    else:
+        log("    %-11s length %.3f  low %s..%s (hips %.3f m)  standing again %s"
+            % ("Slide", row["duration"], at(row, "low_from"), at(row, "low_to"),
+               row["hips_min"], at(row, "stood_up")))
+    # The three windups, because `bog_animator.gd` cuts a release out of all
+    # three and they disagree about which of these columns *is* the release: the
+    # throw's is its furthest forward, the cast's is neither that nor the peak
+    # (D-063, D-064), and the swing's is the peak — a sword connects where the
+    # blade is fastest, which is D-025's original rule coming round again on the
+    # one clip it is unarguable for (D-068). Printing every column for every one
+    # of them is what lets each constant be checked against the asset rather
+    # than believed.
+    for name in ("Throw", "Cast", "Swing"):
+        row = rows.get(name)
+        if row is None:
+            log("    %-11s not in this build" % name)
+            continue
+        log("    %-11s length %.3f  peak hand speed %.3f (%.2f m/s), "
+            "furthest forward %.3f"
+            % (name, row["duration"], row["hand_peak_at"], row["hand_peak"],
+               row["hand_reach_at"]))
+    # The drink, whose window is cut from neither of those columns (D-067).
+    # What this clip is, is a gesture with a long idle either side of it, so
+    # the two numbers the window is built on are where the drinking hand
+    # starts moving and where it stops — and the third is the bottle at the
+    # lips, which is the pose the contact sheet is centred on.
+    row = rows.get("Drink")
+    if row is None:
+        log("    %-11s not in this build" % "Drink")
+    elif row["off_hand_from"] is None:
+        log("    %-11s length %.3f  the drinking hand never moves"
+            % ("Drink", row["duration"]))
+    else:
+        log("    %-11s length %.3f  drinking hand moves %.3f..%.3f, "
+            "highest %.3f m at %.3f"
+            % ("Drink", row["duration"], row["off_hand_from"],
+               row["off_hand_to"], row["off_hand_high"],
+               row["off_hand_high_at"]))
+    log("\ndone.")
+
+
+if __name__ == "__main__":
+    main()

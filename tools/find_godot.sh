@@ -81,7 +81,7 @@ godot_version() {
 
 # The version test is not fussiness. The project pins 4.7 (D-001) and 4.6 cannot
 # parse it at all: `add_blend_point()` gained a fourth argument in 4.7, so the
-# Gub's animation tree fails to load and the error reads exactly like a bug in
+# Bog's animation tree fails to load and the error reads exactly like a bug in
 # our own code — an hour of looking in the wrong file. So a wrong-version binary
 # is skipped rather than used, and named at the end if nothing better turns up.
 GODOT=""

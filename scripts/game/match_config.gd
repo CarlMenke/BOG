@@ -15,12 +15,12 @@ enum Mode {
 
 ## Appended to, never reordered. The ordinal is what travels in `to_dict`, so
 ## inserting a condition in the middle would silently turn every older peer's
-## "last Gub standing" into something else.
+## "last Bog standing" into something else.
 enum WinCondition {
 	KILL_LIMIT,   ## first to N kills
-	LIVES,        ## last Gub (or team) standing
+	LIVES,        ## last Bog (or team) standing
 	TIME_ONLY,    ## highest score when the clock runs out
-	LETTERS,      ## first to hold G, U and B — the Gubs card game's own ending
+	LETTERS,      ## first to hold B, O and G — one hand, the way the card game ends
 	CAPTURE,      ## capture the flag with the three letters: carry each home (D-051)
 }
 
@@ -43,7 +43,7 @@ const TEAM_NONE := -1
 
 ## Teams mode only. When set, nobody picks a team: the host shuffles the roster
 ## and deals it round-robin across `team_count` the moment Start is pressed, so
-## no two teams differ by more than one Gub (D-048). Teams are dealt by
+## no two teams differ by more than one Bog (D-048). Teams are dealt by
 ## `Net.request_match_start` and nowhere else — a rematch keeps the teams that
 ## were dealt, and only a fresh start from the lobby deals again.
 @export var random_teams: bool = false
@@ -52,7 +52,7 @@ const TEAM_NONE := -1
 @export_range(0.0, 30.0) var warmup_time: float = 5.0
 
 ## Spears are the only weapon and always instant-kill, so the recharge time is
-## the single most important balance dial in the game: it sets how often a Gub
+## the single most important balance dial in the game: it sets how often a Bog
 ## can commit to an attack, and therefore how punishing a miss is.
 @export_range(0.5, 15.0) var spear_recharge: float = 3.0
 
@@ -91,12 +91,12 @@ const TEAM_NONE := -1
 ##
 ## 20 to 80 is the user's own range. What is worth reading off the two numbers
 ## is the pair they sit either side of: `Nameplate`'s health bands are amber at
-## 50 and red at 25 (D-062), so a full draw takes a healthy Gub from green to
+## 50 and red at 25 (D-062), so a full draw takes a healthy Bog from green to
 ## red in one and a snap shot does not quite finish one that is already there.
 ## Both are deliberate and both are why the bow is not simply a faster spear.
 ##
-## Neither is `Gub.MAX_HEALTH`, and that is the line between this weapon and the
-## spear: `GubCombat.SPEAR_DAMAGE` is a whole body written as the constant, so
+## Neither is `Bog.MAX_HEALTH`, and that is the line between this weapon and the
+## spear: `BogCombat.SPEAR_DAMAGE` is a whole body written as the constant, so
 ## no dial can make the spear a two-shot. These are numbers, so every dial here
 ## can make the bow anything at all — which is the point of them.
 @export_range(1.0, 100.0) var bow_damage_snap: float = 20.0
@@ -119,7 +119,7 @@ const TEAM_NONE := -1
 ## direction (a third of world gravity, so that a throw has an arc worth
 ## reading), applied twice here so that the two ends of the charge are two
 ## trajectories rather than one trajectory at two speeds. At the defaults a snap
-## shot is point-and-click to 8 m and a full draw to 50 (`GubCombat.flat_band`),
+## shot is point-and-click to 8 m and a full draw to 50 (`BogCombat.flat_band`),
 ## which is the widest spread of any weapon in the game and is meant to be.
 ##
 ## The floor is 0.5 rather than 0: `flat_band` divides by this, and a drop of
@@ -127,18 +127,18 @@ const TEAM_NONE := -1
 @export_range(0.5, 40.0) var bow_drop_snap: float = 16.0
 @export_range(0.5, 40.0) var bow_drop_full: float = 5.0
 
-## Not a cooldown, and deliberately not named like one. Mushrooms and lures are
+## Not a cooldown, and deliberately not named like one. Shields and magnets are
 ## carried stock now (D-032) — there is nothing to recharge, so this is only a
-## floor on how fast a stack can be spent. Without it a Gub who has just walked
-## over four mushroom drops empties all four into the same square metre on one
+## floor on how fast a stack can be spent. Without it a Bog who has just walked
+## over four shield drops empties all four into the same square metre on one
 ## frame, which is neither cover nor a decision.
 ## How long after a swing's blade connects before another swing may be asked
 ## for, in seconds (D-068).
 ##
 ## **0.800 is not a feel number — it is what is left of the clip.**
-## `GubAnimator.SWING_SECONDS` is 1.867 s and `SWING_RELEASE_TIME` is 1.067, so
+## `BogAnimator.SWING_SECONDS` is 1.867 s and `SWING_RELEASE_TIME` is 1.067, so
 ## this default puts the earliest second click on the exact tick the first
-## swing's spin ends. That is what makes the sword chainable at all: `Gub`
+## swing's spin ends. That is what makes the sword chainable at all: `Bog`
 ## opens `LANDING_GRACE` on that frame, so a player who clicks then keeps the
 ## speed the last swing built and a player who is late loses it — the same
 ## window a bunny hop gets, off the same field (D-052).
@@ -151,11 +151,11 @@ const TEAM_NONE := -1
 ## clip's own length.
 @export_range(0.0, 10.0) var sword_recharge: float = 0.8
 
-## How far a great sword reaches, in metres from the swinging Gub's own body
+## How far a great sword reaches, in metres from the swinging Bog's own body
 ## centre to the *surface* of whatever it catches (D-068).
 ##
 ## **Measured with the animation rather than typed beside it.** At the release
-## frame the point of the blade is 1.433 m from the Gub's own axis — that is
+## frame the point of the blade is 1.433 m from the Bog's own axis — that is
 ## `tools/preview_sword.tscn -- measure`, off a sword whose size is itself a
 ## measurement of how far apart the two fists are in `Swing` — and this is that
 ## number. `tools/combat_range.tscn -- sword` reads it again in a running match,
@@ -163,35 +163,35 @@ const TEAM_NONE := -1
 ## and the clip are checked against each other from both ends.
 ##
 ## What a player actually feels is **this plus the advance**: the body covers
-## `Gub.SPIN_ADVANCE`'s 1.712 m during the swing, so a swing started 3.1 m away
+## `Bog.SPIN_ADVANCE`'s 1.712 m during the swing, so a swing started 3.1 m away
 ## connects. That is the whole of what the spinning clip was chosen for, and it
 ## is why the two numbers have to move together — shorten the window and the
 ## advance shrinks while this stays where it was.
 ##
 ## It is a lobby dial because it is the balance number: the sword is a one-shot
-## by construction (`GubCombat.SWORD_DAMAGE`), so the only things a host can
+## by construction (`BogCombat.SWORD_DAMAGE`), so the only things a host can
 ## trade are how long it commits you for and how far it reaches. The arc is
-## deliberately *not* a dial — see `GubCombat.SWORD_ARC`.
+## deliberately *not* a dial — see `BogCombat.SWORD_ARC`.
 @export_range(0.5, 6.0) var sword_reach: float = 1.43
 
-@export_range(0.1, 10.0) var mushroom_use_delay: float = 1.5
-@export_range(2.0, 120.0) var mushroom_lifetime: float = 25.0
-@export_range(1, 5) var mushroom_max_active: int = 2
+@export_range(0.1, 10.0) var shield_use_delay: float = 1.5
+@export_range(2.0, 120.0) var shield_lifetime: float = 25.0
+@export_range(1, 5) var shield_max_active: int = 2
 
-@export_range(0.1, 10.0) var lure_use_delay: float = 2.0
-@export_range(2.0, 25.0) var lure_radius: float = 9.0
-@export_range(0.2, 5.0) var lure_hold: float = 1.4
-@export_range(1.0, 60.0) var lure_pull_strength: float = 18.0
-## The delay between the lure landing and the pull firing — the window in which
+@export_range(0.1, 10.0) var magnet_use_delay: float = 2.0
+@export_range(2.0, 25.0) var magnet_radius: float = 9.0
+@export_range(0.2, 5.0) var magnet_hold: float = 1.4
+@export_range(1.0, 60.0) var magnet_pull_strength: float = 18.0
+## The delay between the magnet landing and the pull firing — the window in which
 ## seeing it land is worth anything. This defaulted to 0.35 while its own range
 ## started at 0.5, so `_clamp_all` silently raised every fresh config to 0.5 and
 ## the declared default was never the value anyone actually played with. The
 ## range wins: half a second is already a short fuse.
-@export_range(0.5, 5.0) var lure_fuse: float = 0.5
+@export_range(0.5, 5.0) var magnet_fuse: float = 0.5
 
 ## How often a death drops a letter card instead of an ability, in the letters
-## win condition only. Everything else that falls out of a corpse is a mushroom
-## or a lure, split evenly.
+## win condition only. Everything else that falls out of a corpse is a shield
+## or a magnet, split evenly.
 ##
 ## A lobby dial rather than a constant, because the honest arithmetic says this
 ## default is probably too stingy and nobody should need a rebuild to find out.
@@ -203,7 +203,7 @@ const TEAM_NONE := -1
 ## release.
 @export_range(0.0, 1.0) var letter_drop_chance: float = 0.08
 
-## How long a Gub has to hold a letter card up before the letter is actually
+## How long a Bog has to hold a letter card up before the letter is actually
 ## theirs. Touching the card starts the hold; finishing it is what scores
 ## (D-035).
 ##
@@ -220,7 +220,7 @@ const TEAM_NONE := -1
 ## is nothing to see.
 @export_range(0.0, 30.0) var letter_hold_time: float = 10.0
 
-## **Capture G·U·B** (D-051): how long a letter dropped by a dead carrier lies
+## **Capture B·O·G** (D-051): how long a letter dropped by a dead carrier lies
 ## where it fell before it goes home to its spawn. Anyone may pick it up in that
 ## time, the carrier's own team included.
 ##
@@ -231,9 +231,9 @@ const TEAM_NONE := -1
 ## chance to recover it.
 @export_range(3.0, 60.0) var capture_return_time: float = 15.0
 
-## What a Gub carrying a letter in Capture G·U·B multiplies its ground speed by.
+## What a Bog carrying a letter in Capture B·O·G multiplies its ground speed by.
 ## Below one on purpose: a carrier who outruns everybody to their base is a
-## carrier nobody gets to fight. Applied at `Gub.target_speed`, the same single
+## carrier nobody gets to fight. Applied at `Bog.target_speed`, the same single
 ## point the Elder's boost is, so the two multiply rather than one hiding the
 ## other.
 @export_range(0.5, 1.2) var capture_carrier_speed: float = 0.9
@@ -246,7 +246,7 @@ const TEAM_NONE := -1
 ## of the same corpse in a kill-limit match as in a letters one (D-038).
 ##
 ## Rarer than either ability by a wide margin, because it is strictly stronger
-## than anything else that drops: 2% of deaths against the mushroom and lure's
+## than anything else that drops: 2% of deaths against the shield and magnet's
 ## ~49% each. In a ten-minute free-for-all that is one or two robes, which is
 ## the intent — an Elder should be an event, not a phase everyone passes
 ## through.
@@ -255,7 +255,7 @@ const TEAM_NONE := -1
 ## cent was set for an Elder that was a modest upgrade held until somebody
 ## killed you: a stronger weapon, on a five-second recharge, that died like
 ## anything else. What the dial now hands out is twenty seconds during which a
-## Gub cannot be killed at all, moves a third faster, and fires a one-shot
+## Bog cannot be killed at all, moves a third faster, and fires a one-shot
 ## weapon about once a second. Arriving several times a match, that is not an
 ## event; it is the match. The user has been told this happened and the slider
 ## is right here if they want it back.
@@ -266,7 +266,7 @@ const TEAM_NONE := -1
 ## **Taken off the top of the drop table like the letter and the robe**, rather
 ## than the remainder being split three ways instead of two. That is the whole
 ## reason this field exists: with the potion as a third share of what is left,
-## the mushroom and the lure would have gone from ~49% of drops each to ~30%
+## the shield and the magnet would have gone from ~49% of drops each to ~30%
 ## each, and nothing in the lobby would have said so. Off the top, the default
 ## below reproduces exactly that three-way split — and a host who wants the old
 ## economy back drags one slider instead of editing a table.
@@ -280,18 +280,18 @@ const TEAM_NONE := -1
 ## and not whether you got anything.
 @export_range(0.0, 1.0) var potion_drop_chance: float = 0.30
 
-## What one heal potion is worth, in the units of `Gub.MAX_HEALTH`.
+## What one heal potion is worth, in the units of `Bog.MAX_HEALTH`.
 ##
 ## 40 of a body's 100, which is two snap arrows or half a full draw. The number
-## is picked off the two bands the nameplate draws (D-062): a potion takes a Gub
+## is picked off the two bands the nameplate draws (D-062): a potion takes a Bog
 ## from anywhere in the red below 25 to well inside the green above 50, so
 ## drinking one is always the difference between "the next arrow kills me" and
-## "it does not" — and it is never a reset, because 40 cannot refill a Gub that
+## "it does not" — and it is never a reset, because 40 cannot refill a Bog that
 ## has been properly hurt.
 ##
 ## **This is the balance dial for healing and the only one.** Whether an
 ## interrupted channel refunds the potion is not a setting and deliberately so
-## (D-067): it is what the mechanic *is*, in the same way `Gub.MAX_HEALTH` is
+## (D-067): it is what the mechanic *is*, in the same way `Bog.MAX_HEALTH` is
 ## the unit rather than a slider (D-062).
 @export_range(5.0, 100.0) var heal_amount: float = 40.0
 
@@ -304,9 +304,9 @@ const TEAM_NONE := -1
 ## health arrives *over* it rather than at the end of it, so a channel broken
 ## half way through is worth half a potion.
 ##
-## `GubAnimator.drink_rate_for_channel` plays the drink clip at whatever rate
+## `BogAnimator.drink_rate_for_channel` plays the drink clip at whatever rate
 ## makes it take exactly this long, so a host who drags this slider moves the
-## animation with it and cannot leave a Gub standing still with its arms down
+## animation with it and cannot leave a Bog standing still with its arms down
 ## for a second after the bottle is empty.
 ##
 ## The floor is 0.5 and not 0.0. Zero is the setting this whole feature exists
@@ -323,12 +323,12 @@ const TEAM_NONE := -1
 ## bolt at the `Throw` clip's own release — 0.71 s then, 0.50 s since D-063 —
 ## because the same clip was being reused. The Elder has its own `Cast` clip
 ## since D-064, and it is played faster to meet this number rather than this
-## number being fitted to it — `GubAnimator.cast_rate_for_release` derives the
+## number being fitted to it — `BogAnimator.cast_rate_for_release` derives the
 ## rate, so the arm and the bolt cannot drift apart (D-040).
 ##
 ## **Zero is legal and means "on the frame of the click"**, which is why the
 ## range starts there rather than at something safely small. The clip still
-## plays, at `GubAnimator.CAST_RATE_MAX`, and the bolt leads the hand by about
+## plays, at `BogAnimator.CAST_RATE_MAX`, and the bolt leads the hand by about
 ## a seventh of a second — which at that setting is precisely what was asked
 ## for.
 @export_range(0.0, 2.0) var lightning_delay: float = 0.2
@@ -349,16 +349,16 @@ const TEAM_NONE := -1
 @export_range(0.2, 10.0) var lightning_cooldown: float = 1.0
 
 ## How far from where the bolt lands it still kills, in metres, measured to the
-## surface of a Gub's collision capsule (D-053).
+## surface of a Bog's collision capsule (D-053).
 ##
 ## The user: *"the lightning should have an aoe (small blast radius) so that if
 ## you hit pretty close it still hits them, this should still be a one shot
 ## kill, but not too far."* So it is a hard edge with no falloff — inside it is
 ## the same kill a direct hit is, outside it is nothing — and 1.5 m is about two
-## Gub-widths of forgiveness either side of the body, which forgives a bolt into
+## Bog-widths of forgiveness either side of the body, which forgives a bolt into
 ## the ground at somebody's feet and does not forgive one into the next room.
 ## The blast needs a clear line from the impact to the body, so a wall or a
-## shield mushroom is still cover; it only exists where the bolt hit something;
+## shield is still cover; it only exists where the bolt hit something;
 ## and it goes through `report_kill` like every other death, so an Elder is
 ## warded against it exactly as against a direct hit (D-040).
 ##
@@ -368,27 +368,27 @@ const TEAM_NONE := -1
 ## How long the robe lasts before it burns out, in seconds.
 ##
 ## **This supersedes D-038's "the Elder lasts until it dies".** With
-## invincibility, death is no longer the exit — a Gub that cannot be killed and
+## invincibility, death is no longer the exit — a Bog that cannot be killed and
 ## is the Elder until it is killed is the Elder for the rest of the match. So
 ## the clock is the exit, it is owned by the host exactly as a letter hold is,
-## and when it runs out the robe is consumed, the model reverts and the Gub is
+## and when it runs out the robe is consumed, the model reverts and the Bog is
 ## ordinary again.
 ##
-## Expiry is **not** a death: the letters and the carried mushrooms and lures a
-## Gub had before the robe are still there afterwards. Nothing about the twenty
+## Expiry is **not** a death: the letters and the carried shields and magnets a
+## Bog had before the robe are still there afterwards. Nothing about the twenty
 ## seconds is meant to cost you what you already had.
 @export_range(1.0, 120.0) var elder_duration: float = 20.0
 
-## What the Elder multiplies `Gub.RUN_SPEED`, `WALK_SPEED` and `CROUCH_SPEED` by.
+## What the Elder multiplies `Bog.RUN_SPEED`, `WALK_SPEED` and `CROUCH_SPEED` by.
 ##
 ## A multiplier on the existing constants rather than a second set of speeds, so
-## there is still exactly one place that says how fast a Gub moves and the
-## Elder is a factor applied to it. It is applied at `Gub.target_speed()`, which
+## there is still exactly one place that says how fast a Bog moves and the
+## Elder is a factor applied to it. It is applied at `Bog.target_speed()`, which
 ## is the single point every stance already comes out of — walking, sprinting
 ## and crouching all scale together and none of them can be forgotten.
 @export_range(1.0, 3.0) var elder_speed_multiplier: float = 1.35
 
-## What the Elder multiplies `Gub.JUMP_VELOCITY` by.
+## What the Elder multiplies `Bog.JUMP_VELOCITY` by.
 ##
 ## **It is a multiplier on launch velocity, and height goes as its square.** At
 ## 1.25 the jump apex goes from 1.69 m to 2.64 m — 56% higher, not 25% — and a
@@ -420,8 +420,9 @@ const _FIELDS := [
 	"bow_draw_time", "bow_recharge", "bow_damage_snap", "bow_damage_full",
 	"bow_speed_snap", "bow_speed_full", "bow_drop_snap", "bow_drop_full",
 	"sword_recharge", "sword_reach",
-	"mushroom_use_delay", "mushroom_lifetime", "mushroom_max_active",
-	"lure_use_delay", "lure_radius", "lure_hold", "lure_pull_strength", "lure_fuse",
+	"shield_use_delay", "shield_lifetime", "shield_max_active",
+	"magnet_use_delay", "magnet_radius", "magnet_hold",
+	"magnet_pull_strength", "magnet_fuse",
 	"letter_drop_chance", "letter_hold_time",
 	"capture_return_time", "capture_carrier_speed",
 	"elder_drop_chance", "lightning_delay", "lightning_cooldown", "lightning_radius",
@@ -500,14 +501,14 @@ func _clamp_all() -> void:
 	bow_drop_full = clampf(bow_drop_full, 0.5, 40.0)
 	sword_recharge = clampf(sword_recharge, 0.0, 10.0)
 	sword_reach = clampf(sword_reach, 0.5, 6.0)
-	mushroom_use_delay = clampf(mushroom_use_delay, 0.1, 10.0)
-	mushroom_lifetime = clampf(mushroom_lifetime, 2.0, 120.0)
-	mushroom_max_active = clampi(mushroom_max_active, 1, 5)
-	lure_use_delay = clampf(lure_use_delay, 0.1, 10.0)
-	lure_radius = clampf(lure_radius, 2.0, 25.0)
-	lure_hold = clampf(lure_hold, 0.2, 5.0)
-	lure_pull_strength = clampf(lure_pull_strength, 1.0, 60.0)
-	lure_fuse = clampf(lure_fuse, 0.5, 5.0)
+	shield_use_delay = clampf(shield_use_delay, 0.1, 10.0)
+	shield_lifetime = clampf(shield_lifetime, 2.0, 120.0)
+	shield_max_active = clampi(shield_max_active, 1, 5)
+	magnet_use_delay = clampf(magnet_use_delay, 0.1, 10.0)
+	magnet_radius = clampf(magnet_radius, 2.0, 25.0)
+	magnet_hold = clampf(magnet_hold, 0.2, 5.0)
+	magnet_pull_strength = clampf(magnet_pull_strength, 1.0, 60.0)
+	magnet_fuse = clampf(magnet_fuse, 0.5, 5.0)
 	letter_drop_chance = clampf(letter_drop_chance, 0.0, 1.0)
 	# Zero survives this on purpose — it is the "grant on touch" setting, not a
 	# value to be raised into a hold nobody asked for.
@@ -537,7 +538,7 @@ func _clamp_all() -> void:
 	# mid-`_ready`, with no way to recover.
 	if not MapCatalog.is_valid(map):
 		map = MapCatalog.DEFAULT
-	# Capture G·U·B is a Teams mode by nature: a base belongs to a team, and a
+	# Capture B·O·G is a Teams mode by nature: a base belongs to a team, and a
 	# free-for-all has eight people and no bases (D-051). Forced here rather
 	# than refused, so every path into a config — the lobby, a peer's
 	# dictionary, a harness — comes out playable. The lobby does the reverse
@@ -550,7 +551,7 @@ func _clamp_all() -> void:
 		time_limit = 600
 
 
-## Whether a win condition is scored in G·U·B letters — the lamps, the letters
+## Whether a win condition is scored in B·O·G letters — the lamps, the letters
 ## column and the letter-first ranking. True for both letter modes, which differ
 ## in how a letter is *earned* (a hold, or a carry home) and not in what it
 ## counts toward. The loot roll deliberately does not ask this: only LETTERS
@@ -571,9 +572,9 @@ func summary() -> String:
 		WinCondition.TIME_ONLY:
 			parts.append("timed")
 		WinCondition.LETTERS:
-			parts.append("Collect G·U·B")
+			parts.append("Collect B·O·G")
 		WinCondition.CAPTURE:
-			parts.append("Capture G·U·B")
+			parts.append("Capture B·O·G")
 	if time_limit > 0:
 		parts.append("%d:%02d" % [time_limit / 60, time_limit % 60])
 	if mode == Mode.TEAMS and random_teams:

@@ -1,23 +1,24 @@
 """Turn the raw source props into game-ready meshes.
 
-The three the project was handed first (Spear, Lure, Mushroom) are
-photogrammetry-style meshes of roughly half a million triangles each. One spear
-per Gub, every projectile in flight, and a scattering of deployed mushrooms
-would be millions of triangles per frame before shadow passes. This script
+The heavy three (Spear, Magnet, Shield) are photogrammetry-style meshes of
+roughly half a million triangles each. One spear per Bog, every projectile in
+flight, and a scattering of planted shields would be millions of triangles
+per frame before shadow passes. This script
 reduces each one to a sane budget while keeping it visually identical at
 gameplay distance.
 
-Not everything that comes through here arrives that heavy. The three letter
-cards are 9k-triangle Tripo exports, and they are in the target list for the
-4096-square texture, the image rename and the single-buffer repack rather than
-for the decimation: the same treatment, applied to a mesh whose triangle count
-was never the problem.
+Not everything that comes through here arrives that heavy. The B and the G are
+9k-triangle Tripo exports, and they are in the target list for the 4096-square
+texture, the image rename and the single-buffer repack rather than for the
+decimation: the same treatment, applied to a mesh whose triangle count was never
+the problem. The O is not one of those — it arrives at 429,870 triangles, the
+weight of a prop, and takes the same 6000 as a real reduction (D-080).
 
-Static, unskinned meshes only. The Gub came through here too until D-029: a
+Static, unskinned meshes only. The Bog came through here too until D-029: a
 skinned photogrammetry mesh whose hand-made rig had to be repaired on the way
 past, which is what the skin binding, the animation-curve cleanup, the clip
 facing alignment and the root-motion stripping in this script existed for. It is
-now built from Mixamo FBX by `tools/build_gub.py`, which does all of that at the
+now built from Mixamo FBX by `tools/build_bog.py`, which does all of that at the
 source instead, so all of it is gone from here and every remaining *source* is
 one unskinned mesh with one material and no animation.
 
@@ -71,23 +72,28 @@ OUT_DIR = os.path.join(REPO, "art", "generated")
 # name -> (source path, triangle budget, max texture edge)
 #
 # Budgets are set by how many of each thing can be on screen at once. The spear
-# is tiny on screen but there is one per Gub plus every projectile in flight, so
-# it gets the tightest budget; the mushroom is a placed object you walk right up
+# is tiny on screen but there is one per Bog plus every projectile in flight, so
+# it gets the tightest budget; the shield is a placed object you walk right up
 # to and gets the loosest. The props arrive at 2048x2048 and the letters at
 # 4096x4096, which is far more than a thrown stick needs.
 #
-# The letters arrive at a tenth of the props' triangle count, so 6000 is barely
-# a reduction — and it is deliberately the lure's number rather than the spear's
-# tighter one, because a letter is read for its *shape*. A G that has lost the
-# inside of its curve is a C, and no texture puts that back. 512 for all three
-# on the spear's and the lure's argument: a 0.6 m prop, looked at from metres
-# away, on a mesh with one material and nothing but base colour on it.
+# Two of the three letters arrive at a tenth of the props' triangle count, so
+# 6000 is barely a reduction for them — and it is deliberately the magnet's
+# number rather than the spear's tighter one, because a letter is read for its
+# *shape*. A G that has lost the inside of its curve is a C, and no texture puts
+# that back. The O arrives at 429,870 instead (D-080), so for it the 6000 is the
+# whole job, and it is the letter that needs the budget most: it is a closed
+# curve edge to edge, and a circle is the shape that goes visibly faceted first
+# — the potion's argument and the magnet's, on a letter. All three keep the same
+# number, which is what makes the three cards one set. 512 for all three on the
+# spear's and the magnet's argument: a 0.6 m prop, looked at from metres away,
+# on a mesh with one material and nothing but base colour on it.
 # The bow brought three more, and the same argument sets all three.
 #
 # The arrow is now the tightest case in the table, tighter than the spear. There
 # is one nocked on every drawn bow, one in flight for every shot taken, and —
 # since a shaft can stick in a victim who lives through it — every arrow
-# standing in every Gub still walking around. Eight Gubs with three apiece is
+# standing in every Bog still walking around. Eight Bogs with three apiece is
 # the ordinary case rather than the bad one, and none of those are in flight
 # yet. 1200, which the shaft can afford because most of it is a cylinder; what
 # the budget is actually protecting is the fletching and the knapped head, which
@@ -96,19 +102,19 @@ OUT_DIR = os.path.join(REPO, "art", "generated")
 # Its texture stays at the spear's 512 all the same, because a texture is paid
 # for once per asset and not once per instance — the count argument that sets
 # the triangle budget has nothing to say about it. What does: an arrow standing
-# in the shoulder of a Gub next to you is looked at as closely as anything in
-# this game, and a Gub walking around with three of them in it is the whole
+# in the shoulder of a Bog next to you is looked at as closely as anything in
+# this game, and a Bog walking around with three of them in it is the whole
 # read that partial damage exists to give.
 #
-# The bow is the other end of it. At most one per Gub, never one in flight, and
+# The bow is the other end of it. At most one per Bog, never one in flight, and
 # it is the prop that spends the longest large and still in frame — held across
 # the body for the whole of every draw, on a mesh the camera is behind. 4000,
-# and the mushroom's 1024 rather than the spear's 512 on the mushroom's own
-# argument: a bow being aimed is nearer the camera than a mushroom you are
-# standing over, and the carving down the limbs is most of what it has.
+# and the shield's 1024 rather than the spear's 512 on the shield's own
+# argument: a bow being aimed is nearer the camera than a shield you are
+# standing behind, and the carving down the limbs is most of what it has.
 #
 # The great sword is the bow's case by the counting rule and nothing like it by
-# the geometry. One per Gub at most, never one in flight — a sword is swung, not
+# the geometry. One per Bog at most, never one in flight — a sword is swung, not
 # thrown — so the bow's argument transfers whole and 4000/1024 is the precedent.
 # What the model says against that: it arrives at 9912 triangles to the bow's
 # 10188, over the same 1 m span, but with **3.5 times the surface** (0.475
@@ -132,24 +138,32 @@ OUT_DIR = os.path.join(REPO, "art", "generated")
 # coarser than the bow's 0.37/1.24, finer than the arrow's shipping 1.00/4.45,
 # and the arrow is the prop in this table that gets looked at closest of all.
 #
-# 1024 for the texture, the bow's and the mushroom's, not the spear's 512. A
+# 1024 for the texture, the bow's and the shield's, not the spear's 512. A
 # texture is paid for once per asset and never once per instance, so the counting
 # rule has nothing to say about it; what does is that this prop spends the whole
 # of a slow swing large and in frame, and that having just taken the triangles
 # out of the blade, the fuller, the edge and the grip wrap are all now texture on
 # a flat plane rather than geometry. The texture is what is holding the blade up.
 #
-# The potion is the lure's case exactly — a small thing on the ground, a handful
-# at a time, collected by running over it — so it takes the lure's numbers and
-# not the spear's. For the letters' reason as well as the lure's: a bottle is a
-# surface of revolution, and a circle goes visibly faceted long before a stick
-# does.
+# The potion is the magnet's case exactly — a small thing on the ground, a
+# handful at a time, collected by running over it — so it takes the magnet's
+# numbers and not the spear's. For the letters' reason as well as the magnet's:
+# a bottle is a surface of revolution, and a circle goes visibly faceted long
+# before a stick does.
+#
+# The magnet is where those numbers come from, and it took them from the lure it
+# replaced (D-078): 446,811 triangles of Tripo down to 6000, one JPEG basecolor
+# down to 512. It is the same case as the potion in every respect — thrown or
+# lying in the grass in ones and twos, and round, which is the shape that goes
+# visibly faceted first. What the 6000 is protecting is the cage of steel bands
+# and the four sunken faces under them; the glow in those faces is texture and
+# costs nothing.
 TARGETS = {
     "spear":       ("assets/source/Spear.glb", 3000, 512),
-    "lure":        ("assets/source/Lure.glb", 6000, 512),
-    "mushroom":    ("assets/source/Mushroom/base_basic_pbr.glb", 10000, 1024),
+    "magnet":      ("assets/source/MAGNET.glb", 6000, 512),
+    "shield":      ("assets/source/SHIELD.glb", 10000, 1024),
     "letter_g":    ("assets/source/G_LETTER.glb", 6000, 512),
-    "letter_u":    ("assets/source/U_LETTER.glb", 6000, 512),
+    "letter_o":    ("assets/source/O_LETTER.glb", 6000, 512),
     "letter_b":    ("assets/source/B_LETTER.glb", 6000, 512),
     "arrow":       ("assets/source/ARROW.glb", 1200, 512),
     "bow":         ("assets/source/BOW.glb", 4000, 1024),
@@ -338,7 +352,7 @@ def verify_blend_shapes(name, path, expect):
     in it: the target names, how many deltas are non-zero, and every distinct
     delta with the number of vertices that share it. Then it rebuilds
     `base + delta` and compares that against the shape the caller meant to
-    write. Same argument as `check_ground` in `tools/build_gub.py` — a judgement
+    write. Same argument as `check_ground` in `tools/build_bog.py` — a judgement
     that is only documented is a judgement nobody is checking.
     """
     g = Gltf.load(path)
@@ -412,12 +426,12 @@ def process(name, src_path, target_tris, max_texture):
 
     # Everything this script knows how to do assumes a static prop. Skin
     # weights and animation curves survive neither the weld nor the decimation
-    # without the machinery that went to `tools/build_gub.py` with the Gub, so
+    # without the machinery that went to `tools/build_bog.py` with the Bog, so
     # say so rather than quietly writing an asset with its rig thrown away.
     if "JOINTS_0" in attrs or g.doc.get("skins") or g.doc.get("animations"):
         raise SystemExit("%s: skinned or animated source; this script only "
-                         "handles static props (the Gub is built by "
-                         "tools/build_gub.py)" % name)
+                         "handles static props (the Bog is built by "
+                         "tools/build_bog.py)" % name)
 
     lo, hi = pos.min(axis=0), pos.max(axis=0)
     # Rounded as float64: rounding a float32 to two places and printing it

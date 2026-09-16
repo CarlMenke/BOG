@@ -24,7 +24,7 @@
 #
 # All this does is find Blender and hand it `tools/preview_clips.py`, which is
 # where the work and all the explanation live. It exists for the same reason
-# `tools/build_gub.sh` does: nobody should have to remember where Blender
+# `tools/build_bog.sh` does: nobody should have to remember where Blender
 # unpacked itself, and the search lives once in `tools/find_blender.sh`.
 #
 # This is the *raw source* half of a pair. `tools/preview_anim.gd` does the same
@@ -44,7 +44,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BLENDER_TAG=preview_clips
 . "$ROOT/tools/find_blender.sh"
 
-# `--factory-startup` is deliberate, as in `tools/build_gub.sh`: this machine has
+# `--factory-startup` is deliberate, as in `tools/build_bog.sh`: this machine has
 # third-party add-ons that print into the log and open sockets on load, and a
 # preview that depends on what add-ons somebody has enabled is not a preview.
 "$BLENDER_BIN" --background --factory-startup \

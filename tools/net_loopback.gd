@@ -72,18 +72,18 @@ const LOOPBACK_IP := "127.0.0.1"
 ## written straight into `Net.players`, the way `tools/ui_range.gd` and
 ## `tools/combat_range.gd` write their stand-ins — a public field, and the only
 ## way to name the host without persisting a name into the shared user data.
-const HOST_NAME := "Gub"
+const HOST_NAME := "Bog"
 ## What the client asks `_request_join` to call it, and what the host must turn
 ## it into.
-const CLIENT_NAME := "Gub"
-const CLIENT_UNIQUE_NAME := "Gub (2)"
+const CLIENT_NAME := "Bog"
+const CLIENT_UNIQUE_NAME := "Bog (2)"
 
 const CLIENT_CHAT := "client to host, over a socket"
 const HOST_CHAT := "host to client, same socket"
 
 ## Config values pushed in check 4, chosen to be awkward rather than tidy.
 ## `map_seed` is past 2^32, so it proves an int survives as an int rather than
-## as a truncated one. `lure_radius` is not representable in 32-bit float, which
+## as a truncated one. `magnet_radius` is not representable in 32-bit float, which
 ## is the case Godot's variant encoder has to widen to 64 bits; `spear_recharge`
 ## is exactly representable, so the two together cover both branches.
 const CONFIG_SEED := 4815162342
@@ -94,12 +94,12 @@ const CONFIG_KILL_LIMIT := 7
 ## map the moment there is one; today the catalog holds only the island, so this
 ## proves the field crosses the wire rather than that the choice does.
 const CONFIG_MAP := MapCatalog.DEFAULT
-const CONFIG_LURE_RADIUS := 12.3
+const CONFIG_MAGNET_RADIUS := 12.3
 const CONFIG_SPEAR_RECHARGE := 4.25
 ## Short, but not skipped: PLAYING is only ever reached through WARMUP, and on
 ## the client it is reached through `_sync_phase` arriving over the wire.
 const WARMUP_TIME := 1.0
-## Off. A protected Gub correctly refuses to die, and leaving it on simply makes
+## Off. A protected Bog correctly refuses to die, and leaving it on simply makes
 ## `report_kill` return without doing anything — a symptom that points nowhere
 ## near its cause. `tools/playthrough.gd` carries the same note.
 const SPAWN_PROTECTION := 0.0
@@ -115,7 +115,7 @@ const SPAWN_PROTECTION := 0.0
 ##
 ## 40 rather than a round half, so a client that quietly kept its own count
 ## cannot land on the right number by halving something, and so that the kill
-## that follows is a hit on a Gub that is *already hurt* — which is the case a
+## that follows is a hit on a Bog that is *already hurt* — which is the case a
 ## spear must still be one shot against.
 const WIRE_DAMAGE := 40.0
 
@@ -138,7 +138,7 @@ const PORT_LAST := 27899
 const PORT_TRIES := 8
 
 ## How far in front of itself the client aims in the abilities stage. Short on
-## purpose: the lure has to come down well inside its own radius of the thrower,
+## purpose: the magnet has to come down well inside its own radius of the thrower,
 ## so that one throw exercises both the host's catch *and* the pull it sends
 ## back to the victim's client. A long throw would land outside the radius and
 ## the pull would never be tested at all.
@@ -191,11 +191,11 @@ var _match_started: bool = false
 var _inbox: Array[Dictionary] = []
 ## Everything `spawned_items` has produced since the abilities stage started
 ## watching, as `[kind, owner_peer_id]`. Recorded as it appears rather than
-## counted afterwards, because a lure removes itself a couple of seconds after
+## counted afterwards, because a magnet removes itself a couple of seconds after
 ## it fires and a spear fades out of the ground a few seconds later still.
 var _spawned: Array = []
-## Host only: peer ids a lure reported catching, from its `caught` signal.
-var _lure_caught: Array[int] = []
+## Host only: peer ids a magnet reported catching, from its `caught` signal.
+var _magnet_caught: Array[int] = []
 ## Host only: where stage 8 killed the client, which is where its loot lies.
 var _death_point: Vector3 = Vector3.ZERO
 ## Host only, stage 10: the lifecycle trace. See `_process`.
@@ -446,7 +446,7 @@ func _stage_weapons() -> bool:
 		Net.player_weapon(_client_id), Loadout.Weapon.BOW)
 
 	# And the client goes back to the spear before the stage ends, because every
-	# stage after this one was written against a Gub that has one: stage 8 has
+	# stage after this one was written against a Bog that has one: stage 8 has
 	# the client *throw* a spear at the host, which is the only place in this
 	# harness a non-host peer makes anything happen at all (D-024). An archer
 	# cannot, and that is the feature working.
@@ -479,7 +479,7 @@ func _stage_config() -> bool:
 	settings.map = CONFIG_MAP
 	settings.map_seed = CONFIG_SEED
 	settings.kill_limit = CONFIG_KILL_LIMIT
-	settings.lure_radius = CONFIG_LURE_RADIUS
+	settings.magnet_radius = CONFIG_MAGNET_RADIUS
 	settings.spear_recharge = CONFIG_SPEAR_RECHARGE
 	settings.friendly_fire = true
 	settings.warmup_time = WARMUP_TIME
@@ -498,8 +498,8 @@ func _stage_config() -> bool:
 		JSON.stringify(reply.get("config", {})), JSON.stringify(mine))
 	_check("the client was told the config changed",
 		int(reply.get("changes", 0)) > 0, true)
-	print("net_loopback:   map %s, seed %d, kill limit %d, lure radius %s all arrived" % [
-		CONFIG_MAP, CONFIG_SEED, CONFIG_KILL_LIMIT, str(CONFIG_LURE_RADIUS)])
+	print("net_loopback:   map %s, seed %d, kill limit %d, magnet radius %s all arrived" % [
+		CONFIG_MAP, CONFIG_SEED, CONFIG_KILL_LIMIT, str(CONFIG_MAGNET_RADIUS)])
 	return true
 
 
@@ -565,15 +565,15 @@ func _stage_match_start() -> bool:
 ## *client* to do: use an ability.
 ##
 ## Both peers build the real island from the replicated seed, and then the
-## client throws a spear, plants a mushroom and lobs a lure through the public
-## `GubCombat` API — the same three calls a key press reaches. Everything after
+## client throws a spear, plants a shield and lobs a magnet through the public
+## `BogCombat` API — the same three calls a key press reaches. Everything after
 ## that is the host's answer coming back: `try_*` only sends a request, and the
 ## item, the throw animation and the empty hand are all built by the `_do_*`
 ## broadcast the host makes in reply. A client whose broadcast is refused
 ## predicts a cooldown and nothing else happens anywhere, which is exactly what
 ## D-024 was.
 ##
-## The sub-check about the client's Gubs is not decoration. `_create_gub` is
+## The sub-check about the client's Bogs is not decoration. `_create_bog` is
 ## dropped on the floor by any peer whose `_players_root` is still null, and the
 ## host sends it the instant *its own* island finishes. See the note below for
 ## how close that actually runs.
@@ -586,9 +586,9 @@ func _stage_abilities() -> bool:
 	if not await _await_until("the host reaching PLAYING", PHASE_TIMEOUT,
 			func() -> bool: return MatchState.phase == MatchState.Phase.PLAYING):
 		return false
-	print("net_loopback:   host arena up after %.1f s, %d gubs" % [
-		float(Time.get_ticks_msec() - started) * 0.001, MatchState.gubs.size()])
-	_check("the host spawned a Gub per player", MatchState.gubs.size(),
+	print("net_loopback:   host arena up after %.1f s, %d bogs" % [
+		float(Time.get_ticks_msec() - started) * 0.001, MatchState.bogs.size()])
+	_check("the host spawned a Bog per player", MatchState.bogs.size(),
 		Net.player_count())
 
 	var arena := await _request("arena", {}, ARENA_TIMEOUT)
@@ -603,16 +603,16 @@ func _stage_abilities() -> bool:
 	# code looks far more dangerous than it measures.
 	#
 	# `MatchState._begin_warmup` runs the moment the *host's* `register_arena`
-	# lands and immediately `_create_gub.rpc`s every player. A peer whose
+	# lands and immediately `_create_bog.rpc`s every player. A peer whose
 	# `_players_root` is still null drops that on the floor, permanently —
-	# nothing re-sends it, and `_do_respawn` also returns early on a Gub that
+	# nothing re-sends it, and `_do_respawn` also returns early on a Bog that
 	# does not exist, so a client that misses the spawn spends the whole match
 	# with an empty arena including its own body.
 	#
 	# What saves it is that the client's island build is one *blocking* call:
 	# `change_scene_to_file` does not return until `arena.gd::_ready` has
 	# finished, and `_ready` ends by calling `register_arena` itself. No network
-	# polling happens anywhere in there, so the queued `_create_gub` packets are
+	# polling happens anywhere in there, so the queued `_create_bog` packets are
 	# not read until after `_players_root` is set. The only losing window is the
 	# stretch before the client has *started* its build — `SceneFlow.go_to`
 	# fades for 0.22 s and waits two frames on the loading card first — against
@@ -622,18 +622,18 @@ func _stage_abilities() -> bool:
 	# So: not a coin flip, but not guarded either. A host with a warm cache and
 	# a fast disk against a client that stalls for a quarter of a second on the
 	# fade is all it would take, and the failure is silent and total.
-	_check("the client has a Gub for every player", int(arena.get("gubs", -1)),
+	_check("the client has a Bog for every player", int(arena.get("bogs", -1)),
 		Net.player_count())
 
-	# Watch the item container rather than sampling it later. A lure takes
+	# Watch the item container rather than sampling it later. A magnet takes
 	# itself out of the world about two seconds after it fires, so "is there a
-	# lure under `spawned_items`?" is a question with a shelf life; "did one
+	# magnet under `spawned_items`?" is a question with a shelf life; "did one
 	# appear, and whose was it?" is not.
 	if not _require("the host found the item container", _watch_spawned_items()):
 		return false
 
-	# Stock the client's Gub, from the host, because a Gub spawns with nothing
-	# now (D-032) and `try_place_mushroom`/`try_throw_lure` refuse on an empty
+	# Stock the client's Bog, from the host, because a Bog spawns with nothing
+	# now (D-032) and `try_place_shield`/`try_throw_magnet` refuse on an empty
 	# hand. This is the harness supplying what a `Pickup` supplies in a real
 	# match, and it is worth naming what that skips: the whole drop path — a
 	# death, `MatchState._drop_loot`, the item on the ground, somebody walking
@@ -641,24 +641,24 @@ func _stage_abilities() -> bool:
 	# script, and `tools/playthrough.gd` is what walks it instead (D-018).
 	#
 	# It happens on the host rather than in the client's own stage because
-	# grants are host-only: `GubCombat.grant_*` refuses anywhere else, which is
+	# grants are host-only: `BogCombat.grant_*` refuses anywhere else, which is
 	# precisely the property this whole file exists to check.
-	var client_gub: Gub = MatchState.gubs.get(_client_id)
-	if not _require("the host has the client's Gub to stock", client_gub != null):
+	var client_bog: Bog = MatchState.bogs.get(_client_id)
+	if not _require("the host has the client's Bog to stock", client_bog != null):
 		return false
-	var client_combat := client_gub.get_node_or_null("Combat") as GubCombat
-	if not _require("the client's Gub carries a Combat on the host",
+	var client_combat := client_bog.get_node_or_null("Combat") as BogCombat
+	if not _require("the client's Bog carries a Combat on the host",
 			client_combat != null):
 		return false
-	client_combat.grant_mushroom(1)
-	client_combat.grant_lure(1)
+	client_combat.grant_shield(1)
+	client_combat.grant_magnet(1)
 
 	var acted := await _request("abilities", {}, ARENA_TIMEOUT)
 	if acted.is_empty():
 		return false
 	_check("the client threw a spear of its own", int(acted.get("spears", -1)), 1)
-	_check("the client planted a mushroom of its own", int(acted.get("mushrooms", -1)), 1)
-	_check("the client threw a lure of its own", int(acted.get("lures", -1)), 1)
+	_check("the client planted a shield of its own", int(acted.get("shields", -1)), 1)
+	_check("the client threw a magnet of its own", int(acted.get("magnets", -1)), 1)
 	_check("the spear left the client's hand", bool(acted.get("hand_empty", false)), true)
 
 	# The same three items on the host, credited to the client. The host builds
@@ -666,17 +666,17 @@ func _stage_abilities() -> bool:
 	# request never arrived; if these are here and the client's are not, the
 	# broadcast was refused on the far side.
 	_check("the host built the client's spear", _spawned_count("spear", _client_id), 1)
-	_check("the host built the client's mushroom", _spawned_count("mushroom", _client_id), 1)
-	_check("the host built the client's lure", _spawned_count("lure", _client_id), 1)
+	_check("the host built the client's shield", _spawned_count("shield", _client_id), 1)
+	_check("the host built the client's magnet", _spawned_count("magnet", _client_id), 1)
 
-	# The lure's pull crosses the wire the other way — the host decides who was
+	# The magnet's pull crosses the wire the other way — the host decides who was
 	# caught, the victim's own client applies it, because movement is
-	# client-authoritative (D-004). The client is thrown inside its own lure's
+	# client-authoritative (D-004). The client is thrown inside its own magnet's
 	# radius on purpose, so it is its own victim and one throw exercises both
 	# directions.
-	_check("the host's lure caught the client", _lure_caught.has(_client_id), true)
-	_check("the client felt the pull", bool(acted.get("lured", false)), true)
-	print("net_loopback:   peer %d threw, planted and lured — on both machines" % _client_id)
+	_check("the host's magnet caught the client", _magnet_caught.has(_client_id), true)
+	_check("the client felt the pull", bool(acted.get("pulled", false)), true)
+	print("net_loopback:   peer %d threw, planted and pulled — on both machines" % _client_id)
 	return true
 
 
@@ -687,29 +687,29 @@ func _stage_kill() -> bool:
 	# Somewhere that is not the client's own spawn pad. Left where it spawned,
 	# the client dies on its pad and `_next_spawn` hands the same pad straight
 	# back — it is the one furthest from the host — so the respawn in stage 9
-	# would be a Gub revived exactly where its loot is, which cannot tell a
+	# would be a Bog revived exactly where its loot is, which cannot tell a
 	# respawn that picks things up from one that does not. The pad nearest the
 	# host that is not the host's own is far from wherever the next spawn will be.
 	var arena := get_tree().current_scene as Arena
-	var host_gub: Gub = MatchState.gubs.get(1)
-	if arena != null and is_instance_valid(host_gub):
+	var host_bog: Bog = MatchState.bogs.get(1)
+	if arena != null and is_instance_valid(host_bog):
 		var best := Vector3.INF
 		for pad: Transform3D in arena.spawn_points:
-			var away := pad.origin.distance_to(host_gub.global_position)
+			var away := pad.origin.distance_to(host_bog.global_position)
 			if away > 8.0 and (best == Vector3.INF
-					or away < best.distance_to(host_gub.global_position)):
+					or away < best.distance_to(host_bog.global_position)):
 				best = pad.origin
 		if best != Vector3.INF:
 			var moved := await _request("move", {"to": best}, STEP_TIMEOUT)
 			if moved.is_empty():
 				return false
-			# Not "until it arrives": the lure from stage 7 may still be dragging it
+			# Not "until it arrives": the magnet from stage 7 may still be dragging it
 			# about. Where it ends up is fine, so long as stage 9 finds it was not
 			# the pad the respawn uses, and stage 9 checks that.
 			for i in 30:
 				await get_tree().physics_frame
-	var victim_gub: Gub = MatchState.gubs.get(_client_id)
-	var point := victim_gub.global_position if is_instance_valid(victim_gub) else Vector3.ZERO
+	var victim_bog: Bog = MatchState.bogs.get(_client_id)
+	var point := victim_bog.global_position if is_instance_valid(victim_bog) else Vector3.ZERO
 	_death_point = point
 
 	# A hit first, and it is not a warm-up for the kill: this is the one place
@@ -718,35 +718,35 @@ func _stage_kill() -> bool:
 	# own body says — if those two ever disagree, a player is fighting with a
 	# bar that is lying to them.
 	var took := MatchState.report_damage(_client_id, 1, WIRE_DAMAGE,
-		Gub.Cause.SPEAR, point + Vector3.UP, Vector3.FORWARD * 6.0, "Spine1")
+		Bog.Cause.SPEAR, point + Vector3.UP, Vector3.FORWARD * 6.0, "Spine1")
 	_check("the host's hit landed", took, WIRE_DAMAGE)
 	_check("the host took it off the body",
-		MatchState.health_of(_client_id), Gub.MAX_HEALTH - WIRE_DAMAGE)
+		MatchState.health_of(_client_id), Bog.MAX_HEALTH - WIRE_DAMAGE)
 	_check("the hit did not kill", MatchState.is_alive(_client_id), true)
 	var hurt := await _request("health", {}, STEP_TIMEOUT)
 	if hurt.is_empty():
 		return false
 	_check("the client's health matches the host's",
-		float(hurt.get("health", -1.0)), Gub.MAX_HEALTH - WIRE_DAMAGE)
+		float(hurt.get("health", -1.0)), Bog.MAX_HEALTH - WIRE_DAMAGE)
 	_check("the client's bar matches its health",
-		float(hurt.get("bar", -1.0)), (Gub.MAX_HEALTH - WIRE_DAMAGE) / Gub.MAX_HEALTH)
+		float(hurt.get("bar", -1.0)), (Bog.MAX_HEALTH - WIRE_DAMAGE) / Bog.MAX_HEALTH)
 	_check("the client is still on its feet", bool(hurt.get("alive", false)), true)
 	print("net_loopback:   %.0f damage crossed the wire: both sides say %.0f left"
 		% [WIRE_DAMAGE, float(hurt.get("health", -1.0))])
 	# The corpse has to leave the two things stage 9 needs lying on it: a robe,
 	# because the loot roll is forced to one (host only — `_drop_loot` is the
-	# only reader and it runs here), and a mushroom beside it, put down through
+	# only reader and it runs here), and a shield beside it, put down through
 	# the same `_spawn_drop` a rolled one comes out of. Between them they are both
 	# halves of what a respawn must not hand back — stock (D-032) and the Elder
 	# (D-038).
 	Net.config.elder_drop_chance = 1.0
 	# A blow with real speed in it: the corpse's flight is scaled by it, so a
 	# unit vector would leave the ragdoll path exercised but never pushed.
-	MatchState.report_kill(_client_id, 1, Gub.Cause.SPEAR, point,
+	MatchState.report_kill(_client_id, 1, Bog.Cause.SPEAR, point,
 		Vector3.FORWARD * 18.0, "Spine1")
 	var spot: Vector3 = MatchState._drop_spot(point)
 	if spot != Vector3.INF:
-		MatchState._spawn_drop(Pickup.Kind.MUSHROOM, 0, spot)
+		MatchState._spawn_drop(Pickup.Kind.SHIELD, 0, spot)
 	_check("the host scored the kill", MatchState.kills(1), 1)
 	_check("the host recorded the death", MatchState.deaths(_client_id), 1)
 	_check("the host's own player_killed fired", _kills.size(), 1)
@@ -757,7 +757,7 @@ func _stage_kill() -> bool:
 	_check("the client saw a death", int(seen.get("count", 0)), 1)
 	_check("the client agrees who died", int(seen.get("victim", 0)), _client_id)
 	_check("the client agrees who killed them", int(seen.get("killer", 0)), 1)
-	_check("the client agrees how", int(seen.get("cause", -1)), int(Gub.Cause.SPEAR))
+	_check("the client agrees how", int(seen.get("cause", -1)), int(Bog.Cause.SPEAR))
 	_check("the client's scores agree", int(seen.get("kills_1", -1)), 1)
 	_check("the client's deaths agree", int(seen.get("deaths_victim", -1)), 1)
 	print("net_loopback:   kill replicated: %d killed %d, both sides agree" % [
@@ -770,11 +770,11 @@ func _stage_kill() -> bool:
 ##
 ## A player's report: *"you spawn with either an item or the elder randomly, it
 ## seems like after you die you respawn first where you died and picked it up
-## from there"*. The host revives its copy of a remote Gub at the pad, but the
+## from there"*. The host revives its copy of a remote Bog at the pad, but the
 ## owner's client is still dead until the reliable `_do_respawn` reaches it, and
 ## goes on publishing its corpse's position until then; followed, those
 ## snapshots put the host's live copy back on its own loot, and the `Pickup`
-## there handed it over. `Gub.sync_life` is what refuses them now (D-043).
+## there handed it over. `Bog.sync_life` is what refuses them now (D-043).
 ##
 ## **Loopback cannot open that window, and this stage is not what guards it.**
 ## Measured: the client's first snapshot after the revive already carries the
@@ -782,25 +782,25 @@ func _stage_kill() -> bool:
 ## the stage passed against the code with the bug in it. `combat_range respawn`
 ## in the smoke gate is the guard; it plays a client 200 ms behind.
 ##
-## What only this can check is the other side of that fix. A remote Gub that
-## refuses snapshots from the wrong life is a remote Gub that stands frozen for
+## What only this can check is the other side of that fix. A remote Bog that
+## refuses snapshots from the wrong life is a remote Bog that stands frozen for
 ## the rest of the match if the two ends ever disagree about which life it is
 ## in — so the host's copy is required to follow the client to wherever it
 ## respawned, over a real socket, with the life number crossing it.
 func _stage_respawn() -> bool:
 	print("net_loopback: stage 10/12 — a respawn over the wire")
-	var gub: Gub = MatchState.gubs.get(_client_id)
-	if not _require("the host still has the client's Gub", is_instance_valid(gub)):
+	var bog: Bog = MatchState.bogs.get(_client_id)
+	if not _require("the host still has the client's Bog", is_instance_valid(bog)):
 		return false
 	var loot: Array[Pickup] = []
 	for item: Pickup in MatchState._pickups.values():
 		if is_instance_valid(item) and not item.is_taken() \
 				and item.global_position.distance_to(_death_point) < 3.0:
 			loot.append(item)
-	_check("the corpse left a robe and a mushroom", loot.size(), 2)
+	_check("the corpse left a robe and a shield", loot.size(), 2)
 
 	if not await _await_until("the client to respawn on the host", STEP_TIMEOUT,
-			func() -> bool: return gub.alive):
+			func() -> bool: return bog.alive):
 		return false
 	# A second, which is the figure in the report and dozens of loopback round
 	# trips: long enough for a grant to have landed and for the copy to have
@@ -812,36 +812,36 @@ func _stage_respawn() -> bool:
 	if seen.is_empty():
 		return false
 	var there: Vector3 = seen.get("pos", Vector3.INF)
-	# Without this the rest can pass by accident: a Gub revived on the pad it died
+	# Without this the rest can pass by accident: a Bog revived on the pad it died
 	# on never leaves its loot's catch volume, so never enters it either.
 	_check("the client respawned well away from its corpse",
 		there.distance_to(_death_point) > 6.0, true)
 	_check("the host's copy followed the client to where it respawned",
-		gub.global_position.distance_to(there) < 1.0, true)
+		bog.global_position.distance_to(there) < 1.0, true)
 	_check("the host's copy is in the life the client is in",
-		gub.sync_life == gub.life and gub.life == MatchState.deaths(_client_id), true)
+		bog.sync_life == bog.life and bog.life == MatchState.deaths(_client_id), true)
 	# A life begins full on both machines, and neither was sent a number to say
-	# so: `Gub.revive_at` runs on every peer and sets it there (D-062). This is
-	# what proves that, over a socket, on a Gub that died on 60 health.
+	# so: `Bog.revive_at` runs on every peer and sets it there (D-062). This is
+	# what proves that, over a socket, on a Bog that died on 60 health.
 	_check("the host's copy came back on full health",
-		MatchState.health_of(_client_id), Gub.MAX_HEALTH)
+		MatchState.health_of(_client_id), Bog.MAX_HEALTH)
 	_check("the client's own body came back on full health",
-		float(seen.get("health", -1.0)), Gub.MAX_HEALTH)
+		float(seen.get("health", -1.0)), Bog.MAX_HEALTH)
 	var taken := 0
 	for item: Pickup in loot:
 		if not is_instance_valid(item) or item.is_taken():
 			taken += 1
 	_check("nothing on the corpse was picked up by its owner", taken, 0)
-	var combat := gub.get_node_or_null("Combat") as GubCombat
-	_check("the host says the client holds no mushroom",
-		combat.mushroom_count() if combat != null else -1, 0)
+	var combat := bog.get_node_or_null("Combat") as BogCombat
+	_check("the host says the client holds no shield",
+		combat.shield_count() if combat != null else -1, 0)
 	_check("the host says the client is not the Elder", MatchState.is_elder(_client_id), false)
-	_check("the client agrees it holds no mushroom", int(seen.get("mushrooms", -1)), 0)
-	_check("the client agrees it holds no lure", int(seen.get("lures", -1)), 0)
+	_check("the client agrees it holds no shield", int(seen.get("shields", -1)), 0)
+	_check("the client agrees it holds no magnet", int(seen.get("magnets", -1)), 0)
 	_check("the client agrees it is not the Elder", bool(seen.get("elder", true)), false)
 	_check("the client is wearing no robe", bool(seen.get("robe", true)), false)
 	print("net_loopback:   peer %d respawned %.1f m from its loot with empty hands; the host's copy is %.2f m from it"
-		% [_client_id, there.distance_to(_death_point), gub.global_position.distance_to(there)])
+		% [_client_id, there.distance_to(_death_point), bog.global_position.distance_to(there)])
 	return true
 
 
@@ -887,9 +887,9 @@ func _stage_rematch() -> bool:
 			return false
 
 		# The result.
-		var victim: Gub = MatchState.gubs.get(_client_id)
+		var victim: Bog = MatchState.bogs.get(_client_id)
 		var point := victim.global_position if is_instance_valid(victim) else Vector3.ZERO
-		MatchState.report_kill(_client_id, 1, Gub.Cause.SPEAR, point, Vector3.FORWARD * 6.0, "")
+		MatchState.report_kill(_client_id, 1, Bog.Cause.SPEAR, point, Vector3.FORWARD * 6.0, "")
 		if not _require("round %d: the kill ended the match on the host" % (n + 1),
 				MatchState.phase == MatchState.Phase.POST_MATCH):
 			return false
@@ -922,15 +922,15 @@ func _stage_rematch() -> bool:
 		slowest = maxf(slowest, took)
 		_check("round %d: the host did not start without the client" % (n + 1),
 			_timed_out_start, false)
-		_check("round %d: the host has a Gub per player, in the new arena" % (n + 1),
-			_gubs_in_current_arena(), Net.player_count())
+		_check("round %d: the host has a Bog per player, in the new arena" % (n + 1),
+			_bogs_in_current_arena(), Net.player_count())
 		var theirs := await _request("rematched", {}, REMATCH_TIMEOUT)
 		if theirs.is_empty():
 			return false
 		_check("round %d: the client is in the new arena and PLAYING" % (n + 1),
 			bool(theirs.get("playing", false)), true)
-		_check("round %d: the client has a Gub per player, in its new arena" % (n + 1),
-			int(theirs.get("gubs", -1)), Net.player_count())
+		_check("round %d: the client has a Bog per player, in its new arena" % (n + 1),
+			int(theirs.get("bogs", -1)), Net.player_count())
 		print("net_loopback:   round %d: REMATCH to PLAYING in %.2f s on the host%s" % [
 			n + 1, took, " (from the lobby)" if via_lobby else ""])
 		if _failures > 0:
@@ -970,15 +970,15 @@ func _hud() -> HUD:
 	return scene.get_node_or_null("HUD") as HUD if scene != null else null
 
 
-## Live Gubs that are actually in the arena on screen — not merely in
-## `MatchState.gubs`, which would also count a Gub spawned into the arena that
+## Live Bogs that are actually in the arena on screen — not merely in
+## `MatchState.bogs`, which would also count a Bog spawned into the arena that
 ## was just freed.
-func _gubs_in_current_arena() -> int:
+func _bogs_in_current_arena() -> int:
 	var scene := get_tree().current_scene
 	var count := 0
-	for gub: Gub in MatchState.gubs.values():
-		if is_instance_valid(gub) and gub.is_inside_tree() and scene != null \
-				and scene.is_ancestor_of(gub):
+	for bog: Bog in MatchState.bogs.values():
+		if is_instance_valid(bog) and bog.is_inside_tree() and scene != null \
+				and scene.is_ancestor_of(bog):
 			count += 1
 	return count
 
@@ -1075,8 +1075,8 @@ func _stage_disconnect() -> void:
 	_check("Net.player_left named the departed", _departed.has(_client_id), true)
 	_check("MatchState dropped their scoring row",
 		MatchState.stats.has(_client_id), false)
-	_check("MatchState took their Gub out of the world",
-		MatchState.gubs.has(_client_id), false)
+	_check("MatchState took their Bog out of the world",
+		MatchState.bogs.has(_client_id), false)
 	print("net_loopback:   peer %d gone, roster %s" % [
 		_client_id, JSON.stringify(_roster_digest())])
 
@@ -1182,7 +1182,7 @@ func _serve(message: Dictionary) -> void:
 			_check("the map the host chose arrived", Net.config.map, CONFIG_MAP)
 			_check("and it is a map this build has", MapCatalog.is_valid(Net.config.map), true)
 			_check("a float that needs 64 bits survived",
-				Net.config.lure_radius, CONFIG_LURE_RADIUS)
+				Net.config.magnet_radius, CONFIG_MAGNET_RADIUS)
 			_check("config_changed was emitted", _config_changes > 0, true)
 			reply["config"] = got
 			reply["changes"] = _config_changes
@@ -1218,12 +1218,12 @@ func _serve(message: Dictionary) -> void:
 			_check("the client built the arena", arena != null, true)
 			_check("phase PLAYING arrived over the wire", MatchState.phase,
 				MatchState.Phase.PLAYING)
-			_check("the client has a Gub for every player",
-				MatchState.gubs.size(), Net.player_count())
+			_check("the client has a Bog for every player",
+				MatchState.bogs.size(), Net.player_count())
 			reply["arena"] = arena != null
 			reply["phase"] = int(MatchState.phase)
 			reply["seed"] = Net.config.map_seed
-			reply["gubs"] = MatchState.gubs.size()
+			reply["bogs"] = MatchState.bogs.size()
 			reply["spawns"] = arena.spawn_points.size() if arena != null else 0
 		"abilities":
 			reply = await _client_abilities()
@@ -1245,14 +1245,14 @@ func _serve(message: Dictionary) -> void:
 				reply["killer"] = int(kill[1])
 				reply["cause"] = int(kill[2])
 		"health":
-			var mine := MatchState.local_gub()
+			var mine := MatchState.local_bog()
 			# Awaited rather than read straight off, because the damage message
 			# and this question are two different trips over the same socket and
 			# nothing says the first has landed when the second arrives.
 			await _await_until("the host's hit to arrive", STEP_TIMEOUT,
-				func() -> bool: return is_instance_valid(mine) 					and mine.health < Gub.MAX_HEALTH)
+				func() -> bool: return is_instance_valid(mine) 					and mine.health < Bog.MAX_HEALTH)
 			_check("the client's own body was hurt",
-				is_instance_valid(mine) and mine.health < Gub.MAX_HEALTH, true)
+				is_instance_valid(mine) and mine.health < Bog.MAX_HEALTH, true)
 			reply["health"] = mine.health if is_instance_valid(mine) else -1.0
 			# The plate is hidden on your own screen (you do not need a label
 			# telling you your own name) but it is still fed, and it is the same
@@ -1261,7 +1261,7 @@ func _serve(message: Dictionary) -> void:
 			reply["bar"] = mine.nameplate._health if is_instance_valid(mine) else -1.0
 			reply["alive"] = is_instance_valid(mine) and mine.alive
 		"move":
-			var body := MatchState.local_gub()
+			var body := MatchState.local_bog()
 			if is_instance_valid(body):
 				body.global_position = payload.get("to", body.global_position) + Vector3.UP * 0.3
 				body.velocity = Vector3.ZERO
@@ -1269,16 +1269,16 @@ func _serve(message: Dictionary) -> void:
 					await get_tree().physics_frame
 				reply["pos"] = body.global_position
 		"respawn":
-			var mine := MatchState.local_gub()
+			var mine := MatchState.local_bog()
 			# Checked on the host from what is sent back, so this side only
 			# reports; the tally stays one place.
 			await _await_until("this client to be alive again", STEP_TIMEOUT,
 				func() -> bool: return is_instance_valid(mine) and mine.alive)
-			var combat: GubCombat = null
+			var combat: BogCombat = null
 			if is_instance_valid(mine):
-				combat = mine.get_node_or_null("Combat") as GubCombat
-			reply["mushrooms"] = combat.mushroom_count() if combat != null else -1
-			reply["lures"] = combat.lure_count() if combat != null else -1
+				combat = mine.get_node_or_null("Combat") as BogCombat
+			reply["shields"] = combat.shield_count() if combat != null else -1
+			reply["magnets"] = combat.magnet_count() if combat != null else -1
 			reply["health"] = mine.health if is_instance_valid(mine) else -1.0
 			reply["elder"] = MatchState.is_elder(Net.local_id())
 			reply["robe"] = is_instance_valid(mine) and mine.elder_robe != null
@@ -1309,11 +1309,11 @@ func _serve(message: Dictionary) -> void:
 					var scene := get_tree().current_scene
 					return scene is Arena and scene.get_instance_id() != _old_arena \
 						and MatchState.phase == MatchState.Phase.PLAYING \
-						and _gubs_in_current_arena() == Net.player_count())
+						and _bogs_in_current_arena() == Net.player_count())
 			var scene := get_tree().current_scene
 			reply["playing"] = scene is Arena and scene.get_instance_id() != _old_arena \
 				and MatchState.phase == MatchState.Phase.PLAYING
-			reply["gubs"] = _gubs_in_current_arena()
+			reply["bogs"] = _bogs_in_current_arena()
 		"finish":
 			reply["checks"] = _checks
 			reply["failures"] = _failures
@@ -1322,11 +1322,11 @@ func _serve(message: Dictionary) -> void:
 			# reply to. Leave *then* tidy up, the order the pause menu's Leave
 			# takes. This used to reset first, a frame before leaving, and that
 			# frame was the "engine error at match start" this run reported for
-			# as long as it existed: the host's Gub was still publishing, the
+			# as long as it existed: the host's Bog was still publishing, the
 			# client had just freed its copy, and one packet landed in between —
-			# *Node not found: Arena/Players/Gub_1/Sync* (D-044). The worry that
-			# ordered it that way, a Gub asking a peer that has gone who owns
-			# it, was fixed in `Gub.is_local` and is guarded by the gate's
+			# *Node not found: Arena/Players/Bog_1/Sync* (D-044). The worry that
+			# ordered it that way, a Bog asking a peer that has gone who owns
+			# it, was fixed in `Bog.is_local` and is guarded by the gate's
 			# "leaving a match cleanly".
 			Net.leave_lobby(Net.Leave.LOCAL_REQUEST, "", false)
 			MatchState.reset()
@@ -1342,77 +1342,77 @@ func _serve(message: Dictionary) -> void:
 ## The client's half of stage 7: use all three abilities and report what
 ## actually happened on this machine.
 ##
-## Everything goes through the public `GubCombat` calls, which is the same entry
-## point `GubCombat._process` reaches from a key press — nothing here pokes at a
+## Everything goes through the public `BogCombat` calls, which is the same entry
+## point `BogCombat._process` reaches from a key press — nothing here pokes at a
 ## `_do_*` or at the host directly. That is the whole point of the stage. Stage 8
 ## kills the client by calling `MatchState.report_kill` on the *host*, which
-## never touches `GubCombat` at all, so until now no non-host peer had ever been
+## never touches `BogCombat` at all, so until now no non-host peer had ever been
 ## asked to do anything and every ability a client used was refused on arrival.
 func _client_abilities() -> Dictionary:
-	var out := {"ok": true, "spears": -1, "mushrooms": -1, "lures": -1,
-		"hand_empty": false, "lured": false}
-	var gub := MatchState.local_gub()
-	if not _require("the client has a Gub of its own", gub != null):
+	var out := {"ok": true, "spears": -1, "shields": -1, "magnets": -1,
+		"hand_empty": false, "pulled": false}
+	var bog := MatchState.local_bog()
+	if not _require("the client has a Bog of its own", bog != null):
 		return out
-	var rig := gub.get_node_or_null("CameraRig") as GubCamera
-	var combat := gub.get_node_or_null("Combat") as GubCombat
-	if not _require("the client's Gub carries a rig and a Combat",
+	var rig := bog.get_node_or_null("CameraRig") as BogCamera
+	var combat := bog.get_node_or_null("Combat") as BogCombat
+	if not _require("the client's Bog carries a rig and a Combat",
 			rig != null and combat != null):
 		return out
 	if not _require("the client found the item container", _watch_spawned_items()):
 		return out
 
 	# Aim at the ground a few metres ahead and let the rig settle on it. The
-	# camera sits behind the Gub and off to one side, so `look_at_point` gets
+	# camera sits behind the Bog and off to one side, so `look_at_point` gets
 	# close on the first call and converges over the next few — the same thing
 	# `tools/combat_range.gd` does, and for the same reason.
-	var aim := gub.global_position + gub.facing() * ABILITY_AIM_DISTANCE
+	var aim := bog.global_position + bog.facing() * ABILITY_AIM_DISTANCE
 	for i in 12:
 		rig.look_at_point(aim)
 		await get_tree().process_frame
 
 	combat.try_throw_spear()
-	combat.try_place_mushroom()
-	combat.try_throw_lure()
+	combat.try_place_shield()
+	combat.try_throw_magnet()
 
 	# None of these three exist yet. `try_*` sends an intent and predicts a
 	# cooldown; the item itself is built by `_do_*` when the host broadcasts it
 	# back, so waiting here is waiting for the round trip.
 	await _await_until("the client's own spear", STEP_TIMEOUT,
-		func() -> bool: return _spawned_count("spear", gub.peer_id) > 0)
-	await _await_until("the client's own mushroom", STEP_TIMEOUT,
-		func() -> bool: return _spawned_count("mushroom", gub.peer_id) > 0)
-	await _await_until("the client's own lure", STEP_TIMEOUT,
-		func() -> bool: return _spawned_count("lure", gub.peer_id) > 0)
-	out["spears"] = _spawned_count("spear", gub.peer_id)
-	out["mushrooms"] = _spawned_count("mushroom", gub.peer_id)
-	out["lures"] = _spawned_count("lure", gub.peer_id)
+		func() -> bool: return _spawned_count("spear", bog.peer_id) > 0)
+	await _await_until("the client's own shield", STEP_TIMEOUT,
+		func() -> bool: return _spawned_count("shield", bog.peer_id) > 0)
+	await _await_until("the client's own magnet", STEP_TIMEOUT,
+		func() -> bool: return _spawned_count("magnet", bog.peer_id) > 0)
+	out["spears"] = _spawned_count("spear", bog.peer_id)
+	out["shields"] = _spawned_count("shield", bog.peer_id)
+	out["magnets"] = _spawned_count("magnet", bog.peer_id)
 	_check("the client built its own spear", out["spears"], 1)
-	_check("the client built its own mushroom", out["mushrooms"], 1)
-	_check("the client built its own lure", out["lures"], 1)
+	_check("the client built its own shield", out["shields"], 1)
+	_check("the client built its own magnet", out["magnets"], 1)
 
 	# The empty hand is checked after the spear exists rather than on the frame
 	# of the call, because it is not local feedback: `_do_throw_spear` is what
 	# takes the spear out of the hand, and a client whose broadcast never lands
 	# stands there still holding a spear it has already thrown.
-	out["hand_empty"] = gub.held_gear != null and not gub.held_gear.is_carried()
+	out["hand_empty"] = bog.held_gear != null and not bog.held_gear.is_carried()
 	_check("the spear left this client's hand", out["hand_empty"], true)
 
-	# The pull travels the other way: the host decides who the lure caught and
+	# The pull travels the other way: the host decides who the magnet caught and
 	# tells the victim's own client, because movement is client-authoritative
 	# and the host cannot move the body itself (D-004). The throw is short
 	# enough that the thrower is inside its own radius, so this client is its
 	# own victim.
-	await _await_until("this client's own lure to pull it", STEP_TIMEOUT,
-		func() -> bool: return gub.is_lured())
-	out["lured"] = gub.is_lured()
-	_check("the lure pulled this client", out["lured"], true)
+	await _await_until("this client's own magnet to pull it", STEP_TIMEOUT,
+		func() -> bool: return bog.is_pulled())
+	out["pulled"] = bog.is_pulled()
+	_check("the magnet pulled this client", out["pulled"], true)
 	return out
 
 
 # --------------------------------------------------------- spawned items ---
 
-## Start recording what `GubCombat._spawn_root` builds. Both peers do this, and
+## Start recording what `BogCombat._spawn_root` builds. Both peers do this, and
 ## both read it back through `_spawned_count`.
 func _watch_spawned_items() -> bool:
 	var root := get_tree().get_first_node_in_group("spawned_items")
@@ -1425,14 +1425,14 @@ func _watch_spawned_items() -> bool:
 
 func _on_item_spawned(node: Node) -> void:
 	# Connected here rather than sampled later: `caught` fires once, about a
-	# second after the lure lands, and it is the only place the whole victim
-	# list exists (see `Lure`).
-	if node is Lure:
-		(node as Lure).caught.connect(func(victim_ids: Array) -> void:
+	# second after the magnet lands, and it is the only place the whole victim
+	# list exists (see `Magnet`).
+	if node is Magnet:
+		(node as Magnet).caught.connect(func(victim_ids: Array) -> void:
 			for victim_id: int in victim_ids:
-				_lure_caught.append(int(victim_id)))
-	# One frame before reading the owner. `GubCombat` adds the child and *then*
-	# calls `plant` / `launch_from`, so at this instant a mushroom and a lure
+				_magnet_caught.append(int(victim_id)))
+	# One frame before reading the owner. `BogCombat` adds the child and *then*
+	# calls `plant` / `launch_from`, so at this instant a shield and a magnet
 	# still say they belong to peer 0. Nothing is freed anywhere near this fast.
 	await get_tree().process_frame
 	if not is_instance_valid(node):
@@ -1446,20 +1446,20 @@ func _on_item_spawned(node: Node) -> void:
 func _item_kind(node: Node) -> String:
 	if node is SpearProjectile:
 		return "spear"
-	if node is ShieldMushroom:
-		return "mushroom"
-	if node is Lure:
-		return "lure"
+	if node is Shield:
+		return "shield"
+	if node is Magnet:
+		return "magnet"
 	return ""
 
 
 func _item_owner(node: Node) -> int:
 	if node is SpearProjectile:
 		return (node as SpearProjectile).thrower_id
-	if node is ShieldMushroom:
-		return (node as ShieldMushroom).owner_peer_id
-	if node is Lure:
-		return (node as Lure).owner_peer_id
+	if node is Shield:
+		return (node as Shield).owner_peer_id
+	if node is Magnet:
+		return (node as Magnet).owner_peer_id
 	return 0
 
 
@@ -1585,8 +1585,8 @@ func _await_until(what: String, timeout: float, ready: Callable) -> bool:
 ## Print the verdict, put the shared settings file back, and go.
 ##
 ## The session is deliberately left open on the host: `Net.leave_lobby` nulls
-## the multiplayer peer and every Gub still in the tree then calls
-## `multiplayer.get_unique_id()` from `Gub.is_local()` on every frame, which
+## the multiplayer peer and every Bog still in the tree then calls
+## `multiplayer.get_unique_id()` from `Bog.is_local()` on every frame, which
 ## buries the verdict under engine errors. Quitting is enough — the engine frees
 ## the tree and closes the socket on the way out. `tools/playthrough.gd` carries
 ## the same note.

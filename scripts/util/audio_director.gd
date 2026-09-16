@@ -24,7 +24,7 @@ const BOW_LOOSE := preload("res://audio/sfx/bow_loose.wav")
 ## The great sword, in two halves (D-068).
 ##
 ## `SWORD_SWING` is the **one clip in this library that is locked to an
-## animation**. It is 1.867 s long because that is `GubAnimator.SWING_SECONDS`,
+## animation**. It is 1.867 s long because that is `BogAnimator.SWING_SECONDS`,
 ## it is played on the frame the spin starts rather than on the frame the blade
 ## lands, and its loudness peaks 1.067 s in because that is
 ## `SWING_RELEASE_TIME` — where the build measures peak hand speed, which is
@@ -35,10 +35,10 @@ const BOW_LOOSE := preload("res://audio/sfx/bow_loose.wav")
 ## the blade and the swing would read as a different swing.
 const SWORD_SWING := preload("res://audio/sfx/sword_swing.wav")
 const SWORD_HIT_BODY := preload("res://audio/sfx/sword_hit_body.wav")
-const MUSHROOM_DEPLOY := preload("res://audio/sfx/mushroom_deploy.wav")
-const LURE_THROW := preload("res://audio/sfx/lure_throw.wav")
-const LURE_ARM := preload("res://audio/sfx/lure_arm.wav")
-const LURE_FIRE := preload("res://audio/sfx/lure_fire.wav")
+const SHIELD_DEPLOY := preload("res://audio/sfx/shield_deploy.wav")
+const MAGNET_THROW := preload("res://audio/sfx/magnet_throw.wav")
+const MAGNET_ARM := preload("res://audio/sfx/magnet_arm.wav")
+const MAGNET_FIRE := preload("res://audio/sfx/magnet_fire.wav")
 const DEATH := preload("res://audio/sfx/death.wav")
 const RESPAWN := preload("res://audio/sfx/respawn.wav")
 const HITMARKER := preload("res://audio/sfx/hitmarker.wav")

@@ -1,14 +1,14 @@
-"""Build the Elder's robe and hat — one skinned mesh that wears the Gub's own skeleton.
+"""Build the Elder's robe and hat — one skinned mesh that wears the Bog's own skeleton.
 
-`art/generated/gub.glb` is the Gub: one mesh, one 49-bone skeleton, nine clips
-(`tools/build_gub.py` builds it and is the model this script is written after).
-The Elder is that same Gub in a floor-length purple robe and a wizard hat, and
+`art/generated/bog.glb` is the Bog: one mesh, one 49-bone skeleton, nine clips
+(`tools/build_bog.py` builds it and is the model this script is written after).
+The Elder is that same Bog in a floor-length purple robe and a wizard hat, and
 the cheapest honest way to say that is a **second skinned mesh bound to the same
 skeleton**: `art/generated/elder.glb` carries the robe, the hat and a copy of the
 skeleton to bind against, and no animation data at all. At runtime its
-`MeshInstance3D` is re-parented onto a Gub's existing `Skeleton3D` — the same
+`MeshInstance3D` is re-parented onto a Bog's existing `Skeleton3D` — the same
 reach-into-the-skeleton move `HeldSpear.attach_to()` already makes — so there is
-one copy of the nine clips in the project and a future rebuild of the Gub flows
+one copy of the nine clips in the project and a future rebuild of the Bog flows
 through the Elder for free.
 
 Run it as:
@@ -16,19 +16,19 @@ Run it as:
     "$BLENDER" --background --python tools/build_elder.py [-- --emission FLOAT]
 
 or `bash tools/build_elder.sh` to have Blender located for you. Re-running is
-always safe: it reads `art/generated/gub.glb`, writes `art/generated/elder.glb`,
+always safe: it reads `art/generated/bog.glb`, writes `art/generated/elder.glb`,
 and never touches `assets/`.
 
 What it does, and why each step is needed:
 
-*Measure, then fit.* Nothing here is a typed-in dimension. The Gub is imported,
+*Measure, then fit.* Nothing here is a typed-in dimension. The Bog is imported,
 its arm vertices are set aside (the arms stick straight out in the rest pose and
 reach 0.95 m against the body's 0.37, so any silhouette measured through them
 would be a metre and a half wide at the shoulder), and the rest of the body is
 sliced 41 times and turned into a **support function** — for each of 48
 directions, the furthest any vertex in the slice projects along it. The robe is
 fitted to that. The numbers are printed on the way past so a regression shows up
-in the log rather than in game, which is `build_gub.py`'s rule and the reason
+in the log rather than in game, which is `build_bog.py`'s rule and the reason
 that script's rig report exists.
 
 A support function rather than a ray-cast, and both halves of that matter. It is
@@ -51,14 +51,14 @@ and it is a measurement rather than a guess about where the cloth should sit.
 `SKIRT_FULLNESS` then adds the fabric a taut hull cannot have, and `FOLDS`
 ripples it, because a smooth cone reads as a traffic cone at any distance.
 
-*The hem is the risk, and it is measured rather than hoped for.* The Gub's legs
+*The hem is the risk, and it is measured rather than hoped for.* The Bog's legs
 are spindly and its feet are enormous, and a skirt is a rigid surface with no
-cloth sim behind it (this is a game asset; eight Gubs can be on screen). The
+cloth sim behind it (this is a game asset; eight Bogs can be on screen). The
 skirt is therefore skinned partly to `LeftUpLeg`/`RightUpLeg` — `LEG_SHARE_MAX`
 of it at the hem, split left/right by how far across the body a vertex sits — so
 the panels swing with the thighs instead of standing still while a knee walks
 through them. What that buys is then *checked*: every clip is played, both meshes
-are evaluated with their armature deformation applied, and every Gub vertex that
+are evaluated with their armature deformation applied, and every Bog vertex that
 starts the rest pose inside the robe is tested against the robe's surface with a
 signed distance. The report splits what comes out into a leg appearing from under
 the hem — which is what a hem is for — and a limb through a panel, which is the
@@ -71,7 +71,7 @@ and saying so in the log is the point of measuring it.
 *The hat is rigid-weighted 100% to `Head`, which makes it correct by
 construction* — it cannot clip a head it never moves relative to. Its crown base
 is sized by measuring the head's cross-section at the brim plane, so it fits this
-skull rather than a nominal one. The Gub's two antennae leave the crown at
+skull rather than a nominal one. The Bog's two antennae leave the crown at
 z = 1.58 and arch forward to z = 1.80, which is the whole of the space a hat
 wants, so they come out through the front of the crown just above the brim. That
 is deliberate: the alternatives are a hat floating above a head it does not touch
@@ -103,19 +103,19 @@ loudly, rather than shipping a robe that deforms around a subtly different body.
   `elder_emissive`   black cloth with the runes and the trim edges on it, plus
       `CLOTH_GLOW`, a near-black violet over the whole robe.
 
-Roughness is `ROUGHNESS` = 0.82 against the Gub's 0.9: velvet is not quite as
-flat as whatever the Gub is made of, and a fraction of sheen is most of what
+Roughness is `ROUGHNESS` = 0.82 against the Bog's 0.9: velvet is not quite as
+flat as whatever the Bog is made of, and a fraction of sheen is most of what
 tells a viewer they are two materials. Metallic 0.
 
 `--emission` (default `EMISSION_DEFAULT`) is the Principled emission strength
-over that emissive map, and it is an argument for the reason `build_gub.py`'s is:
+over that emissive map, and it is an argument for the reason `build_bog.py`'s is:
 D-027 measured a flat-shaded body against Whisperbloom's undergrowth and found it
 a near-silhouette wherever no torch reached, and this robe is far darker than the
-Gub's yellow — 0.10 in linear against 0.6 — so it has further to fall. The cloth
+Bog's yellow — 0.10 in linear against 0.6 — so it has further to fall. The cloth
 term lifts it off the background at a spear's range; the runes are what reads as
 a wizard at 20 m. `--emission 0` leaves the socket unwired, which gives back a
 plain base-colour PBR material rather than one multiplied by zero (the same trap
-`build_gub.py` documents: a wired-but-black emission is a texture fetch per
+`build_bog.py` documents: a wired-but-black emission is a texture fetch per
 fragment that can never do anything).
 
 The images are named `basecolor` and `emissive` and the file `elder.glb` on
@@ -141,7 +141,7 @@ from mathutils.bvhtree import BVHTree
 # ---------------------------------------------------------------------------
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SOURCE_PATH = os.path.join(REPO, "art", "generated", "gub.glb")
+SOURCE_PATH = os.path.join(REPO, "art", "generated", "bog.glb")
 OUT_PATH = os.path.join(REPO, "art", "generated", "elder.glb")
 
 FPS = 60
@@ -161,21 +161,37 @@ NECK_BONE = "Neck"
 ARM_MARKERS = ("Shoulder", "Arm", "ForeArm", "Hand")
 
 # Where Blender's glTF importer parks the helper objects it makes for itself and
-# its own exporter then skips. See `import_gub`.
+# its own exporter then skips. See `import_bog`.
 NOT_EXPORTED = "glTF_not_exported"
+
+# Where the Bog's skeleton puts the top of its skull, and the one dimension of
+# the incoming file this script refuses to proceed without.
+#
+# **The rail is on the rig and not on the mesh**, which it used to be. Since
+# `build_bog.py` grew its `-- body` stage the mesh over these bones is a
+# different sculpt from the Mixamo one — see *Body* there — and it stands
+# 1.757 m rather than the 1.800 the donor did, while not one bone moved. Every
+# number in this file is in the Bog's own rest space and is measured against
+# *bones*: TOP_Z sits above the shoulder joints at 1.098, the hat's brim plane
+# is cut off the Head bone, the hem clears feet whose joints are where they
+# always were. What would really break this script is a rig at a different
+# scale, and that is what this catches; a differently shaped body is fitted to
+# rather than refused, because every dimension that follows the shape is
+# measured off the silhouette on every build.
+RIG_HEAD_TOP = 1.510
 
 # ------------------------------------------------------------------ the robe --
 #
-# Every number here is in metres in the Gub's own rest space: +Z is up, feet at
-# z = 0, head top at z = 1.80, and **-Y is front** (`build_gub.py` establishes
-# that from the LeftFoot -> LeftToeBase vector). Angles below are measured from
-# the front and increase toward the Gub's left, so theta = 0 is the belly and
-# theta = pi is the spine.
+# Every number here is in metres in the Bog's own rest space: +Z is up, feet at
+# z = 0, the skull's HeadTop_End bone at z = 1.51, and **-Y is front**
+# (`build_bog.py` establishes that from the LeftFoot -> LeftToeBase vector).
+# Angles below are measured from the front and increase toward the Bog's left,
+# so theta = 0 is the belly and theta = pi is the spine.
 
 SEGMENTS = 48          # ring resolution. 48 is 7.5 degrees; at 0.55 m radius
                        # that is a 7 cm facet, under a tenth of the fold pitch.
 HEM_Z = 0.055          # just clear of the floor, and below the 0.15 m feet, so
-                       # the Gub stands *in* the robe rather than on it.
+                       # the Bog stands *in* the robe rather than on it.
 HEM_RADIUS = 0.55      # the feet reach 0.437 from the body axis: this clears
                        # them by 0.11 in rest and is what the legs swing inside.
 TOP_Z = 1.160          # a shade above the shoulder joints at 1.098 and well
@@ -240,7 +256,7 @@ SPINE_RAMP = (
 # cape to be that an elbow does not pass through.
 COWL_ARC = math.radians(48.0)   # either side of the back. Wider than this and
                                 # the two ends of it come round far enough to
-                                # stand up beside the Gub's cheeks in a front
+                                # stand up beside the Bog's cheeks in a front
                                 # view, which reads as a broken collar.
 COWL_RISE = 0.260               # tops out at z = 1.42, under the brim.
 COWL_GAP = 0.075                # air between the cowl's top edge and the skull.
@@ -258,7 +274,7 @@ HAT_BRIM_Z = 1.470     # the brim plane's height on the hat axis. The skull is
                        # left of it but the two antennae.
 HAT_TILT = math.radians(18.0)   # leant back, because the head leans forward —
                                 # and far enough back that the brim's front edge
-                                # rides above the Gub's eyes instead of across
+                                # rides above the Bog's eyes instead of across
                                 # them, which is what 12 degrees did.
 HAT_BASE_CLEARANCE = 0.028      # around the skull at the brim plane.
 HAT_HEIGHT = 0.620              # crown, along the axis.
@@ -268,7 +284,7 @@ HAT_TAPER = 1.25                # r = R (1-t)^TAPER. Above 1 the cone is
 HAT_TIP_RADIUS = 0.008
 HAT_CROWN_RINGS = 18
 HAT_SEGMENTS = 40
-# The droop. Back and to the Gub's left, which is the one direction the antennae
+# The droop. Back and to the Bog's left, which is the one direction the antennae
 # do not already occupy — they arch forward. Cubic from DROOP_START so the bend
 # starts as cloth rather than as a kink.
 HAT_DROOP = 0.255
@@ -310,7 +326,7 @@ CLOTH_HIGH = (0.247, 0.165, 0.357)   # #3F2A5B, shoulders and the brim's top
 TRIM = (0.424, 0.306, 0.596)         # #6C4E98, the woven bands
 RUNE = (0.760, 0.686, 1.000)         # #C2AFFF, the glyphs
 # What the cloth emits everywhere, before `--emission`. Linear ~0.012, which is
-# the same order as the 0.15-of-albedo the Gub's darkest surfaces emit (D-027)
+# the same order as the 0.15-of-albedo the Bog's darkest surfaces emit (D-027)
 # and is the difference between a silhouette and a shape under a 0.30-energy
 # moon.
 CLOTH_GLOW = (0.086, 0.063, 0.157)
@@ -370,7 +386,7 @@ def wrap_pi(angle):
 def direction(theta):
     """Unit vector at `theta`, measured from the front and turning toward +X.
 
-    theta = 0 is -Y (the belly), pi/2 is +X (the Gub's left), pi is +Y (the
+    theta = 0 is -Y (the belly), pi/2 is +X (the Bog's left), pi is +Y (the
     spine). Keeping the front at zero is what lets the cowl and the fold phase
     be written as angles off the front rather than as offsets nobody can read.
     """
@@ -378,11 +394,11 @@ def direction(theta):
 
 
 # ---------------------------------------------------------------------------
-# 1. The Gub, and the shape of it
+# 1. The Bog, and the shape of it
 # ---------------------------------------------------------------------------
 
-def import_gub():
-    """Import `gub.glb` and return (armature, mesh, {clip: action}).
+def import_bog():
+    """Import `bog.glb` and return (armature, mesh, {clip: action}).
 
     Blender 5.2's glTF importer drops a 42-vertex Icosphere into a collection
     called `glTF_not_exported` — a placeholder it keeps for its own bookkeeping
@@ -396,7 +412,7 @@ def import_gub():
     scene.render.fps_base = 1.0
 
     if not os.path.isfile(SOURCE_PATH):
-        raise SystemExit("missing %s — run tools/build_gub.sh first" % SOURCE_PATH)
+        raise SystemExit("missing %s — run tools/build_bog.sh first" % SOURCE_PATH)
     bpy.ops.import_scene.gltf(filepath=SOURCE_PATH)
 
     def real(obj):
@@ -417,7 +433,7 @@ def import_gub():
     missing = [b for b in SPINE_CHAIN + LEG_BONES + (HEAD_BONE, NECK_BONE)
                if b not in arm.data.bones]
     if missing:
-        raise SystemExit("the Gub's skeleton has no %s — bone names have moved"
+        raise SystemExit("the Bog's skeleton has no %s — bone names have moved"
                          % ", ".join(missing))
 
     log("  imported %s: %d bones, %d verts, %d clips (%s)"
@@ -440,7 +456,7 @@ def dominant_groups(mesh):
 
 
 def body_points(mesh, dominant):
-    """The Gub's body as an (N, 3) array, with the arms left out.
+    """The Bog's body as an (N, 3) array, with the arms left out.
 
     Arms go by *vertex* rather than by face. Cutting whole faces was the first
     attempt and it is wrong: it takes the shoulder caps with them and leaves a
@@ -459,7 +475,9 @@ def report_rest(arm, mesh):
     coords = [v.co for v in mesh.data.vertices]
     low = min(c.z for c in coords)
     high = max(c.z for c in coords)
-    log("  Gub is %.3f m tall, feet at z=%+.4f" % (high - low, low))
+    head_top = arm.data.bones["HeadTop_End"].head_local.z
+    log("  Bog is %.3f m tall, feet at z=%+.4f; the rig it hangs on reaches "
+        "%.3f at HeadTop_End" % (high - low, low, head_top))
     heights = ("Hips", "Spine", "Spine1", "Spine2", "Neck", "Head", "HeadTop_End",
                "LeftShoulder", "LeftUpLeg", "LeftFoot")
     log("  rest heights " + "  ".join(
@@ -469,9 +487,13 @@ def report_rest(arm, mesh):
         "across the body follows that thigh alone, and the front and back of the "
         "skirt split evenly between the two"
         % (hips.length, LEG_SPLIT_HALF))
-    if abs(high - 1.80) > 1e-3 or abs(low) > 1e-3:
-        raise SystemExit("the Gub is %.4f tall with feet at %.4f — this script is "
-                         "fitted to 1.80 at 0" % (high - low, low))
+    if abs(head_top - RIG_HEAD_TOP) > 1e-3 or abs(low) > 1e-3:
+        raise SystemExit(
+            "the rig's HeadTop_End is at %.4f with the feet at %.4f — this "
+            "script is fitted to %.3f at 0.\nEvery number in it is in the Bog's "
+            "own rest space, so a rig at a different scale is a robe\nbuilt to "
+            "the wrong dimensions in every direction at once."
+            % (head_top, low, RIG_HEAD_TOP))
     return Vector((arm.data.bones["Hips"].head_local.x,
                    arm.data.bones["Hips"].head_local.y, 0.0))
 
@@ -794,7 +816,7 @@ def hat_frame(mesh, dominant):
     if len(slab) < 8:
         raise SystemExit("only %d head vertices near z=%.3f — the head has moved"
                          % (len(slab), HAT_BRIM_Z))
-    # The midpoint of the slice's bounding box, not its centroid. The Gub's two
+    # The midpoint of the slice's bounding box, not its centroid. The Bog's two
     # eyes are Head-weighted geometry crowded onto the front of the skull, and a
     # centroid is pulled forward by them by 8 cm — enough to hang the hat off the
     # front of the head.
@@ -1249,7 +1271,7 @@ def build_material(obj, emission, edge):
         # which Godot turns into an enabled-but-black emission: a second texture
         # fetch per fragment that can never do anything. `--emission 0` is meant
         # to give back a plain base-colour PBR material, so the socket is left
-        # alone instead. (The same trap `build_gub.py` documents.)
+        # alone instead. (The same trap `build_bog.py` documents.)
         bpy.data.images.remove(glow_img)
 
     obj.data.materials.append(material)
@@ -1286,8 +1308,8 @@ def action_span(action):
     return int(round(lo)), int(round(hi))
 
 
-def tracked_vertices(gub, elder, dominant):
-    """The Gub vertices that start the rest pose inside the robe.
+def tracked_vertices(bog, elder, dominant):
+    """The Bog vertices that start the rest pose inside the robe.
 
     Those are the ones the robe has undertaken to cover; anything that leaves is
     a poke-through. Starting from "inside in rest" rather than from "below the
@@ -1296,7 +1318,7 @@ def tracked_vertices(gub, elder, dominant):
     """
     bvh = BVHTree.FromObject(elder, bpy.context.evaluated_depsgraph_get())
     inside = []
-    for vert in gub.data.vertices:
+    for vert in bog.data.vertices:
         name = dominant[vert.index]
         if any(m in name for m in ARM_MARKERS) or name == HEAD_BONE:
             continue
@@ -1312,7 +1334,7 @@ def tracked_vertices(gub, elder, dominant):
     return inside
 
 
-def fit_report(arm, gub, elder, actions, dominant, boundary):
+def fit_report(arm, bog, elder, actions, dominant, boundary):
     """Play every clip and measure what comes out of the cloth, and how.
 
     Two very different things read as "outside the robe". A foot below the hem is
@@ -1327,8 +1349,8 @@ def fit_report(arm, gub, elder, actions, dominant, boundary):
     use_action(arm, None)
     bpy.context.scene.frame_set(1)
     depsgraph.update()
-    tracked = tracked_vertices(gub, elder, dominant)
-    log("  tracking %d Gub vertices that start inside the robe, every %d frames"
+    tracked = tracked_vertices(bog, elder, dominant)
+    log("  tracking %d Bog vertices that start inside the robe, every %d frames"
         % (len(tracked), FIT_FRAME_STEP))
 
     rows = []
@@ -1349,7 +1371,7 @@ def fit_report(arm, gub, elder, actions, dominant, boundary):
             edges.balance()
             elder.evaluated_get(depsgraph).to_mesh_clear()
 
-            body = gub.evaluated_get(depsgraph).to_mesh()
+            body = bog.evaluated_get(depsgraph).to_mesh()
             try:
                 for index in tracked:
                     point = body.vertices[index].co
@@ -1369,7 +1391,7 @@ def fit_report(arm, gub, elder, actions, dominant, boundary):
                         worst_at = (frame - first) / FPS
                         worst_bone = dominant[index]
             finally:
-                gub.evaluated_get(depsgraph).to_mesh_clear()
+                bog.evaluated_get(depsgraph).to_mesh_clear()
         rows.append((clip, 100.0 * wall_count / max(samples, 1),
                      100.0 * hem_count / max(samples, 1), worst, worst_at,
                      worst_bone))
@@ -1428,17 +1450,17 @@ def head_swing(arm, actions):
 # 7. Export, and proving the bind
 # ---------------------------------------------------------------------------
 
-def export_glb(arm, elder, gub, path):
+def export_glb(arm, elder, bog, path):
     """Robe, hat and a rest-pose copy of the skeleton. No animation.
 
-    The Gub's own mesh and its material go first: the Elder's file exists to be
-    bound onto a Gub that is already in the scene, and shipping a second copy of
+    The Bog's own mesh and its material go first: the Elder's file exists to be
+    bound onto a Bog that is already in the scene, and shipping a second copy of
     the body and its 115 KB texture inside it would be exactly the duplication
     this whole approach is for. `export_def_bones=False` keeps all 49 bones, so
-    the joint list in this file is the joint list in `gub.glb` and the comparison
+    the joint list in this file is the joint list in `bog.glb` and the comparison
     below has something to compare.
     """
-    bpy.data.objects.remove(gub, do_unlink=True)
+    bpy.data.objects.remove(bog, do_unlink=True)
     for collection in (bpy.data.meshes, bpy.data.materials, bpy.data.images):
         for datablock in list(collection):
             if datablock.users == 0:
@@ -1533,7 +1555,7 @@ def joint_rests(path):
 
 
 def verify_bind(out_path, source_path):
-    """Prove the Elder can wear the Gub's skeleton, rather than assume it.
+    """Prove the Elder can wear the Bog's skeleton, rather than assume it.
 
     Godot binds a `Skin` to a `Skeleton3D` by bone *name* and then draws each
     vertex through `bone_global_pose * bind_pose`. That is only the right answer
@@ -1545,36 +1567,36 @@ def verify_bind(out_path, source_path):
     and it stops the build.
     """
     elder = joint_rests(out_path)
-    gub = joint_rests(source_path)
-    missing = sorted(set(gub) - set(elder))
-    extra = sorted(set(elder) - set(gub))
+    bog = joint_rests(source_path)
+    missing = sorted(set(bog) - set(elder))
+    extra = sorted(set(elder) - set(bog))
     if missing or extra:
         raise SystemExit("joint lists differ: %d missing (%s), %d extra (%s)"
                          % (len(missing), ", ".join(missing[:4]),
                             len(extra), ", ".join(extra[:4])))
     worst_rest, worst_bind, worst_name = 0.0, 0.0, ""
     for name, (rest, bind) in elder.items():
-        other_rest, other_bind = gub[name]
+        other_rest, other_bind = bog[name]
         rest_error = float(np.max(np.abs(rest - other_rest)))
         bind_error = float(np.max(np.abs(bind - other_bind)))
         if rest_error > worst_rest:
             worst_rest, worst_name = rest_error, name
         worst_bind = max(worst_bind, bind_error)
-    log("  %d joints, same names and the same order as gub.glb" % len(elder))
+    log("  %d joints, same names and the same order as bog.glb" % len(elder))
     log("  rest transforms agree within %.2g (worst: %s); inverse bind matrices "
         "within %.2g" % (worst_rest, worst_name, worst_bind))
     if max(worst_rest, worst_bind) > 1e-4:
         raise SystemExit(
-            "the Elder's skeleton does not match the Gub's (%.3g) — a mesh bound "
+            "the Elder's skeleton does not match the Bog's (%.3g) — a mesh bound "
             "to this skin would deform around a different body, so it cannot be "
-            "attached to a Gub's Skeleton3D at runtime. Export a whole "
-            "gub_elder.glb variant instead." % max(worst_rest, worst_bind))
+            "attached to a Bog's Skeleton3D at runtime. Export a whole "
+            "bog_elder.glb variant instead." % max(worst_rest, worst_bind))
 
 
 # ---------------------------------------------------------------------------
 
 def parse_args(argv):
-    """`--emission FLOAT`, the one lever, as `build_gub.py` does it.
+    """`--emission FLOAT`, the one lever, as `build_bog.py` does it.
 
     Blender stops parsing at `--` and hands the rest over; `build_elder.sh` adds
     a `--` of its own, so both `build_elder.sh --emission 2` and
@@ -1602,11 +1624,11 @@ def main():
     log("=== build_elder  Blender %s, emission %.2f, %d-segment rings, %d² textures"
         % (bpy.app.version_string, emission, SEGMENTS, TEXTURE_EDGE))
 
-    log("\n-- the Gub")
-    arm, gub, actions = import_gub()
-    dominant = dominant_groups(gub)
-    axis = report_rest(arm, gub)
-    points = body_points(gub, dominant)
+    log("\n-- the Bog")
+    arm, bog, actions = import_bog()
+    dominant = dominant_groups(bog)
+    axis = report_rest(arm, bog)
+    points = body_points(bog, dominant)
 
     log("\n-- silhouette")
     profile, raw = robe_radii(points, axis)
@@ -1623,12 +1645,14 @@ def main():
         % (LEG_SHARE_MAX * 100.0, LEG_SHARE_TOP))
 
     log("\n-- hat")
-    centre, hat_axis, side, up, base = hat_frame(gub, dominant)
+    centre, hat_axis, side, up, base = hat_frame(bog, dominant)
     crown, brim = build_hat(centre, hat_axis, side, up, base)
     tip = centre + hat_axis * HAT_HEIGHT
+    bare = max(v.co.z for v in bog.data.vertices) - min(v.co.z
+                                                        for v in bog.data.vertices)
     log("  crown %.3f m tall, drooping %.3f m from %.0f%% up; tip reaches z=%.3f "
-        "so the Elder stands %.3f m to the Gub's 1.800"
-        % (HAT_HEIGHT, HAT_DROOP, HAT_DROOP_START * 100.0, tip.z, tip.z))
+        "so the Elder stands %.3f m to the bare Bog's %.3f"
+        % (HAT_HEIGHT, HAT_DROOP, HAT_DROOP_START * 100.0, tip.z, tip.z, bare))
 
     log("\n-- assemble")
     elder = assemble(arm, [robe, cowl, crown, brim])
@@ -1638,10 +1662,10 @@ def main():
 
     log("\n-- fit")
     head_swing(arm, actions)
-    fit_report(arm, gub, elder, actions, dominant, boundary)
+    fit_report(arm, bog, elder, actions, dominant, boundary)
 
     log("\n-- export")
-    size = export_glb(arm, elder, gub, OUT_PATH)
+    size = export_glb(arm, elder, bog, OUT_PATH)
     log("  wrote %s  %.2f MB"
         % (os.path.relpath(OUT_PATH, REPO).replace("\\", "/"), size / 1e6))
 

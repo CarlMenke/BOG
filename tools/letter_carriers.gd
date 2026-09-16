@@ -7,14 +7,14 @@ extends Node3D
 ##   Godot --headless --path . tools/letter_carriers.tscn            # teams
 ##   Godot --headless --path . tools/letter_carriers.tscn -- ffa     # free-for-all
 ##
-## Through the snapshot it is the picture — the local Gub's own camera, a wall
+## Through the snapshot it is the picture — the local Bog's own camera, a wall
 ## fifteen metres out, two carriers forty metres behind it, and the feed:
 ##
 ##   Godot --path . --resolution 1600x900 --script tools/snapshot.gd -- \
 ##       res://tools/letter_carriers.tscn out/letter_carriers.png 45
 ##
 ## The real match path, as `team_plates` runs it: an offline host, a roster in
-## `Net.players`, Gubs spawned by `MatchState._create_gub`, the real HUD, and
+## `Net.players`, Bogs spawned by `MatchState._create_bog`, the real HUD, and
 ## cards put on the ground by `_spawn_drop` and walked into through
 ## `claim_pickup` — so the feed rows and the markers come from the signals a
 ## match fires, not from this file calling the feed.
@@ -29,8 +29,8 @@ extends Node3D
 ##               up with their letter, drawn without the depth test and above
 ##               the nameplate; the local player's own hold marks nothing on
 ##               this screen.
-##   bank      — after a hold is banked, that Gub's marker is gone.
-##   death     — after a carrier is killed, that Gub's marker is gone.
+##   bank      — after a hold is banked, that Bog's marker is gone.
+##   death     — after a carrier is killed, that Bog's marker is gone.
 ##   rows      — the feed never holds more than `KillFeed.MAX_ROWS`.
 
 const HUD_SCENE := preload("res://scenes/ui/hud.tscn")
@@ -147,19 +147,19 @@ func _pick_up() -> void:
 	var before := _feed.get_child_count()
 	var dupe := MatchState._spawn_drop(Pickup.Kind.LETTER, MatchState.LETTER_B, SPOTS[NEAR_ENEMY])
 	MatchState.claim_pickup(dupe, NEAR_ENEMY)
-	var gub := MatchState.gubs[NEAR_ENEMY] as Gub
+	var bog := MatchState.bogs[NEAR_ENEMY] as Bog
 	_verdict("duplicate", not MatchState._pickups.has(dupe)
 		and not MatchState.is_holding_letter(NEAR_ENEMY)
-		and _feed.get_child_count() == before and not gub.carrier_marker.is_carrying(),
+		and _feed.get_child_count() == before and not bog.carrier_marker.is_carrying(),
 		"card live %s, holding %s, rows %d -> %d, marker %s" % [
 			MatchState._pickups.has(dupe), MatchState.is_holding_letter(NEAR_ENEMY),
-			before, _feed.get_child_count(), gub.carrier_marker.is_carrying()])
+			before, _feed.get_child_count(), bog.carrier_marker.is_carrying()])
 
 	_claim(FAR_ENEMY, MatchState.LETTER_G)
 	_verdict("feed picked up", _top_row() == "Nettle picked up G",
 		"top row is '%s'" % _top_row())
-	_claim(FAR_ALLY, MatchState.LETTER_U)
-	_verdict("feed second pickup", _top_row() == "Pipwick picked up U",
+	_claim(FAR_ALLY, MatchState.LETTER_O)
+	_verdict("feed second pickup", _top_row() == "Pipwick picked up O",
 		"top row is '%s'" % _top_row())
 	_claim(ME, MatchState.LETTER_G)
 
@@ -174,12 +174,12 @@ func _claim(peer_id: int, letter: int) -> void:
 func _bank() -> void:
 	MatchState._letter_holds[FAR_ALLY]["ends_at"] = 0.0
 	MatchState._tick_letter_holds()
-	_verdict("feed bank", _top_row() == "Pipwick banked U", "top row is '%s'" % _top_row())
+	_verdict("feed bank", _top_row() == "Pipwick banked O", "top row is '%s'" % _top_row())
 
 
 func _kill_carrier() -> void:
-	var gub := MatchState.gubs[FAR_ENEMY] as Gub
-	MatchState.report_kill(FAR_ENEMY, ME, Gub.Cause.SPEAR, gub.global_position + Vector3.UP,
+	var bog := MatchState.bogs[FAR_ENEMY] as Bog
+	MatchState.report_kill(FAR_ENEMY, ME, Bog.Cause.SPEAR, bog.global_position + Vector3.UP,
 		Vector3(0, 0, 8), "")
 
 
@@ -187,11 +187,11 @@ func _kill_carrier() -> void:
 
 func _check_wall() -> void:
 	var camera := get_viewport().get_camera_3d()
-	var gub := MatchState.gubs.get(FAR_ENEMY) as Gub
-	if camera == null or gub == null:
-		_verdict("wall", false, "camera %s, gub %s" % [camera, gub])
+	var bog := MatchState.bogs.get(FAR_ENEMY) as Bog
+	if camera == null or bog == null:
+		_verdict("wall", false, "camera %s, bog %s" % [camera, bog])
 		return
-	var target := gub.carrier_marker.global_position
+	var target := bog.carrier_marker.global_position
 	var query := PhysicsRayQueryParameters3D.create(camera.global_position, target)
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	var blocked := not hit.is_empty() and absf((hit["position"] as Vector3).z - WALL_Z) < 1.0
@@ -200,9 +200,9 @@ func _check_wall() -> void:
 
 func _check_markers() -> void:
 	var failures := []
-	for pair: Array in [[FAR_ENEMY, "G"], [FAR_ALLY, "U"]]:
-		var gub := MatchState.gubs.get(pair[0]) as Gub
-		var marker := gub.carrier_marker if gub != null else null
+	for pair: Array in [[FAR_ENEMY, "G"], [FAR_ALLY, "O"]]:
+		var bog := MatchState.bogs.get(pair[0]) as Bog
+		var marker := bog.carrier_marker if bog != null else null
 		if marker == null:
 			failures.append("%d has no marker" % pair[0])
 			continue
@@ -218,7 +218,7 @@ func _check_markers() -> void:
 				failures.append("%d's %s is depth-tested" % [pair[0], child.name])
 		# Above the name, not over it: the card's bottom clears a teammate
 		# plate's top, which is the tallest a plate gets at that range.
-		var plate := gub.get_node("Nameplate") as Node3D
+		var plate := bog.get_node("Nameplate") as Node3D
 		var card := marker.get_node("Border") as MeshInstance3D
 		var bottom := card.global_position.y - (card.mesh as QuadMesh).size.y * 0.5
 		var plate_top := plate.global_position.y \
@@ -227,7 +227,7 @@ func _check_markers() -> void:
 		if bottom <= plate_top:
 			failures.append("%d's card bottom %.2f is under the plate top %.2f" % [
 				pair[0], bottom, plate_top])
-	var mine := (MatchState.gubs[ME] as Gub).carrier_marker
+	var mine := (MatchState.bogs[ME] as Bog).carrier_marker
 	if not MatchState.is_holding_letter(ME) or not mine.is_carrying() or mine.is_shown():
 		failures.append("own marker: holding %s carrying %s shown %s" % [
 			MatchState.is_holding_letter(ME), mine.is_carrying(), mine.is_shown()])
@@ -235,8 +235,8 @@ func _check_markers() -> void:
 
 
 func _check_gone(peer_id: int, verdict_name: String) -> void:
-	var gub := MatchState.gubs.get(peer_id) as Gub
-	var marker := gub.carrier_marker
+	var bog := MatchState.bogs.get(peer_id) as Bog
+	var marker := bog.carrier_marker
 	_verdict(verdict_name, not MatchState.is_holding_letter(peer_id)
 		and not marker.is_carrying() and not marker.is_shown(),
 		"holding %s, carrying %s, shown %s" % [
@@ -269,24 +269,24 @@ func _distance(node: Node3D) -> float:
 
 
 func _place_everyone() -> void:
-	var me := MatchState.gubs.get(ME) as Gub
+	var me := MatchState.bogs.get(ME) as Bog
 	if me != null:
 		me.revive_at(_facing(MY_SPOT, Vector3(0.0, 0.1, -40.0)))
 	for peer_id: int in SPOTS:
-		var gub := MatchState.gubs.get(peer_id) as Gub
-		if gub == null:
+		var bog := MatchState.bogs.get(peer_id) as Bog
+		if bog == null:
 			continue
-		gub.revive_at(_facing(SPOTS[peer_id], MY_SPOT))
-		gub.sync_position = gub.global_position
-		gub.sync_yaw = gub.body_yaw
-		gub.sync_velocity = Vector3.ZERO
-		gub.sync_grounded = true
-		gub.sync_crouching = false
-		gub.sync_sliding = false
+		bog.revive_at(_facing(SPOTS[peer_id], MY_SPOT))
+		bog.sync_position = bog.global_position
+		bog.sync_yaw = bog.body_yaw
+		bog.sync_velocity = Vector3.ZERO
+		bog.sync_grounded = true
+		bog.sync_crouching = false
+		bog.sync_sliding = false
 
 
 static func _facing(from: Vector3, towards: Vector3) -> Transform3D:
-	return Transform3D(Basis(Vector3.UP, Gub.yaw_towards(towards - from)), from)
+	return Transform3D(Basis(Vector3.UP, Bog.yaw_towards(towards - from)), from)
 
 
 func _build_stage() -> void:

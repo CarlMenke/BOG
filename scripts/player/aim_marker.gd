@@ -3,7 +3,7 @@ extends MeshInstance3D
 ## The ring on the ground showing where a spear thrown right now would land.
 ##
 ## Spears drop — at a third of world gravity, but over twenty metres that is
-## still most of a Gub's height, and the playtest question was exactly this:
+## still most of a Bog's height, and the playtest question was exactly this:
 ## "I wish I knew where my spear was going, does it have drop?" A crosshair
 ## cannot answer that, because the crosshair is a point on a ray and the spear
 ## flies a parabola. So the answer is drawn in the world instead of on the HUD.
@@ -16,7 +16,7 @@ extends MeshInstance3D
 ## matching the step matters as much as matching the constants: predict at
 ## 30 Hz and the marker sits metres from where the spear actually lands.
 ##
-## Local, cosmetic and off the network entirely. Only the Gub you are driving
+## Local, cosmetic and off the network entirely. Only the Bog you are driving
 ## ever has one, nothing about it is replicated, and it exists only while the
 ## right mouse button is down.
 
@@ -41,7 +41,7 @@ const SEGMENTS := 32
 ## still reads as a mark on the ground and not as a fence post.
 const WALL_HEIGHT := 0.25
 
-## The Gub's own yellow, the crosshair's colour (`UIPalette.GUB`). Hardcoded
+## The Bog's own yellow, the crosshair's colour (`UIPalette.BOG`). Hardcoded
 ## rather than imported: this is the one thing in `scripts/player` that would
 ## otherwise reach into `scripts/ui`, and the crosshair and the marker being the
 ## same yellow is what says they are two halves of one aim.
@@ -54,7 +54,7 @@ const LIFT := 0.035
 
 
 func _ready() -> void:
-	# Placed in world space from a predicted point; the Gub it hangs off is
+	# Placed in world space from a predicted point; the Bog it hangs off is
 	# moving and turning and must not drag it around.
 	top_level = true
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF

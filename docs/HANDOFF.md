@@ -23,7 +23,7 @@ uncommitted work anywhere. Before starting, confirm the toolchain this repo expe
 machine — the scripts find it themselves and fail loudly if it is absent:
 
 - **Godot 4.7** — located by `tools/find_godot.sh`, which every headless tool and the gate source.
-- **Blender** (5.2 headless) — located by `tools/find_blender.sh`. Only needed to rebuild the Gub or
+- **Blender** (5.2 headless) — located by `tools/find_blender.sh`. Only needed to rebuild the Bog or
   Elder assets; the generated `.glb` files are committed, so most tasks do not touch it.
 - **Python 3** — for `tools/make_sfx.py` and the asset pipeline scripts.
 - **bash** — the gate and build scripts are shell scripts. On Windows use Git Bash.
@@ -45,7 +45,7 @@ below goes to a subagent: the `Agent` tool, `subagent_type: general-purpose`, `m
 reasoning effort. You review what comes back, run the gate yourself, and decide.
 
 **One subagent at a time. Never parallel.** These tasks overlap in `match_state.gd`,
-`gub_combat.gd`, `hud.gd` and `docs/DECISIONS.md`. Four parallel sessions is exactly how this repo
+`bog_combat.gd`, `hud.gd` and `docs/DECISIONS.md`. Four parallel sessions is exactly how this repo
 ended up with three agents all claiming decision number D-040. Sequential, always, even when two
 tasks look independent.
 
@@ -114,7 +114,7 @@ seconds of being unkillable".
 Replaces the letter card's `Label3D` glyph with three real Tripo letter meshes: through the prop
 pipeline at 6000 triangles with the texture cut 4096 → 512, the card 0.60 m in world, self-lit from
 its own gold texture so it reads at night, spinning like other drops, and held upright and square to
-the Gub's facing. A new combat-range mode stands G, U and B side by side and measures their real
+the Bog's facing. A new combat-range mode stands B, O and G side by side and measures their real
 height; it is wired into the smoke test.
 
 Its bottom commit `ec94589` is a SNAPSHOT of main's then-uncommitted tree and is **NOT FOR MERGE** —
@@ -142,7 +142,7 @@ the letter and asset modes of `tools/combat_range.tscn` and the `hud_hold` mode 
 Kopje Crossing, map id `safari`: ~96 m of savanna, 123 platforms across 8 zones built from layout
 tables in `scripts/world/maps/safari_map.gd` and handed to the existing static-map collision baker
 (313,400 swept triangles into 18 shapes in 540 ms). No `.glb` behind it at all.
-`tools/parkour_report.gd` verifies every landing has the rock the table promises, a Gub capsule fits
+`tools/parkour_report.gd` verifies every landing has the rock the table promises, a Bog capsule fits
 on each, every landing is reachable from the ground without a frame-perfect dive, nothing strands,
 the summit dives to both saddles, and no landing or trunk crowds a spawn pad. Route mix 69% hops /
 31% leaps. A full headless playthrough passes, menu to results, arena in 2.8 s.
@@ -183,7 +183,7 @@ it since. Do not build on it without asking. Two things that session did not kno
 ### 0.4 Rebuild — only on the machine that hosts games
 
 The Windows build the user plays from is stale; it predates the bug fixes and the buffed Elder. The
-`/host` skill (`.claude/skills/host/SKILL.md`) rebuilds `GUB.exe` only if it is older than its
+`/host` skill (`.claude/skills/host/SKILL.md`) rebuilds `BOG.exe` only if it is older than its
 sources, hands back the path to share, checks the playit tunnel agent, and prints the invite code. It
 needs Godot export templates and the playit agent installed. **If you are not on the user's hosting
 machine, skip this and say so** — tell them the build is stale and that running `/host` there is what
@@ -223,14 +223,14 @@ Each item gives the user's own words, what it means, what it collides with, and 
 The user's guess is a guess; take it as a symptom report, not a diagnosis. D-032 says everything you
 carry is lost on death, and D-038 says the robe is *consumed* rather than dropped when an Elder dies
 — so an Elder respawning as the Elder is a clear violation of a written rule. First hypothesis to
-test: inventory and elder state are not cleared on the respawn path, and/or the Gub is briefly placed
+test: inventory and elder state are not cleared on the respawn path, and/or the Bog is briefly placed
 at the death position where its own drop is still lying, and the `Pickup` `Area3D` overlaps it on the
 first frame. `_next_spawn` (`match_state.gd:452`) walks the pads and prefers an empty one, so a
 literal respawn-at-death-point is unlikely — but a one-frame placement before the transform is
-applied is not. Check `_respawn`, `GubCombat`'s round/death reset, and whether `claim_pickup` can
-fire on the frame a Gub spawns.
+applied is not. Check `_respawn`, `BogCombat`'s round/death reset, and whether `claim_pickup` can
+fire on the frame a Bog spawns.
 
-*Done when:* a smoke check kills a Gub carrying a mushroom and an Elder wearing a robe, respawns
+*Done when:* a smoke check kills a Bog carrying a shield and an Elder wearing a robe, respawns
 both, and asserts empty hands and no robe.
 
 **1.2 Rematch is unreliable**
@@ -251,17 +251,17 @@ without a stall, and that is in the gate.
 > "The camera needs some better avoidance, too frequently the camera is inside meshes and stuff when
 > there are meshes behind the character"
 
-`scripts/player/gub_camera.gd`. Wants a real spring-arm sweep — a shape cast from the head to the
+`scripts/player/bog_camera.gd`. Wants a real spring-arm sweep — a shape cast from the head to the
 desired boom position, pulled in to the first hit with a margin, and eased back out rather than
 snapped. Watch the interaction with the aim marker and with third-person throwing: pulling the camera
 in must not move where a spear goes, since D-025 puts aim at the release.
 
-*Done when:* there is a range mode that walks a Gub along a wall, into a corner, and under a canopy,
+*Done when:* there is a range mode that walks a Bog along a wall, into a corner, and under a canopy,
 and asserts the camera never ends a frame inside collision geometry.
 
 ### Wave 2 — teams and identity
 
-**2.1 Tint the Gub mesh to the team hue**
+**2.1 Tint the Bog mesh to the team hue**
 
 > "For teams, the gubs change color to the hue, should be able to just tiny the mesh."
 
@@ -298,11 +298,11 @@ A lobby option that shuffles the roster into balanced teams, host-side, before a
 > "for gub game in team, the gub spelling scoring should be per team"
 
 `match_state.gd::_check_win` currently carries the opposite, in a comment written a day ago: *"A team
-whose three members hold G, U and B between them has not won anything: the card game's ending is one
+whose three members hold B, O and G between them has not won anything: the card game's ending is one
 hand with all three in it."* The user now wants the team's letters pooled. Implement the pool, and
 write a decision record that states the reversal and why — the old comment must not simply be
 deleted, it has to be answered. Confirm with the user that pooled means pooled: three teammates
-holding G, U and B between them wins.
+holding B, O and G between them wins.
 
 *Also:* the scoreboard letters column and the results table are per player today (D-033 era) and need
 a team row under this condition.
@@ -348,9 +348,9 @@ Applies to both letter modes.
 
 > "bunny hopping / jumping need to account for momentum a little more"
 
-`scripts/player/gub.gd` — the jump is D-026 (single jump, double-tap dive) and the animator reads
+`scripts/player/bog.gd` — the jump is D-026 (single jump, double-tap dive) and the animator reads
 `jump_velocity()`, so anything that changes take-off speed must keep the air arc a ratio (D-040
-learned this the hard way; see the note in `gub_animator.gd`). Wants horizontal velocity preserved
+learned this the hard way; see the note in `bog_animator.gd`). Wants horizontal velocity preserved
 across a landing-and-immediate-rejump rather than scrubbed, with a cap so it is a skill move and not
 flight. Measure it: state the top sustainable speed before and after.
 
@@ -362,7 +362,7 @@ out absurd — check it and say what the number is.
 > "the lightning should have an aoe (small blast radius) so that if you hit pretty close it still
 > hits them, this should still be a one shot kill, but not too far"
 
-`scripts/player/gub_combat.gd` (the cast and `LIGHTNING_RANGE`) and `scripts/items/lightning_bolt.gd`
+`scripts/player/bog_combat.gd` (the cast and `LIGHTNING_RANGE`) and `scripts/items/lightning_bolt.gd`
 (the visual). Still a one-shot inside the radius, nothing outside it — no falloff, because a bolt
 that sometimes leaves someone alive is a worse read than one that misses. The radius belongs in
 `MatchConfig` with a lobby dial and in `_FIELDS`, like every other Elder number.
@@ -438,9 +438,9 @@ frame-perfect dive" gets hard.
 |---|---|
 | match rules, win conditions, scoring | `scripts/game/match_state.gd`, `scripts/game/match_config.gd` |
 | lobby dials (and `_FIELDS`, which is what travels) | `scripts/ui/match_settings.gd`, `match_config.gd:208` |
-| combat, spear, Elder bolt | `scripts/player/gub_combat.gd` |
-| movement, jump, stances | `scripts/player/gub.gd` |
-| camera | `scripts/player/gub_camera.gd` |
+| combat, spear, Elder bolt | `scripts/player/bog_combat.gd` |
+| movement, jump, stances | `scripts/player/bog.gd` |
+| camera | `scripts/player/bog_camera.gd` |
 | nameplates, team colour | `scripts/player/nameplate.gd`, `scripts/ui/ui_palette.gd` |
 | HUD, ability bar, crosshair | `scripts/ui/hud.gd`, `ability_slot.gd`, `crosshair.gd` |
 | rematch | `scripts/net/net.gd`, `scripts/ui/results_screen.gd` |
@@ -450,7 +450,7 @@ frame-perfect dive" gets hard.
 | the gate | `tools/smoke_test.sh` |
 | headless test beds | `tools/combat_range.gd`, `tools/hud_range.gd`, `tools/match_rules.gd`, `tools/net_loopback.gd` |
 | toolchain finders | `tools/find_godot.sh`, `tools/find_blender.sh` |
-| build + host | `tools/build_gub.sh`, `.claude/skills/host/SKILL.md` |
+| build + host | `tools/build_bog.sh`, `.claude/skills/host/SKILL.md` |
 
 ## APPENDIX — decisions this backlog touches
 
@@ -463,6 +463,6 @@ frame-perfect dive" gets hard.
 | D-033 | letters are uniform, duplicates wasted | 3.1 CTF |
 | D-035 | ten-second hold; death returns the card; no HUD tell for others | 3.1 CTF, 3.2 markers |
 | D-036 | the crosshair ring and the slot countdown were both deleted | 4.3 reload indicator |
-| D-037/38 | the Elder is a purple robe on the Gub's own skeleton | 2.1 team tint |
+| D-037/38 | the Elder is a purple robe on the Bog's own skeleton | 2.1 team tint |
 | D-040 | the Elder is unkillable for 20 s, and faster | 4.1 momentum, 4.2 AoE |
-| `_check_win` comment | a team pooling G, U and B has not won | 2.4 per-team letters |
+| `_check_win` comment | a team pooling B, O and G has not won | 2.4 per-team letters |

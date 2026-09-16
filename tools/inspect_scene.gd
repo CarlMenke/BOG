@@ -36,7 +36,7 @@ func _dump(node: Node, depth: int) -> void:
 			faces += node.mesh.surface_get_arrays(si)[Mesh.ARRAY_INDEX].size() / 3
 		# `pad_decimals` is a *numeric* string helper: handed "(1.902, 1.8, 0.748)"
 		# it cuts everything past the first decimal point and prints "(1.90",
-		# which is how the Gub's height went unreported for a while.
+		# which is how the Bog's height went unreported for a while.
 		var size: Vector3 = node.mesh.get_aabb().size
 		extra = "  [%d tris, %d surfaces, aabb %.3f x %.3f x %.3f]" % [
 			faces, node.mesh.get_surface_count(), size.x, size.y, size.z]

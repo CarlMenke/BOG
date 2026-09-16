@@ -39,7 +39,7 @@ const HEIGHT := 32.0
 ## The robe's violet, which is what the player is actually wearing and what the
 ## ward flash uses. It is the one element on this HUD that is not amber, gold or
 ## white, and that is deliberate: the Elder is the one state in this game that
-## is not an ordinary Gub, and the bar saying so without being read is worth
+## is not an ordinary Bog, and the bar saying so without being read is worth
 ## more than palette consistency.
 const ROBE := Color(0.72, 0.52, 1.00)
 
@@ -67,7 +67,7 @@ func _ready() -> void:
 ##
 ## The seconds shown never reach zero while the robe is on, for the reason
 ## `LetterTrack.set_state` spells out: a client's copy of the clock can expire a
-## round trip before the host's does, and a "0" over a Gub that is still
+## round trip before the host's does, and a "0" over a Bog that is still
 ## visibly the Elder reads as the HUD having stopped rather than as the last
 ## moment of a countdown.
 func set_state(worn: bool, remaining: float, total: float) -> void:

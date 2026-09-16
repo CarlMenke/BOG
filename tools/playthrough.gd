@@ -47,7 +47,7 @@ extends Node
 ## whole positive int range, so no band is truly safe; what these have to avoid
 ## is the *other* harnesses, since a shared id would make two testbeds
 ## impossible to tell apart in a log. `ui_range` owns the 700s, `combat_range`
-## the 900s, `GubBackdrop` the 8100s. This takes the 500s.
+## the 900s, `BogBackdrop` the 8100s. This takes the 500s.
 const FAKE_BASE := 500
 
 ## The stand-ins. The first of them does all the killing and therefore wins, so
@@ -64,7 +64,7 @@ const FAKE_NAMES := ["Pipwick", "Thistle", "Mossback", "Bramblewick"]
 const WARMUP_TIME := 0.5
 ## Spawn protection off, respawn delay to nothing. Both are deliberate and both
 ## are set the way a host sets them — through `Net.update_config`. Protection in
-## particular has to go: it defaults to two seconds, a protected Gub correctly
+## particular has to go: it defaults to two seconds, a protected Bog correctly
 ## refuses to die, and leaving it on simply makes the kill loop spin until it
 ## gives up. That cost an hour in `match_rules` and the note is repeated here
 ## because the symptom (scoring looks broken) points nowhere near the cause.
@@ -134,7 +134,7 @@ func _ready() -> void:
 	# uncapped headless and it FAILs: bodies still moving at 71 m/s when they
 	# should be at rest, having peaked at 119. Run the same scene with the rate
 	# pinned and it settles at 0.06 m/s and passes. This harness kills fifteen
-	# Gubs, so it would be building fifteen of those. Capping is not tidiness
+	# Bogs, so it would be building fifteen of those. Capping is not tidiness
 	# here, it is the difference between simulating the game and simulating a
 	# different game that happens to share its code.
 	Engine.max_fps = int(ProjectSettings.get_setting(
@@ -215,8 +215,8 @@ func _stage_host() -> bool:
 	_check("the local peer is 1", Net.local_id(), 1)
 
 	# Stand-ins written straight into the roster, exactly as `ui_range` does.
-	# `MatchState` spawns a Gub for each without ever asking whether there is a
-	# client behind one, so these become remote Gubs to this peer.
+	# `MatchState` spawns a Bog for each without ever asking whether there is a
+	# client behind one, so these become remote Bogs to this peer.
 	for i in FAKE_NAMES.size():
 		Net.players[FAKE_BASE + i] = {
 			"name": FAKE_NAMES[i], "team": 0, "ready": true,
@@ -319,22 +319,22 @@ func _stage_arena() -> bool:
 	_check("the arena laid out its spawn ring", arena.spawn_points.size(),
 		Arena.SPAWN_COUNT)
 	# A spawn point at the origin is the shape `_solve_spawn` fails into, and
-	# every Gub standing on the same pad is a spawn ring that never ran.
+	# every Bog standing on the same pad is a spawn ring that never ran.
 	var distinct := {}
 	for spawn: Transform3D in arena.spawn_points:
 		distinct[spawn.origin.snapped(Vector3.ONE * 0.01)] = true
 	_check("the spawn pads are in different places", distinct.size(),
 		arena.spawn_points.size())
 
-	# Gubs are the proof that `register_arena` actually happened: nothing else
+	# Bogs are the proof that `register_arena` actually happened: nothing else
 	# spawns them, and an arena that builds beautifully and never hands over is
 	# a black screen with a nice island in it.
-	_check("a Gub exists for every player", MatchState.gubs.size(),
+	_check("a Bog exists for every player", MatchState.bogs.size(),
 		Net.player_count())
 	for peer_id: int in Net.peer_ids():
-		var gub: Gub = MatchState.gubs.get(peer_id)
-		if not _require("peer %d has a Gub in the tree" % peer_id,
-				is_instance_valid(gub) and gub.is_inside_tree()):
+		var bog: Bog = MatchState.bogs.get(peer_id)
+		if not _require("peer %d has a Bog in the tree" % peer_id,
+				is_instance_valid(bog) and bog.is_inside_tree()):
 			return false
 
 	# The arena instances the HUD itself, and every match before that wiring
@@ -345,8 +345,8 @@ func _stage_arena() -> bool:
 	if not _stage_map(arena):
 		return false
 
-	print("playthrough: arena built in %d ms, %d spawns, %d gubs" % [
-		elapsed, arena.spawn_points.size(), MatchState.gubs.size()])
+	print("playthrough: arena built in %d ms, %d spawns, %d bogs" % [
+		elapsed, arena.spawn_points.size(), MatchState.bogs.size()])
 	return true
 
 
@@ -356,7 +356,7 @@ func _stage_arena() -> bool:
 ## rest of this file cannot tell them apart, which is the point — but each one
 ## has a way of half-working that the other does not. A procedural map with no
 ## `IslandGenerator` is a map with no height oracle; a static map that loaded
-## and then quietly failed to build collision is a map every Gub falls through,
+## and then quietly failed to build collision is a map every Bog falls through,
 ## and it looks exactly like a map that loaded fine until somebody walks on it.
 func _stage_map(arena: Arena) -> bool:
 	var entry := MapCatalog.get_entry(_map)
@@ -412,36 +412,36 @@ func _stage_warmup() -> bool:
 		true)
 
 	# The floor holds. Warmup is the first stretch of the run in which anything
-	# has had time to fall, and this is the *local* Gub deliberately: it is the
+	# has had time to fall, and this is the *local* Bog deliberately: it is the
 	# only one that simulates — the stand-ins are remote, so they run no gravity
 	# and would sit happily in mid-air over a map with no collision in it at all.
 	#
 	# Worth its own check because the failure is silent. A map whose collision
-	# never got built does not crash and does not print anything: every Gub
+	# never got built does not crash and does not print anything: every Bog
 	# falls, passes the void height, is killed, respawns, falls again, and the
 	# match plays out and reaches a results screen with the score looking
 	# roughly right. On Rust the collision is built at load from world-space
 	# triangles (D-031), which is a good deal more that can go wrong than
 	# "the terrain mesh has a shape under it".
-	var mine: Gub = MatchState.gubs.get(Net.local_id())
-	if _require("the local Gub is in the world", is_instance_valid(mine)):
-		_check("the local Gub is standing on the map", mine.is_on_floor(), true)
-		_check("the local Gub has not fallen through it",
+	var mine: Bog = MatchState.bogs.get(Net.local_id())
+	if _require("the local Bog is in the world", is_instance_valid(mine)):
+		_check("the local Bog is standing on the map", mine.is_on_floor(), true)
+		_check("the local Bog has not fallen through it",
 			mine.global_position.y > MatchState.void_height + 1.0, true)
 
-	print("playthrough: phase PLAYING after %.1f s, local Gub on the floor at %.2f m" % [
+	print("playthrough: phase PLAYING after %.1f s, local Bog on the floor at %.2f m" % [
 		float(Time.get_ticks_msec() - started) * 0.001,
 		mine.global_position.y if is_instance_valid(mine) else NAN])
 	_check_capture_layout()
 	return true
 
 
-## Capture G·U·B's bases and letters on this map, as the match would place them
+## Capture B·O·G's bases and letters on this map, as the match would place them
 ## (D-051). Checked on every map in every playthrough whatever the win
 ## condition, because the layout is planned for every arena and the physics has
 ## stepped by now: two bases for two teams, on distinct pads well apart, each
 ## with pads of its own to spawn on, and three letter points that are on a real
-## floor with a Gub's head room, outside both bases and apart from each other.
+## floor with a Bog's head room, outside both bases and apart from each other.
 ## Lantern Wharf declares its own bases and letters (D-056) and every other map
 ## is on the fallback, so this is both checks: that the fallback is playable on
 ## every map it can be picked on, and that a declared layout is sound.
@@ -470,7 +470,7 @@ func _check_capture_layout() -> void:
 		var point := letters[i]
 		var glyph := MatchState.letter_name(MatchState.LETTERS[i])
 		_check("capture: %s is on a floor" % glyph, _floor_under(space, point), true)
-		_check("capture: a Gub fits where %s is" % glyph,
+		_check("capture: a Bog fits where %s is" % glyph,
 			CaptureLayout.has_headroom(space, point), true)
 		for team in layout.bases.size():
 			_check("capture: %s is outside team %d's base" % [glyph, team + 1],
@@ -503,7 +503,7 @@ func _floor_under(space: PhysicsDirectSpaceState3D, at: Vector3) -> bool:
 ## One kill per frame, with the frame in between doing the work: the host's
 ## `_process` runs `_tick_respawns`, which is what brings the victim back. So
 ## this is not a bare scoring loop — every swing is a whole death-and-respawn
-## cycle through `_apply_death`, `GubRagdoll.spawn_from` and `_do_respawn`, and
+## cycle through `_apply_death`, `BogRagdoll.spawn_from` and `_do_respawn`, and
 ## the match takes the kill limit's worth of them to end.
 func _stage_match() -> bool:
 	var killer := FAKE_BASE
@@ -530,12 +530,12 @@ func _stage_match() -> bool:
 		if not MatchState.is_alive(victim):
 			await get_tree().process_frame
 			continue
-		var gub: Gub = MatchState.gubs.get(victim)
-		var point := gub.global_position if is_instance_valid(gub) else Vector3.ZERO
+		var bog: Bog = MatchState.bogs.get(victim)
+		var point := bog.global_position if is_instance_valid(bog) else Vector3.ZERO
 		# A blow with real speed in it, not a unit vector: the corpse's flight is
 		# scaled by it, so a zero-length one would leave the ragdoll path
 		# exercised but never actually pushed.
-		MatchState.report_kill(victim, killer, Gub.Cause.SPEAR,
+		MatchState.report_kill(victim, killer, Bog.Cause.SPEAR,
 			point, Vector3.FORWARD * 18.0, "Spine1")
 		deaths += 1
 		await get_tree().process_frame
@@ -564,8 +564,8 @@ func _stage_match() -> bool:
 	_check("the winner leads the ranking", int(ranking[0]), killer)
 	_check("everyone is in the ranking", ranking.size(), Net.player_count())
 	# A kill after the whistle must not count, here as in `match_rules` — this
-	# is the one place it can be checked with a real Gub on the far end.
-	MatchState.report_kill(victims[0], killer, Gub.Cause.SPEAR,
+	# is the one place it can be checked with a real Bog on the far end.
+	MatchState.report_kill(victims[0], killer, Bog.Cause.SPEAR,
 		Vector3.ZERO, Vector3.FORWARD, "Spine1")
 	_check("no scoring after the match ends", MatchState.kills(killer), limit)
 
@@ -672,9 +672,9 @@ func _kill_feed_hazard() -> String:
 ## carries the same note and the same tail of warnings.
 ##
 ## The session is deliberately *not* closed. `Net.leave_lobby` nulls the
-## multiplayer peer, and every Gub still in the tree — the arena's, or the lobby
+## multiplayer peer, and every Bog still in the tree — the arena's, or the lobby
 ## backdrop's if the run stopped early — then calls `multiplayer.get_unique_id()`
-## from `Gub.is_local()` on every frame of every `_process` it has, which buries
+## from `Bog.is_local()` on every frame of every `_process` it has, which buries
 ## the verdict under several hundred engine errors. Quitting is enough; the
 ## engine frees the tree on the way out.
 func _teardown() -> void:

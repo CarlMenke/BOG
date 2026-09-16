@@ -6,7 +6,7 @@ extends Node3D
 ## of cold fill (D-009) and the sky ambient averages near-black, so everything a
 ## player can actually see the shape of is something a torch is shining on. That
 ## makes torch placement level design rather than decoration, and it makes the
-## flicker gameplay-visible: a Gub crossing a torch pool is lit, and then is not.
+## flicker gameplay-visible: a Bog crossing a torch pool is lit, and then is not.
 ##
 ## The flicker is a sum of sines rather than noise, seeded off a per-torch phase.
 ## Sines are cheap, they never sit still, and — because each torch gets its own
@@ -22,7 +22,7 @@ extends Node3D
 ## than evenly dark. Torches are the key light (D-009), so what they light and
 ## what they leave alone *is* the lighting design, and that only exists if there
 ## is unlit ground between them. At 10.5 m a torch owns a clearing and nothing
-## more, and a Gub crossing between two of them goes dark on the way.
+## more, and a Bog crossing between two of them goes dark on the way.
 ## Energy is low for an OmniLight because the ground it lands on is a big flat
 ## upward-facing plane and the environment is tonemapped for a night: at 5.6 the
 ## earth within four metres of a torch blew out to cream and the flame stopped

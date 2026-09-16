@@ -27,7 +27,7 @@ four things that each correspond to a specific thing going wrong:
                per stride that no amount of blending hides.
 
                Measured after re-centring every frame on its own centroid, so
-               what is left is the change in *pose*. `tools/build_gub.py` locks
+               what is left is the change in *pose*. `tools/build_bog.py` locks
                the root motion out before export, but a clip that still
                travelled would otherwise swamp the seam with its stride and
                every locomotion clip would look broken.
@@ -46,7 +46,7 @@ four things that each correspond to a specific thing going wrong:
                of surface the same", not as an exact per-vertex difference.
 
 Usage:  python tools/rig_report.py [path/to.glb ...]
-        default: art/generated/gub.glb, the built Gub.
+        default: art/generated/bog.glb, the built Bog.
 """
 
 import os
@@ -74,7 +74,7 @@ MIRROR_TOLERANCE = 0.02
 
 # Suffixes an exporter or importer convention adds to a clip's own name. Godot's
 # scene importer sets `loop_mode` on any animation whose name ends in `loop` or
-# `cycle`, so `tools/build_gub.py` exports the looping clips with a `-loop`
+# `cycle`, so `tools/build_bog.py` exports the looping clips with a `-loop`
 # tail; `.001` is what a second action of the same name looks like. Neither is
 # part of the clip's identity, and both have to come off before the name is
 # matched against CYCLIC.
@@ -396,7 +396,7 @@ def report(path):
 
 
 def main(argv):
-    paths = argv[1:] or [os.path.join(REPO, "art", "generated", "gub.glb")]
+    paths = argv[1:] or [os.path.join(REPO, "art", "generated", "bog.glb")]
     for path in paths:
         report(path)
 

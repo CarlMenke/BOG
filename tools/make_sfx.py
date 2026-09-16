@@ -2,7 +2,7 @@
 
 There is no sound library for this project and no budget for one, so the effects
 are generated rather than recorded. That is not a compromise for a game that
-looks like this: a Gub is a cartoon, and short synthetic hits — a filtered noise
+looks like this: a Bog is a cartoon, and short synthetic hits — a filtered noise
 whoosh, a low thud, a struck-glass chime — read as deliberate stylisation where
 a mismatched library sample would read as an accident.
 
@@ -198,18 +198,30 @@ def spear_ready():
     return sweep(n, 320.0, 780.0, 1.4) * envelope(n, 0.25, 0.6, 1.6) * 0.8
 
 
-def mushroom_deploy():
-    """Something organic shoving itself out of the ground: a pitch rise with a
-    thick low body under it."""
+def shield_deploy():
+    """A heavy thing driven into the earth: a pitch rise with a thick low body
+    under it.
+
+    The sample is unchanged from the mushroom this prop replaced (D-079), on
+    D-078's argument. It was written as something organic shoving itself out of
+    the ground, and a 90-to-240 Hz swell under a low-passed noise burst
+    describes a timber barricade being rammed into soil just as well — the
+    swell is the mass and the squelch is the ground taking it. Re-synthesising
+    a sound nobody asked to change would be a diff with no argument behind
+    it."""
     n = seconds(0.45)
     swell = sweep(n, 90.0, 240.0, 1.8) * envelope(n, 0.12, 0.6, 1.8)
     squelch = lowpass(noise(n, 5), 1400.0) * envelope(n, 0.05, 0.8, 2.0) * 0.45
     return swell + squelch
 
 
-def lure_throw():
-    """A struck crystal, thrown. Three partials at inharmonic ratios — whole
-    number ratios sound like a musical note, and this should sound like glass."""
+def magnet_throw():
+    """A struck bar, thrown. Three partials at inharmonic ratios — whole number
+    ratios sound like a musical note, and a lump of magnetised steel is not one.
+
+    The samples are unchanged from the crystal this prop replaced (D-078): the
+    numbers below already describe a struck metal object, because inharmonic
+    partials over a fast decay are what glass and steel have in common."""
     n = seconds(0.5)
     t = np.linspace(0.0, n / RATE, n)
     tone = np.zeros(n)
@@ -218,7 +230,7 @@ def lure_throw():
     return tone * envelope(n, 0.002, 0.4, 1.5)
 
 
-def lure_arm():
+def magnet_arm():
     """The fuse. A rising tone is the one shape everybody already reads as
     'something is about to happen', which is the whole job of this sound."""
     n = seconds(0.5)
@@ -228,7 +240,7 @@ def lure_arm():
     return tone * envelope(n, 0.08, 0.25, 1.2)
 
 
-def lure_fire():
+def magnet_fire():
     """The pull. Downward sweep — everything is being dragged inward — with a
     noise swell riding it."""
     n = seconds(0.7)
@@ -238,7 +250,7 @@ def lure_fire():
 
 
 ## The great sword's swing, in seconds, and the frame the blade actually cuts on
-## (D-068). `GubAnimator.SWING_SECONDS` and `SWING_RELEASE_TIME` are the same two
+## (D-068). `BogAnimator.SWING_SECONDS` and `SWING_RELEASE_TIME` are the same two
 ## numbers, and the release is not a feel number at either end: it is where the
 ## build measures peak hand speed, 6.86 m/s, because a sword cuts where the blade
 ## is fastest. If the clip or the window ever moves, these move with them, or the
@@ -256,7 +268,7 @@ def bow_loose():
     against the riser, which is a block of wood being hit from the inside. So the
     loudest layer here is `limb`, and it is low, dry and woody — higher and
     deader than `spear_hit_body`'s flesh at 150 down to 62 Hz, because wood is
-    stiffer than a Gub.
+    stiffer than a Bog.
 
     On top of it, in the order the ear gets them:
 
@@ -340,7 +352,7 @@ def sword_swing():
 
 
 def sword_hit_body():
-    """A metre of steel arriving in a Gub at 6.9 m/s with a whole spinning body
+    """A metre of steel arriving in a Bog at 6.9 m/s with a whole spinning body
     behind it. Three things separate it from a spear burying itself, and all
     three are the blade rather than the damage.
 
@@ -350,12 +362,12 @@ def sword_hit_body():
             to a slap at all.
       thud  the momentum, and the reason this reads as *heavy*. Lower and longer
             than the spear's 150 down to 62 Hz, because what is behind a thrown
-            stick is a stick and what is behind this is a Gub turning through a
+            stick is a stick and what is behind this is a Bog turning through a
             whole revolution.
       ring  the part a spear cannot do. A blade struck across its length rings in
             the bending modes of a free bar, whose frequencies go as
             1 : 2.76 : 5.40 : 8.93 — the squares of 4.730, 7.853, 10.996 and
-            14.137, and emphatically not whole numbers. `lure_throw` reaches for
+            14.137, and emphatically not whole numbers. `magnet_throw` reaches for
             inharmonic partials so that a chime does not sound like a musical
             note; these are the same shape arrived at from the other end,
             because they are simply what a bar does. The fundamental is about
@@ -382,7 +394,7 @@ def sword_hit_body():
 
 
 def death():
-    """A Gub expiring. Falling, slightly comic, over quickly."""
+    """A Bog expiring. Falling, slightly comic, over quickly."""
     n = seconds(0.55)
     cry = sweep(n, 640.0, 150.0, 1.9) * envelope(n, 0.02, 0.7, 1.7)
     # A little vibrato keeps it from sounding like a test tone.
@@ -474,10 +486,10 @@ EFFECTS = {
     "bow_loose": bow_loose,
     "sword_swing": sword_swing,
     "sword_hit_body": sword_hit_body,
-    "mushroom_deploy": mushroom_deploy,
-    "lure_throw": lure_throw,
-    "lure_arm": lure_arm,
-    "lure_fire": lure_fire,
+    "shield_deploy": shield_deploy,
+    "magnet_throw": magnet_throw,
+    "magnet_arm": magnet_arm,
+    "magnet_fire": magnet_fire,
     "death": death,
     "respawn": respawn,
     "hitmarker": hitmarker,

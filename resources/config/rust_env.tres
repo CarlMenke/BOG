@@ -44,7 +44,7 @@
 ;     sunlit ground in front of it converge and the whole reason for dropping the
 ;     sun to 36 degrees is thrown away. 0.90 keeps a 25-to-191 range across the
 ;     eight views with a tenth of a percent crushed, which is contrast a hot
-;     afternoon should have and shadow detail a player can still read a Gub in.
+;     afternoon should have and shadow detail a player can still read a Bog in.
 ;   * ACES at white 6.0 and exposure 1.0, which is `arena_env.tres`'s
 ;     tonemapping unchanged — the two maps should not need different eyes.
 ;
@@ -78,7 +78,7 @@
 ;     and with the old density they sat at the same contrast as the yard and
 ;     read as toys on a shelf. The readability arithmetic is the thing to check
 ;     rather than the look, and `1 - exp(-density * metres)` is all of it: at
-;     20 m, where a Gub silhouette has to be recognisable, this is 6.8% fog; at
+;     20 m, where a Bog silhouette has to be recognisable, this is 6.8% fog; at
 ;     45 m, the longest sightline anywhere on the map, 14.5%; at 152 m, where
 ;     the flare stands, 41%. Nothing inside the yard is hidden and everything
 ;     outside it is softened. `fog_aerial_perspective` 0.6 makes the far stuff

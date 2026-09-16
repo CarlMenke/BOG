@@ -1,8 +1,8 @@
 class_name HeldGear
 extends Node3D
-## Everything a Gub is carrying, pinned to the bones of its two hands.
+## Everything a Bog is carrying, pinned to the bones of its two hands.
 ##
-## A Gub always has a weapon visible unless it is on cooldown or disarmed,
+## A Bog always has a weapon visible unless it is on cooldown or disarmed,
 ## because what is in the hands is the whole read on whether an opponent is
 ## dangerous right now: seeing an empty pair of them across the clearing is how
 ## you know it is safe to approach. That makes this cosmetic node
@@ -22,7 +22,7 @@ extends Node3D
 ##   left hand    the bow; or the heal potion, for the length of a drink
 ##                (D-075)
 ##
-## **The left hand's two are exclusive and it is `GubCombat` that says so**, not
+## **The left hand's two are exclusive and it is `BogCombat` that says so**, not
 ## this file and not the fact that they share an attachment. A drink empties
 ## both fists — `has_bow()` and `has_spear()` have carried `not is_channelling()`
 ## since D-067 — so a bottle and a bow can no more be out together than a bow
@@ -33,20 +33,20 @@ extends Node3D
 ## gripped by the right fist and the left goes to it in the animation, which
 ## costs nothing here because the left hand is a bone the clip already moves.
 ## What the rule does buy is the exclusion — the sword and the bow cannot be out
-## together, because `GubCombat._wants_bow` says so in the same place it says
+## together, because `BogCombat._wants_bow` says so in the same place it says
 ## everything else about that hand, and not because two attachments happened to
 ## be free.
 ##
 ## Nothing can put two objects on one attachment, and **which one is showing is
-## still decided in exactly one place** — `GubCombat._refresh_hand`, off the
+## still decided in exactly one place** — `BogCombat._refresh_hand`, off the
 ## same gates the attacks are refused by — because a hand that disagrees with
-## the gate is a Gub that looks armed and is not. Two rules in two files is the
+## the gate is a Bog that looks armed and is not. Two rules in two files is the
 ## thing that generalisation had to avoid, and the way it avoids it is that this
 ## file still decides nothing: every `set_*` below does what it is told and asks
 ## no questions, exactly as `set_letter` has always done.
 ##
 ## Attaching to the bone is done in code rather than by adding a
-## `BoneAttachment3D` inside `gub.tscn`, because that would mean turning on
+## `BoneAttachment3D` inside `bog.tscn`, because that would mean turning on
 ## editable children for the imported `.glb` and hand-writing a node into a
 ## subtree that a re-import can renumber.
 
@@ -80,7 +80,7 @@ const BOW_HAND_BONE := "LeftHand"
 ## *"for the spear idle, the spear should be horizontal not vertical."*
 ##
 ## That reverses D-065's own target, which was a shaft 75-85 deg **up** —
-## *"a Gub in a guard stance with a spear held upright reads as armed"* — and it
+## *"a Bog in a guard stance with a spear held upright reads as armed"* — and it
 ## reverses it on the strength of the very thing D-065 said made it impossible:
 ##
 ##     the hand's world orientation differs by more than 100 deg between a
@@ -90,15 +90,15 @@ const BOW_HAND_BONE := "LeftHand"
 ## That sentence is true of a grip fitted against **twelve** hand orientations,
 ## which is what a rigid attachment on a fist the locomotion throws about is.
 ## The carry layer removes the premise: `UPPER_BODY_BONES` takes its pose from
-## one looping carry clip in every clip a Gub walks around in, so there is one
+## one looping carry clip in every clip a Bog walks around in, so there is one
 ## hand orientation to fit, and "lay the shaft flat" stops being a compromise and
 ## becomes an equation with one answer. `tools/preview_carry.tscn -- solve`
-## solves it — aim the shaft where it is wanted in the Gub's own frame, read the
+## solves it — aim the shaft where it is wanted in the Bog's own frame, read the
 ## grip back off the hand — and then **scores every bearing against the real
 ## skinned trunk**, which is D-065's own method and is the half no equation
-## answers: where a flat shaft may point without going through the Gub.
+## answers: where a flat shaft may point without going through the Bog.
 ##
-## **The pose under it is the Gub's own `Idle` and the shaft is cocked to throw**
+## **The pose under it is the Bog's own `Idle` and the shaft is cocked to throw**
 ## (D-072). The user, on D-070's two-handed carry: *"This spear is only thrown so
 ## 2 hands doesnt make sense. I like the original one because it looks like hes
 ## holding it up with one hand ready to throw... a horizontial spear in its right
@@ -119,19 +119,19 @@ const BOW_HAND_BONE := "LeftHand"
 ##   floor    .455  .465  .423  .383  .344  .307  **.272** .240  .210  .183  .159  out
 ##   off level  12    14    15    16    17    21   **25**   28    32    35    38    out
 ##
-## Forward is 0 and positive is to the Gub's right. **Nothing on the right-hand
+## Forward is 0 and positive is to the Bog's right. **Nothing on the right-hand
 ## side clears inside 70 deg**, and the reason is where the fist is: it sits at
 ## x +0.15, 0.30 m in front of the chest, so 0.68 m of butt has to go somewhere.
 ## Aim the tip right and the butt swings back-left through the ribs — 0.001 to
 ## 0.043 m from the skin across the whole sector. Aim it forward-left and the
 ## butt trails back past the **right shoulder into open air**, which is the one
-## direction out of that fist that is not occupied by the Gub.
+## direction out of that fist that is not occupied by the Bog.
 ##
 ## **-60 deg is taken, and it is the peak of that curve rather than the nearest
 ## row to forward.** -40 is twenty degrees more forward and clears the floor by
 ## 9 mm; a 9 mm margin is exactly what D-066 and D-071 each took away from this
 ## grip without anybody noticing, and it costs 13 more degrees of swing as well.
-## -60 is the furthest from the Gub's own body any bearing gets, at 0.165 m —
+## -60 is the furthest from the Bog's own body any bearing gets, at 0.165 m —
 ## better than the two-handed carry it replaces — while still clearly leading.
 ## What it delivers over the twelve clips, beside D-070's two-handed carry
 ## re-measured on the same day and the same clips:
@@ -158,7 +158,7 @@ const BOW_HAND_BONE := "LeftHand"
 ## than 0.71. What is bought with it is `Run` and the two crouches, which reach
 ## 22-25 deg: a forward-leading shaft lies nearer the sagittal plane, so pelvis
 ## pitch shows in it, which is the same trade `Loadout` records `BowCarry` losing
-## on at 55. The tip dips as the Gub pitches into a run. That is a spear being
+## on at 55. The tip dips as the Bog pitches into a run. That is a spear being
 ## carried at speed and it is inside `preview_carry.LEVEL_MAX`.
 ##
 ## **The left-hand column above is D-070's, re-measured, and it is not what D-070
@@ -191,7 +191,7 @@ const GRIP_ROTATION := Vector3(52.31, 0.00, 53.82)
 ## Deliberately *off* the wrist bone's axis: a hand holds a stick in its palm
 ## rather than through its own bones. `+X` runs across the palm toward the
 ## fingertips, `+Y` up the arm and out through the fingers, and **`+Z` is the
-## palm normal** — which in `Idle`'s raised guard points back in at the Gub's own
+## palm normal** — which in `Idle`'s raised guard points back in at the Bog's own
 ## chest, so this third component is the one that costs trunk clearance.
 ##
 ## **`z` is -0.01 and was -0.04, which is D-074 and is the whole of it.** The
@@ -260,7 +260,7 @@ const GRIP_FRACTION := 0.55
 ## How far past the fist, along the shaft, the letter card sits.
 ##
 ## **Derived rather than chosen**, because the shaft is the one volume around
-## this hand that has already been proven clear of the Gub's own skin in every
+## this hand that has already been proven clear of the Bog's own skin in every
 ## clip it is carried through — the table above is that measurement. Putting the
 ## card on the same line inherits all of it: the card rides where the lower
 ## shaft rides, which in `Idle` is up beside a head it stays 11 cm off, and the
@@ -269,10 +269,10 @@ const GRIP_FRACTION := 0.55
 ## 22 cm rather than further up is what keeps it out of the ground. `Walk` and
 ## `Run` lay the shaft over and point the tip down — see the table — and the
 ## card's own half-height is subtracted from wherever it lands, so at the top of
-## the shaft it would plough the grass in exactly the clips a Gub is most likely
+## the shaft it would plough the grass in exactly the clips a Bog is most likely
 ## to be running a hold out in.
 ##
-## **It is measured in the pose a hold actually puts a Gub in, which is not the
+## **It is measured in the pose a hold actually puts a Bog in, which is not the
 ## carried one**: a letter disarms (D-035), so `_armed()` answers no, the carry
 ## layer is off and the arm is back on whatever the locomotion plane is doing.
 ## That makes this number a hostage to `GRIP_ROTATION` without sharing any of its
@@ -292,17 +292,17 @@ const CARD_ABOVE_FIST := 0.22
 ## The card in the hand against the card on the ground. Smaller on purpose: the
 ## world card is sized to be *found*, legible across the island as the only
 ## thing in a patch of grass, and at that size in a fist it is a letter wider
-## than the Gub holding it. This one only has to be seen on a Gub that is
+## than the Bog holding it. This one only has to be seen on a Bog that is
 ## already in view.
 const CARD_SCALE := 0.70
 
-## The card lights the Gub holding it, and this is the part that actually
+## The card lights the Bog holding it, and this is the part that actually
 ## carries.
 ##
 ## A card does not read at thirty metres — it was checked, back when it was a
 ## glyph, with `tools/combat_range.tscn letter` from the touchline, and a gold G
-## in a gold Gub's fist is a gold smudge on a gold body whether it is drawn or
-## modelled. What reads at that range is that the whole Gub is *lit*. So the card
+## in a gold Bog's fist is a gold smudge on a gold body whether it is drawn or
+## modelled. What reads at that range is that the whole Bog is *lit*. So the card
 ## borrows the trick the card on the ground already uses for the same reason ("a
 ## drop nobody can see is a drop nobody collects") and brings its own light,
 ## which is what turns "somebody over there is holding something" into a thing
@@ -323,7 +323,7 @@ var _bow_attachment: BoneAttachment3D
 var _model: Node3D
 ## The bow, and the one mesh inside it that carries the `drawn` blend shape.
 ## Held rather than found again per frame: `set_draw` runs on every peer's copy
-## of every drawing Gub, on every frame of every draw.
+## of every drawing Bog, on every frame of every draw.
 var _bow: Node3D
 ## The grip `set_bow_grip` was last handed, and how much of `CARRY_TILT` is over
 ## it. Kept because the two are composed rather than set one after the other —
@@ -348,7 +348,7 @@ var _arrow: Node3D
 ## The Elder's crackle, while the bolt is ready (D-038). On the same attachment
 ## as the other two for the reason the card is, and built and freed rather than
 ## toggled for the reason the card is: an Elder is rare, and a `HandCrackle` on
-## every Gub in the match redrawing arcs nobody can see would be seven wasted
+## every Bog in the match redrawing arcs nobody can see would be seven wasted
 ## meshes out of eight.
 var _crackle: HandCrackle
 ## The letter card, while a hold is running (D-035). Hung off the same
@@ -358,18 +358,18 @@ var _crackle: HandCrackle
 var _card: Node3D
 ## The great sword, while a swing is running (D-068). Same attachment again, and
 ## for the fifth time the same reason: whatever is in this fist is in it because
-## `GubCombat._refresh_hand` put it there, and there is nowhere for a second
+## `BogCombat._refresh_hand` put it there, and there is nowhere for a second
 ## opinion to live.
 ##
 ## Carried at rest since D-069 rather than only during a swing. That cost a
 ## carry tilt then and costs nothing now (D-070): the grip the swing is fitted to
-## turned out to be a grip a Gub can walk around in perfectly well, once the
+## turned out to be a grip a Bog can walk around in perfectly well, once the
 ## fists it hangs off are in a pose that was drawn holding a great sword.
 var _sword: Node3D
 ## The grip `set_sword_grip` was last handed. Three fields and no fourth for a
 ## carry weight, because since D-070 the carried sword and the swinging sword are
 ## the *same* grip: what changes between them is the pose the fists are in, which
-## is `GubAnimator`'s business and not this node's.
+## is `BogAnimator`'s business and not this node's.
 var _sword_model_scale: float = SWORD_SCALE
 var _sword_grip_offset: Vector3 = SWORD_GRIP_OFFSET
 var _sword_grip_rotation: Vector3 = SWORD_GRIP_ROTATION
@@ -405,8 +405,8 @@ func attach_to(skeleton: Skeleton3D) -> bool:
 
 ## The left fist, and the bow in it (D-065).
 ##
-## A warning and not a refusal on a rig with no `LeftHand`: a Gub with a spear
-## and no bow is still a playable Gub, and the pipeline's own
+## A warning and not a refusal on a rig with no `LeftHand`: a Bog with a spear
+## and no bow is still a playable Bog, and the pipeline's own
 ## `assert_same_character` is what actually guards the bone list.
 func _attach_bow(skeleton: Skeleton3D) -> void:
 	if skeleton.find_bone(BOW_HAND_BONE) < 0:
@@ -470,7 +470,7 @@ func is_carried() -> bool:
 ## that stayed would have to be re-lettered anyway.
 ##
 ## **This does not touch the spear.** Deciding which of the two is in the hand
-## belongs to `GubCombat._refresh_hand`, which asks the same question the throw
+## belongs to `BogCombat._refresh_hand`, which asks the same question the throw
 ## gate asks; a second opinion here is how the hand and the gate end up
 ## disagreeing. See D-035.
 func set_letter(letter: int) -> void:
@@ -500,11 +500,11 @@ func has_letter() -> bool:
 	return _card != null
 
 
-## Keep the letter upright in the world and turned the way the Gub is facing.
+## Keep the letter upright in the world and turned the way the Bog is facing.
 ##
 ## Only the orientation is taken back off the hand. The *position* is untouched
 ## and goes on coming from `card_offset()` through the bone, so the card still
-## rides the one line around this fist that has been measured clear of the Gub's
+## rides the one line around this fist that has been measured clear of the Bog's
 ## own skin in every clip it is carried through.
 ##
 ## The billboard needed none of this, because a billboard has no back. A mesh
@@ -524,10 +524,10 @@ func has_letter() -> bool:
 func _process(_delta: float) -> void:
 	if _card == null:
 		return
-	var gub := get_parent() as Gub
-	if gub == null:
+	var bog := get_parent() as Bog
+	if bog == null:
 		return
-	var upright := Basis.looking_at(-gub.facing(), Vector3.UP)
+	var upright := Basis.looking_at(-bog.facing(), Vector3.UP)
 	_card.global_transform.basis = upright.scaled(Vector3.ONE * CARD_SCALE)
 
 
@@ -535,7 +535,7 @@ func _process(_delta: float) -> void:
 ##
 ## **This does not touch the spear or the card**, exactly as `set_letter` does
 ## not touch the spear: deciding which of the three is in the hand belongs to
-## `GubCombat._refresh_hand`, and a second opinion here is how the hand and the
+## `BogCombat._refresh_hand`, and a second opinion here is how the hand and the
 ## gate end up disagreeing.
 ##
 ## Positioned at the fist rather than up the shaft where the card goes. The card
@@ -586,13 +586,13 @@ static func fist_offset() -> Vector3:
 ##
 ## Computed from `GRIP_ROTATION` rather than written down as a third vector, so
 ## that re-aiming the grip carries the card with it. Get this wrong by hand and
-## the card floats beside the Gub instead of in its hand, which is the one thing
+## the card floats beside the Bog instead of in its hand, which is the one thing
 ## about the hold that has to be unambiguous from a distance.
 ##
 ## **Static since D-070, because that inheritance finally cost something.** The
 ## grip moved by eighty degrees, so the 0.22 m this slides the card along the
 ## shaft stopped pointing up the forearm and started pointing across the body —
-## which moves the card, in a pose (`Idle`'s guard) that a Gub holding a letter
+## which moves the card, in a pose (`Idle`'s guard) that a Bog holding a letter
 ## is back in, because a hold disarms it and the carry layer is off for the whole
 ## of one. `tools/preview_carry.tscn -- measure` asks this function where the
 ## card is and checks the bottom of it is out of the grass, which is the number
@@ -625,7 +625,7 @@ static func spear_transform(rotation_degrees: Vector3 = GRIP_ROTATION) -> Transf
 
 
 ## World transform of the spear tip, used as the spawn point for a throw so the
-## projectile leaves the hand rather than the middle of the Gub.
+## projectile leaves the hand rather than the middle of the Bog.
 func tip_transform() -> Transform3D:
 	if _model == null:
 		return global_transform
@@ -659,7 +659,7 @@ const SWORD_POMMEL := 0.913
 ## The forward hand is just above the crossguard and the rear hand is on the
 ## pommel, which is how a sword this size is actually held — and, more to the
 ## point here, it is the **longest** span the hilt offers. That matters because
-## the span is the denominator of `SWORD_SCALE`: the Gub's fists are a fixed
+## the span is the denominator of `SWORD_SCALE`: the Bog's fists are a fixed
 ## distance apart in the clip, so a shorter span buys a longer sword, and the
 ## honest answer is the one that puts both fists on hilt rather than the one
 ## that flatters the size.
@@ -675,7 +675,7 @@ const SWORD_REAR_HAND := 0.980
 ## solves it and prints these three lines:
 ##
 ##     P(t)   the left fist, in right-hand-local metres, sampled across the
-##            window `GubAnimator` plays of `Swing`
+##            window `BogAnimator` plays of `Swing`
 ##     d      normalise(mean P(t)), the line from the gripping fist to the one
 ##            that joins it — which is the hilt
 ##     scale  |mean P(t)| / (SWORD_REAR_HAND - SWORD_FORE_HAND)
@@ -688,14 +688,14 @@ const SWORD_REAR_HAND := 0.980
 ##            its **point** — the length of the fore-hilt below the fist
 ##
 ## The scale is the interesting half, as it was for the bow. This model is
-## 1.000 long with 0.130 of hilt between the two grip points; the Gub's fists
+## 1.000 long with 0.130 of hilt between the two grip points; the Bog's fists
 ## are further apart than that through the whole swing, so the sword has to be
 ## scaled up or the left hand closes on empty air a long way from the pommel.
 ## **The size of this sword is therefore a measurement of the animation**, not a
 ## number anybody picked — and what it buys is the reach, which is why
 ## `MatchConfig.sword_reach` is checked against it rather than typed beside it.
 ##
-## Move `SWING_CLIP_START`/`SWING_CLIP_END` in `GubAnimator` and all three go
+## Move `SWING_CLIP_START`/`SWING_CLIP_END` in `BogAnimator` and all three go
 ## stale together. Re-run the tool rather than nudging one of them.
 ## Re-pasted at D-073, unchanged in everything but the fourth decimal. The tool
 ## above had been printing `1.2585` and `(0.6117, 0.4203, -0.8164)` for some time
@@ -814,12 +814,12 @@ func _orient_sword() -> void:
 
 
 ## Put a great sword in the right fist, or take it away. A visibility toggle for
-## the spear's reason: a Gub swings several times a life and rebuilding a prop
+## the spear's reason: a Bog swings several times a life and rebuilding a prop
 ## for each of them buys nothing.
 ##
 ## **This does not touch the spear, the card or the crackle**, exactly as
 ## `set_letter` does not touch the spear. Which of the five is in this hand
-## belongs to `GubCombat._refresh_hand`, and a second opinion here is how the
+## belongs to `BogCombat._refresh_hand`, and a second opinion here is how the
 ## hand and the gate end up disagreeing.
 func set_sword(carried: bool) -> void:
 	if _sword != null:
@@ -832,9 +832,9 @@ func has_sword() -> bool:
 
 ## The blade, in world space, as [the point, the crossguard] (D-068).
 ##
-## **Read off the bone attachment and not off the Gub's basis**, which is the
+## **Read off the bone attachment and not off the Bog's basis**, which is the
 ## whole reason this function exists. `Swing` turns the body through a full
-## revolution inside the skeleton, so at the moment the blade connects the Gub's
+## revolution inside the skeleton, so at the moment the blade connects the Bog's
 ## own `body_yaw` is pointing wherever it was when the player clicked and the
 ## sword is pointing somewhere else entirely. A sweep along `-basis.z` would be
 ## a sweep at nothing.
@@ -844,7 +844,7 @@ func has_sword() -> bool:
 ## `SkeletonModifier3D` — the skeleton writes the modified pose into the skin and
 ## restores the animation's own behind it — while `BoneAttachment3D` updates off
 ## `skeleton_updated`, which fires *after* the modifier stack. So this is the one
-## reading that includes `GubAim` and is the one the sword is drawn from.
+## reading that includes `BogAim` and is the one the sword is drawn from.
 ##
 ## Returns two points and not a point and a direction, because what the hit is
 ## resolved against is a **segment**: a two-metre blade whose tip is past a
@@ -878,7 +878,7 @@ func set_sword_grip(model_scale: float, offset: Vector3,
 ##
 ## **Every number here is derived from the draw clip rather than swept by eye**,
 ## and that is the one way this grip differs from the spear's above. A shaft in
-## a fist only has to miss the Gub's own skin, and `tools/preview_grip.tscn`
+## a fist only has to miss the Bog's own skin, and `tools/preview_grip.tscn`
 ## exists because there was no better answer than looking. A bow has a
 ## **string**, and the string's nocking point has to be where the drawing hand's
 ## fingers are at *every* charge level — otherwise the one tell this whole
@@ -889,7 +889,7 @@ func set_sword_grip(model_scale: float, offset: Vector3,
 ## `tools/preview_bow.tscn -- measure` and pasted here:
 ##
 ##     P(c)   the drawing hand, in left-hand-local metres, at charge c, read off
-##            the built `Draw` clip across the window `GubAnimator` indexes
+##            the built `Draw` clip across the window `BogAnimator` indexes
 ##     d      normalise(P(1) - P(0)), the line the fingers actually travel
 ##     scale  |P(1) - P(0)| / NOCK_TRAVEL
 ##     R·Y    -d, because the bow's own -Y is the draw direction
@@ -897,17 +897,17 @@ func set_sword_grip(model_scale: float, offset: Vector3,
 ##     offset P(0) + scale · STRING_REST_Y · d
 ##
 ## The scale is the interesting half of that. A bow is a lever, and this one is
-## 0.986 m tip to tip, which draws its nocking point 0.285 m; the Gub's hands
+## 0.986 m tip to tip, which draws its nocking point 0.285 m; the Bog's hands
 ## come further apart than that across this draw, so the model has to be scaled
 ## or the string stops short of the fingers pulling it. **The size of the bow is
 ## therefore a measurement of the animation**, not a number anybody picked.
 ##
-## Move the window in `GubAnimator` and all three go stale together. Re-run the
+## Move the window in `BogAnimator` and all three go stale together. Re-run the
 ## tool rather than nudging one of them.
 ##
 ## **What that size costs, measured** (`tools/preview_bow.tscn -- measure`
 ## prints this table too, over 24 samples of each clip): how far the lower limb
-## tip is above the floor while a Gub is simply carrying the thing.
+## tip is above the floor while a Bog is simply carrying the thing.
 ##
 ##   Idle        +0.171 m      CrouchIdle  +0.287 m
 ##   Walk        +0.135 m      CrouchWalk  +0.269 m
@@ -940,7 +940,7 @@ func set_sword_grip(model_scale: float, offset: Vector3,
 ## bow is back in the grip that equation solved, unmoved to the millimetre.
 ##
 ## Swept rather than chosen. `preview_bow -- measure` walks a grid of both
-## angles over all eleven clips a Gub carries a bow around in and reports the
+## angles over all eleven clips a Bog carries a bow around in and reports the
 ## worst limb tip over the lot; this is the peak of it, and it is a broad one —
 ## every tilt within 5° of it on either axis clears 0.25 m. What it buys:
 ##
@@ -954,7 +954,7 @@ func set_sword_grip(model_scale: float, offset: Vector3,
 ## in the fist and the fist is at a different attitude in every clip.
 ##
 ## **It survives D-070 where the sword's did not, and the difference is which
-## clip each pose was authored for.** `3_Bow_Suite/BowIdle.fbx` is a Gub standing
+## clip each pose was authored for.** `3_Bow_Suite/BowIdle.fbx` is a Bog standing
 ## with a longbow, so the carry layer poses the bow arm properly — but the grip
 ## the bow hangs in is not a pose, it is the *equation* above, solved against
 ## `Draw` so the string's V meets the drawing fingers at every charge. The carry
@@ -969,7 +969,35 @@ func set_sword_grip(model_scale: float, offset: Vector3,
 const CARRY_TILT := Vector2(47.5, -25.0)
 
 const BOW_SCALE := 1.7383
-const BOW_GRIP_OFFSET := Vector3(-0.1927, -0.1376, 0.0989)
+
+## Two centimetres out of the solve, along the hand's own +Y, and the only
+## number on this page that is not what `preview_bow -- measure` printed
+## (D-077).
+##
+## The body swap put a wider torso under the same skeleton and the carried bow
+## came out **0.052 m** from it, against `preview_carry.SKIN_MIN` 0.06 — the
+## one smoke failure of that change, and the same 0.052 in all twelve carried
+## clips, because the trunk and the bow hand are both bones the carry layer
+## owns and the distance between them is a constant of the pose.
+##
+## +Y is the axis that buys the clearance, measured rather than reasoned: at
+## +1 cm the three hand-local axes read 0.051, **0.062** and 0.052, so x and z
+## slide the limb along the trunk and only y lifts it off. It is very nearly
+## one-for-one, so two centimetres is 0.072 m — 1.2x the floor, where 0.070 m
+## was available at 1.8 cm and left nothing for the next clip.
+##
+## **What it spends is the string**, and that is why it is a named constant
+## instead of an edit to the vector below. The solve puts the string's nocking
+## point on the drawing fingers at every charge (the equation above), and a
+## rigid 2 cm along the fist moves the whole bow, so the string's V is now 2 cm
+## off the fingers at brace and at full draw, where the solve had it exact. It
+## is a carry problem paid for at the draw, because the carry is the pose a Bog
+## is in almost all of the time.
+##
+## So: re-run `preview_bow -- measure` when the window or the model moves,
+## paste what it prints into the vector, and leave this lift on top of it.
+const BOW_TRUNK_LIFT := 0.0200
+const BOW_GRIP_OFFSET := Vector3(-0.1927, -0.1376 + BOW_TRUNK_LIFT, 0.0989)
 const BOW_GRIP_ROTATION := Vector3(10.162, 165.413, 19.573)
 
 ## Two facts about `art/generated/bow.glb`, in the model's own units, named here
@@ -1008,7 +1036,7 @@ const STRING_SHAPE := 0
 
 
 ## Put a bow in the left fist, or take it away. A visibility toggle for the same
-## reason the spear's is: a Gub draws several times a life, and rebuilding a
+## reason the spear's is: a Bog draws several times a life, and rebuilding a
 ## prop for each of them buys nothing.
 ## The bow's orientation in the bow hand, `tilt` degrees out of the drawing
 ## grip. `tilt` 0 is the grip `preview_bow -- measure` solved and the pose every
@@ -1035,7 +1063,7 @@ static func bow_basis(tilt: Vector2, grip_rotation: Vector3 = BOW_GRIP_ROTATION)
 ## back to the carry underneath a hand that has not moved yet, on the one frame
 ## everybody is looking at it.
 ##
-## Idempotent and cheap, because it is called every frame on every Gub in the
+## Idempotent and cheap, because it is called every frame on every Bog in the
 ## match: an unchanged value writes nothing.
 func set_carry(amount: float) -> void:
 	var want := clampf(amount, 0.0, 1.0)
@@ -1064,8 +1092,8 @@ func has_bow() -> bool:
 ## How far this bow is drawn, 0 at brace and 1 at full.
 ##
 ## One float, straight onto the string's one blend shape — and it is the *same*
-## float that scrubs the draw pose (`GubAnimator.draw_time`) and picks the
-## arrow's damage and speed (`GubCombat`). That is the whole reason the string
+## float that scrubs the draw pose (`BogAnimator.draw_time`) and picks the
+## arrow's damage and speed (`BogCombat`). That is the whole reason the string
 ## is a morph and not a bone chain: a second thing that had to be told how drawn
 ## the bow is would be a second thing that could be told something else.
 ##
@@ -1084,7 +1112,7 @@ func set_draw(fraction: float) -> void:
 ##
 ## On the same attachment as the shaft, the card and the crackle, which is what
 ## makes "one thing per hand" a fact about the scene tree rather than a rule
-## somebody has to remember: `GubCombat._refresh_hand` is the only caller and it
+## somebody has to remember: `BogCombat._refresh_hand` is the only caller and it
 ## sets all four of them every time it runs.
 func set_arrow(nocked: bool) -> void:
 	if _arrow != null:
@@ -1134,10 +1162,10 @@ func set_arrow_grip(model_scale: float, offset: Vector3, rotation_degrees: Vecto
 ##   belly's 0.33 — so the fist closes on something a fist could close on rather
 ##   than on a 0.20 m sphere.
 ## * It puts **two thirds of the bottle on the far side of the fist from the
-##   lip**, and at the lips that is the side away from the Gub's face. The clip
+##   lip**, and at the lips that is the side away from the Bog's face. The clip
 ##   tips the bottle to -47 deg there, so whatever is past the lip end goes into
 ##   the head: at 0.25 the bottle is 0.225 m past it and **vanishes inside the
-##   Gub entirely** — rendered, and it is not subtle, there is no bottle in the
+##   Bog entirely** — rendered, and it is not subtle, there is no bottle in the
 ##   picture at all. At 0.65 it is 0.105 m past, which is a lip at a face, and
 ##   the belly rides clear above it where it can be seen.
 ##
@@ -1152,7 +1180,7 @@ const POTION_GRIP_FRACTION := 0.65
 ##
 ## `Pickup` draws the same model at 0.50 on the ground and this is smaller,
 ## which is the one place the two disagree and is deliberate. A drop is read
-## from across a clearing and stands in a band with the lure and the letters; a
+## from across a clearing and stands in a band with the magnet and the letters; a
 ## held bottle is read against the mitten it is in, and this mitten is 0.22 m
 ## across and **solid**. That cuts both ways and it is why the number is not
 ## free at either end:
@@ -1161,7 +1189,7 @@ const POTION_GRIP_FRACTION := 0.65
 ##            swallows it — rendered, there is a purple sliver and no bottle
 ##     0.30   belly 0.20 m, neck 0.10 m: the cork clears the top of the fist
 ##            and the belly clears the bottom, which is a bottle in a hand
-##     0.50   as tall as the Gub's own head, held by a neck wider than the
+##     0.50   as tall as the Bog's own head, held by a neck wider than the
 ##            mitten
 ##
 ## **There is no check on this and `preview_carry.HEAD_BONES` says why**: the
@@ -1201,23 +1229,23 @@ const POTION_SCALE := 0.30
 ## one hand over, in the pose this prop is actually held in, and the centre it
 ## reports is `(-0.003, 0.157, 0.077)` — flat to 0.0002 m across the whole
 ## window, because every bone the mitten hangs off is in
-## `GubAnimator.UPPER_BODY_BONES` and the drink layer owns all of them.
+## `BogAnimator.UPPER_BODY_BONES` and the drink layer owns all of them.
 ##
-## **This is that centre plus five centimetres out of the Gub, and the five
+## **This is that centre plus five centimetres out of the Bog, and the five
 ## centimetres are the whole of the fitting.** It is D-074's own move, made for
 ## the opposite reason and in the opposite direction: there a shaft was riding
 ## the *outside* of the fist and had to come 3 cm in; here a bottle centred in
-## the fist spends half its belly inside the Gub's own stomach, because the
+## the fist spends half its belly inside the Bog's own stomach, because the
 ## drinking hand rests against a body that is a pear. `-- potion` derives the
 ## direction rather than guessing it — horizontally away from `Spine1` at the
 ## frame the window opens, with the component along the bottle projected out,
 ## which in this hand's frame is `(0.246, 0.348, -0.905)` — and the sheet is the
 ## argument:
 ##
-##     out by   what the bottle does at the Gub's side
+##     out by   what the bottle does at the Bog's side
 ##     -0.05    swallowed: a purple sliver under a mitten, no bottle at all
 ##      0.00    the belly half inside the stomach, cut off by the body
-##     +0.05    the whole bottle, cork clear of the fist, belly clear of the Gub
+##     +0.05    the whole bottle, cork clear of the fist, belly clear of the Bog
 ##
 ## It costs 0.05 m of `PALM_MAX`'s 0.066, which is the one number this spends
 ## and it is spent deliberately: `bottle` reads **0.050 against 0.066**, so the
@@ -1230,16 +1258,16 @@ const POTION_PALM := Vector3(0.0089, 0.1741, 0.0317)
 ##
 ## **Solved, and solved at one frame of one clip.** `preview_carry -- potion`
 ## aims the bottle's +Y at world up in the hand's own frame at
-## `GubAnimator.DRINK_CLIP_START` — the frame the drink window opens on, and the
+## `BogAnimator.DRINK_CLIP_START` — the frame the drink window opens on, and the
 ## frame the arm has not started to move on yet. Everything after that is the
 ## clip's, and that is the whole point of fitting it there rather than at the
-## lips: `Drinking.fbx` is a Gub raising something to its mouth, so a bottle
+## lips: `Drinking.fbx` is a Bog raising something to its mouth, so a bottle
 ## stood upright in the hand *before* the lift is tipped into the face *by* the
 ## lift, for free, with one rigid transform and no second pose to blend.
 ##
 ## Measured, across the window:
 ##
-##     the window opens   +90 deg   upright, at the Gub's side
+##     the window opens   +90 deg   upright, at the Bog's side
 ##     the lift           +34 deg   coming up, starting to tip
 ##     at the lips        -47 deg   mouth down, into the face, and it stays
 ##                                  there for the whole 0.7 s the head is back
@@ -1247,7 +1275,7 @@ const POTION_PALM := Vector3(0.0089, 0.1741, 0.0317)
 ##
 ## which is a drink. **A grip fitted at the lips instead is the same argument
 ## backwards, and it is worse**: it reads -51 and -49 deg at the two edges of
-## the window, so a Gub picks the bottle up upside down, pours it out for half a
+## the window, so a Bog picks the bottle up upside down, pours it out for half a
 ## second and then rights it at its own mouth. The tool prints both tables and
 ## D-075 has them side by side.
 ##
@@ -1322,7 +1350,7 @@ func _orient_potion() -> void:
 ##
 ## **This does not touch the bow**, exactly as `set_sword` does not touch the
 ## spear and `set_letter` touches neither. Which of this fist's two is in it
-## belongs to `GubCombat._refresh_hand`, which asks `is_channelling()` — the
+## belongs to `BogCombat._refresh_hand`, which asks `is_channelling()` — the
 ## same question `has_bow()` is refused by (D-067) — and a second opinion here
 ## is how the hand and the gate end up disagreeing.
 func set_potion(carried: bool) -> void:

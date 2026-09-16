@@ -1,21 +1,21 @@
 class_name Pickup
 extends Area3D
-## Something a Gub left on the ground when it died. Walk over it and it is
+## Something a Bog left on the ground when it died. Walk over it and it is
 ## yours.
 ##
-## Everything a Gub gains now comes from a corpse (D-032). `MatchState` rolls
+## Everything a Bog gains now comes from a corpse (D-032). `MatchState` rolls
 ## one of these per death and spawns it at the death point; this is the thing
 ## that then sits there, glows, and eventually rots.
 ##
-## Five kinds, and three of them are stock. A mushroom, a lure or a heal potion
-## goes into `GubCombat`'s stock, a letter goes into `MatchState.stats` and is
-## never lost again (D-033), and the Elder's robe buys the Gub that walked over
+## Five kinds, and three of them are stock. A shield, a magnet or a heal potion
+## goes into `BogCombat`'s stock, a letter goes into `MatchState.stats` and is
+## never lost again (D-033), and the Elder's robe buys the Bog that walked over
 ## it twenty seconds of being unkillable (D-038, D-040).
 ##
 ## **Collection is walk-over, not a keypress.** There is no interact action
 ## bound in this project and adding one to pick up a thing you are standing on
 ## would be a key press that only ever has one answer. The `Area3D` is on the
-## player layer and the first *living* Gub to touch it takes it.
+## player layer and the first *living* Bog to touch it takes it.
 ##
 ## **The host decides who got it.** The overlap that matters is the host's; a
 ## client's copy of this node monitors nothing and is told the answer. Which is
@@ -30,12 +30,12 @@ extends Area3D
 ## gives: the ordinal is what `_spawn_pickup` puts on the wire, and inserting a
 ## kind in the middle would turn every drop already in flight into a different
 ## object on the far end.
-enum Kind { MUSHROOM, LURE, LETTER, ELDER_ROBE, POTION }
+enum Kind { SHIELD, MAGNET, LETTER, ELDER_ROBE, POTION }
 
-const MUSHROOM_MODEL := preload("res://art/generated/mushroom.glb")
-const LURE_MODEL := preload("res://art/generated/lure.glb")
+const SHIELD_MODEL := preload("res://art/generated/shield.glb")
+const MAGNET_MODEL := preload("res://art/generated/magnet.glb")
 const POTION_MODEL := preload("res://art/generated/heal_potion.glb")
-## The robe itself, instanced in its rest pose. It carries a copy of the Gub's
+## The robe itself, instanced in its rest pose. It carries a copy of the Bog's
 ## skeleton (D-037) and no animation, so what stands on the grass is a robe and
 ## hat with nobody in them — which is exactly the right picture for a garment
 ## lying where its owner died.
@@ -46,13 +46,13 @@ const LAYER_PLAYER := 2
 ## How long an uncollected drop survives. A constant rather than a config dial
 ## because it is a litter rule and not a balance one: eight players killing each
 ## other for ten minutes leaves a hundred and fifty items, and the only question
-## is how long the map stays legible. Roughly a mushroom's life, which is the
+## is how long the map stays legible. Roughly a shield's life, which is the
 ## other number in the game that answers "how long does a thing left on the
 ## ground last".
 const LIFETIME := 30.0
 
 ## Both ends of the life are animated rather than instant, for the same reason a
-## mushroom erupts and withers: an item that blinks into existence is one nobody
+## shield erupts and withers: an item that blinks into existence is one nobody
 ## noticed arriving, and one that blinks out is one somebody thinks they saw
 ## stolen.
 const GROW_TIME := 0.30
@@ -60,7 +60,7 @@ const WITHER_TIME := 0.40
 ## How far above the ground point the item floats, so it reads as a thing lying
 ## on the grass rather than a thing buried in it.
 const HOVER := 0.55
-## The robe hangs lower than the rest, because unlike a mushroom or a crystal it
+## The robe hangs lower than the rest, because unlike a shield or a magnet it
 ## is a *full-height* object — 2.06 m of robe and hat at its own scale — and one
 ## floating with 0.55 m of clear air under its hem reads as a ghost rather than
 ## as a garment. Subtracted from HOVER rather than given as an absolute, so
@@ -79,8 +79,8 @@ const ROBE_SPIN_SCALE := 0.33
 const CATCH_RADIUS := 1.15
 const CATCH_HEIGHT := 2.2
 
-## How big the robe stands on the ground. The source is fitted to a 1.80 m Gub
-## and would be a second Gub standing in the clearing at 1.0 — which is a
+## How big the robe stands on the ground. The source is fitted to a 1.80 m Bog
+## and would be a second Bog standing in the clearing at 1.0 — which is a
 ## genuinely confusing thing to leave on a battlefield. A third of that is a
 ## garment on a stand: unmistakably the robe, unmistakably not a person.
 const ROBE_SCALE := 0.34
@@ -89,26 +89,32 @@ const ROBE_SCALE := 0.34
 ## readable at a glance from a few metres. That used to argue for a glyph on a
 ## billboard, and the reason it gave was the honest one: there was no card mesh
 ## in `art/generated/`. There is one per letter now (D-041), out of the same
-## pipeline the spear and the lure come through, so what is lying in the grass
+## pipeline the spear and the magnet come through, so what is lying in the grass
 ## is the letter rather than a picture of one.
-const LETTER_G_MODEL := preload("res://art/generated/letter_g.glb")
-const LETTER_U_MODEL := preload("res://art/generated/letter_u.glb")
 const LETTER_B_MODEL := preload("res://art/generated/letter_b.glb")
+const LETTER_O_MODEL := preload("res://art/generated/letter_o.glb")
+const LETTER_G_MODEL := preload("res://art/generated/letter_g.glb")
 ## How tall a letter stands on the ground, in metres. The sources are exactly
 ## one metre with the origin at the base, so this is also the scale.
 ##
 ## 0.60 and not the glyph's 0.47, for two reasons that point the same way. A
 ## shaded solid has less presence at a given height than an outlined, unshaded
 ## glyph does — it is lit like the world instead of shouting over it — and the
-## other things that fall out of a corpse stand 0.5 to 0.7 m (the lure 0.49, the
+## other things that fall out of a corpse stand 0.5 to 0.7 m (the magnet 0.49, the
 ## robe 0.70). At the glyph's height a card would be the one drop on the map
 ## that reads as smaller than the rest of them. This one sits among them.
 const LETTER_HEIGHT := 0.60
 ## How much of its own colour a letter emits, 0..1.
 const LETTER_SELF_LIGHT := 0.7
 const LETTER_COLOUR := Color(1.00, 0.84, 0.26)
-const MUSHROOM_COLOUR := Color(0.92, 0.52, 0.44)
-const LURE_COLOUR := Color(0.55, 0.85, 1.00)
+## Left at the mushroom's coral for the reason D-078 left the magnet's blue: the
+## drop glow is a **distance code**, read across a clearing at the size the model
+## is four pixels wide, not a swatch of the prop. The shield's own weathered
+## brown would be a lamp the colour of the ground next to a letter's gold, and
+## the two drops a player most needs to tell apart at forty metres are the one
+## that is a top-up and the one that is a race.
+const SHIELD_COLOUR := Color(0.92, 0.52, 0.44)
+const MAGNET_COLOUR := Color(0.55, 0.85, 1.00)
 ## The potion's own purple, taken up out of the glass the way ROBE_COLOUR was
 ## taken up out of the cloth: `#8040A0` is the single most common colour in
 ## `heal_potion_basecolor.png`, and this is that hue at full value.
@@ -132,8 +138,8 @@ const ROBE_COLOUR := Color(0.68, 0.45, 1.00)
 ## Match-unique, handed out by the host. This is the name both ends agree on —
 ## see the note in the header about why the node's own path is not.
 var pickup_id: int = 0
-var kind: Kind = Kind.MUSHROOM
-## Which letter, as one of `MatchState.LETTER_G/U/B`. Zero for the other kinds.
+var kind: Kind = Kind.SHIELD
+## Which letter, as one of `MatchState.LETTER_B/O/G`. Zero for the other kinds.
 var letter: int = 0
 
 var _model: Node3D
@@ -159,7 +165,7 @@ func drop(id: int, of_kind: Kind, of_letter: int, spot: Vector3) -> void:
 	# not recognise.
 	kind = clampi(of_kind, 0, Kind.size() - 1) as Kind
 	letter = of_letter
-	# A Capture G·U·B card never rots (D-051). There are exactly three letters
+	# A Capture B·O·G card never rots (D-051). There are exactly three letters
 	# in that match and the host decides when a dropped one goes home, so a
 	# card that withered on this clock would be a letter leaving the match — or,
 	# on a client, a card that vanished while the host still has it on the
@@ -174,7 +180,7 @@ func drop(id: int, of_kind: Kind, of_letter: int, spot: Vector3) -> void:
 	_phase = randf() * TAU
 
 	# Nothing collides *with* a pickup — it is not cover and it must not stop a
-	# spear. It only watches for Gubs walking through it.
+	# spear. It only watches for Bogs walking through it.
 	collision_layer = 0
 	collision_mask = LAYER_PLAYER
 	# A client's copy never decides anything, so it does not need to watch
@@ -191,7 +197,7 @@ func _build_collision() -> void:
 	cylinder.radius = CATCH_RADIUS
 	cylinder.height = CATCH_HEIGHT
 	shape.shape = cylinder
-	# Centred on the ground rather than on the item, so a Gub walking past at
+	# Centred on the ground rather than on the item, so a Bog walking past at
 	# foot level is caught by it and one standing on a ledge above is not.
 	shape.position = Vector3(0.0, CATCH_HEIGHT * 0.5 - HOVER, 0.0)
 	add_child(shape)
@@ -199,16 +205,26 @@ func _build_collision() -> void:
 
 func _build_visual() -> void:
 	match kind:
-		Kind.MUSHROOM:
-			_model = MUSHROOM_MODEL.instantiate() as Node3D
-			# A quarter the size it will be once planted. It has to read as a
-			# spare in your pocket, not as cover somebody already put there.
-			_model.scale = Vector3.ONE * 0.32
-		Kind.LURE:
-			_model = LURE_MODEL.instantiate() as Node3D
-			# The source crystal is nearly two metres tall, the same reason
-			# `Lure` shrinks it before throwing one.
-			_model.scale = Vector3.ONE * 0.26
+		Kind.SHIELD:
+			_model = SHIELD_MODEL.instantiate() as Node3D
+			# The model is a metre tall with its origin at its base, so the
+			# scale is the height. 0.65 m is exactly where the mushroom's drop
+			# stood — 1.25 root scale x 0.32 of a 1.624 m model — so nothing
+			# about the loot pile moves, and it is the top of the band the rest
+			# of the drops are in (the magnet 0.49, the letters 0.60, the robe
+			# 0.70). It is a bit over a third of the 1.75 m planted one, which
+			# is the argument the old 0.32 was making: a spare in your pocket,
+			# not cover somebody already put there.
+			_model.scale = Vector3.ONE * 0.65
+		Kind.MAGNET:
+			_model = MAGNET_MODEL.instantiate() as Node3D
+			# The model is a metre tall with its origin at its base, so the
+			# scale is the height: 0.49 m, which is where the crystal stood
+			# (0.26 of 1.894 m) and is the band the rest of the drops are in.
+			# Smaller than the 0.57 the thrown one is, for the shield's
+			# reason one case up — a drop is a spare in your pocket, not the
+			# thing already armed on the ground.
+			_model.scale = Vector3.ONE * 0.49
 		Kind.LETTER:
 			_model = build_card(letter)
 		Kind.ELDER_ROBE:
@@ -218,7 +234,7 @@ func _build_visual() -> void:
 			_model = POTION_MODEL.instantiate() as Node3D
 			# The source bottle is exactly a metre tall. Half of it puts a
 			# potion at 0.50 m, which is the band everything else that falls out
-			# of a corpse already stands in — the lure 0.49, the letters 0.60,
+			# of a corpse already stands in — the magnet 0.49, the letters 0.60,
 			# the robe 0.70 — so it reads as one of the drops rather than as a
 			# prop somebody left in the grass.
 			_model.scale = Vector3.ONE * 0.50
@@ -231,7 +247,7 @@ func _build_visual() -> void:
 	_light.light_color = _tint()
 	# Three tiers, not two, and the robe is the new top one. It is the rarest
 	# and strongest thing that drops (D-038) and it has to look like the prize
-	# it is from further away than a letter card does — a mushroom is a top-up,
+	# it is from further away than a letter card does — a shield is a top-up,
 	# a card is a race, and a robe decides the next minute of the match. The
 	# whole point of putting one on the ground is that somebody sees it.
 	_light.light_energy = _glow_energy()
@@ -239,7 +255,7 @@ func _build_visual() -> void:
 	_light.position = Vector3(0.0, 0.35, 0.0)
 	add_child(_light)
 
-	# Erupts out of the ground the way a mushroom does. `_model.scale` is the
+	# Erupts out of the ground the way a shield does. `_model.scale` is the
 	# final size, so the tween has to end where the builder above left it.
 	var target := _model.scale
 	_model.scale = target * 0.05
@@ -270,7 +286,7 @@ func _build_visual() -> void:
 ## again, with worse edges than the glyph had.
 ##
 ## **Static and public, because the card has two homes.** `HeldGear` builds one
-## of these into a Gub's fist for the length of a letter hold (D-035), and a
+## of these into a Bog's fist for the length of a letter hold (D-035), and a
 ## card in the hand that was drawn any differently from the card on the ground
 ## would read as a second kind of object rather than as the one that was just
 ## picked up. One builder is what stops the two drifting apart the first time
@@ -288,7 +304,7 @@ static func build_card(of_letter: int) -> Node3D:
 
 ## Which of the three scenes a letter bit stands for.
 ##
-## Answers a bad one with the G and a warning rather than with nothing. `drop`
+## Answers a bad one with the B and a warning rather than with nothing. `drop`
 ## clamps `kind`, because a kind off the wire with no model behind it leaves
 ## `_build_visual` with nothing to add; a letter cannot be clamped the same way,
 ## since the bits are 1, 2 and 4 and there is no range to squeeze a stray byte
@@ -296,14 +312,14 @@ static func build_card(of_letter: int) -> Node3D:
 ## ERROR on every client in the match at the same instant.
 static func _letter_model(of_letter: int) -> PackedScene:
 	match of_letter:
-		MatchState.LETTER_G:
-			return LETTER_G_MODEL
-		MatchState.LETTER_U:
-			return LETTER_U_MODEL
 		MatchState.LETTER_B:
 			return LETTER_B_MODEL
-	push_warning("Pickup: no model for letter %d, showing a G" % of_letter)
-	return LETTER_G_MODEL
+		MatchState.LETTER_O:
+			return LETTER_O_MODEL
+		MatchState.LETTER_G:
+			return LETTER_G_MODEL
+	push_warning("Pickup: no model for letter %d, showing a B" % of_letter)
+	return LETTER_B_MODEL
 
 
 ## Turn every surface of the letter into something that emits its own texture.
@@ -339,14 +355,14 @@ func _tint() -> Color:
 	match kind:
 		Kind.LETTER:
 			return LETTER_COLOUR
-		Kind.LURE:
-			return LURE_COLOUR
+		Kind.MAGNET:
+			return MAGNET_COLOUR
 		Kind.ELDER_ROBE:
 			return ROBE_COLOUR
 		Kind.POTION:
 			return POTION_COLOUR
 		_:
-			return MUSHROOM_COLOUR
+			return SHIELD_COLOUR
 
 
 func _glow_energy() -> float:
@@ -384,7 +400,7 @@ func _process(delta: float) -> void:
 	# it readable from whichever side you came at it from, and it is what a thing
 	# lying on the ground waiting to be collected has always done. The robe keeps
 	# its third of the rate: it is a tall object with a front, and a wizard's hat
-	# revolving at mushroom speed is a joke the map only wants to make once.
+	# revolving at shield speed is a joke the map only wants to make once.
 	if kind == Kind.ELDER_ROBE:
 		_model.rotate_y(SPIN_SPEED * ROBE_SPIN_SCALE * delta)
 	else:
@@ -399,10 +415,10 @@ func _process(delta: float) -> void:
 func _on_body_entered(body: Node3D) -> void:
 	if _taken or not Net.is_host:
 		return
-	var gub := body as Gub
-	if gub == null or not gub.alive:
+	var bog := body as Bog
+	if bog == null or not bog.alive:
 		return
-	MatchState.claim_pickup(pickup_id, gub.peer_id)
+	MatchState.claim_pickup(pickup_id, bog.peer_id)
 
 
 func is_taken() -> bool:
@@ -438,14 +454,14 @@ func wither() -> void:
 	_vanish(WITHER_TIME, Vector3.ZERO)
 
 
-## Stop watching for Gubs, on the next idle frame rather than now.
+## Stop watching for Bogs, on the next idle frame rather than now.
 ##
 ## `take` is reached from inside `body_entered`, and Godot refuses to change
 ## `monitoring` while an area is dispatching its own enter/exit signals — it
 ## would be re-entering the physics server mid-callback. Deferring is the
 ## documented answer and costs nothing here, because the thing that actually
 ## makes a drop collectable once is `_taken`, which is set synchronously above:
-## a second Gub entering on the same frame is refused by the flag long before
+## a second Bog entering on the same frame is refused by the flag long before
 ## the monitoring flag catches up.
 func _stop_monitoring() -> void:
 	set_deferred("monitoring", false)

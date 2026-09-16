@@ -27,7 +27,7 @@
 ;                SPAWN_LIFT, and all read the same sightline.
 ;
 ; The map is the one thing here that is not stated but checked.
-; `tools/preview_map.gd` stands a Gub-sized capsule on every pad and
+; `tools/preview_map.gd` stands a Bog-sized capsule on every pad and
 ; `tools/parkour_report.gd` rebuilds the whole jump graph out of the platform
 ; table and walks it from the ground, and `tools/smoke_test.sh` runs both as
 ; gates — so a gap nobody can cross fails a build rather than being discovered
@@ -66,7 +66,7 @@ directional_shadow_blend_splits = true
 ; platform slab, the inside of every overhang and the shaded face of every rock
 ; fell to whatever the sky's lower hemisphere gave them, which in a render was
 ; a flat dead brown. That is a readability problem before it is a look one —
-; the slabs a Gub lands on are read from below on the way up to them.
+; the slabs a Bog lands on are read from below on the way up to them.
 ;
 ; So: a shadowless directional light pointing up and back — almost the exact
 ; anti-parallel of the Sun above, which is where a bounce off flat ground comes

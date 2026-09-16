@@ -34,7 +34,7 @@
 ;                above its own measured floor, which runs from 1.59 to 1.82.
 ;
 ; The pads are checked rather than trusted. `tools/preview_map.gd` casts a ray
-; down from each one and stands a Gub-sized capsule on it, and
+; down from each one and stands a Bog-sized capsule on it, and
 ; `tools/smoke_test.sh` runs that as a gate — so a pad that ends up inside a
 ; shipping container fails a build rather than being discovered by a player.
 

@@ -10,7 +10,7 @@ extends PanelContainer
 ## widget that was built for.
 ##
 ## Names are tinted with the same team colours the nameplates use, so the person
-## who just said something and the Gub across the clearing are visibly the same
+## who just said something and the Bog across the clearing are visibly the same
 ## player.
 
 signal submitted(text: String)
@@ -46,11 +46,11 @@ func _ready() -> void:
 # ------------------------------------------------------------------ writing ---
 
 ## A line from a player. `peer_id` is looked up rather than passed as a name so
-## a rename between sending and receiving cannot produce two names for one Gub.
+## a rename between sending and receiving cannot produce two names for one Bog.
 func add_message(peer_id: int, text: String) -> void:
 	var team := Net.player_team(peer_id)
 	var colour := UIPalette.team_colour(team) if Net.config.mode == MatchConfig.Mode.TEAMS \
-		else (UIPalette.GUB if peer_id == Net.local_id() else UIPalette.TEXT)
+		else (UIPalette.BOG if peer_id == Net.local_id() else UIPalette.TEXT)
 	_append("[color=#%s]%s[/color]  %s" % [
 		colour.to_html(false), _escape(Net.player_name(peer_id)), _escape(text)])
 
@@ -96,7 +96,7 @@ func _on_submitted(text: String) -> void:
 
 ## In-match, the input box appears when the player presses the chat key and
 ## goes away again on send or on escape. It has to actually take focus, or the
-## first few characters go to the game and the Gub jumps.
+## first few characters go to the game and the Bog jumps.
 func set_input_visible(shown: bool) -> void:
 	_input.visible = shown
 	_hint.visible = compact and not shown

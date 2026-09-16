@@ -56,10 +56,10 @@ const LOOPS := {
 
 ## How tall the mist volume is, and how fast its density halves going up.
 ##
-## A Gub is 1.55 m tall and this map's whole argument is that you can see one at
+## A Bog is 1.55 m tall and this map's whole argument is that you can see one at
 ## 25 m; mist at chest height would be a fog bank with a fair-fight problem in
 ## it. The box is 1.8 m tall so its top face is never a visible edge, but the
-## falloff leaves about a tenth of the ground density at a Gub's shoulders and
+## falloff leaves about a tenth of the ground density at a Bog's shoulders and
 ## effectively none at his head.
 ## How tall the mist volume's *box* is, and how fast its density halves going up
 ## inside it.
@@ -70,7 +70,7 @@ const LOOPS := {
 ## line across the middle of the screen — the edge of the box, seen end-on.
 ## Six metres puts that edge above every framing anybody has, and the falloff
 ## is what actually decides where the mist stops: halving every 0.55 m leaves a
-## fifth of the ground density at a Gub's eyes and a two-hundredth at four
+## fifth of the ground density at a Bog's eyes and a two-hundredth at four
 ## metres, so the mist is ankle-deep whatever the box says.
 const MIST_TOP := 6.0
 const MIST_FALLOFF := 1.25
@@ -113,7 +113,7 @@ static func build(parent: Node3D, half: float, lamp_heads: Array[Vector3],
 ## yard at a third of a metre a second are what stop the mist reading as a
 ## property of the map rather than as weather coming in off the water. They are
 ## unshaded and very faint on purpose — at alpha 0.05, thirty of them stacked
-## edge-on still do not add up to anything a Gub can hide behind, and the light
+## edge-on still do not add up to anything a Bog can hide behind, and the light
 ## interaction is the fog volume's job, not theirs.
 static func _build_mist(parent: Node3D, half: float) -> void:
 	var fog := FogVolume.new()
@@ -256,7 +256,7 @@ static func _build_moths(parent: Node3D, heads: Array[Vector3], aim_at: Array[Ve
 ## They are silhouettes — unshaded, near-black, no emission — because at dusk at
 ## forty metres that is exactly what a gull is. They fly high enough to clear
 ## the wall from the middle of the yard (a 7.8 m wall at 18 m puts the top of
-## what a standing Gub can see at about 20 degrees, which forty metres out is
+## what a standing Bog can see at about 20 degrees, which forty metres out is
 ## fifteen metres up) and they glide rather than flap, because a flapping
 ## billboard needs an animated texture and a gliding one does not.
 static func _build_gulls(parent: Node3D, half: float, rng: RandomNumberGenerator) -> void:

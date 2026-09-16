@@ -84,7 +84,7 @@ layout_mode = 2
 layout_mode = 2
 size_flags_horizontal = 3
 theme_type_variation = &"SectionLabel"
-text = "GUB"
+text = "BOG"
 
 [node name="KillsHeading" type="Label" parent="Center/Card/Body/ColumnHeadings"]
 custom_minimum_size = Vector2(92, 0)

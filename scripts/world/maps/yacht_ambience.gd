@@ -48,7 +48,7 @@ const GULL_SHADER := preload("res://resources/shaders/yacht_gull.gdshader")
 ## Six gulls, on six circles. `centre` is the circle's middle on the deck plan
 ## and every one of them is offset to one side or the other, so the birds spend
 ## their time over water rather than over the decks: a gull crossing between two
-## Gubs at 20 m up is a fraction of a pixel, but a gull crossing between them at
+## Bogs at 20 m up is a fraction of a pixel, but a gull crossing between them at
 ## 6 m would be a bug, and the cheapest way to never have that argument is to
 ## keep the flock outboard.
 ##
@@ -194,7 +194,7 @@ static func _gull_tri(st: SurfaceTool, side: float, a: Vector3, b: Vector3,
 ## that gives off anything at all, and because the sun deck — which is where G
 ## sits, and therefore where the fight goes — had nothing in the air over it.
 ##
-## It is kept deliberately thin. The tub is a declared landing: a Gub can stand
+## It is kept deliberately thin. The tub is a declared landing: a Bog can stand
 ## in it, and a plume that hid one would be a bug and not a mood. 0.9 m tall,
 ## alpha well under a tenth, and drifting downwind so it clears the tub rather
 ## than sitting on it.

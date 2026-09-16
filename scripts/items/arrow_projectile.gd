@@ -4,7 +4,7 @@ extends SpearProjectile
 ##
 ## It is a `SpearProjectile` with four things swapped — a different mesh, a
 ## launch speed and a drop taken off the charge instead of out of a constant,
-## and a damage number that is **not** a whole Gub. Everything else is inherited
+## and a damage number that is **not** a whole Bog. Everything else is inherited
 ## and is deliberately not re-stated here: the hand-stepped flight, the segment
 ## sweep that stops a 60 m/s shaft tunnelling through a body, the glow, the
 ## trail, and the three endings in `_stick_in` — the victim lives and the shaft
@@ -12,7 +12,7 @@ extends SpearProjectile
 ## falls into the void and it gives up.
 ##
 ## That last one is why this class is nine lines of override and not a second
-## projectile. D-062 built the ride *for this weapon*, and said so: "a Gub with
+## projectile. D-062 built the ride *for this weapon*, and said so: "a Bog with
 ## three arrows in it and a short bar is the best read in the game". The parent
 ## was already the right shape; what it needed was to stop assuming the shaft
 ## was worth a hundred, which it never actually did — damage has always belonged
@@ -54,14 +54,14 @@ const DAMAGE_CURVE := 3.0
 ## arrow rather than looked up, because by the time it lands the archer may be
 ## drawing the next one.
 var charge: float = 0.0
-## What it does to a Gub it hits. Worked out once, on every peer, from the
+## What it does to a Bog it hits. Worked out once, on every peer, from the
 ## charge and the config — both of which are replicated — so the number cannot
 ## travel and cannot travel wrong. Only the host's copy reports it.
 var damage: float = 0.0
 
 
 ## Loose an arrow. `direction` is expected to be normalised, `charge` clamped.
-static func loose(parent: Node, archer: Gub, origin: Vector3, direction: Vector3,
+static func loose(parent: Node, archer: Bog, origin: Vector3, direction: Vector3,
 		draw: float, config: MatchConfig, is_authoritative: bool) -> ArrowProjectile:
 	var arrow := ArrowProjectile.new()
 	arrow.charge = clampf(draw, 0.0, 1.0)
@@ -72,7 +72,7 @@ static func loose(parent: Node, archer: Gub, origin: Vector3, direction: Vector3
 	return arrow
 
 
-## What an arrow drawn this far is worth, in `Gub.MAX_HEALTH`'s units.
+## What an arrow drawn this far is worth, in `Bog.MAX_HEALTH`'s units.
 ##
 ## Static and public because four things ask it and they must all get the same
 ## answer: the arrow itself, the HUD that could one day show it, the combat
@@ -131,7 +131,7 @@ func _model_offset() -> Vector3:
 
 
 ## The same length it was in the fist. `HeldGear.ARROW_SCALE` is derived from
-## how far apart the Gub's hands actually come across the draw, so asking it
+## how far apart the Bog's hands actually come across the draw, so asking it
 ## here is what makes the arrow that leaves the bow the arrow that was nocked in
 ## it rather than a second, differently sized one.
 func _model_scale() -> float:

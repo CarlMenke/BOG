@@ -3,7 +3,7 @@ extends Control
 ## The Escape menu (PLAN 6.4).
 ##
 ## It does not pause anything. `get_tree().paused = true` would freeze this
-## client's copy of a match that seven other people are still playing — the Gub
+## client's copy of a match that seven other people are still playing — the Bog
 ## would stand still, stop replicating, and be speared while its owner read a
 ## volume slider. So this is an overlay with a scrim, and the only thing it
 ## actually stops is mouse-look, by way of `SceneFlow.release_cursor`.
@@ -72,6 +72,6 @@ func _describe_session() -> String:
 	if Net.is_offline:
 		return "Offline session."
 	if Net.is_host:
-		return "You are hosting. Leaving closes the lobby for all %d Gubs." \
+		return "You are hosting. Leaving closes the lobby for all %d Bogs." \
 			% Net.player_count()
 	return "Connected to a lobby of %d." % Net.player_count()

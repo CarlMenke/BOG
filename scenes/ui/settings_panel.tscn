@@ -1,7 +1,7 @@
 [gd_scene load_steps=3 format=3 uid="uid://bgubsettings001"]
 
 [ext_resource type="Script" path="res://scripts/ui/settings_panel.gd" id="1_script"]
-[ext_resource type="Theme" path="res://resources/ui/gub_theme.tres" id="2_theme"]
+[ext_resource type="Theme" path="res://resources/ui/bog_theme.tres" id="2_theme"]
 
 [node name="SettingsPanel" type="Control"]
 layout_mode = 3

@@ -9595,3 +9595,844 @@ Six checks, 120 to **126**, all rendered:
 - **Anything on the crosshair, a drain, a ring, or a HUD element for somebody
   else's hold.** D-036, D-050, D-054. Several of those are deletions and a pass
   that restores them is a regression with better typography.
+
+## D-077 — The BOG wears the Gub's skeleton: a new body by weight transfer, not a new rig
+
+The user, with a new Tripo mesh in `assets/source/BOG.glb`: *"I want to swap out
+the mesh used in this game for the GUB, to now use a different mesh, which i
+have in the assets folder as BOG, they are widely shaped the same and
+everything, but all of the animations and stuff are tied to that old file."*
+
+### What the file is, and what that rules out
+
+`BOG.glb` is a static mesh — 9,128 vertices, 10,754 polygons, one material, one
+4096² JPEG — with no skeleton, no skin and no animation. Nothing in it can be
+"pointed at" the clips, because the clips live on the 49-bone `mixamorig:`
+skeleton that `tools/build_gub.py` folds out of the Mixamo FBX packs, and a
+clip is a set of rotations on those bones and nothing else. So the question was
+never how to move the animations to the BOG; it was how to put the BOG on the
+skeleton the animations already drive.
+
+Two ways to do that, and the one not taken is written down because it is the
+cleaner one in the long run:
+
+- **Re-upload the BOG to Mixamo and download every clip on it.** This is what
+  the pipeline was built for; Mixamo would fit the joints to the BOG's own
+  legs and belly. It costs twenty downloads by hand (the list is in the packs
+  table) and a re-measuring pass over every number taken against the old
+  skeleton — the three grips of D-074/D-075 and the ragdoll girths.
+- **Keep the skeleton, transfer the Gub's skin weights onto the BOG.** No
+  downloads, and every measured number in the game stays true, because the
+  bones it was measured against are the same bones. The cost is a skeleton
+  fitted to a different body.
+
+The second was taken, for now. It is done in an afternoon and it leaves the
+first open: the Mixamo route slots into the same packs and the same build with
+one flag to remove.
+
+### What was measured before deciding
+
+Both bodies are T-posed and proportioned alike, which is the only reason a
+transfer is legitimate at all. Rendered side by side in the same bind pose:
+
+| | Gub (donor) | BOG |
+|---|---|---|
+| height, arm span | 1.800, 1.902 | 1.757, 1.804 |
+| arm centre-line above the feet | 1.019 | 1.019 (pinned) |
+| crotch, as a fraction of height | 0.327 | 0.229 |
+| vertices, polygons | 8,814 / 10,542 | 9,128 / 10,754 |
+
+The one number that matters is the crotch. The BOG's belly hangs a tenth of its
+height lower than the Gub's, and the skeleton's knee joint sits at 0.38 m — at
+the BOG's crotch. Whatever is done with weights, the thigh bones span the lower
+half of that belly.
+
+Three weightings were rendered through Idle, Run, CrouchWalk, Throw and Drink:
+
+- **Nearest-face transfer** (Blender's Data Transfer, `POLYINTERP_NEAREST`,
+  then limit to 4 influences and normalise). Reads well in every clip. The belly
+  underside rides with the thighs and creases across the belly in the run.
+- **The same plus a smoothing pass** (`vertex_group_smooth`, 6 × 0.5). Tore the
+  surface open at the joints. Rejected.
+- **Blender bone heat** (`ARMATURE_AUTO`) on the skeleton. Failed to solve for
+  one or more bones and produced no weights at all. Rejected.
+
+Two shapings were considered and not rendered, because the arithmetic already
+said no. Warping the donor so its crotch lands on the BOG's crotch before the
+transfer puts Hips weights on the lower belly, but leaves the thigh pivot 30 cm
+above the visible crotch, so the leg would swing *out of* the belly. Moving the
+leg joints down to fit the BOG changes every Hips curve, every rest height, and
+the capsule, crouch and slide heights that were measured off them — which is
+the Mixamo route done badly.
+
+### What shipped
+
+`tools/build_gub.py` gained a `-- body` stage after `scale_to_height`, with
+`--body FILE` defaulting to `BOG.glb` and `--body -` keeping the donor's own
+mesh for an A/B. The Mixamo files are now the **weight donor**; the body is a
+separate static mesh. The fit: arm axis and front measured off the mesh rather
+than typed in (the top tenth of either body leans forward — the antennae — and
+that is what says which way is front, since neither has a face that protrudes);
+the BOG turned −90° about Z to match; uniform scale 1.8035 so its arm
+centre-line sits where the skeleton's arms are; feet at z = 0. The body comes
+out 1.757 m tall, not 1.80, and that is left alone: the fit is to the skeleton,
+and four centimetres of antenna is inside every tolerance the capsule and the
+nameplate have. 0 vertices under 0.5 total weight; three consecutive builds
+byte-identical (D-029 holds). The material stage was untouched, so the texture
+still lands as `art/generated/gub_basecolor.jpg`.
+
+`tools/build_elder.py` had a rail that the Gub is 1.80 m tall. Everything it
+fits is measured off bones or off the silhouette on every build, so the rail
+moved to the rig (`RIG_HEAD_TOP`) and the robe and hat refit themselves: the
+antennae come out through the front of the crown just above the brim, which is
+what the script intends and reads as a wizard.
+
+### Known limitations, accepted
+
+- **The belly wobble.** Visible in Run as a crease across the lower belly. The
+  reason is the crotch row of the table above and nothing short of a new rig
+  fixes it.
+- **The bottle passes into the head** at 40–60 % of the drink
+  (`out/carry_potion.png`). The BOG's skull is larger and rounder than the
+  donor's, and the fist measurement the check makes (`bottle PASS`, 0.021 m)
+  cannot see that. One second of a rarely played clip.
+- **The carried spear crosses in front of the snout** in Idle and Walk. 0.106 m
+  of clearance, passing, but it reads tighter than it did.
+- **The carried bow** came out 0.052 m from the new torso against the 0.06 m
+  `SKIN_MIN` that `every carried weapon clears the ground` enforces — the one
+  smoke failure of the swap, and a fact about the body rather than the clip. The
+  fix is a centimetre on `BOW_GRIP_OFFSET`, done in the next entry's first step
+  and recorded there.
+
+### The bow, a centimetre out
+
+Two, in the end. `BOW_GRIP_OFFSET` goes from `(-0.1927, -0.1376, 0.0989)` to
+`(-0.1927, -0.1176, 0.0989)` — the solve untouched plus a named
+`BOW_TRUNK_LIFT := 0.0200` along the bow hand's own **+Y**, which is the axis
+that was measured rather than argued: at +1 cm the three hand-local axes moved
+the nearest trunk 0.051, **0.062** and 0.052 from 0.052, so x and z slide the
+limb along the belly and only y lifts it off it. Nearest trunk **0.052 m →
+0.072 m** against `SKIN_MIN` 0.06, in all twelve carried clips as before, and
+the floor is unchanged where it matters: `preview_bow` reads +0.275 m of worst
+limb tip against +0.284, `preview_carry` +0.247 against +0.251. `SKIN_MIN` was
+not touched. What it spends is the string — the whole bow slid 2 cm, so the
+nocking point is 2 cm off the drawing fingers at brace and at full draw, where
+the solve had it exact — and `out/carry_bow.png` beside `out/carry_bow_before.png`
+is the picture that says the riser is still inside the mitten.
+
+## D-078 — The magnet replaces the lure, and the prop brings a colour of its own
+
+The user: *"the Lure model needs to be replaced with the MAGNET model, same
+functionality and everything."*
+
+So this is a swap and a rename and nothing else. Every number the ability is
+balanced on — `magnet_radius` 9 m, `magnet_hold` 1.4 s, `magnet_pull_strength`
+18, `magnet_fuse` 0.5, `MAGNET_SPEED` 22 over `MAGNET_GRAVITY` 22, the 1.1 m
+grip and the 11 m/s cap a caught Gub is dragged at — is byte-identical. What
+changed is the mesh, the word, and two scales chosen to keep the thing exactly
+the size it already was.
+
+### What the file is, and the first thing that was wrong about it
+
+`assets/source/MAGNET.glb` is a Tripo export: 238,234 vertices, 446,811
+triangles, one material, one 2048² JPEG basecolor, bbox x ±0.456, y 0..1.0,
+z ±0.322 with the origin at its base.
+
+**It is not a horseshoe.** The brief said one and the model is not: it is a
+roughly spherical thing 0.91 x 1.00 x 0.64 m, a cage of steel bands over four
+sunken faces, each face a violet vortex. Worth writing down rather than quietly
+working around, because two decisions were made on the horseshoe and then unmade
+on the render — the decimator's comment about protecting "the gap between the
+poles", and a horseshoe drawn for the tile's fallback glyph. A prop is what the
+render says it is (`out/preview_assets.png`).
+
+It is also, in the way that matters most, *not what the lure was*: both are
+6,000 triangles, but `lure.glb` carries **no image at all** and one material at
+`baseColorFactor 0.5, 0.5, 0.5`, against the magnet's single 512² basecolor.
+
+**The lure was grey.** Every blue thing anybody has ever seen about that ability
+was the `OmniLight3D` in `Lure._ready` and the `LURE_COLOUR` on the drop — the
+mesh under both was an untextured half-grey blob. The magnet brings its own
+violet-on-steel, which is the first time this prop has had a colour of its own,
+and it is the one open question this step leaves (below).
+
+### The pipeline, and why the numbers are the lure's
+
+`TARGETS` takes `"magnet": ("assets/source/MAGNET.glb", 6000, 512)` — the lure's
+budget and the lure's argument, which is the potion's too: a small thing thrown
+or lying in the grass, in ones and twos, never eight of them at once. 446,811
+triangles to 6,000 is 1.3%, and the model is round, which is the shape that goes
+visibly faceted first; what the budget buys is the cage of bands and the rims of
+the four faces, and the glow inside them is texture and costs nothing. 2048² to
+512² on the spear's and the letters' argument. 13.4 MB in, 0.6 MB out, 1.2 s,
+with 1,155 of 18,000 corners falling back to plain nearest-vertex on the UV
+transfer — ordinary here and invisible at this size.
+
+`art/generated/lure.glb` and its `.import` are `git rm`'d. There was no
+`lure_basecolor.png` to remove because there was no image in the file;
+`magnet_basecolor.png` is therefore a *new* generated file rather than a renamed
+one, and it sits beside the seven other props' extracted basecolors.
+
+### Size: the same two heights, measured
+
+The lure was `0.30` of a 1.894 m model in flight and `0.26` of it on the ground.
+The magnet is 1.002 m in the file, so its scale is simply its height in metres,
+which is the clearer arrangement and the reason both constants read the way they
+now do. Measured off the real nodes, in the tree, after the drop's grow tween has
+finished:
+
+| | lure | magnet | scale |
+|---|---:|---:|---:|
+| thrown (`Magnet._ready`) | 0.568 m | **0.571 m** | 0.57 |
+| dropped (`Pickup.Kind.MAGNET`) | 0.492 m | **0.491 m** | 0.49 |
+
+Three millimetres and one. In flight it is 0.52 m wide and 0.37 deep where the
+crystal was 0.44 x 0.38, so it takes very slightly more of the grass and nothing
+about cover or dodging moves. The dropped one is still in the 0.5–0.7 m band
+every other drop is in (D-032, D-075).
+
+**Kept exactly:** `GLOW_FLYING` 2.5, `GLOW_ARMED` 7.0, `GLOW_PULLING` 16.0 and
+the pulse on the hold. The jump at arming is the tell that the pull is about to
+happen and is the only reason a fuse exists — it is functionality, and a
+brightness that reads as decoration is exactly the kind of number a swap loses.
+So is the spin, at 1x, 2x and 4x `SPIN_SPEED` through the three phases.
+
+### The rename, and the one word that could not be swept
+
+Case-preserving, `LURE`/`Lure`/`lure` → `MAGNET`/`Magnet`/`magnet`, over every
+tracked text file, with `git mv` for `scripts/items/lure.gd` (+ its `.uid`),
+`scenes/items/lure.tscn` and the three sounds, so the history follows. 376
+replacements across 22 files.
+
+Two places it could not be mechanical:
+
+- **`lured`.** "Magneted" is not a word. `Gub.is_lured()`/`note_lured()` are
+  `is_pulled()`/`note_pulled()`, `combat_range`'s potion verdict is about a Gub
+  being *pulled*, and `match_rules`' "the lurer is credited" is "the thrower is
+  credited". A magnet pulls; that is the verb the mechanic already used
+  everywhere else (`apply_magnet_pull`, `magnet_pull_strength`).
+- **The scene's uid.** `magnet.tscn` keeps `uid://bgublure0001`. A uid is an
+  identity and not a name — changing it makes a different resource of the same
+  file and orphans every reference by uid. It is the one string in the sweep
+  that is deliberately left spelling the old word.
+
+`AudioDirector.LURE_*` are `MAGNET_*` and the three wavs are
+`magnet_throw/arm/fire.wav`, with `make_sfx.py`'s three functions moved with them
+so a re-run writes the names the game preloads. **The samples themselves are
+untouched** — `magnet_throw`'s three inharmonic partials over a fast decay were
+written as a struck crystal and describe a struck bar just as well, and
+re-synthesising a sound nobody asked to change would be a diff with no argument
+behind it.
+
+Input action `throw_lure` → `throw_magnet` (`E` is unmoved), `hud.tscn`'s
+`LureSlot` → `MagnetSlot` with `label_text = "Magnet"`, `AbilitySlot.Kind.LURE`
+→ `Kind.MAGNET`, `"grant_lure"` → `"grant_magnet"`, and the five `lure_*` config
+keys are `magnet_*` with the lobby slider labelled "Magnet delay".
+
+### The tile, and the glyph that was drawn and thrown away
+
+`bake_tiles`' `SUBJECTS` names `magnet`, and the seven were re-baked under the
+one camera and the one framing rule (D-076): aspect 1.1:1, upright, mean 0.659
+of the tile against the rule's 0.66, ink 0.288 — between the mushroom's 0.249
+and the potion's 0.299, which is where a round prop belongs. `check` passes.
+`resources/ui/tiles/lure.png` is `git rm`'d. `out/tiles_sheet.png` is the seven
+side by side, and the magnet reads as one of the set rather than as the odd one
+out: it is the only dark prop, and the violet in its faces is the only thing on
+the strip that glows.
+
+The drawn fallback glyph — the one `AbilitySlot` uses if a tile PNG is missing —
+was rewritten as a horseshoe and then put back. A disc with six lines out of it
+was drawn for the crystal and is right for a sphere that pulls, in a way a
+horseshoe would not have been.
+
+### What is not decided, and is left for a playtest
+
+**`MAGNET_COLOUR` is still the crystal's pale blue** `(0.55, 0.85, 1.00)`, and
+the prop under it is violet. That is a disagreement where there never was one,
+because the lure was grey and the light was all the colour there was.
+
+It is left alone on purpose, and the argument is D-075's: the drop glow is a
+*distance code*, read across a clearing at the size the model is four pixels
+wide, and two of the five drops are already purple — the potion at 1.5 over
+4.0 m and the robe at 3.4 over 8.5 m, separated from each other by tier and not
+by hue. A third would be one purple too many, and a magnet on the ground is the
+drop a player most wants to identify before walking onto it. Re-tinting it
+violet is a one-line change if a playtest says the mismatch reads worse than the
+collision would; it is not a change to make from a still frame.
+
+### What was checked
+
+`bash tools/smoke_test.sh` — **126 checks, 0 failures**, which includes
+`combat_range -- magnet` printing `magnet caught 1`, the net loopback's client
+lobbing one through the public `GubCombat` calls with both processes agreeing,
+`match_rules` on the five renamed config keys through `to_dict`/`apply_dict` and
+both clamps, and `bake_tiles -- check` on the committed PNGs. The one failure the
+gate had before this step was the bow's, and it is fixed and recorded at the end
+of D-077 rather than here.
+
+Pictures: `out/preview_assets.png` (the prop beside the Gub and the other five),
+`out/magnet_flight.png` (armed on the ground beside a Gub, for size),
+`out/magnet_self.png` (the pull at full glow), `out/hud_magnet.png` (the tile and
+the label on the real bar), `out/tiles_sheet.png` (the set).
+
+## D-079 — The shield replaces the mushroom, and a canopy becomes a wall
+
+The user: *"the Mushroom model needs to be swapped out with the SHIELD model.
+Same functionality."*
+
+Same functionality, and every number the ability is balanced on is
+byte-identical: `shield_use_delay` 1.5, `shield_lifetime` 25, `shield_max_active`
+2, `SHIELD_DISTANCE` 2.1, the layer-8 deployable mask the Gub, the spear, the
+arrow and the bolt all include, the 0.28 s eruption and the 0.45 s wither. What
+changed is the mesh, the word, and a *shape* — and the shape is the whole of
+this entry, because a mushroom and a barricade are cover in two different ways
+and only one of them needed two scales, an offset and five constants.
+
+### What the file is, and the second brief that was wrong about the model
+
+`assets/source/SHIELD.glb` is a Tripo export: 235,046 vertices, 415,952
+triangles, one double-sided material, a 4096² JPEG basecolor **and** a 4096² PNG
+normal map, bbox x ±0.3497, y 0..0.9989, z ±0.0908, origin at its base and
+symmetric about x = 0.
+
+**It is not a knight's shield.** It is a *barricade*: six horizontal planks
+lashed between two vertical stiles, with a rail across the top and the bottom
+and a short spike under the middle of the foot. Its two faces are not the same
+picture. The **+Z** face is weathered, sunlit, mossed and lichened, with no
+structure showing; the **-Z** face is the carpentry — the two stiles, and a V of
+diagonal bracing meeting at the foot. Rendered before anything was decided
+(`out/preview_assets.png`, and a textured front-and-back pass from the raw
+buffers), because that is the second brief in two steps written off a bounding
+box: D-078's horseshoe magnet turned out to be a sphere, and this heater shield
+turned out to be a fence.
+
+Two decisions came out of the render rather than out of the spec. Which way it
+faces (below), and the drawn fallback glyph in `AbilitySlot` — a dome on a stalk,
+which was a mushroom and is now five planks on two uprights.
+
+### The pipeline, and the normal map
+
+`TARGETS` takes `"shield": ("assets/source/SHIELD.glb", 10000, 1024)` — the
+mushroom's budget and the mushroom's argument: a placed object you walk right up
+to and stand behind, so it gets the loosest triangle budget in the table.
+415,952 to 9,999 is 2.4%, and almost none of it is curvature: the model is flat
+planes and square edges, which is the shape quadric-error decimation is best at.
+8,990 vertices after the seam-aware rebuild, with 2,173 of 29,997 corners falling
+back to plain nearest-vertex on the UV transfer.
+
+**The normal map comes through**, which was the open question: `process` loops
+over every image in the file rather than the first one, so both were capped at
+the target edge. 4096² basecolor 4644 KB → 1634 KB, 4096² normal 9482 KB →
+727 KB, and the whole file 27.0 MB → 2.8 MB in 2.9 s. Godot extracts them as
+`shield_basecolor.png` and `shield_normal.png`. The mushroom's three extracted
+maps — diffuse, metallic-roughness and normal — are `git rm`'d with its `.glb`
+and `.import`; `assets/source/Mushroom/` is a source and is untouched.
+
+### The scale, and the two constants that had to die
+
+`nodes/root_scale` in `shield.glb.import` is **1.0**, deliberately and not by
+default. The mushroom's was 1.25, and that hidden quarter is what D-034 and
+D-039 spent two rounds untangling: the importer's scale and the script's
+multiply, so a 1.25 in the `.import` and a 1.25 in the code made a mushroom 2.54
+m tall out of a 1.62 m file. One number, in one place, and the file's metre is
+the metre.
+
+`MODEL_SCALE_WIDE`, `MODEL_SCALE_TALL`, `MODEL_AXIS` and `_model_offset` are
+gone, with their essays, and one `MODEL_SCALE := 1.75` replaces all four.
+
+**A shield is a wall and not a canopy.** The mushroom needed wide and tall apart
+because its cover hung off a stalk: height decided *where* the cover was and
+width decided how much of it there was, and scaling both together floated the cap
+over the head of the Gub behind it. A slab has no such joint — it starts at the
+ground, its cover is its silhouette, and scaling it uniformly moves the top edge
+and nothing else. It needed no `MODEL_AXIS` either: the mushroom's `.glb` was a
+leaning cluster whose big cap sat half a metre off the file's origin, and this
+mesh is centred on x 0.0005 and z 0.0012.
+
+1.75 is the mushroom's top edge (D-039), kept on purpose: it is the height that
+leaves the antennae of the 1.80 m Gub showing while putting the 1.55 m hitbox
+entirely behind. The file is 1.0 m tall, so the scale is the height in metres,
+which is the arrangement D-078's two magnet scales also landed on.
+
+### Facing: the planter's yaw exactly, and half a turn inside the node
+
+`plant()`'s `randf_range(-0.5, 0.5)` is **dropped**. A mushroom is a thing that
+grew there and wants to look like it grew at an angle; a shield is a thing
+somebody put down, and a wall turned a few degrees off the line you meant is a
+wall you get shot past. A row of them all facing the same way is a shield wall,
+which is the right picture rather than a defect.
+
+Godot's forward is -Z and `GubCombat._host_place_shield` hands `plant` the
+*planter's camera yaw*, so the node's forward points at the enemy. The model's
+weathered face is its +Z, so `MODEL_YAW := PI` turns the model half a turn inside
+the node: the enemy gets the mossy planks, the planter gets the bracing. Without
+it, exactly backwards.
+
+The same sign was wrong in `combat_range._plant_a_shield`, which planted with
+`yaw_towards(-forward)` where the ability uses `yaw_towards(forward)`. Invisible
+for eight decision records because a mushroom is rotationally symmetric; the
+first thing you see on a slab. Fixed, with the reason written beside it.
+
+### Collision: one box, measured
+
+One `BoxShape3D`, **1.23 x 1.75 x 0.32 m centred at y 0.875**, measured off the
+decimated mesh at 1.75 by slicing it rather than derived from anything. The mesh
+at 1.75 runs x -0.613..+0.614, y 0.002..1.749, z -0.158..+0.160 — 1.226 x 1.746
+x 0.319 — and in quarter-metre bands:
+
+```
+  0.00-0.25   1.207 wide   0.317 deep   the bottom rail and the ground spike
+  0.25-0.50   1.206        0.225        planks
+  0.50-0.75   1.179        0.254        planks
+  0.75-1.00   1.189        0.236        planks
+  1.00-1.25   1.215        0.263        planks
+  1.25-1.50   1.200        0.232        planks
+  1.50-1.75   1.204        0.319        the top rail
+```
+
+Width and height are the full extents rounded up to the centimetre, so the box
+circumscribes the mesh by 2 mm and 4 mm with nothing sticking out to be shot
+through. Depth is the measured 0.319 rounded up, which clears the 0.25 m floor
+this shape was given without the floor ever having to bite — the floor is there
+because `SpearProjectile._sweep` rays the segment between two ticks and cannot
+tunnel at any thickness, but a `CharacterBody3D` is depenetrated out of whatever
+it is already inside, and a Gub covers 3.8 cm in a tick.
+
+**The box is solid and the prop is not**, and that is the one deliberate
+disagreement. Between each pair of planks is a slot two or three centimetres tall
+you can see daylight through. A box per plank would put six letterboxes up the
+middle of a thing whose entire job is to have no way through it — D-039's gap
+between the stem and the cap, six times over. Of the two ways to be wrong, a
+spear that stops against a slot you could have threaded reads as a spear hitting
+a barricade; one that comes through a gap you cannot aim at reads as the game
+being broken.
+
+### The cover profile, re-run
+
+`tools/combat_range.tscn cover`, verbatim:
+
+```
+combat_range: shield collision, measured on layer 8 at 2 cm across.
+              A Gub stands 0.00-1.55 m, crouches to 1.35, has its eyes at 1.33,
+              and its antennae reach 1.80 m — above the hitbox, and meant to show.
+              y 0.15 m  1.22 m wide  ############
+              y 0.30 m  1.22 m wide  ############
+              y 0.45 m  1.22 m wide  ############
+              y 0.60 m  1.22 m wide  ############
+              y 0.75 m  1.22 m wide  ############
+              y 0.90 m  1.22 m wide  ############
+              y 1.05 m  1.22 m wide  ############
+              y 1.20 m  1.22 m wide  ############
+              y 1.35 m  1.22 m wide  ############
+              y 1.50 m  1.22 m wide  ############   <- the top of a standing Gub
+              y 1.65 m  1.22 m wide  ############
+              y 1.80 m  0.00 m wide
+              y 1.95 m  0.00 m wide
+              y 2.10 m  0.00 m wide
+              y 2.25 m  0.00 m wide
+              y 2.40 m  0.00 m wide
+              y 2.55 m  0.00 m wide
+              y 2.70 m  0.00 m wide
+              squarely behind it, a standing Gub is 100% hidden from 14.1 m
+              standing 0.50 m out of line, as the dummy is, 70%
+combat_range: the spear did not get through — cover PASS
+combat_range: the same throw with the shield gone killed Dummy 1 — control PASS
+combat_range: walked into it and was held 0.54 m off the middle (wanted 0.49) — solid PASS
+```
+
+That is the whole of D-039 answered rather than argued: 1.22 m of wall at every
+height a Gub occupies, starting at the ground, ending between the hitbox and the
+antennae. The mushroom's profile had a 0.55 m stem in that band and a cap above
+it.
+
+`solid`'s threshold moved with the shape and got **tighter**, not looser.
+`COVER_HOLD_OFF_SLACK` was 0.25 m because a capsule pressed into a cylinder meets
+curve on curve and nobody could say which centimetre the contact was at; a
+capsule walked squarely into a flat face touches it at exactly one radius, so the
+only slop left is a tick of travel. 0.05, and the hold-off it is subtracted from
+is `BOX_DEPTH * 0.5 + CAPSULE_RADIUS` = 0.16 + 0.38. Measured: 0.54 against a
+wanted 0.49, which is the geometry to the centimetre.
+
+### The rename, the tile and the drop
+
+Case-preserving `MUSHROOM`/`Mushroom`/`mushroom` → `SHIELD`/`Shield`/`shield`
+over every tracked text file, 369 occurrences across 31 files, with `git mv` for
+`shield_mushroom.gd` (+ its `.uid`), `shield_mushroom.tscn`, `mushroom_deploy.wav`
+and `mushroom.png` so the history follows. `class_name Shield`, with no collision
+— there was no `Shield` in the class cache. `shield.tscn` keeps
+`uid://bgubmushroom01`, spelled for the old word, for D-078's reason exactly: a
+uid is an identity and not a name, and changing it makes a different resource of
+the same file. It is the one string in this sweep that is deliberately left
+saying mushroom.
+
+What the sweep had to be kept away from: **the nature kit's mushrooms**, which are
+scenery and not this item. `landmarks.gd`'s grove, `prop_scatter.gd`'s
+`Mushroom_Common`, `gub_backdrop.gd`'s floor dressing, `ambience.gd`'s bird over
+the grove and `PLAN.md`'s ground-cover line all still say mushroom, and so does
+`assets/source/Mushroom/` in `.gitignore`.
+
+`AudioDirector.MUSHROOM_DEPLOY` is `SHIELD_DEPLOY` and the wav moved with it.
+**The sample itself is untouched**, on D-078's argument: a 90-to-240 Hz swell
+under a low-passed noise burst was written as something organic shoving itself
+out of the ground and describes a timber barricade rammed into soil just as well
+— the swell is the mass and the squelch is the ground taking it.
+
+Input action `place_mushroom` → `place_shield` (`Q` is unmoved), `hud.tscn`'s
+`MushroomSlot` → `ShieldSlot` labelled "Shield", `AbilitySlot.Kind.MUSHROOM` →
+`Kind.SHIELD`, `"grant_mushroom"` → `"grant_shield"`, and the three `mushroom_*`
+config keys are `shield_*` with the lobby slider labelled "Shield delay".
+
+The seven tiles were re-baked under the one camera and the one framing rule
+(D-076): the shield reads 1.4:1, upright, mean 0.662 of the tile against the
+rule's 0.66, longest 0.758, **ink 0.330** — the densest of the seven, ahead of
+the potion's 0.299, which is what a slab should be. `check` passes.
+`resources/ui/tiles/mushroom.png` is `git rm`'d.
+
+The **drop** is 0.65 m rather than the mushroom's `0.32` of a doubly-scaled file.
+Measured: the mushroom's dropped model stood 1.25 × 0.32 × 1.624 = 0.649 m, so
+nothing about the loot pile moves, and it is the top of the band the rest are in
+(the magnet 0.49, the letters 0.60, the robe 0.70). `SHIELD_COLOUR` stays the
+mushroom's coral for D-078's reason: the drop glow is a distance code read at the
+size the model is four pixels wide, not a swatch of the prop, and a lamp the
+colour of weathered wood beside a letter's gold is the one pair a player most
+needs to tell apart across a clearing.
+
+### What was checked
+
+`bash tools/smoke_test.sh` — **126 checks, 0 failures**, including `cover`,
+`control` and `solid` above, `shield deploys` walking the real placement path,
+`bake_tiles -- check` on the committed PNGs, `match_rules` on the renamed config
+keys through `to_dict`/`apply_dict`, and the net loopback's client planting one
+through the public `GubCombat` calls with both processes agreeing.
+
+Pictures: `out/shield_planted.png` (one planted beside a Gub, braced side to the
+planter), `out/shield_cover.png` (a spear buried in the boards with the dummy
+untouched behind it), `out/shield_face_front.png` and `out/shield_face_back.png`
+(the two faces, textured off the raw buffers — the render the facing decision was
+made on), `out/preview_assets.png` (out of the pipeline, beside the Gub and the
+rest), `out/hud_shield.png` (the tile and the label on the real bar),
+`out/tiles_sheet.png` (the seven).
+
+## D-080 — The word becomes B, O, G: one new letter, and three bits renumbered
+
+The user: *"All references to GUB need to be erased and replaced with BOG,
+including the 2 game modes that rely on the word GUB. There is a new O_LETTER
+model that you can use."*
+
+Two modes spell the word — `WinCondition.LETTERS`, where cards fall out of
+corpses and you hold one up for ten seconds (D-033, D-035), and `CAPTURE`, where
+three cards sit between the bases and you carry each one home (D-051). Neither
+rule changed. What changed is one mesh, three constants, and the order three
+lamps are drawn in. This entry is **only** the letters: the `Gub`/`GUB` brand
+rename is a separate step and nothing here touches it.
+
+### What the O actually is, and the third brief written off a bounding box
+
+`assets/source/O_LETTER.glb` is a Tripo export: 237,427 vertices, **429,870
+triangles**, one double-sided material, one 4096² JPEG basecolor, bbox x ±0.3417,
+y 0..1.0, z ±0.0763, origin at its base and symmetric about x = 0 and z = 0. The
+spec described it from that box as "the same 1 m card convention as the G/U/B",
+which is true of the box and misleading about everything else, so it was rendered
+before anything was written about it (`out/preview_assets.png`).
+
+**It is not the same hand as the other two.** The B and the G are ornate — a
+swash curling off the top of the B's stem, chiselled facets, a rough gold with
+real contrast in it. The O is a plain roman ring: smooth, symmetrical, untapered,
+no serif and no curl, in a noticeably paler and flatter gold. Side by side the
+word reads perfectly well and the O is visibly the calmest letter in it. That is
+worth writing down rather than fixing: all three cards are lit by the same
+`LETTER_SELF_LIGHT` 0.7 out of their own basecolor and glow the same gold at
+range, which is what the ability is actually read by, and a still frame two
+metres from a card is not the distance this prop is judged at.
+
+**It is not the same weight either.** The other two letters were 8,555 and 9,271
+triangles out of Tripo — in `decimate_assets`' target list for the texture cut
+and the image rename, not for the decimation. The O arrives at 429,870, which is
+the magnet's weight in a letter's clothing, and for it the 6000 is the whole job.
+
+### The pipeline, and why the budget did not move
+
+`TARGETS` takes `"letter_o": ("assets/source/O_LETTER.glb", 6000, 512)` — the
+number the other two already had, kept deliberately so the three cards stay one
+set. It is also the right number on its own merits: an O is a closed curve edge
+to edge, and a circle is the shape that goes visibly faceted first (the potion's
+argument, D-075, and the magnet's, D-078). Measured:
+
+```
+  source     237,427 verts   429,870 tris   4096² basecolor 2728 KB   15.6 MB
+  welded     214,925 verts   (22,502 seam duplicates removed)
+  decimated    3,000 verts     6,000 tris   (1.4% of source)
+  rebuilt      4,461 verts     6,000 tris   after the seam-aware dedup
+  texture    4096² -> 512²    2728 KB -> 267 KB
+  wrote      art/generated/letter_o.glb  0.5 MB  in 1.6 s
+```
+
+312 of 18,000 corners fell back to plain nearest-vertex on the UV transfer — a
+tenth of the shield's rate, and invisible. The three generated cards now sit at
+454 KB (O), 458 KB (G) and 483 KB (B), which is the set being one set.
+
+`art/generated/letter_u.glb` is `git rm`'d; its `.import` and its extracted
+`letter_u_basecolor.png` are `git mv`'d onto the O's names, so the history
+follows and the scene keeps `uid://bslugdik4ewv2` — a uid is an identity and not
+a name, the argument D-078 and D-079 each left a uid alone on. `U_LETTER.glb`
+stays in `assets/source/`: it is a source, and sources are never deleted.
+
+### Size on the ground: the O is the wide one
+
+`LETTER_HEIGHT` is 0.60 and every card is exactly one metre in its file, so the
+constant is the scale and all three stand 0.60 m. `combat_range -- cards`
+measures that off each mesh's own AABB rather than off the constant: **B 0.60 m,
+O 0.60 m, G 0.60 m**. What the height does not say is the footprint:
+
+| | file w × d | on the ground at 0.60 |
+|---|---|---|
+| B | 0.526 × 0.135 | 0.316 × 0.081 m |
+| O | 0.685 × 0.153 | **0.411 × 0.092 m** |
+| G | 0.486 × 0.204 | 0.292 × 0.122 m |
+
+The O is 30% wider than the B and 41% wider than the G, and the only one of the
+three more than five times wider than it is deep. Nothing depends on that — a
+card's catch volume is `Pickup.CATCH_RADIUS` and not its mesh — but it is why
+the O is the most legible of the three lying in grass, and why in the fist
+(`HeldGear.CARD_SCALE` 0.70, so 0.288 m across) it still clears the head: the
+card is held out to the side of the skull, not in front of it
+(`out/letter_o_held.png`).
+
+### The mask: renumbered, in reading order
+
+| | old | new |
+|---|---:|---:|
+| `LETTER_G` | 1 | **4** |
+| `LETTER_U` → `LETTER_O` | 2 | 2 |
+| `LETTER_B` | 4 | **1** |
+| `LETTER_ALL` | 7 | 7 |
+| `LETTERS` | `[G, U, B]` | `[B, O, G]` |
+
+The values could have been left where they were — every consumer goes through
+`LETTERS` or `letter_name`, and a whole mask is only ever compared against
+`LETTER_ALL`. They were changed anyway, and the reason is written into the
+constant's comment: a mask is a *number* the moment it is printed in a log line
+or saved in a lobby config, and 5 meaning "B and G, no O" only parses at a glance
+if bit 0 is the first letter of the word. Renumbering costs nothing today,
+because nothing persists a mask across a version; leaving it crooked costs a
+double-take every time a person reads one.
+
+Because the values moved, the sweep had to be **one** sweep. The bits travel on
+the wire inside `stats`, and a client with `LETTER_B = 4` against a host with
+`LETTER_B = 1` lights the wrong lamp with no error anywhere.
+
+### The roles moved and the geometry did not
+
+`capture_layout.fallback_letters` puts one card at the midpoint of the two bases
+and one either side; that was "G at the midpoint, U and B either side", and is
+now "**B** at the midpoint, **O and G** either side". Not one coordinate changed:
+`LETTERS[0]` is the midpoint before and after, and it is the first letter of the
+word that sits on it. The same rule settled the two maps that declare their own
+points — Lantern Wharf's `Letters` markers were `G, U, B` at (0,0,0),
+(-15.5,0,0), (15.5,0,0) and are now `B, O, G` at exactly those three points, and
+Halcyon Wake's sun-deck card, the only one any map has put off the main floor,
+was the G and is now the B. `playthrough -- wharf` prints the three points it
+always printed.
+
+Renaming the markers rather than reordering them is the whole of that decision.
+Moving the geometry to keep the G in the middle would have re-cut two hand-made
+maps — Wharf's crossroads card and the Yacht's two salon cards are placed where
+they are because of the boxes and the bar around them — to preserve one letter's
+position in a word that no longer has it there.
+
+### The sweep
+
+Case-exact `LETTER_U` → `LETTER_O`, `letter_u` → `letter_o`, `U_LETTER` →
+`O_LETTER`, `G·U·B` → `B·O·G`, `G/U/B` → `B/O/G`, `G, U and B` → `B, O and G`,
+`G, U, B` → `B, O, G`: **138 replacements across 28 tracked files**, with
+`docs/DECISIONS.md`, `feedback/` and `assets/` excluded. About thirty more by
+hand, where the word is spelled out in a sentence rather than in a token —
+`match_rules`' "both teammates are holding U", `letter_carriers`' feed rows
+("Pipwick picked up O", "Pipwick banked O"), `hud_range`'s "Team 0 pools to O·G
+and is one B short", and the two map headers.
+
+One harness needed more than a rename. `match_rules`' capture scenario banks the
+*first* letter and asserts it came home to `CAPTURE_HOMES[0]`, so the letter it
+names had to move with the index: the G it carries is now the B, and the B it
+loses to the void is now the G. Everything the scenario proves is unchanged; the
+alternative was to keep the names and let an index-coupled check quietly compare
+the wrong home point.
+
+`Pickup._letter_model`'s fallback answers an unrecognised bit with the **B**
+rather than the G now, because the first letter of the word is the least
+surprising thing to find on a card that should not exist.
+
+The one `"U"` left in the codebase is `invite_code.gd`'s Crockford base32
+substitution table, which excludes I, L, O and U so a code cannot be misread.
+Nothing to do with the letters, and left alone.
+
+### What was checked
+
+`bash tools/smoke_test.sh` — **126 checks, 0 failures**. Among them:
+`combat_range -- cards` printing `cards on the ground — B 0.60 m, O 0.60 m,
+G 0.60 m — cards PASS`; `letter_carriers` and its free-for-all run, on the real
+spawn path with the real HUD; `match_rules`' four letter scenarios including the
+whole capture rewrite; `capture_preview` on Kopje Crossing; and `playthrough`'s
+capture layout on all five maps, two of which declare their own points.
+
+Pictures: `out/letter_cards.png` (B, O and G on the ground at 0.60 m, in reading
+order — the picture the O was judged on), `out/preview_assets.png` (the three
+cards normalised beside the Gub and the props, which is where the difference in
+hand is clearest), `out/letter_o_held.png` (the O in a fist during a hold),
+`out/hud_letters.png` (the three lamps, B unlit and O and G lit) and
+`out/capture_base.png` (a Capture B·O·G match on Lantern Wharf).
+
+## D-081 — GUB becomes BOG: one sweep, and five things that keep the old name
+
+The user: *"we will be scrapping the entire GUB branding and changing over to
+BOG ... All references to GUB need to be erased and replaced with BOG."*
+
+D-077 put the new body on the old skeleton and D-080 made the letters spell the
+word. This is the last of it and the least interesting: a rename, done in one
+pass so nothing is half-renamed for the length of a commit. There is no design
+in it except the list of things that do **not** change, which is the only part
+worth an entry.
+
+### The sweep
+
+One script, kept in the scratchpad rather than in `tools/` because it has no
+second use, over `git ls-files`, with binaries skipped by content — a NUL byte
+or a failed UTF-8 decode — rather than by extension. The replacement is
+per-letter case-preserving rather than a table of spellings:
+
+```python
+PROTECT = re.compile(r"uid://[A-Za-z0-9_]+|angry-gub")
+WORD    = re.compile(r"[Gg][Uu][Bb][sS]?")
+
+def swap(m):
+    g, u, b = m.group(0)[0], m.group(0)[1], m.group(0)[2]
+    return case_of(g, "b") + case_of(u, "o") + case_of(b, "g") + m.group(0)[3:]
+```
+
+B takes the case of the G it stands in for, O the case of the U, G the case of
+the B, and a trailing s keeps its own. A table of GUB/Gub/gub/GUBS/Gubs/gubs
+would have caught everything except `docs/PLAN.md`'s one `GUBs`, which is
+exactly the sort of thing a table misses and a rule does not.
+
+**137 files, 4,282 replacements.** 186 binaries skipped, 13 excluded paths
+skipped. Then `git mv` on the twenty-four files whose *names* said it —
+`art/generated/gub.glb`, its basecolor and both `.import` sidecars,
+`resources/shaders/gub_team_tint.gdshader`, `resources/ui/gub_theme.tres`,
+`scenes/player/gub.tscn`, the six `scripts/player/gub*.gd`,
+`scripts/ui/gub_backdrop.gd`, `tools/build_gub.py`, `tools/build_gub.sh`, and
+every `.uid` beside them. The sweep ran **first**, so the path strings inside
+`.tscn`, `.tres` and `.import` already said `bog` by the time the files arrived
+at those paths; the other order leaves a window in which a scene points at
+nothing.
+
+### What keeps the old name, and why none of it is an oversight
+
+**`uid://…`.** Fifty-eight tracked uids happen to spell `bgubplayer001`,
+`gubhud00000001`, `cq2gubwharfenv`. A uid is an identity and not a name — the
+argument D-078, D-079 and D-080 each left a uid alone on — and a changed uid is
+a different resource that nothing loads. Protected in the regex.
+
+**`GUB_2`.** A folder on disk holding the Mixamo upload of the **old**
+character. Since D-077 that mesh is the weight donor and not the body, and the
+BOG was never uploaded to Mixamo, so a folder called `BOG_2` would promise a
+body that is not in those FBX files. Fifty-five strings name it across
+seventeen files, including `audit_source_packs.py`'s
+`os.path.join(SOURCE_ROOT, "GUB_2", …)` and `build_bog.py`'s `Pack("GUB_2", …)`,
+both of which would stop finding their files. Rather than make it a third
+exception inside the matcher, the script replaces it and then puts it back, so
+how many strings name that folder is a number the run prints. The comment
+saying why now sits above the `Pack`.
+
+**`angry-gub.at.ply.gg`.** playit.gg assigned that hostname. `docs/PLAYING.md`
+and `scripts/net/net.gd` quote it as what a tunnel address looks like, and
+`tools/invite_codes.gd` feeds it to `Net.parse_public_address` nineteen times as
+the fixture the whole parser is checked against. Renaming it would document an
+address that does not resolve and rewrite a test's own input. Protected
+alongside the uids.
+
+**`CarlMenke/Gubs_Game`.** The GitHub repo and the working directory are still
+called that and `git remote -v` agrees. The sweep turned five clone lines in
+`README.md`, `docs/HANDOFF.md` and `docs/STATUS.md` into a URL that 404s; they
+were put back by hand. Renaming the repo is a GitHub operation and a separate
+decision.
+
+**Two sentences the user wrote.** `docs/HANDOFF.md` quotes them verbatim —
+*"For teams, the gubs change color to the hue"* and *"for gub game in team, the
+gub spelling scoring should be per team"* — and a quotation that has been
+edited is not a quotation. `feedback/` is excluded from the sweep for exactly
+this reason; these two live outside it and got the same treatment by hand.
+`docs/DECISIONS.md` is excluded because history is not rewritten, and
+`assets/source/_rejected/MANIFEST.md` because it is about the folder that keeps
+its name.
+
+After all of that, `grep -rIi gub` over `git ls-files` minus the four excluded
+paths returns those five categories and nothing else.
+
+### The GLB, byte for byte
+
+`build_bog.py` names the mesh, the material and the glTF image, so the rebuild
+was never going to reproduce the file the sweep had just renamed — and that is
+the check rather than a fault in it. Same length, 2,690,780 bytes, and **nine
+bytes differ**:
+
+| offset | before | after | what it is |
+|---|---|---|---|
+| 12,100 | `Gub` | `Bog` | the node name |
+| 355,483 | `gub` | `bog` | the material name |
+| 355,621 | `Gub` | `Bog` | the mesh name |
+
+Three names of three letters, and nothing else in 2.7 MB — not one vertex, not
+one keyframe, not one byte of the JSON's offsets, which stay put because `bog`
+is as long as `gub`. That is D-029's byte-identical rebuild still holding across
+a rename. The embedded basecolor comes out with the md5 it went in with
+(`3ff2cd0e…`), Godot re-extracted it as `art/generated/bog_basecolor.jpg` from
+`bog.glb`, and `nodes/use_name_suffixes=true` survived the rewrite of the
+`.import`. `tools/build_elder.sh` after it: **byte-identical**, 789,032 bytes,
+its bind check reading *49 joints, same names and the same order as bog.glb*.
+
+The rename had to be one sweep for the reason D-080's renumbering did.
+`scenes/player/bog.tscn` names the mesh node that the GLB names, so a renamed
+scene against an unrebuilt GLB is a scene pointing at a node that is not there.
+
+### The description that was not true any more
+
+`project.godot` and `export_presets.cfg` both sold the game as *"small yellow
+aliens, thrown spears"*. The alien is gone and so is the yellow: the BOG's
+1024² basecolor averages **RGB (169, 123, 60)** over its whole atlas — hue
+34.5°, saturation 0.65 — which is a tan, and the two antennae are the
+silhouette. Both strings now say "tan two-antennaed creatures", and `README.md`
+opens on "a small tan creature with two antennae".
+
+About thirty comments elsewhere still call the body yellow —
+`bog_team_tint.gdshader`'s "find the yellow skin in the texture",
+`ui_palette`'s "the Bog's own yellow", `arena_env.tres`' glow threshold. They
+are left. Half are about the **UI accent**, which really is a yellow, and the
+other half are D-077's to settle: the tint shader finds the new body by hue and
+its checks pass, so those sentences are stale rather than wrong, and a rename
+is the wrong commit in which to re-argue a colour.
+
+### What was checked
+
+`bash tools/smoke_test.sh` — **126 checks, 0 failures**, on the first run, with
+no cache to clear. Then the Windows export, with the host skill's own command:
+`build/windows/BOG.exe`, exit 0, no `ERROR:` lines, ending in
+`[ DONE ] savepack`. The stale `build/windows/GUB.exe` was deleted first — it is
+a build output and the skill regenerates it.
+
+One thing the rename moves that is not in the repo: `config/name` is also the
+user data folder, so the game now reads
+`%APPDATA%/Godot/app_userdata/**BOG**/settings.cfg` and the tuned one — public
+address, sensitivity, volumes, fullscreen — was sitting in `.../GUB/`. It was
+copied across (the defaults the gate had just written are beside it as
+`settings.cfg.pre-rename-default`), and the old folder was left where it is.
+The host skill's step 4 is the check that would have caught this at the worst
+possible moment: a blank `public_address` hands out a LAN address and nobody
+outside the house can join.
+
+**The exe is 408,016,032 bytes, 389 MiB, against 300 MB for the last GUB build,
+and roughly 130 MB of that is `out/`.** `export_filter="all_resources"` with an
+`exclude_filter` that never learned about `out/`, so every preview PNG left
+lying around since D-029 is packed into the binary players download — 142 of
+them in this export's log. Nothing about that changed today and it is not this
+entry's to fix, but it is written down because the number above is otherwise
+unexplainable and because the fix is one path in one line.

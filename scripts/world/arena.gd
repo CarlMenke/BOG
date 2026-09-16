@@ -7,7 +7,7 @@ extends Node3D
 ## `MatchState.register_arena(players_root, spawn_points)`, and until something
 ## makes it there is no game. `tools/combat_range.tscn` was the only caller until
 ## this scene existed, which is why this file keeps to the same contract it does:
-## build the world, hand over a node to parent Gubs under and a list of places to
+## build the world, hand over a node to parent Bogs under and a list of places to
 ## put them, and then get out of the way.
 ##
 ## *Which* map is `Net.config.map`, an id into `MapCatalog`. It rides with the
@@ -52,7 +52,7 @@ const MOON_COLOR := Color(0.62, 0.72, 1.0)
 const MOON_ENERGY := 0.30
 
 ## How many spawn pads to lay out. Eight, matching `MatchConfig.MAX_PLAYERS`, so
-## a full lobby never has two Gubs sharing a pad on the opening frame.
+## a full lobby never has two Bogs sharing a pad on the opening frame.
 const SPAWN_COUNT := MatchConfig.MAX_PLAYERS
 ## Pads sit at this fraction of the main island's rim radius: far enough out that
 ## nobody opens the match standing in the hollow with five sightlines on them,
@@ -65,7 +65,7 @@ const SPAWN_RIM_MARGIN := 4.0
 ## have to swing clear of the knoll used to come to rest on the same patch of
 ## flat ground, 3-5 m apart — one pad in all but name (D-055).
 const SPAWN_MIN_APART := 6.0
-## Gubs are spawned a few centimetres up so the capsule settles onto the ground
+## Bogs are spawned a few centimetres up so the capsule settles onto the ground
 ## rather than starting the match intersecting it.
 const SPAWN_LIFT := 0.12
 
@@ -92,7 +92,7 @@ func _ready() -> void:
 	else:
 		_build_procedural(entry, started)
 
-	# Capture G·U·B's objectives, if the map states any (D-051). Every map is
+	# Capture B·O·G's objectives, if the map states any (D-051). Every map is
 	# asked, whatever the condition, and a procedural map states none: its
 	# layout is the fallback planned from the spawn ring.
 	var static_map := get_node_or_null("Map") as StaticMap
@@ -185,7 +185,7 @@ func _build_static(entry: Dictionary, started: int) -> void:
 	# transform wearing a disguise.
 	spawn_points = static_map.spawn_points()
 	# The map's own floor. A bought arena stands on the ground rather than
-	# floating over 45 m of nothing, and a Gub that steps off one should be dead
+	# floating over 45 m of nothing, and a Bog that steps off one should be dead
 	# before the fall gets boring.
 	MatchState.set_void_height(static_map.void_height)
 
@@ -223,13 +223,13 @@ func _build_environment() -> void:
 
 
 func _build_containers() -> void:
-	# `MatchState._create_gub` parents every Gub here.
+	# `MatchState._create_bog` parents every Bog here.
 	_players = Node3D.new()
 	_players.name = "Players"
 	add_child(_players)
 
-	# `GubCombat._spawn_root` finds this by group. Without it every spear,
-	# mushroom and lure is parented to the scene root and nothing can be swept
+	# `BogCombat._spawn_root` finds this by group. Without it every spear,
+	# shield and magnet is parented to the scene root and nothing can be swept
 	# up between rounds.
 	_items = Node3D.new()
 	_items.name = "SpawnedItems"
@@ -265,10 +265,10 @@ func _build_spawn_points() -> void:
 		var ground := island.surface_point(found.x, found.y) + Vector3.UP * SPAWN_LIFT
 		# Facing the middle of the map. A player whose first frame looks out over
 		# the void has to turn around before they can read anything.
-		var yaw := Gub.yaw_towards(Vector3(-found.x, 0.0, -found.y).normalized())
+		var yaw := Bog.yaw_towards(Vector3(-found.x, 0.0, -found.y).normalized())
 		spawn_points.append(Transform3D(Basis(Vector3.UP, yaw), ground))
 
-		# Published to the scatter so no tree or boulder grows on a pad and a Gub
+		# Published to the scatter so no tree or boulder grows on a pad and a Bog
 		# can see out of its own spawn. Deliberately a *sparse-only* keepout:
 		# an earlier version also kept the dense layers off, and every pad came
 		# out as a bald circle of bare earth four metres across — which is both
@@ -383,7 +383,7 @@ func _build_torches() -> void:
 
 # ----------------------------------------------------------------- capture ---
 
-## A glowing ring in each team's colour at each Capture G·U·B base (D-051),
+## A glowing ring in each team's colour at each Capture B·O·G base (D-051),
 ## from the layout `register_arena` just planned. On every peer, and only in
 ## that mode: a base drawn in a kill-limit match is a promise of a rule that is
 ## not there.

@@ -1,11 +1,11 @@
-"""Audit a folder of hand-downloaded Mixamo FBX before `build_gub.py` ever opens one.
+"""Audit a folder of hand-downloaded Mixamo FBX before `build_bog.py` ever opens one.
 
     "$BLENDER" --background --python tools/audit_source_packs.py
     "$BLENDER" --background --python tools/audit_source_packs.py -- 5_Locomotion
 
 Every clip in this game arrives the same way: somebody opens Mixamo, applies an
-animation to *the Gub as uploaded*, downloads it by hand, and drops the file in a
-folder under `assets/source/`. `build_gub.py` then refuses to build unless every
+animation to *the Bog as uploaded*, downloads it by hand, and drops the file in a
+folder under `assets/source/`. `build_bog.py` then refuses to build unless every
 one of those files shares a body with `GUB_2/Idle.fbx` — same vertex count, same
 bone list, same vertex groups, bind poses agreeing to 1e-5
 (`assert_same_character`). That check is correct and it is not going anywhere.
@@ -41,7 +41,7 @@ column and why a failure here says so in one sentence.
 *Travel.* The column the locomotion work lives on. Mixamo's "In Place" checkbox
 strips the root motion, and this pipeline **needs** it: `lock_root_motion` throws
 the travel away only after `measure_clip` has read the speed the clip was drawn
-at, and that speed is what `gub.gd` matches its playback rate to so the feet grip
+at, and that speed is what `bog.gd` matches its playback rate to so the feet grip
 instead of skating. `AUTHORED_RUN = 4.314` is that measurement on `GUB_2/Run.fbx`
 and nothing else. A locomotion clip that reports 0.000 m here was downloaded In
 Place and is unusable for that no matter how good it looks — so travel is printed
@@ -78,8 +78,8 @@ tests, and again after normalising out a uniform scale difference. Two numbers
 rather than one because they mean opposite things. If the raw delta is large and
 the normalised delta collapses, the rig is the same and something rescaled it. If
 both stay large, it is a different rig — a stock Mixamo character, a second
-upload of the Gub, a pack from somewhere else — and no re-download of *that* file
-helps, because the file was never the Gub.
+upload of the Bog, a pack from somewhere else — and no re-download of *that* file
+helps, because the file was never the Bog.
 
 Nothing here writes to the repo, invokes Godot, or needs a `Clip(...)` to exist.
 It is safe to run on a folder somebody has just unzipped into, which is the
@@ -92,7 +92,7 @@ import sys
 
 import bpy
 
-# Matching build_gub.py, because every number printed here is meant to be
+# Matching build_bog.py, because every number printed here is meant to be
 # comparable with the numbers that build prints.
 FPS = 60
 PREFIX = "mixamorig:"
@@ -100,7 +100,7 @@ HIPS = PREFIX + "Hips"
 TARGET_HEIGHT = 1.80
 
 # The one pair of joints that stays put while the arms and torso animate, which
-# is why build_gub.py measures facing between them and why a scale ratio is
+# is why build_bog.py measures facing between them and why a scale ratio is
 # measured between them here.
 HIP_JOINTS = (PREFIX + "LeftUpLeg", PREFIX + "RightUpLeg")
 
@@ -124,7 +124,7 @@ WITHOUT_SKIN = (
     "only. With no skin cluster there are no bind\n    matrices, so the importer "
     "rebuilds a different rest pose (different bone heads, "
     "different\n    rolls) and the rotation curves no longer mean the same thing "
-    "on the Gub's skeleton.\n    Download each clip again With Skin; there is no "
+    "on the Bog's skeleton.\n    Download each clip again With Skin; there is no "
     "fix that does not involve doing that."
 )
 
@@ -134,7 +134,7 @@ def log(msg=""):
 
 
 # ---------------------------------------------------------------------------
-# Layered-action plumbing, the same shape build_gub.py uses
+# Layered-action plumbing, the same shape build_bog.py uses
 # ---------------------------------------------------------------------------
 
 def iter_fcurves(action):
@@ -191,7 +191,7 @@ def read_reference():
         "matrices": dict((b.name, [list(r) for r in b.matrix_local])
                          for b in arm.data.bones),
         # The same factor scale_to_height derives, so travel comes out in the
-        # metres the build log and gub.gd talk in.
+        # metres the build log and bog.gd talk in.
         "factor": TARGET_HEIGHT / (max(zs) - min(zs)),
         "span": hip_span(arm),
     }
@@ -383,7 +383,7 @@ def main():
             "walk, run or")
         log("      strafe in it was downloaded with In Place ticked, and no "
             "authored speed can be")
-        log("      measured from it — see AUTHORED_RUN in gub.gd.")
+        log("      measured from it — see AUTHORED_RUN in bog.gd.")
         for r in still:
             log("      %-*s peak %.3f m" % (width, r["file"], r.get("peak", 0.0)))
     if not skinless and not broken:
@@ -391,7 +391,7 @@ def main():
 
     bad = len(skinless) + len(broken)
     log()
-    log("  %d of %d files would fail build_gub.py as they are." % (bad, len(rows)))
+    log("  %d of %d files would fail build_bog.py as they are." % (bad, len(rows)))
     return 1 if bad else 0
 
 

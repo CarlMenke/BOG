@@ -27,7 +27,7 @@ extends RefCounted
 const KIT := "res://assets/Stylized_Nature_MegaKitStandard/glTF/%s.gltf"
 
 ## Physics layer 1 — "world" in project.godot. Trunks and boulders are cover, so
-## they collide with Gubs and stop spears exactly like the terrain does.
+## they collide with Bogs and stop spears exactly like the terrain does.
 const LAYER_WORLD := 1
 
 
@@ -117,9 +117,9 @@ const DENSE_LAYERS := [
 	{
 		"name": "Grass",
 		# Scale matters more here than anywhere else in the table.
-		# `Grass_Common_Tall` is 1.87 m at scale 1 and a Gub is 1.81 m: the first
+		# `Grass_Common_Tall` is 1.87 m at scale 1 and a Bog is 1.81 m: the first
 		# pass ran to scale 1.0 and grew grass taller than the players, which
-		# reads as a swamp and hides a crouched Gub at three metres.
+		# reads as a swamp and hides a crouched Bog at three metres.
 		"models": ["Grass_Common_Short", "Grass_Common_Tall", "Grass_Wispy_Short",
 			"Grass_Wispy_Tall"],
 		"cell": 0.68, "chance": 0.95, "scale": [0.30, 0.58], "align": 0.4,
@@ -461,7 +461,7 @@ func _usable(spot: Vector2, layer: Dictionary) -> bool:
 	if mass == null:
 		return false
 	# Keep back from the lip. A tree half off the edge looks like a bug, and the
-	# rim is also the one place a Gub most needs to see their own feet.
+	# rim is also the one place a Bog most needs to see their own feet.
 	#
 	# Capped at a quarter of the landmass radius, because a flat 2.2 m margin is
 	# a sensible skirt on the main island and the *entire surface* of a

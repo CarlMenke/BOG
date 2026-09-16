@@ -11,7 +11,7 @@ extends StaticMap
 ## kilobytes of script instead of forty megabytes of mesh.
 ##
 ## It is parkour first. There are about 120 landing surfaces between 0.4 m and
-## 9.5 m, and the distance between any two of them was chosen against the Gub's
+## 9.5 m, and the distance between any two of them was chosen against the Bog's
 ## own movement constants rather than by eye: a `hop` is a jump at run speed, a
 ## `leap` is a jump with the dive spent at the apex, and a `big` is a jump with
 ## the dive spent on the very next tick. `tools/parkour_report.gd` rebuilds that
@@ -67,7 +67,7 @@ const PLATEAU_RADIUS := 48.0
 const PLATEAU_POWER := 6.0
 const RIM_SEGMENTS := 96
 ## How far the rim falls before the geometry stops. `void_height` is -14 in the
-## scene, so a Gub that walks off the edge is dead a metre below the bottom of
+## scene, so a Bog that walks off the edge is dead a metre below the bottom of
 ## the cliff rather than falling past it for five seconds.
 const CLIFF_DEPTH := 9.0
 
@@ -373,7 +373,7 @@ const TRUNK_FRACTION := 0.62
 ## Where the plain is, and how big a square of it. -9.4 is a hand's breadth
 ## under `CLIFF_DEPTH`, so the cliff lands on it rather than hovering over it,
 ## and 3600 m is far enough that its own edge is under the haze from anywhere on
-## the plateau. `void_height` is -14, so this is scenery a falling Gub passes
+## the plateau. `void_height` is -14, so this is scenery a falling Bog passes
 ## through and dies below, exactly as before.
 const PLAIN_Y := -9.4
 const PLAIN_SIZE := 3600.0
@@ -548,7 +548,7 @@ func _build_ground(parent: Node3D) -> void:
 ##
 ## It is nine metres of rock that exists so the edge of the map is an edge and
 ## not a hole. It is swept into the collision along with everything else, which
-## is what stops a Gub sliding down the outside of it; `void_height` at -14 is
+## is what stops a Bog sliding down the outside of it; `void_height` at -14 is
 ## five metres below the bottom of it.
 func _build_cliff(parent: Node3D) -> void:
 	var vertices := PackedVector3Array()
@@ -698,7 +698,7 @@ func _build_waterhole(parent: Node3D) -> void:
 		var top := STONE_FIRST_TOP + STONE_RISE * float(i)
 		# The standard pillar rather than a hand-placed lump: it is sized off the
 		# slab's own underside, so the rock stops inside the stone instead of
-		# poking a boulder up through the one place a Gub has to stand.
+		# poking a boulder up through the one place a Bog has to stand.
 		_slab(parent, "waterhole", "stone %d" % i, TERMITE_CAPS[i % TERMITE_CAPS.size()],
 			at, top, Vector3(1.7, 2.0, 1.7), 41.0 * float(i))
 
@@ -944,7 +944,7 @@ func _build_bushes(parent: Node3D) -> void:
 ##
 ## Thinned rather than excluded: knee-high grass between the platforms is most of
 ## what stops the city reading as a rock garden, but grass everywhere would hide
-## a crouched Gub at three metres, which on a map with an instant-kill projectile
+## a crouched Bog at three metres, which on a map with an instant-kill projectile
 ## is a gameplay change and not a look.
 func _build_grass(parent: Node3D) -> void:
 	var group := _group("Grass", parent)
@@ -1175,7 +1175,7 @@ func _air_band_point(inner: float, outer: float) -> Vector2:
 ## One landing: a flat kit slab, a pillar under it, and a `Platform` record.
 ##
 ## The slab is positioned by its *top*, which is the only number the layout
-## tables state, because the top is what a Gub stands on and everything else
+## tables state, because the top is what a Bog stands on and everything else
 ## about the slab is a consequence of the mesh it was cut from.
 func _slab(parent: Node3D, zone: String, label: String, model: String, at: Vector2,
 		top: float, size: Vector3, yaw_deg: float, pillar: bool = true) -> Platform:

@@ -1,6 +1,6 @@
 class_name CaptureBase
 extends Node3D
-## A team's base in Capture G·U·B, drawn in the team's colour so a carrier knows
+## A team's base in Capture B·O·G, drawn in the team's colour so a carrier knows
 ## where to run from across the map (D-051).
 ##
 ## Three parts, all cosmetic — the rule is `CaptureLayout.in_base`, and nothing

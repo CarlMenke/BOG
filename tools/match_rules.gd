@@ -11,15 +11,15 @@ extends Node
 ##
 ## `combat_range` proves a spear can kill someone. It cannot prove that fifteen
 ## kills ends a match, that a friendly-fire kill costs a point instead of
-## earning one, or that the last Gub standing wins — those live entirely in
+## earning one, or that the last Bog standing wins — those live entirely in
 ## `MatchState` and, until this existed, had never been run with more than one
 ## live player. Every scenario drives the same host-side API a real match drives
 ## (`report_kill`, the clock, the respawn tick), so a rule that passes here is a
 ## rule that works in a match.
 ##
-## Gubs are deliberately never spawned. These scenarios are about the
+## Bogs are deliberately never spawned. These scenarios are about the
 ## bookkeeping, so the arena is registered with an empty spawn list and
-## `_create_gub` is left to fail quietly for peers that do not exist.
+## `_create_bog` is left to fail quietly for peers that do not exist.
 
 const PEERS := [1, 901, 902, 903]
 
@@ -67,7 +67,7 @@ func _ready() -> void:
 
 	print("match_rules: %d checks, %d failures" % [_checks, _failures])
 	print("match_rules: %s" % ("PASS" if _failures == 0 else "FAIL"))
-	# Free the Gubs the scenarios spawned before quitting: Godot reports
+	# Free the Bogs the scenarios spawned before quitting: Godot reports
 	# anything still in the tree at exit as a leak, and a harness that prints
 	# PASS above a wall of warnings teaches people to ignore warnings.
 	# queue_free lands at the end of a frame and the corpses and spears take
@@ -107,7 +107,7 @@ func _begin(count: int, configure: Callable, root: Node = null,
 	Net.roster_changed.emit()
 	# Every scenario starts from a clean, fast config. Spawn protection in
 	# particular has to be switched off explicitly: it defaults to two seconds,
-	# these scenarios run in microseconds, and a protected Gub correctly refuses
+	# these scenarios run in microseconds, and a protected Bog correctly refuses
 	# to die — which looked exactly like the scoring being broken the first time
 	# this harness was run. `_run_spawn_protection` turns it back on deliberately.
 	Net.config.spawn_protection = 0.0
@@ -122,11 +122,11 @@ func _begin(count: int, configure: Callable, root: Node = null,
 
 
 func _kill(victim: int, killer: int) -> void:
-	MatchState.report_kill(victim, killer, Gub.Cause.SPEAR,
+	MatchState.report_kill(victim, killer, Bog.Cause.SPEAR,
 		Vector3.ZERO, Vector3.FORWARD, "Spine1")
 
 
-## Bring a dead player back without needing a Gub or a respawn timer.
+## Bring a dead player back without needing a Bog or a respawn timer.
 func _revive(peer_id: int) -> void:
 	MatchState.stats[peer_id]["alive"] = true
 	MatchState.stats[peer_id]["respawn_at"] = 0.0
@@ -186,15 +186,15 @@ func _drop_robe() -> int:
 	return MatchState._spawn_drop(Pickup.Kind.ELDER_ROBE, 0, Vector3.ZERO)
 
 
-## Is this Gub actually wearing the cloth, as opposed to merely being listed as
+## Is this Bog actually wearing the cloth, as opposed to merely being listed as
 ## the Elder? Two claims, and the interesting bug is the one where they
-## disagree — a Gub that is the Elder in the rules and a plain Gub on screen is
+## disagree — a Bog that is the Elder in the rules and a plain Bog on screen is
 ## the worst outcome available, because the robe is the only warning anyone gets.
 func _wearing_robe(peer_id: int) -> bool:
-	var gub: Gub = MatchState.gubs.get(peer_id)
-	if not is_instance_valid(gub) or gub.elder_robe == null:
+	var bog: Bog = MatchState.bogs.get(peer_id)
+	if not is_instance_valid(bog) or bog.elder_robe == null:
 		return false
-	return gub.elder_robe.is_worn()
+	return bog.elder_robe.is_worn()
 
 
 ## Fire one bolt the way the host fires one, straight at `_host_cast_lightning`.
@@ -246,23 +246,23 @@ func _newest_card_letter() -> int:
 	return letter
 
 
-## A Gub's combat node and its hand, or null if that Gub never got one.
+## A Bog's combat node and its hand, or null if that Bog never got one.
 ##
 ## Every other scenario here is pure bookkeeping and touches neither. The hold
 ## needs both, because "you cannot throw, and the card is in the hand where the
-## spear was" is half the mechanic and it lives on the Gub — and the half most
+## spear was" is half the mechanic and it lives on the Bog — and the half most
 ## likely to rot, since a hand driven by anything other than `has_spear()` looks
 ## right until the frame it does not (D-035).
-func _combat(peer_id: int) -> GubCombat:
-	var gub: Gub = MatchState.gubs.get(peer_id)
-	if not is_instance_valid(gub):
+func _combat(peer_id: int) -> BogCombat:
+	var bog: Bog = MatchState.bogs.get(peer_id)
+	if not is_instance_valid(bog):
 		return null
-	return gub.get_node_or_null("Combat") as GubCombat
+	return bog.get_node_or_null("Combat") as BogCombat
 
 
 func _hand(peer_id: int) -> HeldGear:
-	var gub: Gub = MatchState.gubs.get(peer_id)
-	return gub.held_gear if is_instance_valid(gub) else null
+	var bog: Bog = MatchState.bogs.get(peer_id)
+	return bog.held_gear if is_instance_valid(bog) else null
 
 
 ## Run a hold's clock down to zero and let the host finish it, rather than
@@ -376,7 +376,7 @@ func _run_team_kill_limit() -> void:
 
 
 func _run_lives_elimination() -> void:
-	_scenario("lives, last Gub standing")
+	_scenario("lives, last Bog standing")
 	var finished := {}
 	_begin(3, func(c: MatchConfig) -> void:
 		c.mode = MatchConfig.Mode.FREE_FOR_ALL
@@ -410,7 +410,7 @@ func _run_lives_elimination() -> void:
 
 
 func _run_letters() -> void:
-	_scenario("free-for-all, collect G·U·B")
+	_scenario("free-for-all, collect B·O·G")
 	var finished := {}
 	_begin(3, func(c: MatchConfig) -> void:
 		c.mode = MatchConfig.Mode.FREE_FOR_ALL
@@ -433,13 +433,13 @@ func _run_letters() -> void:
 	_check("and does not turn into a letter they needed",
 		MatchState.letters_for(901), MatchState.LETTER_G)
 
-	# The one thing on a stats row a death does not touch. Everything a Gub was
+	# The one thing on a stats row a death does not touch. Everything a Bog was
 	# carrying goes; the letters stay.
 	_kill(901, 902)
 	_check("letters survive a death", MatchState.letter_count(901), 1)
 	_revive(901)
 
-	MatchState.award_letter(901, MatchState.LETTER_U)
+	MatchState.award_letter(901, MatchState.LETTER_O)
 	_check("two of three is not a win", MatchState.phase, MatchState.Phase.PLAYING)
 	MatchState.award_letter(901, MatchState.LETTER_B)
 	_check("three of three ends it", MatchState.phase, MatchState.Phase.POST_MATCH)
@@ -471,18 +471,18 @@ func _run_team_letters() -> void:
 		finished.merge(s, true), CONNECT_ONE_SHOT)
 
 	# The same three letters split across two teams spell nothing (D-049): G
-	# and U on team 0, B on team 1. Pooling is within a team, never across.
+	# and O on team 0, B on team 1. Pooling is within a team, never across.
 	MatchState.award_letter(1, MatchState.LETTER_G)
-	MatchState.award_letter(902, MatchState.LETTER_U)
+	MatchState.award_letter(902, MatchState.LETTER_O)
 	MatchState.award_letter(901, MatchState.LETTER_B)
-	_check("G·U·B split across two teams has not won",
+	_check("B·O·G split across two teams has not won",
 		MatchState.phase, MatchState.Phase.PLAYING)
 	_check("team 0 pools its two members' letters",
-		MatchState.team_letters(0), MatchState.LETTER_G | MatchState.LETTER_U)
+		MatchState.team_letters(0), MatchState.LETTER_G | MatchState.LETTER_O)
 	_check("team 1 holds only its own",
 		MatchState.team_letters(1), MatchState.LETTER_B)
 	_check("a player's lamps are the team's",
-		MatchState.scoring_letters(1), MatchState.LETTER_G | MatchState.LETTER_U)
+		MatchState.scoring_letters(1), MatchState.LETTER_G | MatchState.LETTER_O)
 	_check("while their own row keeps what they banked",
 		MatchState.letters_for(1), MatchState.LETTER_G)
 
@@ -491,9 +491,9 @@ func _run_team_letters() -> void:
 	_check("a teammate's letter is a duplicate",
 		MatchState.award_letter(902, MatchState.LETTER_G), false)
 	_check("and moves nothing on the team",
-		MatchState.team_letters(0), MatchState.LETTER_G | MatchState.LETTER_U)
+		MatchState.team_letters(0), MatchState.LETTER_G | MatchState.LETTER_O)
 	_check("or on the player",
-		MatchState.letters_for(902), MatchState.LETTER_U)
+		MatchState.letters_for(902), MatchState.LETTER_O)
 	# But the other team's letters are not theirs, so it is not a duplicate there.
 	_check("the other team can still take a G",
 		MatchState.award_letter(903, MatchState.LETTER_G), true)
@@ -501,7 +501,7 @@ func _run_team_letters() -> void:
 	# Three teammates-worth of hands, one word: 902 banks the B team 0 was
 	# missing, and team 0 wins without anybody holding all three.
 	MatchState.award_letter(902, MatchState.LETTER_B)
-	_check("G·U·B between teammates ends it",
+	_check("B·O·G between teammates ends it",
 		MatchState.phase, MatchState.Phase.POST_MATCH)
 	_check("reason", finished.get("reason"), "letters")
 	_check("nobody holds all three alone",
@@ -522,11 +522,11 @@ func _run_team_letters_leaver() -> void:
 		finished.merge(s, true), CONNECT_ONE_SHOT)
 
 	MatchState.award_letter(902, MatchState.LETTER_G)
-	MatchState.award_letter(902, MatchState.LETTER_U)
+	MatchState.award_letter(902, MatchState.LETTER_O)
 	MatchState._on_player_left(902)
 	_check("the leaver's row is gone", MatchState.stats.has(902), false)
 	_check("but their letters are still the team's",
-		MatchState.team_letters(0), MatchState.LETTER_G | MatchState.LETTER_U)
+		MatchState.team_letters(0), MatchState.LETTER_G | MatchState.LETTER_O)
 	_check("the leaver's G is still a duplicate for the team",
 		MatchState.award_letter(1, MatchState.LETTER_G), false)
 	MatchState.award_letter(1, MatchState.LETTER_B)
@@ -555,19 +555,19 @@ func _run_team_letter_hold() -> void:
 
 	# Two teammates standing still for the same letter: the first to finish
 	# banks it and the other one's hold is over, not ten seconds of nothing.
-	var first := _drop_card(MatchState.LETTER_U)
-	var second := _drop_card(MatchState.LETTER_U)
+	var first := _drop_card(MatchState.LETTER_O)
+	var second := _drop_card(MatchState.LETTER_O)
 	MatchState.claim_pickup(first, 1)
 	MatchState.claim_pickup(second, 902)
-	var enemy := _drop_card(MatchState.LETTER_U)
+	var enemy := _drop_card(MatchState.LETTER_O)
 	MatchState.claim_pickup(enemy, 901)
-	_check("both teammates are holding U",
+	_check("both teammates are holding O",
 		MatchState.is_holding_letter(1) and MatchState.is_holding_letter(902), true)
 	_expire_hold(1)
 	_check("the first to finish banks it",
-		MatchState.team_letters(0), MatchState.LETTER_G | MatchState.LETTER_U)
+		MatchState.team_letters(0), MatchState.LETTER_G | MatchState.LETTER_O)
 	_check("and the teammate's hold for it ends", MatchState.is_holding_letter(902), false)
-	_check("while the other team's hold for U carries on",
+	_check("while the other team's hold for O carries on",
 		MatchState.is_holding_letter(901), true)
 
 
@@ -588,18 +588,18 @@ func _run_letter_hold() -> void:
 	MatchState.claim_pickup(first, 901)
 	_check("the card is taken off the ground", _card_live(first), false)
 	_check("but the letter is not granted", MatchState.letters_for(901), 0)
-	_check("the Gub is holding it up", MatchState.is_holding_letter(901), true)
+	_check("the Bog is holding it up", MatchState.is_holding_letter(901), true)
 	_check("and it is the letter that was on the card",
 		MatchState.letter_hold_letter(901), MatchState.LETTER_G)
 	_check("with the clock running",
 		MatchState.letter_hold_remaining(901) > 9.0, true)
 
 	# The hand and the gate, which are not allowed to disagree. Both read
-	# `has_spear()`, so a Gub that looks armed is armed and one holding a card
+	# `has_spear()`, so a Bog that looks armed is armed and one holding a card
 	# is not — that is the whole tell the mechanic is built on.
 	var combat := _combat(901)
 	var hand := _hand(901)
-	_check("the Gub has a combat node", combat != null, true)
+	_check("the Bog has a combat node", combat != null, true)
 	_check("and a hand to put the card in", hand != null, true)
 	if combat != null and hand != null:
 		_check("no spear while holding", combat.has_spear(), false)
@@ -608,7 +608,7 @@ func _run_letter_hold() -> void:
 
 	# One hold at a time. A second card is not consumed, not queued, and not
 	# refused to anybody else — it is simply still there.
-	var second := _drop_card(MatchState.LETTER_U)
+	var second := _drop_card(MatchState.LETTER_O)
 	MatchState.claim_pickup(second, 901)
 	_check("a second card is left where it lies", _card_live(second), true)
 	_check("and does not replace the hold in progress",
@@ -630,7 +630,7 @@ func _run_letter_hold() -> void:
 		_check("and the card is gone from it", hand.has_letter(), false)
 
 	# Dying nine seconds in is the whole point of the mechanic, from the other
-	# side. 902 is still holding U.
+	# side. 902 is still holding O.
 	var before := MatchState._pickups.size()
 	_kill(902, 901)
 	_check("dying mid-hold grants nothing", MatchState.letters_for(902), 0)
@@ -641,7 +641,7 @@ func _run_letter_hold() -> void:
 	_check("and puts the card back in circulation",
 		MatchState._pickups.size(), before + 1)
 	_check("carrying the letter that was being held",
-		_newest_card_letter(), MatchState.LETTER_U)
+		_newest_card_letter(), MatchState.LETTER_O)
 	_revive(902)
 
 	# A letter you already hold is worth nothing whether you stand still for it
@@ -655,7 +655,7 @@ func _run_letter_hold() -> void:
 	# Zero is a real setting — the mode without the hold — and it must not go
 	# through a hold that lasts one frame.
 	Net.config.letter_hold_time = 0.0
-	var instant := _drop_card(MatchState.LETTER_U)
+	var instant := _drop_card(MatchState.LETTER_O)
 	MatchState.claim_pickup(instant, 901)
 	_check("a zero hold grants on touch", MatchState.letter_count(901), 2)
 	_check("without ever starting one", MatchState.is_holding_letter(901), false)
@@ -668,7 +668,7 @@ func _run_letter_hold() -> void:
 	_check("one letter short and holding the third",
 		MatchState.is_holding_letter(901), true)
 	MatchState.award_letter(1, MatchState.LETTER_G)
-	MatchState.award_letter(1, MatchState.LETTER_U)
+	MatchState.award_letter(1, MatchState.LETTER_O)
 	MatchState.award_letter(1, MatchState.LETTER_B)
 	_check("somebody else completes the word first",
 		MatchState.phase, MatchState.Phase.POST_MATCH)
@@ -720,7 +720,7 @@ func _run_elder() -> void:
 		c.elder_jump_multiplier = 1.4
 		c.lightning_delay = 0.3)
 
-	# The robe is a drop like any other: it lies there and the first living Gub
+	# The robe is a drop like any other: it lies there and the first living Bog
 	# to walk over it takes it.
 	var robe := _drop_robe()
 	_check("nobody starts as the Elder", MatchState.is_elder(901), false)
@@ -746,9 +746,9 @@ func _run_elder() -> void:
 	# It still collects everything else. The robe replaces the spear and
 	# nothing else (D-038).
 	MatchState.claim_pickup(MatchState._spawn_drop(
-		Pickup.Kind.MUSHROOM, 0, Vector3.ZERO), 901)
+		Pickup.Kind.SHIELD, 0, Vector3.ZERO), 901)
 	if combat != null:
-		_check("an Elder still picks up mushrooms", combat.mushroom_count(), 1)
+		_check("an Elder still picks up shields", combat.shield_count(), 1)
 
 	# The cooldown gates a second cast, and it is the host's copy that does it —
 	# `_cast` goes straight at `_host_cast_lightning`, which is the only thing
@@ -792,30 +792,30 @@ func _run_elder() -> void:
 		_check("and the crackle back in the fist", hand.is_charged(), true)
 	Net.config.win_condition = MatchConfig.WinCondition.KILL_LIMIT
 
-	# **The boosts** (D-040). Read off `Gub` rather than off the config, because
+	# **The boosts** (D-040). Read off `Bog` rather than off the config, because
 	# the thing worth checking is that the multiplier reached the one point every
 	# stance comes out of — a boost applied to `RUN_SPEED` alone is a walking
 	# Elder that moves at exactly everybody else's pace, and the difference
 	# between those two bugs and no bug at all is invisible from the dial.
-	var body: Gub = MatchState.gubs.get(901)
+	var body: Bog = MatchState.bogs.get(901)
 	if body != null:
 		_near("the Elder walks faster", body.target_speed(),
-			Gub.WALK_SPEED * Net.config.elder_speed_multiplier)
+			Bog.WALK_SPEED * Net.config.elder_speed_multiplier)
 		body.wants_sprint = true
 		_near("and sprints faster by the same factor", body.target_speed(),
-			Gub.RUN_SPEED * Net.config.elder_speed_multiplier)
+			Bog.RUN_SPEED * Net.config.elder_speed_multiplier)
 		body.wants_sprint = false
 		_near("and jumps harder", body.jump_velocity(),
-			Gub.JUMP_VELOCITY * Net.config.elder_jump_multiplier)
+			Bog.JUMP_VELOCITY * Net.config.elder_jump_multiplier)
 	# The apex, which is the number that actually decides whether a boost puts a
 	# player somewhere a map did not plan for — and it is not the number on the
 	# slider, because height goes as the square of launch velocity. Pinned here
 	# rather than left in a comment: the shipping 1.25 is +56% of height, and
 	# that is the fact anybody retuning this dial has to be handed.
 	_near("a plain jump tops out at 1.69 m",
-		snappedf(Gub.apex_for(Gub.JUMP_VELOCITY), 0.01), 1.69)
+		snappedf(Bog.apex_for(Bog.JUMP_VELOCITY), 0.01), 1.69)
 	_near("the shipping 1.25x boost tops out at 2.64",
-		snappedf(Gub.apex_for(Gub.JUMP_VELOCITY * 1.25), 0.01), 2.64)
+		snappedf(Bog.apex_for(Bog.JUMP_VELOCITY * 1.25), 0.01), 2.64)
 
 	# **An Elder cannot be killed.** This supersedes D-038's "dying consumes the
 	# robe": with nothing able to kill one, death is no longer the exit and the
@@ -846,13 +846,13 @@ func _run_elder() -> void:
 	_check("and it is not longer than the dial",
 		MatchState.elder_remaining(901) <= Net.config.elder_duration, true)
 
-	# **Expiry is not a death.** Everything the Gub had before the robe is still
-	# there after it: the letter it earned mid-scenario and the mushroom it
+	# **Expiry is not a death.** Everything the Bog had before the robe is still
+	# there after it: the letter it earned mid-scenario and the shield it
 	# picked up. That is the half of this most likely to rot, because the
 	# obvious way to write the teardown is to reuse the death path.
 	var pickups := MatchState._pickups.size()
 	var letters_before := MatchState.letters_for(901)
-	var stock_before := combat.mushroom_count() if combat != null else -1
+	var stock_before := combat.shield_count() if combat != null else -1
 	_expire_elder(901)
 	_check("the robe burns out on its own", MatchState.is_elder(901), false)
 	_check("and comes off the body", _wearing_robe(901), false)
@@ -861,22 +861,22 @@ func _run_elder() -> void:
 	_check("expiry is not a death", MatchState.is_alive(901), true)
 	_check("it keeps its letters", MatchState.letters_for(901), letters_before)
 	if combat != null and hand != null:
-		_check("and its carried stock", combat.mushroom_count(), stock_before)
+		_check("and its carried stock", combat.shield_count(), stock_before)
 		_check("the spear comes back", combat.has_spear(), true)
 		_check("and the bolt is gone", combat.has_lightning(), false)
 		_check("with the shaft back in the fist", hand.is_carried(), true)
 	if body != null:
-		_near("and it moves like a Gub again", body.target_speed(), Gub.WALK_SPEED)
-		_near("and jumps like one", body.jump_velocity(), Gub.JUMP_VELOCITY)
+		_near("and it moves like a Bog again", body.target_speed(), Bog.WALK_SPEED)
+		_near("and jumps like one", body.jump_velocity(), Bog.JUMP_VELOCITY)
 
 	# **The void still kills, and it is the only thing that does.** Spawn
-	# protection carves the same hole for the same reason: a Gub that cannot die
+	# protection carves the same hole for the same reason: a Bog that cannot die
 	# to the void falls past the bottom of the island for ever, alive and
 	# unreachable. Without this the invincibility above is a soft-lock waiting
 	# for somebody to walk off a ledge.
 	MatchState.claim_pickup(_drop_robe(), 901)
 	_check("a second robe is claimable", MatchState.is_elder(901), true)
-	MatchState.report_kill(901, 901, Gub.Cause.VOID, Vector3.ZERO, Vector3.DOWN, "")
+	MatchState.report_kill(901, 901, Bog.Cause.VOID, Vector3.ZERO, Vector3.DOWN, "")
 	_check("the void kills an Elder", MatchState.is_alive(901), false)
 	_check("and takes the robe with it", MatchState.is_elder(901), false)
 	_check("and off the body", _wearing_robe(901), false)
@@ -915,19 +915,19 @@ func _run_elder() -> void:
 	_sweep_effects()
 
 
-## The lobby pick, where it actually lands: on a Gub, in a match (D-069).
+## The lobby pick, where it actually lands: on a Bog, in a match (D-069).
 ##
 ## `tools/weapon_select.tscn` has the other half — the roster row, the request
 ## path, the lock and the rematch. This is the half that only exists once a body
-## has been built from that row: `MatchState._create_gub` seeds `Gub.weapon` off
-## the roster, `GubCombat` gates its three `has_*` on it, and the three things
+## has been built from that row: `MatchState._create_bog` seeds `Bog.weapon` off
+## the roster, `BogCombat` gates its three `has_*` on it, and the three things
 ## that could already take a weapon away have to go on doing exactly that.
 ##
-## Why it is here and not there: these are real Gubs with real combat nodes and
+## Why it is here and not there: these are real Bogs with real combat nodes and
 ## real hands, spawned by the host through `register_arena`, and this file is
 ## already the one place that stands those up (see `_combat` and `_hand`).
 func _run_loadout() -> void:
-	_scenario("three Gubs, three weapons")
+	_scenario("three Bogs, three weapons")
 	_begin(3, func(c: MatchConfig) -> void:
 		c.mode = MatchConfig.Mode.FREE_FOR_ALL
 		c.win_condition = MatchConfig.WinCondition.KILL_LIMIT
@@ -944,14 +944,14 @@ func _run_loadout() -> void:
 	var want := {1: Loadout.Weapon.SPEAR, 901: Loadout.Weapon.BOW,
 		902: Loadout.Weapon.SWORD}
 	for peer_id: int in want:
-		var gub: Gub = MatchState.gubs.get(peer_id)
-		_check("%d got a Gub" % peer_id, is_instance_valid(gub), true)
-		if not is_instance_valid(gub):
+		var bog: Bog = MatchState.bogs.get(peer_id)
+		_check("%d got a Bog" % peer_id, is_instance_valid(bog), true)
+		if not is_instance_valid(bog):
 			continue
-		# Seeded from this peer's own copy of the roster by `_create_gub`, beside
+		# Seeded from this peer's own copy of the roster by `_create_bog`, beside
 		# the name and the team, which is why no replication was needed for it.
-		_check("%d's Gub carries what the roster says" % peer_id,
-			gub.weapon, want[peer_id])
+		_check("%d's Bog carries what the roster says" % peer_id,
+			bog.weapon, want[peer_id])
 
 		var combat := _combat(peer_id)
 		var hand := _hand(peer_id)
@@ -979,7 +979,7 @@ func _run_loadout() -> void:
 		_check("%d: no letter" % peer_id, hand.has_letter(), false)
 		_check("%d: no crackle" % peer_id, hand.is_charged(), false)
 
-	# **Three cooldowns, and a Gub only spends one of them.** The other two go on
+	# **Three cooldowns, and a Bog only spends one of them.** The other two go on
 	# ticking and must not be able to reach into a hand they have nothing to do
 	# with — which is the thing that would quietly come apart if the gate had
 	# been written as a `match` on the weapon somewhere else.
@@ -1049,9 +1049,9 @@ func _run_loadout() -> void:
 	Net.players[1].erase("weapon")
 	var plain := _combat(1)
 	if plain != null:
-		MatchState.gubs[1].weapon = Net.player_weapon(1)
+		MatchState.bogs[1].weapon = Net.player_weapon(1)
 		plain._refresh_hand()
-		_check("a row with no weapon on it is a spear Gub",
+		_check("a row with no weapon on it is a spear Bog",
 			plain.has_spear(), true)
 		_check("with a shaft in its fist", _hand(1).is_carried(), true)
 		_check("and neither of the other two", plain.has_bow(), false)
@@ -1090,15 +1090,15 @@ func _run_void_credit() -> void:
 
 	# Nobody touched them: the fall is their own doing, and costs them a death
 	# without paying anyone.
-	MatchState.report_kill(901, 901, Gub.Cause.VOID, Vector3.ZERO, Vector3.DOWN, "")
+	MatchState.report_kill(901, 901, Bog.Cause.VOID, Vector3.ZERO, Vector3.DOWN, "")
 	_check("a fall costs a death", MatchState.deaths(901), 1)
 	_check("and pays nobody", MatchState.kills(901), 0)
 	_revive(901)
 
-	# Lured off the edge: `note_attack` is what carries the credit across.
+	# Pulled off the edge: `note_attack` is what carries the credit across.
 	MatchState.note_attack(901, 902)
-	MatchState.report_kill(901, 902, Gub.Cause.VOID, Vector3.ZERO, Vector3.DOWN, "")
-	_check("the lurer is credited", MatchState.kills(902), 1)
+	MatchState.report_kill(901, 902, Bog.Cause.VOID, Vector3.ZERO, Vector3.DOWN, "")
+	_check("the thrower is credited", MatchState.kills(902), 1)
 
 
 func _run_spawn_protection() -> void:
@@ -1110,18 +1110,18 @@ func _run_spawn_protection() -> void:
 		c.time_limit = 0
 		c.spawn_protection = 5.0)
 
-	# A Gub that has just spawned is solid but unkillable, so spawning face to
+	# A Bog that has just spawned is solid but unkillable, so spawning face to
 	# face with someone holding a spear is survivable.
-	var victim: Gub = MatchState.gubs.get(901)
-	_check("a Gub exists to protect", is_instance_valid(victim), true)
+	var victim: Bog = MatchState.bogs.get(901)
+	_check("a Bog exists to protect", is_instance_valid(victim), true)
 	_check("and starts protected", victim.is_invulnerable(), true)
 	_kill(901, 1)
 	_check("a spear cannot kill it", MatchState.is_alive(901), true)
 	_check("and earns nothing", MatchState.kills(1), 0)
 
 	# Falling off the island is not something protection should save you from,
-	# or a protected Gub could sit in the void forever.
-	MatchState.report_kill(901, 901, Gub.Cause.VOID, Vector3.ZERO, Vector3.DOWN, "")
+	# or a protected Bog could sit in the void forever.
+	MatchState.report_kill(901, 901, Bog.Cause.VOID, Vector3.ZERO, Vector3.DOWN, "")
 	_check("but the void still takes it", MatchState.is_alive(901), false)
 
 	# Once protection lapses the same spear lands.
@@ -1169,7 +1169,7 @@ func _run_random_teams() -> void:
 			_check("%d into %d: team sizes within one (%s)" % [count, teams, str(sizes)],
 				high - low <= 1, true)
 
-	# Now through the shipping path: a seven-Gub lobby, host pressing Start.
+	# Now through the shipping path: a seven-Bog lobby, host pressing Start.
 	Net.start_offline()
 	for i in range(1, 7):
 		Net.players[900 + i] = {"name": "R%d" % i, "team": 0, "ready": true}
@@ -1189,7 +1189,7 @@ func _run_random_teams() -> void:
 	var counts := [0, 0]
 	for peer_id: int in Net.peer_ids():
 		counts[Net.player_team(peer_id)] += 1
-	_check("Start dealt seven Gubs four and three", [mini(counts[0], counts[1]),
+	_check("Start dealt seven Bogs four and three", [mini(counts[0], counts[1]),
 		maxi(counts[0], counts[1])], [3, 4])
 
 	# The user's call: a rematch keeps the teams as dealt.
@@ -1232,7 +1232,7 @@ func _teams_digest() -> Array:
 	return out
 
 
-## Capture G·U·B (D-051), in a world with a floor in it.
+## Capture B·O·G (D-051), in a world with a floor in it.
 ##
 ## Every other letters scenario here has no geometry, and that is fine for them;
 ## this one cannot do without. A dead carrier's card lands on *the ground under
@@ -1281,17 +1281,17 @@ func _flat_distance(a: Vector3, b: Vector3) -> float:
 	return Vector2(a.x, a.z).distance_to(Vector2(b.x, b.z))
 
 
-## Put a Gub somewhere and let the host's own tick look at it, synchronously, so
-## no frame in between can move a remote Gub back towards its last snapshot.
+## Put a Bog somewhere and let the host's own tick look at it, synchronously, so
+## no frame in between can move a remote Bog back towards its last snapshot.
 func _stand(peer_id: int, at: Vector3) -> void:
-	var gub: Gub = MatchState.gubs.get(peer_id)
-	if is_instance_valid(gub):
-		gub.global_position = at
+	var bog: Bog = MatchState.bogs.get(peer_id)
+	if is_instance_valid(bog):
+		bog.global_position = at
 	MatchState._tick_capture()
 
 
 func _run_capture() -> void:
-	_scenario("capture G·U·B: three cards, carried home, dropped and returned")
+	_scenario("capture B·O·G: three cards, carried home, dropped and returned")
 	var world := _capture_world()
 	var finished := {}
 	var dropped: Array = []
@@ -1341,31 +1341,31 @@ func _run_capture() -> void:
 
 	# No card ever comes out of a corpse in this mode, even at 100%.
 	var before := MatchState._pickups.size()
-	MatchState.report_kill(903, 1, Gub.Cause.SPEAR, CAPTURE_DEATH_2, Vector3.FORWARD, "Spine1")
+	MatchState.report_kill(903, 1, Bog.Cause.SPEAR, CAPTURE_DEATH_2, Vector3.FORWARD, "Spine1")
 	_check("a death still drops loot", MatchState._pickups.size(), before + 1)
 	_check("but never a letter", _letter_cards().size(), 3)
 	_revive(903)
 
 	# Pick up. Peer 1 is team 0, whose base is CAPTURE_BASES[0].
-	var g_card := _capture_card(MatchState.LETTER_G)
-	MatchState.claim_pickup(g_card, 1)
+	var b_card := _capture_card(MatchState.LETTER_B)
+	MatchState.claim_pickup(b_card, 1)
 	_check("touching a card makes a carrier", MatchState.is_holding_letter(1), true)
-	_check("of that letter", MatchState.letter_hold_letter(1), MatchState.LETTER_G)
-	_check("the card leaves the ground", _card_live(g_card), false)
-	_check("the letter is carried", MatchState.capture_state(MatchState.LETTER_G), "carried")
+	_check("of that letter", MatchState.letter_hold_letter(1), MatchState.LETTER_B)
+	_check("the card leaves the ground", _card_live(b_card), false)
+	_check("the letter is carried", MatchState.capture_state(MatchState.LETTER_B), "carried")
 	_check("a carry has no clock", is_inf(MatchState.letter_hold_remaining(1)), true)
 	_check("and scores nothing yet", MatchState.team_letters(0), 0)
 	var combat := _combat(1)
 	if combat != null:
 		_check("a carrier cannot throw", combat.has_spear(), false)
-	var body: Gub = MatchState.gubs.get(1)
+	var body: Bog = MatchState.bogs.get(1)
 	if body != null:
 		_near("a carrier walks at the carrier speed", body.target_speed(),
-			Gub.WALK_SPEED * 0.8)
+			Bog.WALK_SPEED * 0.8)
 	# One at a time.
-	var u_card := _capture_card(MatchState.LETTER_U)
-	MatchState.claim_pickup(u_card, 1)
-	_check("a carrier leaves a second card where it is", _card_live(u_card), true)
+	var o_card := _capture_card(MatchState.LETTER_O)
+	MatchState.claim_pickup(o_card, 1)
+	_check("a carrier leaves a second card where it is", _card_live(o_card), true)
 	# Still nothing after the carry has run far longer than any hold.
 	MatchState._tick_letter_holds()
 	_check("no clock ends a carry", MatchState.is_holding_letter(1), true)
@@ -1379,95 +1379,95 @@ func _run_capture() -> void:
 	# The right one.
 	_stand(1, CAPTURE_BASES[0] + Vector3(2.5, 0.0, 1.5))
 	_check("walking into your own base banks it", MatchState.team_letters(0),
-		MatchState.LETTER_G)
-	_check("the banker's own row keeps it", MatchState.letters_for(1), MatchState.LETTER_G)
+		MatchState.LETTER_B)
+	_check("the banker's own row keeps it", MatchState.letters_for(1), MatchState.LETTER_B)
 	_check("and the carry ends", MatchState.is_holding_letter(1), false)
-	_check("the card goes back to its spawn", MatchState.capture_state(MatchState.LETTER_G),
+	_check("the card goes back to its spawn", MatchState.capture_state(MatchState.LETTER_B),
 		"home")
-	var g_again: Pickup = MatchState._pickups.get(_capture_card(MatchState.LETTER_G))
+	var b_again: Pickup = MatchState._pickups.get(_capture_card(MatchState.LETTER_B))
 	_check("as a real card on its home point",
-		g_again != null and _flat_distance(g_again.global_position, CAPTURE_HOMES[0]) < 0.01,
+		b_again != null and _flat_distance(b_again.global_position, CAPTURE_HOMES[0]) < 0.01,
 		true)
 	_check("still three letters in the world", _letter_cards().size(), 3)
 	_check("and the match goes on", MatchState.phase, MatchState.Phase.PLAYING)
 	_stand(1, Vector3.ZERO)
 
 	# A team cannot pick up a letter it has already banked; the other team can.
-	var g_id := _capture_card(MatchState.LETTER_G)
-	MatchState.claim_pickup(g_id, 902)
-	_check("a team leaves its own banked letter on the ground", _card_live(g_id), true)
+	var b_id := _capture_card(MatchState.LETTER_B)
+	MatchState.claim_pickup(b_id, 902)
+	_check("a team leaves its own banked letter on the ground", _card_live(b_id), true)
 	_check("and its player carries nothing", MatchState.is_holding_letter(902), false)
 
 	# A carrier dies: the card drops where they died.
-	MatchState.claim_pickup(_capture_card(MatchState.LETTER_U), 901)
-	_check("the other team picks up U", MatchState.letter_hold_letter(901),
-		MatchState.LETTER_U)
-	MatchState.report_kill(901, 1, Gub.Cause.SPEAR, CAPTURE_DEATH, Vector3.FORWARD, "Spine1")
+	MatchState.claim_pickup(_capture_card(MatchState.LETTER_O), 901)
+	_check("the other team picks up O", MatchState.letter_hold_letter(901),
+		MatchState.LETTER_O)
+	MatchState.report_kill(901, 1, Bog.Cause.SPEAR, CAPTURE_DEATH, Vector3.FORWARD, "Spine1")
 	_check("a dead carrier carries nothing", MatchState.is_holding_letter(901), false)
-	_check("the card is dropped", MatchState.capture_state(MatchState.LETTER_U), "dropped")
-	var lying: Pickup = MatchState._pickups.get(_capture_card(MatchState.LETTER_U))
+	_check("the card is dropped", MatchState.capture_state(MatchState.LETTER_O), "dropped")
+	var lying: Pickup = MatchState._pickups.get(_capture_card(MatchState.LETTER_O))
 	_check("there is a card on the ground", lying != null, true)
 	if lying != null:
 		_check("at the death point", _flat_distance(lying.global_position, CAPTURE_DEATH) < 0.01,
 			true)
 		_near("on the floor under it", lying.global_position.y, Pickup.HOVER)
-		_check("carrying U", lying.letter, MatchState.LETTER_U)
+		_check("carrying O", lying.letter, MatchState.LETTER_O)
 	# Within a tenth of a second: the host's clock has moved on by however long
 	# the lines since the death took.
 	_check("and it goes home after the configured time", absf(
-		float(MatchState._capture[MatchState.LETTER_U]["return_at"]) - MatchState._now() - 12.0)
+		float(MatchState._capture[MatchState.LETTER_O]["return_at"]) - MatchState._now() - 12.0)
 		< 0.1, true)
-	_check("the drop is told", dropped, [[901, MatchState.LETTER_U]])
+	_check("the drop is told", dropped, [[901, MatchState.LETTER_O]])
 	_check("the loot roll still gave no letter", _letter_cards().size(), 3)
 	_revive(901)
 
 	# Anybody can recover it before then — here the team that killed the carrier.
-	var dropped_id := _capture_card(MatchState.LETTER_U)
+	var dropped_id := _capture_card(MatchState.LETTER_O)
 	MatchState._tick_capture()
-	_check("nothing returns early", MatchState.capture_state(MatchState.LETTER_U), "dropped")
+	_check("nothing returns early", MatchState.capture_state(MatchState.LETTER_O), "dropped")
 	MatchState.claim_pickup(dropped_id, 902)
 	_check("an enemy picks up the dropped card", MatchState.letter_hold_letter(902),
-		MatchState.LETTER_U)
-	_check("which clears its return", MatchState.capture_state(MatchState.LETTER_U), "carried")
+		MatchState.LETTER_O)
+	_check("which clears its return", MatchState.capture_state(MatchState.LETTER_O), "carried")
 
 	# And drops it again; this time nobody reaches it.
-	MatchState.report_kill(902, 901, Gub.Cause.SPEAR, CAPTURE_DEATH_2, Vector3.FORWARD, "Spine1")
-	var second_drop := _capture_card(MatchState.LETTER_U)
-	_check("dropped a second time", MatchState.capture_state(MatchState.LETTER_U), "dropped")
-	MatchState._capture[MatchState.LETTER_U]["return_at"] = 0.001
+	MatchState.report_kill(902, 901, Bog.Cause.SPEAR, CAPTURE_DEATH_2, Vector3.FORWARD, "Spine1")
+	var second_drop := _capture_card(MatchState.LETTER_O)
+	_check("dropped a second time", MatchState.capture_state(MatchState.LETTER_O), "dropped")
+	MatchState._capture[MatchState.LETTER_O]["return_at"] = 0.001
 	MatchState._tick_capture()
 	_check("a card left lying goes home on its own clock",
-		MatchState.capture_state(MatchState.LETTER_U), "home")
+		MatchState.capture_state(MatchState.LETTER_O), "home")
 	_check("the dropped copy is gone", _card_live(second_drop), false)
-	var u_home: Pickup = MatchState._pickups.get(_capture_card(MatchState.LETTER_U))
-	_check("and a card is back on U's home point",
-		u_home != null and _flat_distance(u_home.global_position, CAPTURE_HOMES[1]) < 0.01, true)
-	_check("the return is told", returned, [MatchState.LETTER_U])
+	var o_home: Pickup = MatchState._pickups.get(_capture_card(MatchState.LETTER_O))
+	_check("and a card is back on O's home point",
+		o_home != null and _flat_distance(o_home.global_position, CAPTURE_HOMES[1]) < 0.01, true)
+	_check("the return is told", returned, [MatchState.LETTER_O])
 	_check("never more than three", _letter_cards().size(), 3)
 	_revive(902)
 
 	# A carrier who falls into the void: nowhere to land, so the card goes home.
-	MatchState.claim_pickup(_capture_card(MatchState.LETTER_B), 903)
-	MatchState.report_kill(903, 903, Gub.Cause.VOID, Vector3(0, -200, 0), Vector3.DOWN, "")
+	MatchState.claim_pickup(_capture_card(MatchState.LETTER_G), 903)
+	MatchState.report_kill(903, 903, Bog.Cause.VOID, Vector3(0, -200, 0), Vector3.DOWN, "")
 	_check("a card lost to the void goes straight home",
-		MatchState.capture_state(MatchState.LETTER_B), "home")
+		MatchState.capture_state(MatchState.LETTER_G), "home")
 	_check("still three", _letter_cards().size(), 3)
 	_revive(903)
 
 	# Team 0 banks the other two, and wins.
-	MatchState.claim_pickup(_capture_card(MatchState.LETTER_U), 1)
+	MatchState.claim_pickup(_capture_card(MatchState.LETTER_O), 1)
 	_stand(1, CAPTURE_BASES[0])
 	_stand(1, Vector3.ZERO)
 	_check("two banked", MatchState.team_letters(0),
-		MatchState.LETTER_G | MatchState.LETTER_U)
+		MatchState.LETTER_B | MatchState.LETTER_O)
 	_check("not over at two", MatchState.phase, MatchState.Phase.PLAYING)
 	# 902's row says alive (`_revive` wrote it) but its body is still the one
-	# that died: a Gub's body keeps its collision where it fell (D-043), and the
+	# that died: a Bog's body keeps its collision where it fell (D-043), and the
 	# body is what stands in a base. That must not bank.
-	MatchState.claim_pickup(_capture_card(MatchState.LETTER_B), 902)
+	MatchState.claim_pickup(_capture_card(MatchState.LETTER_G), 902)
 	_stand(902, CAPTURE_BASES[0])
 	_check("a carrier whose body is dead banks nothing", MatchState.team_letters(0),
-		MatchState.LETTER_G | MatchState.LETTER_U)
+		MatchState.LETTER_B | MatchState.LETTER_O)
 	_check("and keeps carrying", MatchState.is_holding_letter(902), true)
 	# Once the body is back, the same carry in the same base banks.
 	MatchState._respawn(902)
@@ -1497,7 +1497,7 @@ func _run_capture() -> void:
 ## The layout on its own: the fallback out of a ring of spawn pads, and a map's
 ## declared points taking over from it.
 func _run_capture_layout() -> void:
-	_scenario("capture G·U·B: bases and letters out of the spawn pads")
+	_scenario("capture B·O·G: bases and letters out of the spawn pads")
 	var pads: Array[Transform3D] = []
 	for i in 8:
 		var bearing := TAU * float(i) / 8.0 + 0.2
@@ -1541,9 +1541,9 @@ func _run_capture_layout() -> void:
 	_check("with a base for every team", short.bases.size(), 3)
 
 
-## Free-for-all and Capture G·U·B, both ways round.
+## Free-for-all and Capture B·O·G, both ways round.
 func _run_capture_lobby() -> void:
-	_scenario("capture G·U·B is a Teams mode")
+	_scenario("capture B·O·G is a Teams mode")
 	var config := MatchConfig.new()
 	config.apply_dict({"mode": MatchConfig.Mode.FREE_FOR_ALL,
 		"win_condition": MatchConfig.WinCondition.CAPTURE})
@@ -1681,20 +1681,20 @@ func _run_config_validation() -> void:
 	# here rather than left to be noticed as an arm that finishes after the bolt
 	# has gone.
 	_near("0.2 s of delay is a 2.58x cast",
-		GubAnimator.cast_rate_for_release(0.2), GubAnimator.CAST_WINDOW / 0.2)
+		BogAnimator.cast_rate_for_release(0.2), BogAnimator.CAST_WINDOW / 0.2)
 	_near("and that rate releases at 0.2 s again",
-		GubAnimator.cast_release_for_rate(
-			GubAnimator.cast_rate_for_release(0.2)), 0.2)
+		BogAnimator.cast_release_for_rate(
+			BogAnimator.cast_rate_for_release(0.2)), 0.2)
 	# The two windups are two clips with two windows since D-064, and this is
 	# the line that fails if one of them is ever quietly wired to the other's:
 	# the cast's window is 0.516 s against the throw's 0.500, so a cast played
 	# at the throw's rate lands 16 ms late and a throw played at the cast's
 	# lands early, and nothing else in this file would notice either.
 	_check("the two windups are not the same window",
-		is_equal_approx(GubAnimator.CAST_WINDOW, GubAnimator.THROW_WINDOW), false)
+		is_equal_approx(BogAnimator.CAST_WINDOW, BogAnimator.THROW_WINDOW), false)
 	_near("the spear's own rate still releases at 0.50",
-		GubAnimator.THROW_WINDOW / GubAnimator.THROW_RATE,
-		GubAnimator.THROW_RELEASE_TIME)
+		BogAnimator.THROW_WINDOW / BogAnimator.THROW_RATE,
+		BogAnimator.THROW_RELEASE_TIME)
 	# The half second the user asked for, asserted against the literal rather
 	# than against the constant it is derived from — which is the only way this
 	# line can ever fail. `THROW_RELEASE_TIME` is `THROW_WINDOW / THROW_RATE` and
@@ -1704,20 +1704,20 @@ func _run_config_validation() -> void:
 	# stops being half a second. `tools/combat_range.gd`'s `release` mode is the
 	# other half, and the half that measures rather than asserts.
 	_near("and that is the half second the throw was asked for",
-		GubAnimator.THROW_RELEASE_TIME, 0.5)
+		BogAnimator.THROW_RELEASE_TIME, 0.5)
 	# The setting that would otherwise be a division by zero.
 	_near("a zero delay saturates rather than dividing by zero",
-		GubAnimator.cast_rate_for_release(0.0), GubAnimator.CAST_RATE_MAX)
+		BogAnimator.cast_rate_for_release(0.0), BogAnimator.CAST_RATE_MAX)
 	_check("and the clip still plays at a finite rate",
-		is_finite(GubAnimator.cast_rate_for_release(0.0)), true)
+		is_finite(BogAnimator.cast_rate_for_release(0.0)), true)
 	# And what that ceiling *means*, which is the half of it that can rot: it is
 	# 0.14 s of arm off the cast's own window, and the day somebody moves the
 	# window without moving the floor this is the line that says the ceiling has
 	# stopped meaning what its comment says (D-063's lesson, applied to the clip
 	# that inherited the ceiling).
 	_near("and the ceiling is still the floor it says it is",
-		GubAnimator.cast_release_for_rate(GubAnimator.CAST_RATE_MAX),
-		GubAnimator.CAST_RELEASE_MIN)
+		BogAnimator.cast_release_for_rate(BogAnimator.CAST_RATE_MAX),
+		BogAnimator.CAST_RELEASE_MIN)
 
 	# ------------------------------------------------------------- the bow ---
 	#
@@ -1727,7 +1727,7 @@ func _run_config_validation() -> void:
 	# is the other half, and the half that measures rather than asserts.
 	config.apply_dict({"bow_drop_snap": 0.0, "bow_draw_time": 90.0})
 	# Not clamped to zero, and this is the one bow clamp with an argument rather
-	# than a range behind it: `GubCombat.flat_band` divides by the drop, and a
+	# than a range behind it: `BogCombat.flat_band` divides by the drop, and a
 	# drop of zero is a hitscan weapon with a flight time, which is not an arrow.
 	_check("a weightless arrow is clamped off zero", config.bow_drop_snap, 0.5)
 	_check("an absurd draw time is clamped", config.bow_draw_time, 4.0)
@@ -1769,29 +1769,29 @@ func _run_config_validation() -> void:
 		1.0 - two_thirds, 1.0 - pow(2.0 / 3.0, ArrowProjectile.DAMAGE_CURVE))
 
 	# The re-derivation, and the proof that it is the same arithmetic it always
-	# was: `GubCombat.LIGHTNING_RANGE` was a typed 28.0 whose comment derived it
+	# was: `BogCombat.LIGHTNING_RANGE` was a typed 28.0 whose comment derived it
 	# from the spear, and `flat_band` is that comment. Asked of the spear's own
 	# two constants it still comes out at 28, which is the line that fails if
-	# anybody ever "tidies" `FLAT_BAND_DROP` into a Gub's collision height.
+	# anybody ever "tidies" `FLAT_BAND_DROP` into a Bog's collision height.
 	_check("the spear's flat band is still the 28 m the Elder's range was",
-		absf(GubCombat.flat_band(SpearProjectile.SPEED, SpearProjectile.DROP) - 28.0)
+		absf(BogCombat.flat_band(SpearProjectile.SPEED, SpearProjectile.DROP) - 28.0)
 			< 0.05, true)
 	# And what the re-derivation is *for*: a full draw is the flattest thing in
 	# the game and a snap shot is the least flat, so the Elder's range now rises
 	# to the top of the bow's band rather than sitting inside it.
-	var spear_band := GubCombat.flat_band(SpearProjectile.SPEED, SpearProjectile.DROP)
+	var spear_band := BogCombat.flat_band(SpearProjectile.SPEED, SpearProjectile.DROP)
 	_check("a full draw is flatter than a spear",
-		GubCombat.flat_band(bow.bow_speed_full, bow.bow_drop_full) > spear_band, true)
+		BogCombat.flat_band(bow.bow_speed_full, bow.bow_drop_full) > spear_band, true)
 	_check("and a snap shot is not",
-		GubCombat.flat_band(bow.bow_speed_snap, bow.bow_drop_snap) < spear_band, true)
+		BogCombat.flat_band(bow.bow_speed_snap, bow.bow_drop_snap) < spear_band, true)
 
-	# Regression guard: lure_fuse defaulted to 0.35 while its own range started
+	# Regression guard: magnet_fuse defaulted to 0.35 while its own range started
 	# at 0.5, so every fresh config was silently raised and the declared default
 	# was never the value anyone played with.
 	var fresh := MatchConfig.new()
-	var default_fuse := fresh.lure_fuse
+	var default_fuse := fresh.magnet_fuse
 	fresh.apply_dict({})
-	_check("every default survives its own clamp", fresh.lure_fuse, default_fuse)
+	_check("every default survives its own clamp", fresh.magnet_fuse, default_fuse)
 
 	# Whatever a host sets must arrive unchanged at the far end.
 	var host := MatchConfig.new()
@@ -1800,7 +1800,7 @@ func _run_config_validation() -> void:
 	host.friendly_fire = true
 	host.map_seed = 987654
 	host.map = MapCatalog.ids()[MapCatalog.ids().size() - 1]
-	host.lure_radius = 12.5
+	host.magnet_radius = 12.5
 	host.random_teams = true
 	# All eight bow dials, because a field left out of `_FIELDS` is a setting
 	# the host drags and nobody else ever sees — and eight of them arrived at
@@ -1826,7 +1826,7 @@ func _run_config_validation() -> void:
 	_check("the map survives", arrived.map, host.map)
 	_check("and the map is in the replicated key list",
 		host.to_dict().has("map"), true)
-	_check("floats survive", arrived.lure_radius, host.lure_radius)
+	_check("floats survive", arrived.magnet_radius, host.magnet_radius)
 	for field: String in ["bow_draw_time", "bow_recharge", "bow_damage_snap",
 			"bow_damage_full", "bow_speed_snap", "bow_speed_full",
 			"bow_drop_snap", "bow_drop_full"]:

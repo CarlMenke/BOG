@@ -1,11 +1,11 @@
 class_name CaptureLayout
 extends RefCounted
-## Where the bases and the three letters are in a Capture G·U·B match (D-051).
+## Where the bases and the three letters are in a Capture B·O·G match (D-051).
 ##
 ## **A map can say, and every map that does not gets a fallback.** A hand-made
 ## map declares its objectives on its `StaticMap` root (see `static_map.gd`):
 ## a `Bases` node with one `Marker3D` per team, in team order, and a `Letters`
-## node with three `Marker3D`s in G, U, B order. Nothing on disk declares either
+## node with three `Marker3D`s in B, O, G order. Nothing on disk declares either
 ## yet, so today every map — the island, Rust and Kopje Crossing — is played on
 ## the fallback below, which is a **placeholder** until a map built for this
 ## mode exists:
@@ -16,14 +16,16 @@ extends RefCounted
 ##   arc's centroid — a pad rather than the centroid itself, because a pad is
 ##   the one point on any map already proven standable, and a centroid can be
 ##   inside a shipping container.
-## - **Letters.** On the line through the middle of the two first bases: G at
-##   the midpoint, U and B either side of it across the axis between the bases,
-##   so all three are equidistant from the two bases. Each is then settled onto
+## - **Letters.** On the line through the middle of the two first bases: B at
+##   the midpoint, O and G either side of it across the axis between the bases,
+##   so all three are equidistant from the two bases. The roles moved with the
+##   word and the geometry did not (D-080): the middle point is still the middle
+##   point, and it is the first letter of the word that now sits on it. Each is then settled onto
 ##   real ground with head room above it (`settle`), searching outward in rings
 ##   when the ideal point is inside something.
 ##
 ## **Team spawns follow the bases**, declared or not: every pad belongs to the
-## nearest base, and a Gub in this mode respawns on one of its own team's pads
+## nearest base, and a Bog in this mode respawns on one of its own team's pads
 ## (`MatchState._spawn_pool`). A team the pads cannot be shared with spawns
 ## anywhere, rather than nowhere.
 ##
@@ -41,7 +43,7 @@ const DEFAULT_BASE_RADIUS := 4.0
 ## the ground under a platform base.
 const BASE_HEIGHT := 3.0
 
-## A Gub's collision, taken from `Gub` rather than typed, for the head-room test.
+## A Bog's collision, taken from `Bog` rather than typed, for the head-room test.
 const CAPSULE_LIFT := 0.775
 const LAYER_WORLD := 1
 ## A surface steeper than this is a wall to put a card against, not a floor.
@@ -66,7 +68,7 @@ var bases: Array[Vector3] = []
 var base_radius: float = DEFAULT_BASE_RADIUS
 ## For each spawn pad, in pad order, the team whose base it is nearest.
 var pad_team: Array[int] = []
-## Three unsettled points, G, U, B.
+## Three unsettled points, B, O, G.
 var letters: Array[Vector3] = []
 ## Whether the map stated these, or the fallback made them up.
 var bases_declared: bool = false
@@ -246,7 +248,7 @@ static func fallback_letters(base_points: Array[Vector3],
 	return out
 
 
-## Every letter point settled onto real ground, in G, U, B order. `space` null
+## Every letter point settled onto real ground, in B, O, G order. `space` null
 ## means there is no world to ask (a rules harness), and the points come back as
 ## planned.
 func settle_letters(space: PhysicsDirectSpaceState3D) -> Array[Vector3]:
@@ -264,7 +266,7 @@ func settle_letters(space: PhysicsDirectSpaceState3D) -> Array[Vector3]:
 
 
 ## A standable spot at or near `point`: a floor under it, not too steep, with a
-## Gub's worth of room above it, as close to `reference_y` in height as the
+## Bog's worth of room above it, as close to `reference_y` in height as the
 ## column allows. Searches rings outward when the point itself fails, and
 ## returns `point` untouched when nothing anywhere nearby passes — a card in a
 ## strange place is a smaller problem than no card.
@@ -313,11 +315,11 @@ static func _ground(space: PhysicsDirectSpaceState3D, at: Vector3,
 	return best
 
 
-## Whether a Gub standing at `foot` fits there.
+## Whether a Bog standing at `foot` fits there.
 static func has_headroom(space: PhysicsDirectSpaceState3D, foot: Vector3) -> bool:
 	var capsule := CapsuleShape3D.new()
-	capsule.radius = Gub.CAPSULE_RADIUS
-	capsule.height = Gub.STAND_HEIGHT
+	capsule.radius = Bog.CAPSULE_RADIUS
+	capsule.height = Bog.STAND_HEIGHT
 	var query := PhysicsShapeQueryParameters3D.new()
 	query.shape = capsule
 	# A few centimetres up, so the floor the capsule is standing on is not

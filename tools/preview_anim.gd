@@ -1,20 +1,20 @@
 extends Node3D
-## Contact sheet: one Gub per sampled moment of a clip, so a whole animation can
+## Contact sheet: one Bog per sampled moment of a clip, so a whole animation can
 ## be judged from a single snapshot. Development tool, not shipped.
 ##
 ##   Godot --path . --resolution 1600x700 --script tools/snapshot.gd -- \
 ##       res://tools/preview_anim.tscn out.png 30 Throw [from] [to]
 ##
 ## `from`/`to` narrow the sheet to a window of the clip in seconds. A 3.8 s throw
-## spread over six evenly-spaced Gubs puts one sample anywhere near the release,
+## spread over six evenly-spaced Bogs puts one sample anywhere near the release,
 ## which is not enough to pick a frame off; asking for 1.45-1.80 puts all six
 ## there. Without them the whole clip is sampled, as before.
 ##
-## The Gubs stand on a floor at y = 0 and are placed to fill the frame at
+## The Bogs stand on a floor at y = 0 and are placed to fill the frame at
 ## whatever `--resolution` was asked for: a contact sheet exists to answer "are
 ## the feet planted, is the body facing the same way in every pose, is the hip
 ## drifting across the sheet", and all three of those need a ground line and a
-## Gub big enough to see. `art/generated/gub.glb` imports at 1:1 (1.80 m tall,
+## Bog big enough to see. `art/generated/bog.glb` imports at 1:1 (1.80 m tall,
 ## `root_scale = 1.0`), so nothing here scales it — the old asset came in at
 ## 0.35 and this file used to cancel that out in two places.
 
@@ -23,15 +23,15 @@ extends Node3D
 @export var spacing: float = 1.4
 
 ## What the frame has to hold vertically: the floor a little below the feet, the
-## 1.80 m Gub, its time stamp and the title. The camera is centred on the middle
+## 1.80 m Bog, its time stamp and the title. The camera is centred on the middle
 ## of that and never framed tighter than FRAME_MIN, but a wide render (the
 ## 1600x700 these sheets are taken at) is usually limited by the width instead.
 const FRAME_LOW := -0.3
 const FRAME_HIGH := 2.6
 const FRAME_MIN := 3.2
-## Elbow room either side of the two end Gubs, so an arm never leaves the frame.
+## Elbow room either side of the two end Bogs, so an arm never leaves the frame.
 const FRAME_MARGIN := 1.5
-const GUB := "res://art/generated/gub.glb"
+const BOG := "res://art/generated/bog.glb"
 
 
 func _ready() -> void:
@@ -39,12 +39,12 @@ func _ready() -> void:
 	if args.size() >= 4:
 		clip = args[3]
 
-	var scene := load(GUB) as PackedScene
+	var scene := load(BOG) as PackedScene
 	var probe := scene.instantiate()
 	var probe_ap := probe.find_child("AnimationPlayer", true, false) as AnimationPlayer
 	if not probe_ap.has_animation(clip):
 		push_error("preview_anim: %s has no clip '%s' (has %s)"
-			% [GUB, clip, ", ".join(probe_ap.get_animation_list())])
+			% [BOG, clip, ", ".join(probe_ap.get_animation_list())])
 		probe.free()
 		return
 	var length: float = probe_ap.get_animation(clip).length
@@ -88,7 +88,7 @@ func _ready() -> void:
 	# The ground, as a line rather than a plane. The camera below is orthographic
 	# and level, so a floor plane at y = 0 would be exactly edge-on and invisible;
 	# a 2 cm bar is four pixels of unambiguous "this is where y = 0 is", which is
-	# what "are the feet planted?" needs. It sits behind the Gubs so a foot draws
+	# what "are the feet planted?" needs. It sits behind the Bogs so a foot draws
 	# over it, and a foot that hovers leaves the line showing underneath.
 	var ground := MeshInstance3D.new()
 	var bar := BoxMesh.new()
@@ -112,14 +112,14 @@ func _ready() -> void:
 	add_child(fill)
 
 	# Orthographic, which matters more here than it sounds. Under perspective the
-	# end Gubs of a 7 m wide sheet are seen from 40° off to the side, so a clip
+	# end Bogs of a 7 m wide sheet are seen from 40° off to the side, so a clip
 	# whose facing never changes looks like it swings through 80° across the
 	# sheet — and "do all six poses face the same way" is one of the two
 	# questions this tool exists to answer. In parallel projection every sample
 	# is seen from exactly the same angle, and the floor is a straight line the
 	# feet either touch or do not.
 	#
-	# The frame is as tall as the content needs, or taller if the row of Gubs
+	# The frame is as tall as the content needs, or taller if the row of Bogs
 	# would not otherwise fit across: `size` is the vertical extent (the viewport
 	# keeps height), so the width follows from the aspect the render asked for.
 	var view := get_viewport().get_visible_rect().size

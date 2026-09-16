@@ -1,7 +1,7 @@
 extends Node3D
 ## Lines the generated meshes up under a neutral light so the art pipeline's
 ## results can be eyeballed: the three props and the three letter cards out of
-## `tools/decimate_assets.py`, and the Gub out of `tools/build_gub.py`.
+## `tools/decimate_assets.py`, and the Bog out of `tools/build_bog.py`.
 ## Development tool, not shipped.
 ##
 ## Everything here is normalised to about two metres, so what this answers for
@@ -10,19 +10,19 @@ extends Node3D
 ## world — `tools/combat_range.tscn cards` is where that is looked at.
 
 const MODELS := [
-	"res://art/generated/gub.glb",
+	"res://art/generated/bog.glb",
 	"res://art/generated/spear.glb",
-	"res://art/generated/lure.glb",
-	"res://art/generated/mushroom.glb",
-	"res://art/generated/letter_g.glb",
-	"res://art/generated/letter_u.glb",
+	"res://art/generated/magnet.glb",
+	"res://art/generated/shield.glb",
 	"res://art/generated/letter_b.glb",
+	"res://art/generated/letter_o.glb",
+	"res://art/generated/letter_g.glb",
 ]
 
-## Which frame of which animation to pose the Gub in, so the preview shows the
+## Which frame of which animation to pose the Bog in, so the preview shows the
 ## skin weights doing something rather than a T-pose.
-@export var gub_animation: String = "Idle"
-@export var gub_animation_time: float = 1.6
+@export var bog_animation: String = "Idle"
+@export var bog_animation_time: float = 1.6
 @export var spacing: float = 2.6
 
 
@@ -70,13 +70,13 @@ func _pose(node: Node3D) -> void:
 	var player := node.find_child("AnimationPlayer", true, false) as AnimationPlayer
 	if player == null:
 		return
-	if not player.has_animation(gub_animation):
+	if not player.has_animation(bog_animation):
 		print("preview: %s has no animation '%s' (has %s)"
-			% [node.name, gub_animation, player.get_animation_list()])
+			% [node.name, bog_animation, player.get_animation_list()])
 		return
-	print("preview: posing %s with '%s' at %.2fs" % [node.name, gub_animation, gub_animation_time])
-	player.play(gub_animation)
-	player.advance(gub_animation_time)
+	print("preview: posing %s with '%s' at %.2fs" % [node.name, bog_animation, bog_animation_time])
+	player.play(bog_animation)
+	player.advance(bog_animation_time)
 	player.pause()
 
 
@@ -108,7 +108,7 @@ func _build_stage() -> void:
 	cam.rotation_degrees = Vector3(-5, 0, 0)
 	cam.fov = 45.0
 	# Backed off the row rather than parked at a distance that happened to suit
-	# four models. Seven of them span 15.6 m, and at the old 8.6 m the Gub at one
+	# four models. Seven of them span 15.6 m, and at the old 8.6 m the Bog at one
 	# end and the B at the other were both cut in half by the frame. Derived from
 	# the row's own width and the viewport's aspect — `fov` is the *vertical*
 	# angle and this lineup is judged on its width — so adding an eighth model

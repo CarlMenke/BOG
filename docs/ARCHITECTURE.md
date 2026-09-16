@@ -1,6 +1,6 @@
 # Architecture
 
-How GUB is put together, and where the seams are.
+How BOG is put together, and where the seams are.
 
 `docs/PLAN.md` is the scope. `docs/DECISIONS.md` is why non-obvious things are
 the way they are, and this file points into it rather than repeating it.
@@ -34,7 +34,7 @@ The dependency direction is strictly one way:
            ↑
       MatchState          (the match; asks Net who is here)
            ↑
-   arena / gub / ui       (the world and the screens)
+   arena / bog / ui       (the world and the screens)
 ```
 
 Nothing below reaches up. `Net` does not know a match exists; `MatchState` does
@@ -61,24 +61,24 @@ server and no matchmaking backend — the host is peer 1.
 
 | owned by | what |
 |---|---|
-| **the owning client** | its own Gub's position, rotation, animation state |
+| **the owning client** | its own Bog's position, rotation, animation state |
 | **the host** | throws, projectile hits, deaths, respawns, scoring, phase, timers, the roster |
 
-A client's Gub is client-authoritative because prediction and reconciliation is
+A client's Bog is client-authoritative because prediction and reconciliation is
 a large amount of complexity to buy accuracy that a friends-only party game does
 not need. `set_multiplayer_authority(peer_id)` is called on spawn and a
-`MultiplayerSynchronizer` pushes the result out; remote Gubs run no input and no
+`MultiplayerSynchronizer` pushes the result out; remote Bogs run no input and no
 gravity, they only smooth toward what the network last said.
 
-One child is deliberately held back from that: the Gub's **`Combat` node belongs
+One child is deliberately held back from that: the Bog's **`Combat` node belongs
 to the host** on every machine (**D-024**). The owner decides *when* it wants to
 throw and the host decides *whether* it happened, and it is the host that
 broadcasts the answer — so the node that answer arrives at has to be the host's,
-or every peer refuses it. That is also where a lure's pull is delivered, because
-`Players/Gub_<peer>/Combat` is a path both ends agree on and a spawned lure's
+or every peer refuses it. That is also where a magnet's pull is delivered, because
+`Players/Bog_<peer>/Combat` is a path both ends agree on and a spawned magnet's
 is not.
 
-Everything else is a request. `GubCombat` decides *when* it wants to throw and
+Everything else is a request. `BogCombat` decides *when* it wants to throw and
 plays its own feedback immediately so the game feels instant, but it sends an
 intent RPC and the host decides whether the throw actually happened. Cooldowns
 are therefore tracked twice on purpose — the local copy drives the HUD sweep
@@ -90,7 +90,7 @@ not. A click starts the throw animation everywhere — locally, and on the other
 peers through a cosmetic relay the host sends — and the spear leaves the hand
 0.50 s later, on the frame the throwing arm reaches full extension. That
 number is derived from the throw clip's window and rate rather than tuned:
-`GubAnimator.THROW_RELEASE_TIME`, which `gub_combat.gd` reads. The aim is read
+`BogAnimator.THROW_RELEASE_TIME`, which `bog_combat.gd` reads. The aim is read
 then and not at the click, so a moving target has to be led (**D-025**,
 **D-029**). The Elder's bolt runs through the same windup and the same release
 tick and comes out the other end as hitscan instead of a shaft (**D-038**) — on
@@ -183,13 +183,13 @@ finished. Ending a match is a **broadcast, not a navigation** (**D-021**): the
 host declares the match over and every peer's results screen comes up off that
 signal, rather than each client deciding on its own that it is time to leave.
 Spectating is a change of subject rather than a second camera (**D-020**) — a
-dead player's camera re-targets a living Gub, it does not switch to some other
+dead player's camera re-targets a living Bog, it does not switch to some other
 rig.
 
 A match ends on one of five win conditions, `MatchConfig.WinCondition`, whose
 ordinal travels on the wire, so it is only ever appended to: the kill limit,
-last Gub standing, the clock, **Collect G·U·B** (letters out of corpses, held up
-for ten seconds each, **D-033**, **D-035**) and **Capture G·U·B** (**D-051**).
+last Bog standing, the clock, **Collect B·O·G** (letters out of corpses, held up
+for ten seconds each, **D-033**, **D-035**) and **Capture B·O·G** (**D-051**).
 Capture is capture the flag with the three letters, and a Teams mode: three
 cards spawn once, a carrier walks one into its own team's base to bank it into
 the team's mask (**D-049**), the card goes back to its home point, and a dead
@@ -234,7 +234,7 @@ import cannot supply, `StaticMap` builds at load in about 150 ms (**D-031**):
 Its walkable floor is at y ≈ 1.70, not zero, and its eight spawn pads sit on that
 plane. They were found with `tools/preview_map.gd`, which scans the floor on a
 grid and prints it, and they are re-checked by that same tool in the gate with
-the physics the match will use — a ray that has to find a floor and a Gub-sized
+the physics the match will use — a ray that has to find a floor and a Bog-sized
 capsule that has to fit.
 
 **Kopje Crossing** is also static, and has no import behind it (**D-042**).
@@ -248,7 +248,7 @@ so it is not trimesh collision; trees and boulders bring their own simple
 colliders. Every peer builds the map independently, so every random draw comes
 from one constant-seeded `RandomNumberGenerator` in a fixed order.
 `SafariMap.platforms` is also the input to `tools/parkour_report.gd`, which
-rebuilds the Gub's jump arc from `Gub`'s constants and fails the gate if any
+rebuilds the Bog's jump arc from `Bog`'s constants and fails the gate if any
 landing is unreachable from the ground.
 
 **Lantern Wharf** is a third built map, and the small one (**D-056**):
@@ -259,7 +259,7 @@ half written and the south half mirrored. Its landings and its `off_limits`
 tower and wall tops are both on `StaticMap` (the `Platform` record moved there
 from `SafariMap`), so the same `parkour_report` walks it, proves no jump reaches
 a tower top, and measures the longest eye-to-eye sightline. Its scene also
-declares `Bases` and `Letters` for Capture G·U·B rather than leaving them to the
+declares `Bases` and `Letters` for Capture B·O·G rather than leaving them to the
 fallback.
 
 **Halcyon Wake** is the fourth built map, and the tall one (**D-057**):
@@ -267,7 +267,7 @@ fallback.
 lofted from cross-sections (66 m with the swim platform, 13 m beam), and on it a
 main deck at y = 0, an upper deck at 3.2, a sun deck at 6.2 and a flybridge at
 8.8, each deck's open floor declared as a grid of landing records. Stairs are
-invisible collision ramps under dressing treads, because the Gub has no step-up;
+invisible collision ramps under dressing treads, because the Bog has no step-up;
 hop steps are plain boxes. The sea is a 2.4 km dressing quad in
 `StaticMap.BACKDROP_GROUP`, which `preview_map` leaves out of the map's bounds,
 and `void_height` is half a metre under it. `parkour_report` walks all four decks,
@@ -304,7 +304,7 @@ because the rim is the most-looked-at line on a floating island and a grid
 leaves a staircase edge there. A polar ring lands on the outline by
 construction, and the last surface ring *is* the first underside ring.
 
-### Capture G·U·B bases and letter points
+### Capture B·O·G bases and letter points
 
 `scripts/game/capture_layout.gd` plans one base per team and three letter home
 points for every arena, on every peer, from the spawn pads and whatever the map
@@ -315,16 +315,16 @@ declares (**D-051**). A static map built for the mode declares, on its
   the floor at the middle of each base;
 - `base_radius` — the export on `StaticMap`, default 4 m (a carrier also has to
   be within 3 m of the marker's height);
-- `Letters` — three `Marker3D`s **in G, U, B order**, on the floor where each card
+- `Letters` — three `Marker3D`s **in B, O, G order**, on the floor where each card
   starts and returns;
-- `Spawns` as always; each pad belongs to the nearest base, and in this mode Gubs
+- `Spawns` as always; each pad belongs to the nearest base, and in this mode Bogs
   spawn only on their own team's pads.
 
 **Lantern Wharf and Halcyon Wake declare all of them (D-056, D-057); every other
 map plays on a placeholder fallback**:
 the pads are split into one arc per team by bearing, each team's base is the pad
-nearest its arc's middle, and the letters sit between the first two bases (G at
-the midpoint, U and B either side across the axis). The host settles each card
+nearest its arc's middle, and the letters sit between the first two bases (B at
+the midpoint, O and G either side across the axis). The host settles each card
 onto a standable floor near the bases' height once the physics has stepped.
 `tools/playthrough.gd` checks the result on all five maps, and says in its log
 line whether the layout was declared or fallen back to. `CaptureBase` draws
@@ -357,20 +357,20 @@ tools/           dev tools and testbeds — none of this ships
 | `scripts/world/arena.gd` | the map scene, and `register_arena` |
 | `scripts/world/map_catalog.gd` | the list of maps; ids in, entries out |
 | `scripts/world/static_map.gd` | what a hand-made map scene owes the match, and its collision |
-| `scripts/game/capture_layout.gd` | Capture G·U·B's bases and letter points: declared by a map, or the fallback (**D-051**) |
+| `scripts/game/capture_layout.gd` | Capture B·O·G's bases and letter points: declared by a map, or the fallback (**D-051**) |
 | `scripts/world/capture_base.gd` | a team's base drawn in its colour (**D-051**) |
 | `scripts/world/island_generator.gd` | terrain, and the height oracle |
-| `scripts/player/gub.gd` | a player character |
-| `scripts/player/gub_animator.gd` | the blend tree, built in code (**D-029**) |
-| `scripts/player/gub_combat.gd` | spear, mushroom, lure — and the Elder's bolt in the spear's place (**D-038**, **D-040**) |
+| `scripts/player/bog.gd` | a player character |
+| `scripts/player/bog_animator.gd` | the blend tree, built in code (**D-029**) |
+| `scripts/player/bog_combat.gd` | spear, shield, magnet — and the Elder's bolt in the spear's place (**D-038**, **D-040**) |
 | `scripts/player/ragdoll_builder.gd` | 13 physical bones, generated at runtime |
 | `scripts/items/spear_projectile.gd` | hand-integrated ballistics, swept for hits |
 | `scripts/items/pickup.gd` | what a death leaves on the ground (**D-032**) |
-| `scripts/player/elder_robe.gd` | the robe on a live Gub's own skeleton (**D-037**, **D-038**) |
+| `scripts/player/elder_robe.gd` | the robe on a live Bog's own skeleton (**D-037**, **D-038**) |
 | `scripts/items/lightning_bolt.gd` | the bolt: one `ImmediateMesh`, two lights, forty sparks |
 | `scripts/items/ward_flash.gd` | what a spear looks like when it fails to kill an Elder (**D-040**) |
 | `scripts/ui/elder_track.gd` | how much of the Elder is left, for its wearer only (**D-040**) |
-| `tools/build_gub.py` | the Gub's whole art pipeline: several source packs in, one `.glb` out |
+| `tools/build_bog.py` | the Bog's whole art pipeline: several source packs in, one `.glb` out |
 
 `export_presets.cfg` is deliberately committed — it is the only record of what a
 shippable build excludes (`tools/`, `assets/`, `docs/`), and ignoring it would

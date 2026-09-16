@@ -1,0 +1,235 @@
+class_name Magnet
+extends Node3D
+## A thrown magnet that briefly drags every nearby Bog into it and holds them.
+##
+## The magnet is the answer to cover. A Bog crouched behind a shield is
+## unhittable; a magnet lobbed past it pulls them out into the open for about a
+## second, which is exactly long enough for a spear to be in the air already. It
+## is deliberately not damaging — it creates the shot, it does not take it.
+##
+## Life cycle: FLYING (ballistic) → ARMED (a short fuse, so it can be dodged if
+## you see it land) → PULLING → SPENT.
+##
+## The host owns every decision here. Movement is client-authoritative, so a
+## caught Bog cannot be moved by the host directly; instead the host tells that
+## client it is being pulled and the client's own movement code obeys.
+##
+## That message is sent on the *victim's* `Bog/Combat` node rather than on this
+## one, and the reason is worth knowing: an RPC is addressed by node **path**,
+## and a magnet has no path two machines agree on. Every peer builds its own copy
+## into `spawned_items`, and the moment a second magnet is in the air Godot
+## disambiguates the duplicate name with a counter local to that process — so
+## the pull could be delivered to a node the receiver has under a different
+## name, or, before D-024 was fixed, to no node at all. `BogCombat` is
+## `Players/Bog_<peer>/Combat` everywhere. See `BogCombat.apply_magnet_pull`.
+
+const MODEL := preload("res://art/generated/magnet.glb")
+
+enum Phase { FLYING, ARMED, PULLING, SPENT }
+
+## Emitted host-side the instant the magnet fires, carrying the peer ids it caught.
+## The pull itself is applied on each victim's own client (movement is
+## client-authoritative), so this is the only place the *whole* victim list
+## exists — which makes it what feedback and the testbeds have to listen to.
+signal caught(victim_ids: Array)
+
+const GRAVITY := 22.0
+const MAX_FLIGHT := 5.0
+const SPIN_SPEED := 5.0
+
+## How brightly the magnet glows in each phase. The jump at arming is the
+## warning that the pull is about to happen — the window the fuse exists to
+## give, so it is functionality and not decoration, and not one of the numbers
+## that moved when the crystal became a magnet (D-078).
+const GLOW_FLYING := 2.5
+const GLOW_ARMED := 7.0
+const GLOW_PULLING := 16.0
+
+const LAYER_WORLD := 1
+const LAYER_PLAYER := 2
+const LAYER_DEPLOYABLE := 8
+
+var owner_peer_id: int = 0
+
+var _phase: Phase = Phase.FLYING
+var _velocity: Vector3 = Vector3.ZERO
+var _timer: float = 0.0
+var _flight_time: float = 0.0
+var _model: Node3D
+var _light: OmniLight3D
+
+var _radius: float = 9.0
+var _hold: float = 1.4
+var _strength: float = 18.0
+var _fuse: float = 0.35
+
+
+func launch_from(origin: Vector3, velocity: Vector3, thrown_by: int,
+		config: MatchConfig) -> void:
+	owner_peer_id = thrown_by
+	global_position = origin
+	_velocity = velocity
+	_radius = config.magnet_radius
+	_hold = config.magnet_hold
+	_strength = config.magnet_pull_strength
+	_fuse = config.magnet_fuse
+
+
+func _ready() -> void:
+	_model = MODEL.instantiate() as Node3D
+	# `magnet.glb` is exactly a metre tall with its origin at its base, so the
+	# scale *is* the height in metres. 0.57 is the crystal's own 0.57 m to the
+	# centimetre (0.30 of a 1.894 m model, D-078), because the size of a thrown
+	# thing is a balance number — how far off it can be seen coming, and how
+	# much of the grass it hides — and it is the model under it that changed,
+	# not the throw.
+	_model.scale = Vector3.ONE * 0.57
+	add_child(_model)
+
+	_light = OmniLight3D.new()
+	_light.light_color = Color(0.55, 0.85, 1.0)
+	_light.light_energy = GLOW_FLYING
+	_light.omni_range = 7.0
+	_light.position = Vector3(0.0, 0.3, 0.0)
+	add_child(_light)
+
+
+func _physics_process(delta: float) -> void:
+	match _phase:
+		Phase.FLYING:
+			_tick_flight(delta)
+		Phase.ARMED:
+			_tick_fuse(delta)
+		Phase.PULLING:
+			_tick_pull(delta)
+		Phase.SPENT:
+			pass
+
+
+func _tick_flight(delta: float) -> void:
+	_flight_time += delta
+	if _flight_time > MAX_FLIGHT:
+		_arm()
+		return
+
+	_velocity.y -= GRAVITY * delta
+	var next := global_position + _velocity * delta
+
+	var space := get_world_3d().direct_space_state
+	var query := PhysicsRayQueryParameters3D.create(global_position, next)
+	query.collision_mask = LAYER_WORLD | LAYER_DEPLOYABLE
+	var hit := space.intersect_ray(query)
+	if hit.is_empty():
+		global_position = next
+		if _model != null:
+			_model.rotate_y(SPIN_SPEED * delta)
+		return
+
+	global_position = hit["position"] + Vector3(hit["normal"]) * 0.15
+	_arm()
+
+
+func _arm() -> void:
+	_phase = Phase.ARMED
+	_timer = _fuse
+	_velocity = Vector3.ZERO
+	AudioDirector.play_3d_varied(AudioDirector.MAGNET_ARM, global_position)
+	if _light != null:
+		_light.light_energy = GLOW_ARMED
+
+
+func _tick_fuse(delta: float) -> void:
+	_timer -= delta
+	if _model != null:
+		_model.rotate_y(SPIN_SPEED * 2.0 * delta)
+	if _timer > 0.0:
+		return
+	_phase = Phase.PULLING
+	_timer = _hold
+	AudioDirector.play_3d(AudioDirector.MAGNET_FIRE, global_position)
+	if _light != null:
+		_light.light_energy = GLOW_PULLING
+	_catch()
+
+
+## Sweep once, at the moment the magnet goes off. Deciding the victim list up
+## front — rather than every frame — means running *out* of the radius after it
+## fires does not save you, which is what makes the magnet worth throwing at
+## someone already behind cover.
+func _catch() -> void:
+	if not Net.is_host:
+		return
+	var victims: Array = []
+	for bog in get_tree().get_nodes_in_group("bogs"):
+		var target := bog as Bog
+		if target == null or not target.alive:
+			continue
+		if target.global_position.distance_to(global_position) > _radius:
+			continue
+		# Line of sight, so a magnet does not yank people through the island.
+		if not _can_see(target):
+			continue
+		# Credit the thrower if this Bog dies shortly afterwards. Pulling someone
+		# off the edge of the island is a kill the magnet earned, but nothing the
+		# void-death code could attribute on its own — it only sees a Bog that
+		# fell. `note_attack` is what carries that intent forward.
+		if target.peer_id != owner_peer_id:
+			MatchState.note_attack(target.peer_id, owner_peer_id)
+		victims.append(target.peer_id)
+		# The host's own copy of this Bog is told it is being dragged, whoever
+		# owns it and whether or not the pull below is sent anywhere (D-067).
+		# It moves nothing — see `Bog.note_pulled` — and it is what lets the host
+		# tell a Bog that walked out of a heal channel from one that was pulled
+		# out of it.
+		target.note_pulled(_hold)
+		# Exactly one of these, never both. Sending to yourself is refused
+		# outright by a `call_remote` RPC, and sending to a peer that is not
+		# connected — a fake roster entry in a testbed, or anyone who dropped
+		# between the sweep and this line in a real match — is an error too.
+		# Both used to be logged on every magnet that caught the host or a
+		# departing player.
+		if target.peer_id == multiplayer.get_unique_id():
+			target.apply_magnet(global_position, _strength, _hold)
+		elif multiplayer.get_peers().has(target.peer_id):
+			var combat := target.get_node_or_null("Combat") as BogCombat
+			if combat != null:
+				combat.apply_magnet_pull.rpc_id(target.peer_id, global_position,
+					_strength, _hold)
+	caught.emit(victims)
+
+
+func _can_see(target: Bog) -> bool:
+	var space := get_world_3d().direct_space_state
+	var query := PhysicsRayQueryParameters3D.create(
+		global_position + Vector3.UP * 0.2,
+		target.global_position + Vector3.UP * target.eye_height())
+	query.collision_mask = LAYER_WORLD
+	query.exclude = [target.get_rid()]
+	return space.intersect_ray(query).is_empty()
+
+
+func _tick_pull(delta: float) -> void:
+	_timer -= delta
+	if _model != null:
+		_model.rotate_y(SPIN_SPEED * 4.0 * delta)
+	if _light != null:
+		# Pulse while it holds, so the effect has an obvious duration.
+		_light.light_energy = GLOW_PULLING * (0.7 + 0.3 * sin(_timer * 22.0))
+	if _timer > 0.0:
+		return
+	_spend()
+
+
+func _spend() -> void:
+	_phase = Phase.SPENT
+	var fade := create_tween()
+	fade.set_parallel(true)
+	if _model != null:
+		fade.tween_property(_model, "scale", Vector3.ZERO, 0.35)
+	if _light != null:
+		fade.tween_property(_light, "light_energy", 0.0, 0.35)
+	fade.chain().tween_callback(queue_free)
+
+
+func phase() -> Phase:
+	return _phase

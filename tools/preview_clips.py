@@ -5,7 +5,7 @@
 
 Every animation in this game has so far been chosen by reading a table of
 numbers, because a downloaded `.fbx` cannot be *looked at* until somebody
-declares it in `PACKS` in `build_gub.py` and runs a full build. "Which of these
+declares it in `PACKS` in `build_bog.py` and runs a full build. "Which of these
 two throws reads better?" therefore cost a code edit, a 14 s build, a Godot
 import and a snapshot — so in practice it was answered off a speed graph
 instead, by somebody who is not an animator and should not have to be. This
@@ -23,7 +23,7 @@ imports and the render included.
 What it does, and why each choice is the one it is:
 
 *It renders in Blender, not in Godot.* `tools/preview_anim.gd` is the same idea
-one stage later: it works on *built* clips, out of `art/generated/gub.glb`, and
+one stage later: it works on *built* clips, out of `art/generated/bog.glb`, and
 getting a raw download that far is the whole cost this exists to remove. Going
 through Godot would also mean an `.import` per PNG in a tree where several
 agents share `.godot/`. Blender is already open for the FBX and renders the
@@ -34,7 +34,7 @@ better.
 *The source is corrected the way the build corrects it, by calling the build's
 own functions.* A raw Mixamo FBX is 9.5 mm tall, rotated 90° about X, prefixed
 `mixamorig:` and sitting at an arbitrary resting yaw, and a sheet of *that* is a
-sheet of something the game will never show. So `build_gub.py` is imported (not
+sheet of something the game will never show. So `build_bog.py` is imported (not
 copied, and never edited) and four of its stages are run per clip, in its order:
 
   `strip_bone_prefix`  — cosmetic on a picture, but it is what makes every bone
@@ -76,7 +76,7 @@ Five things the build does that this **deliberately does not**:
 *Frames are chosen around the moment being judged, not spread evenly.*
 `GUB_2/Throw` is 3.833 s. Six evenly spaced samples of it land at 0.00, 0.77,
 1.53, 2.30, 3.07 and 3.83 s — one of them within 0.11 s of the release and the
-other five looking at a Gub standing still. So the default layout is a **burst**
+other five looking at a Bog standing still. So the default layout is a **burst**
 of 7 frames across 0.36 s centred on the interesting moment, plus 6 **context**
 frames spread over the rest, with any context frame that lands inside the burst
 window dropped as a duplicate. Every offset is snapped to a real 60 fps key —
@@ -159,7 +159,7 @@ joints, scaled by the hip span instead of by a mesh height (the substitution the
 auditor already makes), in red, under a row that says what is wrong with it.
 What it must not do is *pretend*: a skinless file has no bind matrices, Blender
 rebuilds a different rest pose — measured at 1.39 against the 1e-5
-`assert_same_character` allows — and putting the Gub's body on it would draw a
+`assert_same_character` allows — and putting the Bog's body on it would draw a
 confident, wrong figure. Bars are the honest picture, and step 9's question
 ("in-place swing, or spinning advance?") is a gross-motion question they answer.
 
@@ -178,7 +178,7 @@ one colour, so the outline keeps the argument. Judge the *shape* on `--mode
 flat` and the *pose* on the default; the two sheets are ten seconds apart, so
 the answer is to look at both.
 
-*The camera is three-quarters, from the Gub's throwing side.* Straight on, a
+*The camera is three-quarters, from the Bog's throwing side.* Straight on, a
 right-handed throw swings the arm directly at the lens and its arc foreshortens
 to nothing — the release frame looks like the frames either side of it, which is
 the exact complaint step 4 exists to fix. Side on, the arc is at its longest but
@@ -227,14 +227,14 @@ import sys
 import bpy
 from mathutils import Matrix, Vector
 
-# `build_gub.py` is the pipeline and is imported, never edited and never copied:
+# `build_bog.py` is the pipeline and is imported, never edited and never copied:
 # the whole value of this sheet is that what it shows is what a build would
 # produce, and a second copy of `scale_to_height` would be a second copy that
 # goes stale. `audit_source_packs.py` is imported for the same reason — its
 # `audit_file` is the measurement code, and the numbers printed on the sheet have
 # to be the same numbers that script prints or one of them is lying.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import build_gub as pipeline          # noqa: E402
+import build_bog as pipeline          # noqa: E402
 import audit_source_packs as auditor  # noqa: E402
 
 REPO = pipeline.REPO
@@ -252,7 +252,7 @@ BURST = 7
 BURST_SPAN = 0.36
 CONTEXT = 6
 
-# The grid, in metres of world space. A Gub is 1.80 m tall and about 1.7 m wide
+# The grid, in metres of world space. A Bog is 1.80 m tall and about 1.7 m wide
 # with an arm extended, so 1.55 m of column pitch lets a follow-through overlap
 # its neighbour slightly rather than leaving a corridor of empty floor between
 # every pose — the poses are what is being compared, not the gaps.
@@ -274,7 +274,7 @@ MARGIN = 0.7
 # that does not.
 DEGREE = "\u00b0"
 
-# Pixels per metre of world space. 160 puts the 1.80 m Gub at 288 px tall, which
+# Pixels per metre of world space. 160 puts the 1.80 m Bog at 288 px tall, which
 # is enough to see a knee cross a knee and not so much that a twelve-column sheet
 # stops fitting on a screen.
 SCALE = 160
@@ -282,7 +282,7 @@ MAX_WIDTH = 8000
 
 # Camera. The arguments for both of these are in the docstring; they are here as
 # numbers so `--azimuth 0` is visibly a departure from a default rather than from
-# nothing. Positive azimuth swings toward the Gub's right, which is the throwing
+# nothing. Positive azimuth swings toward the Bog's right, which is the throwing
 # side.
 AZIMUTH = 35.0
 ELEVATION = 12.0
@@ -347,7 +347,7 @@ def log(msg=""):
 # ---------------------------------------------------------------------------
 # Arguments
 #
-# Hand-rolled, the way `build_gub.parse_args` is, and for the same reason: Blender
+# Hand-rolled, the way `build_bog.parse_args` is, and for the same reason: Blender
 # hands over whatever follows `--` and the wrapper adds a separator of its own, so
 # bare `--` is skipped rather than counted.
 # ---------------------------------------------------------------------------
@@ -539,7 +539,7 @@ def import_corrected(path, name, reference):
     Returns (armature, mesh, action, ...), with `mesh` None for a file that was
     downloaded Without Skin — see `skeleton_snapshot`. Which stages run, and which
     deliberately do not, is the fourth section of the module docstring; the point
-    of calling `build_gub`'s own functions rather than reimplementing them is that
+    of calling `build_bog`'s own functions rather than reimplementing them is that
     a sheet that disagrees with a build is worse than no sheet.
     """
     before_objects = set(bpy.data.objects.keys())
@@ -820,7 +820,7 @@ def skeleton_snapshot(arm, frame, location, colour):
     What it must not do is *pretend*. A skinless file has no bind matrices, so
     Blender rebuilds a different rest pose — bone heads up to a quarter of a
     metre out, rolls tens of degrees off, measured at 1.39 against the 1e-5
-    `assert_same_character` allows — and putting the Gub's mesh on it would draw a
+    `assert_same_character` allows — and putting the Bog's mesh on it would draw a
     confident, wrong body. Bars between the joints it actually has are the honest
     picture: the limb the file describes, at the proportions the file describes,
     with the row shouting in red that it would not build.
@@ -867,7 +867,7 @@ def snapshot(mesh_obj, frame, location, colour):
     """A static copy of the deformed mesh at one frame.
 
     This is what makes the whole sheet one render instead of thirty-six. Blender
-    evaluates one frame at a time for the whole scene, so thirty-six posed Gubs
+    evaluates one frame at a time for the whole scene, so thirty-six posed Bogs
     cannot coexist as armatures — but they can as thirty-six frozen meshes, and
     `new_from_object` off the evaluated depsgraph is the armature modifier
     already applied. 8814 verts apiece; the spear sheet is 317k verts and
@@ -921,7 +921,7 @@ def prepare(opts, audits, reference):
     scene.render.fps_base = 1.0
 
     log()
-    log("-- importing and correcting, with build_gub's own stages")
+    log("-- importing and correcting, with build_bog's own stages")
     clips = []
     for index, path in enumerate(opts.files):
         name = shortname(path)
@@ -1070,7 +1070,7 @@ def build_sheet(opts, clips, offsets, draw_yaw):
     azimuth = math.radians(opts.azimuth)
     elevation = math.radians(opts.elevation)
     # The rest pose looks along -Y and its right hand is toward -X
-    # (`report_rest_pose` in build_gub measures both: the foot points -Y, which
+    # (`report_rest_pose` in build_bog measures both: the foot points -Y, which
     # is +Z in Godot, and `rest_facing` puts the left-hip -> right-hip line at
     # -176°). Positive azimuth therefore swings the camera toward -X, which is
     # the throwing side.

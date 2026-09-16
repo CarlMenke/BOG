@@ -24,7 +24,7 @@ const EAST_BEARING := 0.55
 const NORTH_BEARING := 2.15
 
 ## Deck height above the two rims a bridge connects, and how wide it is. 1.9 m of
-## walkable width is about two Gubs abreast: enough that crossing is not a
+## walkable width is about two Bogs abreast: enough that crossing is not a
 ## balance minigame, narrow enough that being caught on one is bad news.
 const BRIDGE_RISE := 0.35
 const BRIDGE_WIDTH := 1.9
@@ -189,7 +189,7 @@ func _build_shrine(parent: Node3D) -> void:
 ## ceiling on it. The first pass went to 5.6x, which on a 1.37 m Laetiporus is a
 ## cap nearly eight metres across: from a spawn pad it filled half the screen
 ## with pale fungus and hid the shrine behind it. At 1.5-2.9x the tallest caps
-## are around head height on a Gub and you can still see the map past them.
+## are around head height on a Bog and you can still see the map past them.
 func _build_grove(parent: Node3D) -> void:
 	var centre := GROVE_CENTRE
 	var grove := Node3D.new()

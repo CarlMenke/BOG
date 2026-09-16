@@ -6,7 +6,7 @@ extends Node3D
 ## environment is doing its job: a floating slab so the horizon line and the void
 ## below it are both in frame, three torches for the warm/cool contrast the map
 ## is built around, dark cones to check silhouettes read against the sky, and the
-## Gub plus a saturated yellow ball to catch glow blow-out.
+## Bog plus a saturated yellow ball to catch glow blow-out.
 ##
 ## Usage (the extra arg is read straight off the command line, so this works
 ## through `tools/snapshot.gd` without teaching it about views):
@@ -14,7 +14,7 @@ extends Node3D
 ##       res://tools/preview_sky.tscn out.png 45 [horizon|up|edge]
 
 const ENV_PATH := "res://resources/config/arena_env.tres"
-const GUB_PATH := "res://art/generated/gub.glb"
+const BOG_PATH := "res://art/generated/bog.glb"
 
 ## Where the sky's moon sits. Must match `moon_direction` in `arena_sky.tres`:
 ## the shader reads the DirectionalLight3D when one exists, and a mismatch would
@@ -145,12 +145,12 @@ func _build_torches() -> void:
 
 
 func _build_exposure_targets() -> void:
-	# The Gub is the brightest thing that is *not* supposed to bloom, so the
+	# The Bog is the brightest thing that is *not* supposed to bloom, so the
 	# glow threshold is judged against him. Real mesh if it has been imported,
 	# a ball of the same yellow if not.
-	var gub := (load(GUB_PATH) as PackedScene)
-	if gub != null:
-		var node := gub.instantiate() as Node3D
+	var bog := (load(BOG_PATH) as PackedScene)
+	if bog != null:
+		var node := bog.instantiate() as Node3D
 		add_child(node)
 		# Normalised by measured height rather than the project's 0.35 import
 		# scale, so a re-import of the mesh cannot silently change the size of

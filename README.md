@@ -1,9 +1,10 @@
-# GUB
+# BOG
 
-A match-based third-person multiplayer game in Godot 4.7.2. You are a Gub — a
-small yellow alien — fighting with thrown spears that kill in one hit, on one of
-five maps: **Whisperbloom Hollow**, a floating enchanted-forest island grown from
-a seed; **Rust**, a hand-made industrial yard under a hard sun; **Kopje
+A match-based third-person multiplayer game in Godot 4.7.2. You are a Bog — a
+small tan creature with two antennae — fighting with thrown spears that kill in
+one hit, on one of five maps: **Whisperbloom Hollow**, a floating
+enchanted-forest island grown from a seed; **Rust**, a hand-made industrial
+yard under a hard sun; **Kopje
 Crossing**, a savanna plateau with a hundred and twenty-three rocks to climb; or
 **Lantern Wharf**, a small walled box yard at dusk with two bases facing each
 other across it; or **Halcyon Wake**, a superyacht at anchor on a bright
@@ -12,10 +13,11 @@ host picks in the lobby.
 
 Spears are the whole fight. One lands, you die, and the thrower's hand is empty
 until it grows back, so an empty hand is the most useful thing on screen: it
-tells everyone in sight that the Gub holding it is harmless for the next few
-seconds. Two abilities exist to bend that around: a **mushroom** planted as cover
-you cannot be hit through, and a **lure** lobbed past it that drags everyone
-nearby out into the open for about a second. Neither is on a timer: you spawn
+tells everyone in sight that the Bog holding it is harmless for the next few
+seconds. Two abilities exist to bend that around: a **shield** — a barricade of
+weathered planks, 1.75 m tall and 1.22 wide, planted facing exactly the way you
+were looking — as cover you cannot be hit through, and a **magnet** lobbed past
+it that drags everyone nearby out into the open for about a second. Neither is on a timer: you spawn
 with neither, every death drops one item where the body fell, and you pick them
 up by walking over them. Whatever you were carrying is lost when you die.
 
@@ -24,11 +26,11 @@ and for twenty seconds you cannot be killed — spears bounce off — you move a
 third faster, jump half again as high, and throw lightning out of your hand
 instead of a spear. The robe is visible to everybody from across the map, the
 clock is visible only to you, and the counter-play is not to kill an Elder but to
-outlast one. Falling off the map still counts, which is what the lure is for.
+outlast one. Falling off the map still counts, which is what the magnet is for.
 
-A match ends on the kill limit, the last Gub standing, the clock, or one of two
-letter modes. **Collect G·U·B**: letter cards fall out of corpses, and you hold
-one up for ten seconds to keep it. **Capture G·U·B**: capture the flag, in
+A match ends on the kill limit, the last Bog standing, the clock, or one of two
+letter modes. **Collect B·O·G**: letter cards fall out of corpses, and you hold
+one up for ten seconds to keep it. **Capture B·O·G**: capture the flag, in
 teams, with exactly three letters that you carry into your own team's base.
 
 ---
@@ -98,7 +100,7 @@ plain one detaches from the terminal and prints nowhere.
 | the Elder's bolt | the same left mouse, while wearing the robe — 0.2 s |
 | draw the bow | hold `V` or mouse 5 — longer draw, faster and harder arrow |
 | aim (zooms in) | right mouse |
-| mushroom, lure | `Q`, `E` |
+| shield, magnet | `Q`, `E` |
 | drink a heal potion | `F` — two seconds, standing still; moving or being hit ends it and the potion is gone |
 | scoreboard, pause, chat | `Tab`, `Esc`, `T` |
 
@@ -125,7 +127,7 @@ otherwise. See **D-028**.
 
 One player hosts and plays at the same time, and the host is authoritative: it
 owns every kill, score and respawn. Movement is client-authoritative so your own
-Gub never feels laggy. Up to 8 players.
+Bog never feels laggy. Up to 8 players.
 
 ---
 
@@ -140,8 +142,8 @@ share, checks the playit agent, and prints the invite code. It lives in
 `.claude/skills/host/`.
 
 ```bash
-"$GODOT" --headless --path . --export-release "Windows Desktop" "$PWD/build/windows/GUB.exe"
-"$GODOT" --headless --path . --export-release "macOS"           "$PWD/build/macos/GUB.app"
+"$GODOT" --headless --path . --export-release "Windows Desktop" "$PWD/build/windows/BOG.exe"
+"$GODOT" --headless --path . --export-release "macOS"           "$PWD/build/macos/BOG.app"
 ```
 
 Pass an **absolute** output path. A relative one is resolved against the project,
@@ -172,8 +174,10 @@ The macOS app is signed **ad-hoc**, which is enough to run it yourself and not
 enough to hand to a stranger without Gatekeeper objecting. Notarisation needs an
 Apple Developer account and is not set up.
 
-Sizes, for reference: `GUB.exe` 109 MB plus a 7.9 MB `.pck`; `GUB.app` 172 MB
-universal. Most of that is the engine, not the game.
+Sizes, for reference: `BOG.exe` is **389 MB** with the pack embedded, as of the
+five-map build with the shield, the magnet and the three letter cards in it
+(D-078 to D-081). Most of the growth since the 109 MB of the two-map build is
+art, not engine.
 
 ## Working on it
 
@@ -196,10 +200,10 @@ Everything that can be checked without a person watching: the headless import,
 the invite codes, the match rules, **a full playthrough from the main menu to
 the results screen**, a ragdoll that has to survive hitting the ground, several
 combat modes that report what they did — including the Elder's lightning, end to
-end from the robe dropping off a corpse to the Gub at the far end falling over,
+end from the robe dropping off a corpse to the Bog at the far end falling over,
 and a real spear thrown at a real Elder that has to bounce off — and three checks
-that walk the path a player walks: that holding W moves a Gub, that starting a
-match takes the mouse, and that leaving one does not leave Gubs asking a peer
+that walk the path a player walks: that holding W moves a Bog, that starting a
+match takes the mouse, and that leaving one does not leave Bogs asking a peer
 that is gone. Twenty-one in all. Run it before committing anything that touches
 gameplay.
 
@@ -237,10 +241,10 @@ and `tools/` is full of scenes for it:
 | `preview_assets`, `preview_anim`, `preview_grip` | the art, the clips, the spear in the hand |
 | `preview_ragdoll`, `ragdoll_stability` | how a corpse falls, and whether it survives |
 | `preview_sky` | the sky and environment |
-| `preview_island` | **the island** — a dozen framings (plan view, eye height on any pad, under a tree), `match` for real Gubs, `hud` to keep the HUD |
+| `preview_island` | **the island** — a dozen framings (plan view, eye height on any pad, under a tree), `match` for real Bogs, `hud` to keep the HUD |
 | `island_report` | **the island as numbers** — footprint, slope, placed props per layer, tree heights, spawn spacing, capture bases. In the gate |
 | `preview_map` | **a static map** — top-down, side, or eye height on any spawn pad; `probe` prints the floor as ASCII. Rust by default, `map=res://scenes/world/maps/safari.tscn` for the savanna, `map=res://scenes/world/maps/wharf.tscn min_triangles=1000` for the box yard, `map=res://scenes/world/maps/yacht.tscn min_triangles=1000` for the yacht. Checks every pad with the physics, and is in the gate for all four |
-| `parkour_report` | **a built map** — rebuilds the Gub's jump arc and proves every platform can be reached from the ground. Kopje Crossing by default; `map=res://scenes/world/maps/wharf.tscn` also proves no jump reaches a tower top and measures the longest sightline; `map=res://scenes/world/maps/yacht.tscn` proves every deck is reachable, the mast is not, and there is nothing but the void over the side. In the gate for all three |
+| `parkour_report` | **a built map** — rebuilds the Bog's jump arc and proves every platform can be reached from the ground. Kopje Crossing by default; `map=res://scenes/world/maps/wharf.tscn` also proves no jump reaches a tower top and measures the longest sightline; `map=res://scenes/world/maps/yacht.tscn` proves every deck is reachable, the mast is not, and there is nothing but the void over the side. In the gate for all three |
 | `playthrough.tscn` | the whole flow, menu to results, headless. Add `-- rust`, `-- safari`, `-- wharf` or `-- yacht` to play it on a static map |
 | `match_rules.tscn` | 195 assertions across 14 scoring scenarios, headless |
 | `net_loopback.tscn` | two real processes over a real socket, ten rematches included. Run by hand through `net_test.sh` (not in the gate, ~45 s); binds loopback only |
@@ -250,8 +254,8 @@ and `tools/` is full of scenes for it:
 `combat_range` runs the **real match path** — an offline session on `Net`, a
 roster, `MatchState.register_arena`, kills through `MatchState.report_kill` — so
 a throw that works there works in a match. Pass a mode as the trailing argument
-(`flight`, `hit`, `arc`, `miss`, `aim`, `mushroom`, `cover`, `lure`,
-`lure_self`, `letter`, `cards`, `lightning`, `ward`, `recharge`, `walk`,
+(`flight`, `hit`, `arc`, `miss`, `aim`, `shield`, `cover`, `magnet`,
+`magnet_self`, `letter`, `cards`, `lightning`, `ward`, `recharge`, `walk`,
 `health`, `embed`, `hurt`,
 `leave`, `free`) and `trace` after it to print the whole flight, which is the
 only way to tell a miss from a hit whose kill was dropped.
@@ -265,10 +269,10 @@ Godot --headless --path . tools/combat_range.tscn -- recharge
 Godot --headless --path . tools/combat_range.tscn -- ward
 ```
 
-`cover` is the one to reach for after touching `shield_mushroom.gd`: it stands a
-real mushroom up, prints the blocked width at every height a Gub occupies, and
+`cover` is the one to reach for after touching `shield.gd`: it stands a
+real shield up, prints the blocked width at every height a Bog occupies, and
 then asserts that a spear is stopped by one, that the same throw without one is
-not, and that a Gub cannot walk into the cap (D-039).
+not, and that a Bog cannot walk through it (D-039, D-079).
 
 `ward` is the one to reach for after touching anything about the Elder: it puts
 a robe on a dummy, throws a real spear at it, and asserts that the Elder
@@ -282,25 +286,27 @@ left the hand.
 Both are committed, so you only need this if you change a source file:
 
 ```bash
-bash tools/build_gub.sh             # the Gub: several Mixamo packs → one .glb. Needs Blender 5.2
-python tools/decimate_assets.py     # spear, lure, mushroom, G, U, B. numpy, scipy, pillow, fast_simplification
+bash tools/build_bog.sh             # the Bog: several Mixamo packs → one .glb. Needs Blender 5.2
+python tools/decimate_assets.py     # spear, magnet, shield, B, O, G. numpy, scipy, pillow, fast_simplification
 python tools/make_sfx.py            # needs numpy
 python tools/prepare_map.py         # needs numpy, pillow
-python tools/rig_report.py          # checks the Gub's rig; prints, changes nothing
+python tools/rig_report.py          # checks the Bog's rig; prints, changes nothing
 ```
 
 The three props arrive at ~500k triangles each and leave at 19k between them,
 with UVs transferred back seam-aware. The **three letter cards** — the meshes
 the letters win condition puts on the ground and in a fist (**D-041**) — go
-through the same script for the other half of what it does. They arrive from
-Tripo at 8.5k–10.6k triangles, so 6000 is barely a decimation; what they are in
-the target list for is the 4096-square base colour coming down to 512, the
-embedded image being renamed so Godot extracts it as `letter_g_basecolor.png`
-rather than `letter_g_G_LETTER_basecolor.jpg.png`, and the repack into one
-clean single-buffer `.glb`. **The Gub has its own pipeline** and does
-not go through `decimate_assets` at all: `tools/build_gub.sh` runs
-`tools/build_gub.py` in headless Blender, which consolidates the declared FBX files
-in `assets/source/GUB_2/` into one 1.5 MB `art/generated/gub.glb` — one armature,
+through the same script, and not all three for the same reason. The B and the
+G arrive from Tripo at 8.5k and 9.3k triangles, so 6000 is barely a decimation;
+what *they* are in the target list for is the 4096-square base colour coming
+down to 512, the embedded image being renamed so Godot extracts it as
+`letter_g_basecolor.png` rather than `letter_g_G_LETTER_basecolor.jpg.png`, and
+the repack into one clean single-buffer `.glb`. The O (**D-080**) is the odd one
+out: it arrives at 429,870 triangles, a prop-sized mesh in a letter's clothing,
+and takes the same 6000 as a real 1.4% decimation. **The Bog has its own pipeline** and does
+not go through `decimate_assets` at all: `tools/build_bog.sh` runs
+`tools/build_bog.py` in headless Blender, which consolidates the declared FBX files
+in `assets/source/GUB_2/` into one 1.5 MB `art/generated/bog.glb` — one armature,
 one mesh, nine clips, 10.5k triangles, 1.80 m tall, root motion locked, every
 clip's facing aligned — and prints every measurement it takes (**D-029**). Three
 runs of it produce a byte-identical file, and it refuses to write one whose jump
@@ -353,7 +359,7 @@ still reachable (**D-042**).
 **Lantern Wharf is built the same way**, smaller: `scenes/world/maps/wharf.tscn`
 and `scripts/world/maps/wharf_map.gd` lay out a 36 m yard of painted containers
 and crates from tables, with corrugation textures computed in code rather than
-loaded. It is the first map to declare its own Capture G·U·B bases and letters,
+loaded. It is the first map to declare its own Capture B·O·G bases and letters,
 and `parkour_report` holds it to a 25 m sightline (**D-056**).
 
 **Halcyon Wake is built the same way too**, and goes up instead of out:
@@ -387,6 +393,6 @@ Autoloads: `Settings`, `Net`, `MatchState`, `SceneFlow`, `AudioDirector`.
 
 The game's own code and assets are **MIT** licensed — see [LICENSE](LICENSE).
 
-Environment art is the **Stylized Nature MegaKit** (CC0). The Gub, spear, lure
-and mushroom are project assets. Sound effects are synthesised from scratch by
+Environment art is the **Stylized Nature MegaKit** (CC0). The Bog, spear, magnet
+and shield are project assets. Sound effects are synthesised from scratch by
 `tools/make_sfx.py`.

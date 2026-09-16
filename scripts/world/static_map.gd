@@ -24,7 +24,7 @@ extends Node3D
 ##   `global_transform` on the markers mean anything.
 ## - **Geometry somewhere under the root.** Every `MeshInstance3D` in the
 ##   subtree is swept into the trimesh body this script builds on physics
-##   layer 1, `world`. That is the layer Gubs, spears, deployables and the
+##   layer 1, `world`. That is the layer Bogs, spears, deployables and the
 ##   camera probe all collide against (`project.godot` names it). A map on any
 ##   other layer is a map players fall straight through, and it will look like
 ##   the map failed to load.
@@ -35,17 +35,17 @@ extends Node3D
 ##   daylit arena into a moonlit night makes both look broken.
 ## - An optional **`Lights`** node for anything else the map needs lit.
 ## - A **`Spawns`** node holding **eight `Marker3D` children** — one per
-##   `MatchConfig.MAX_PLAYERS`, so a full lobby never opens with two Gubs on one
+##   `MatchConfig.MAX_PLAYERS`, so a full lobby never opens with two Bogs on one
 ##   pad — each **facing inward**. A player whose first frame looks at a wall
 ##   has to turn around before they can read anything, which is the same reason
 ##   the island's solved pads face the middle of the map.
 ## - **`void_height`**, below which a fall is a death. Exported rather than
 ##   taken from `MatchState.VOID_HEIGHT` because that constant is -45, which is
 ##   a property of a floating island with a deep rocky underside; a ground-level
-##   arena wants a floor a few metres down, and a Gub that walks off the edge of
+##   arena wants a floor a few metres down, and a Bog that walks off the edge of
 ##   one should be dead before the fall becomes boring.
 ##
-## And, **optionally, for Capture G·U·B** (D-051). A map that says nothing here
+## And, **optionally, for Capture B·O·G** (D-051). A map that says nothing here
 ## is still playable in that mode on the fallback in `capture_layout.gd`; a map
 ## built for it should say all of it:
 ##
@@ -58,17 +58,17 @@ extends Node3D
 ##   A carrier also has to be within 3 m of the marker's height
 ##   (`CaptureLayout.BASE_HEIGHT`), so a base on a platform is not scored from
 ##   the ground under it.
-## - A **`Letters`** node holding **three `Marker3D`s, in G, U, B order**, on
+## - A **`Letters`** node holding **three `Marker3D`s, in B, O, G order**, on
 ##   the floor where each card starts and returns to. Put them where both teams
 ##   can reach them; the game settles each onto the nearest standable floor but
 ##   does not move it anywhere smarter than that.
 ## - **Spawns stay in `Spawns`.** Each pad belongs to the team whose base it is
-##   nearest, and in this mode a Gub respawns only on its own team's pads, so
+##   nearest, and in this mode a Bog respawns only on its own team's pads, so
 ##   put four pads near each base for a two-team map.
 
 ## And, **optionally, for `tools/parkour_report.gd`** (D-042, D-056). A map
 ## built from a table rather than imported can say where its landings are, by
-## filling `platforms` before calling `super()`, and the report walks the Gub's
+## filling `platforms` before calling `super()`, and the report walks the Bog's
 ## jump arc over them. `off_limits` is the other half of that for a map that
 ## wants somewhere *nobody* stands — the top of a tall stack that would see the
 ## whole map — and the report fails if any jump at all reaches one.
@@ -90,7 +90,7 @@ const BACKDROP_GROUP := "map_backdrop"
 ## here because the report reads it off any `StaticMap`, not because Rust has
 ## any.
 class Platform extends RefCounted:
-	var centre: Vector3   ## x, the top surface's y, z — where a Gub stands
+	var centre: Vector3   ## x, the top surface's y, z — where a Bog stands
 	var radius: float     ## inscribed landing radius of the scaled footprint
 	var zone: String      ## "kopje", "ridge", "termites", …
 	var label: String     ## "spiral 3", "ridge 5", "nest" — named in failures
@@ -132,7 +132,7 @@ const COLLISION_CELL := 16.0
 ## autoload is not something that can be relied on to exist.
 @export var void_height: float = -45.0
 
-## How far across the ground a Capture G·U·B base reaches from its `Bases`
+## How far across the ground a Capture B·O·G base reaches from its `Bases`
 ## marker, in metres (D-051). Ignored by every other mode, and by a map with no
 ## `Bases` node.
 @export var base_radius: float = 4.0
@@ -312,7 +312,7 @@ func spawn_points() -> Array[Transform3D]:
 		return out
 
 	# Loud, and then survivable. A map with no spawns would otherwise hand
-	# `MatchState` an empty list, every Gub would be created at the world
+	# `MatchState` an empty list, every Bog would be created at the world
 	# origin, and the report would be "everyone spawns inside each other"
 	# rather than "the map forgot its Spawns node".
 	push_error("StaticMap: '%s' has no Marker3D under a `Spawns` node; "
@@ -328,21 +328,21 @@ func _fallback_spawns() -> Array[Transform3D]:
 	for i in FALLBACK_COUNT:
 		var bearing := TAU * float(i) / float(FALLBACK_COUNT)
 		var here := Vector3(cos(bearing), 0.0, sin(bearing)) * FALLBACK_RADIUS
-		var yaw := Gub.yaw_towards(-here.normalized())
+		var yaw := Bog.yaw_towards(-here.normalized())
 		out.append(Transform3D(Basis(Vector3.UP, yaw), here))
 	return out
 
 
 # ---------------------------------------------------------------- capture ---
 
-## The Capture G·U·B bases this map declares, one per team in team order, or an
+## The Capture B·O·G bases this map declares, one per team in team order, or an
 ## empty list when it declares none (D-051). World space, so call it after the
 ## map is in the tree, like `spawn_points()`.
 func base_points() -> Array[Vector3]:
 	return _marker_points("Bases")
 
 
-## The three letter spawn points this map declares, G, U, B, or an empty list.
+## The three letter spawn points this map declares, B, O, G, or an empty list.
 func letter_points() -> Array[Vector3]:
 	return _marker_points("Letters")
 

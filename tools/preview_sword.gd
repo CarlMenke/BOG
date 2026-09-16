@@ -12,7 +12,7 @@ extends Node3D
 ##   Godot --headless --path . --script tools/snapshot.gd -- \
 ##       res://tools/preview_sword.tscn out/none.png 4 measure
 ##
-##   # the sheet: seven Gubs across the swing, each set back by the distance the
+##   # the sheet: seven Bogs across the swing, each set back by the distance the
 ##   # advance has carried it, with a compass under every one
 ##   Godot --path . --resolution 2400x1100 --script tools/snapshot.gd -- \
 ##       res://tools/preview_sword.tscn out/sword_swing.png 25
@@ -20,20 +20,20 @@ extends Node3D
 ## **Why this exists rather than `tools/preview_bow.tscn` with a sword in it.**
 ## The same reason that one exists rather than `preview_grip`: there is an
 ## equation here and it has one answer. A spear in a fist only has to miss the
-## Gub's own skin; a bow's string has to meet the drawing fingers; a great sword
+## Bog's own skin; a bow's string has to meet the drawing fingers; a great sword
 ## is **two-handed**, and the hilt has to reach from the fist that holds it to
 ## the fist that joins it, through a clip that is throwing both of them about. So
 ## the fit is solved rather than nudged.
 ##
 ## **Why the sheet is here and not `preview_anim.tscn`.** That tool stands one
-## Gub per sampled moment in an evenly spaced row, which is exactly wrong for
+## Bog per sampled moment in an evenly spaced row, which is exactly wrong for
 ## this clip: the two things worth looking at are the **rotation** (350° of it)
 ## and the **advance** (1.712 m of it), and an evenly spaced row hides the second
 ## and gives no reference for the first. Here the row carries the advance on one
 ## axis and a compass ring under every body carries the rotation, so the sheet is
 ## the swing's ground track rather than a flip-book of poses (D-068).
 
-const GUB := preload("res://scenes/player/gub.tscn")
+const BOG := preload("res://scenes/player/bog.tscn")
 
 ## How many samples the derivation is checked at across the window. Seventeen is
 ## every sixteenth of the swing, fine enough to catch a wrist that rotates
@@ -72,12 +72,12 @@ const BLADE_CLEARANCE_MIN := -0.50
 
 @export var samples: int = 7
 
-## How far apart the sheet stands its Gubs across the frame, in metres. Layout
+## How far apart the sheet stands its Bogs across the frame, in metres. Layout
 ## only — the *other* axis is the one that carries the advance, and this one
-## simply has to be wider than a Gub with a 1.26 m sword going round it.
+## simply has to be wider than a Bog with a 1.26 m sword going round it.
 const SHEET_SPREAD := 1.9
 
-## The frame, in metres. A 1.26 m sword swung overhead by a 1.80 m Gub needs a
+## The frame, in metres. A 1.26 m sword swung overhead by a 1.80 m Bog needs a
 ## taller box than the bow's.
 const FRAME_LOW := -0.2
 const FRAME_HIGH := 3.4
@@ -118,9 +118,9 @@ func _ready() -> void:
 
 ## Solve the grip, print it, and say how far off it is at every sample.
 func _measure() -> void:
-	var gub := _bare_gub()
-	var skeleton := gub.find_child("Skeleton3D", true, false) as Skeleton3D
-	var player := gub.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	var bog := _bare_bog()
+	var skeleton := bog.find_child("Skeleton3D", true, false) as Skeleton3D
+	var player := bog.find_child("AnimationPlayer", true, false) as AnimationPlayer
 	var right := skeleton.find_bone(HeldGear.HAND_BONE)
 	var left := skeleton.find_bone(HeldGear.BOW_HAND_BONE)
 	if right < 0 or left < 0:
@@ -184,7 +184,7 @@ func _measure() -> void:
 	print("    const SWORD_GRIP_ROTATION := Vector3(%.3f, %.3f, %.3f)"
 		% [euler.x, euler.y, euler.z])
 
-	_report_blade(gub, skeleton, player,
+	_report_blade(bog, skeleton, player,
 		Transform3D(basis.scaled(Vector3.ONE * model_scale), offset), model_scale)
 
 
@@ -192,7 +192,7 @@ func _measure() -> void:
 ##
 ## Two things, and the second is the one the reach is built on. How low the point
 ## gets, which is the sword's version of the carried bow's limb-tip table; and
-## **how far from the Gub the point reaches at the release**, which is the
+## **how far from the Bog the point reaches at the release**, which is the
 ## measurement `MatchConfig.sword_reach` has to agree with. The second is printed
 ## here and asserted in the game by `tools/combat_range.tscn -- sword`, so the
 ## dial and the animation are checked against each other from both ends.
@@ -200,10 +200,10 @@ func _measure() -> void:
 ## The transform is composed by hand rather than read off
 ## `HeldGear.sword_blade()`, which is what the *game* reads (D-066: a
 ## `BoneAttachment3D` is the only thing that sees the modifier stack). There is
-## no modifier stack in a bare Gub and no physics frame for an attachment to
+## no modifier stack in a bare Bog and no physics frame for an attachment to
 ## update in, so a reading taken through one here is the first frame's pose
 ## seventeen times over — it was, before this line.
-func _report_blade(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
+func _report_blade(bog: Bog, skeleton: Skeleton3D, player: AnimationPlayer,
 		grip: Transform3D, model_scale: float) -> void:
 	var hand := skeleton.find_bone(HeldGear.HAND_BONE)
 	var lowest := INF
@@ -217,29 +217,29 @@ func _report_blade(gub: Gub, skeleton: Skeleton3D, player: AnimationPlayer,
 	for i in CHECKS * 4:
 		var time := _sample_time(i, CHECKS * 4)
 		_pose(player, skeleton, time)
-		var at := gub.global_transform * skeleton.global_transform \
+		var at := bog.global_transform * skeleton.global_transform \
 			* skeleton.get_bone_global_pose(hand) * grip
 		var point := at.origin
 		if point.y < lowest:
 			lowest = point.y
 			lowest_at = time
-		# The reach is horizontal, because the sweep is: a Gub is caught by where
+		# The reach is horizontal, because the sweep is: a Bog is caught by where
 		# the blade is *on the ground plane*, not by how high it is.
-		var flat := Vector3(point.x - gub.global_position.x, 0.0,
-			point.z - gub.global_position.z).length()
+		var flat := Vector3(point.x - bog.global_position.x, 0.0,
+			point.z - bog.global_position.z).length()
 		if flat > furthest:
 			furthest = flat
 			furthest_at = time
-		if absf(time - GubAnimator.SWING_RELEASE_IN_CLIP) < 0.015:
+		if absf(time - BogAnimator.SWING_RELEASE_IN_CLIP) < 0.015:
 			release = flat
 	print("preview_sword: the blade (%.3f m of it, at x%.3f)"
 		% [HeldGear.SWORD_GUARD * model_scale, model_scale])
 	print("  lowest point %+.3f m at %.3f s" % [lowest, lowest_at])
 	print("  furthest out %.3f m at %.3f s" % [furthest, furthest_at])
-	print("  at the release (%.3f s) the point is %.3f m from the Gub's own axis"
-		% [GubAnimator.SWING_RELEASE_IN_CLIP, release])
+	print("  at the release (%.3f s) the point is %.3f m from the Bog's own axis"
+		% [BogAnimator.SWING_RELEASE_IN_CLIP, release])
 	print("  plus %.3f m of advance = %.3f m of ground a swing threatens"
-		% [Gub.SPIN_ADVANCE, release + Gub.SPIN_ADVANCE])
+		% [Bog.SPIN_ADVANCE, release + Bog.SPIN_ADVANCE])
 	if lowest >= BLADE_CLEARANCE_MIN:
 		print("preview_sword: the point dips to %+.3f m against a %+.3f m limit "
 			% [lowest, BLADE_CLEARANCE_MIN] + "— blade PASS")
@@ -262,11 +262,11 @@ func _highest(values: Array[float]) -> float:
 	return out
 
 
-## The clip second of sample `i` of `count`, across the window `GubAnimator`
+## The clip second of sample `i` of `count`, across the window `BogAnimator`
 ## plays — asked of the animator's own constants, so a window that moves moves
 ## this tool with it.
 func _sample_time(i: int, count: int) -> float:
-	return lerpf(GubAnimator.SWING_CLIP_START, GubAnimator.SWING_CLIP_END,
+	return lerpf(BogAnimator.SWING_CLIP_START, BogAnimator.SWING_CLIP_END,
 		float(i) / float(maxi(count - 1, 1)))
 
 
@@ -286,19 +286,19 @@ func _pose(player: AnimationPlayer, skeleton: Skeleton3D, time: float) -> void:
 
 ## The swing as a ground track (D-068).
 ##
-## One Gub per sampled moment, laid out on **two axes that mean two different
-## things**, which is the whole design of this sheet. Across the frame the Gubs
+## One Bog per sampled moment, laid out on **two axes that mean two different
+## things**, which is the whole design of this sheet. Across the frame the Bogs
 ## are simply spread out, `SHEET_SPREAD` apart, so that seven bodies can be
 ## looked at without standing in each other — that axis is a contact sheet's and
 ## carries no meaning. *Into* the frame each one is set back by the distance the
-## advance has actually carried it by that moment — `Gub.SPIN_ADVANCE` times the
-## fraction of the window elapsed, which is exactly what `Gub._handle_movement`
+## advance has actually carried it by that moment — `Bog.SPIN_ADVANCE` times the
+## fraction of the window elapsed, which is exactly what `Bog._handle_movement`
 ## produces — so the row climbs the screen as a staircase whose rise is the real
 ## 1.712 m, measurable against the chalk it is standing on.
 ##
-## The first attempt put the Gubs at their true positions on *both* axes and was
+## The first attempt put the Bogs at their true positions on *both* axes and was
 ## unreadable: 1.712 m over seven bodies is a quarter of a metre a step, which is
-## seven Gubs in a heap. That the advance is small compared to a Gub is the fact
+## seven Bogs in a heap. That the advance is small compared to a Bog is the fact
 ## which made that picture worthless and is also why the advance is worth having
 ## at all, so this sheet separates the two questions instead of asking one axis
 ## to answer both.
@@ -310,7 +310,7 @@ func _pose(player: AnimationPlayer, skeleton: Skeleton3D, time: float) -> void:
 ## raw FBX for the same reason.
 func _sheet() -> void:
 	# Across the frame, and into it. The advance runs along -Z because that is
-	# where an untouched Gub node faces, which is the direction `Gub.facing()`
+	# where an untouched Bog node faces, which is the direction `Bog.facing()`
 	# hands `begin_spin` at the click.
 	var row := Vector3.RIGHT
 	var travel := Vector3.FORWARD
@@ -322,28 +322,28 @@ func _sheet() -> void:
 	# moment it most has to point at.
 	var marked := 0
 	for i in samples:
-		if absf(_sample_time(i, samples) - GubAnimator.SWING_RELEASE_IN_CLIP) \
-				< absf(_sample_time(marked, samples) - GubAnimator.SWING_RELEASE_IN_CLIP):
+		if absf(_sample_time(i, samples) - BogAnimator.SWING_RELEASE_IN_CLIP) \
+				< absf(_sample_time(marked, samples) - BogAnimator.SWING_RELEASE_IN_CLIP):
 			marked = i
 
 	_ground(row, travel)
 	for i in samples:
 		var time := _sample_time(i, samples)
-		var reached := Gub.SPIN_ADVANCE * float(i) / float(maxi(samples - 1, 1))
-		var gub := _bare_gub()
-		gub.position = row * (float(i) - float(samples - 1) * 0.5) * SHEET_SPREAD \
+		var reached := Bog.SPIN_ADVANCE * float(i) / float(maxi(samples - 1, 1))
+		var bog := _bare_bog()
+		bog.position = row * (float(i) - float(samples - 1) * 0.5) * SHEET_SPREAD \
 			+ travel * reached
-		var player := gub.find_child("AnimationPlayer", true, false) as AnimationPlayer
-		var skeleton := gub.find_child("Skeleton3D", true, false) as Skeleton3D
+		var player := bog.find_child("AnimationPlayer", true, false) as AnimationPlayer
+		var skeleton := bog.find_child("Skeleton3D", true, false) as Skeleton3D
 		_pose(player, skeleton, time)
-		gub.held_gear.set_sword(true)
+		bog.held_gear.set_sword(true)
 		# Nothing else in either hand, which is what the game shows through a
 		# swing and is also the one thing in frame that could be mistaken for a
-		# blade (`GubCombat._wants_shaft`, `_wants_bow`).
-		gub.held_gear.set_carried(false)
-		gub.held_gear.set_bow(false)
+		# blade (`BogCombat._wants_shaft`, `_wants_bow`).
+		bog.held_gear.set_carried(false)
+		bog.held_gear.set_bow(false)
 
-		_compass(gub, skeleton)
+		_compass(bog, skeleton)
 		var mark := i == marked
 		var stamp := Label3D.new()
 		stamp.text = "%.2f s\n%.2f m%s" % [time, reached,
@@ -353,19 +353,19 @@ func _sheet() -> void:
 		stamp.modulate = Color(1.0, 0.78, 0.30) if mark else Color.WHITE
 		stamp.position = Vector3(0.0, 2.80, 0.0)
 		stamp.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		gub.add_child(stamp)
+		bog.add_child(stamp)
 
 	_build_stage()
 
 
-## A ring on the floor under one Gub with a spoke down its hip line, which is
+## A ring on the floor under one Bog with a spoke down its hip line, which is
 ## what turns "the shoulders look twisted" into "the body is 214° round".
 ##
 ## The hip line and not the node's yaw: the whole point of this clip is that the
 ## rotation lives *inside the skeleton*, so a compass drawn off `body_yaw` would
-## be a compass that never moved — which is the same fact `GubCombat` has to read
+## be a compass that never moved — which is the same fact `BogCombat` has to read
 ## the blade off the bone attachment for.
-func _compass(gub: Gub, skeleton: Skeleton3D) -> void:
+func _compass(bog: Bog, skeleton: Skeleton3D) -> void:
 	var left := skeleton.find_bone("LeftUpLeg")
 	var right := skeleton.find_bone("RightUpLeg")
 	if left < 0 or right < 0:
@@ -386,10 +386,10 @@ func _compass(gub: Gub, skeleton: Skeleton3D) -> void:
 	ring.mesh = torus
 	ring.position = Vector3(0.0, 0.03, 0.0)
 	ring.material_override = paint
-	gub.add_child(ring)
+	bog.add_child(ring)
 
 	# Outside the ring rather than across it. A spoke drawn from the centre is a
-	# spoke under the Gub's own legs, which is where the first version of this
+	# spoke under the Bog's own legs, which is where the first version of this
 	# sheet put it and why the first version showed seven identical rings.
 	var spoke := MeshInstance3D.new()
 	var bar := BoxMesh.new()
@@ -398,11 +398,11 @@ func _compass(gub: Gub, skeleton: Skeleton3D) -> void:
 	spoke.material_override = paint
 	spoke.position = Vector3(cos(yaw) * 0.93, 0.04, sin(yaw) * 0.93)
 	spoke.rotation.y = -yaw
-	gub.add_child(spoke)
+	bog.add_child(spoke)
 
 
 ## The ground the advance is read against: a chalk line across the travel
-## direction every half metre, plus one on `Gub.SPIN_ADVANCE` itself, so the
+## direction every half metre, plus one on `Bog.SPIN_ADVANCE` itself, so the
 ## staircase can be measured off the picture and not merely seen in it.
 func _ground(row: Vector3, travel: Vector3) -> void:
 	var ground := MeshInstance3D.new()
@@ -415,7 +415,7 @@ func _ground(row: Vector3, travel: Vector3) -> void:
 	add_child(ground)
 
 	var width := SHEET_SPREAD * float(samples) + 0.6
-	var marks: Array[float] = [0.0, 0.5, 1.0, 1.5, Gub.SPIN_ADVANCE]
+	var marks: Array[float] = [0.0, 0.5, 1.0, 1.5, Bog.SPIN_ADVANCE]
 	for i in marks.size():
 		var at: float = marks[i]
 		var last := i == marks.size() - 1
@@ -442,30 +442,30 @@ func _ground(row: Vector3, travel: Vector3) -> void:
 		add_child(tag)
 
 
-## A Gub with nothing driving it: no camera, no plate, no animation tree and no
+## A Bog with nothing driving it: no camera, no plate, no animation tree and no
 ## combat node, so the only thing posing this skeleton is this file. Leaving
 ## `Combat` in would have it repaint the hands off a swing gate that knows
 ## nothing about a preview scene, on the frame after every pose.
-func _bare_gub() -> Gub:
-	var gub := GUB.instantiate() as Gub
-	add_child(gub)
-	gub.set_physics_process(false)
+func _bare_bog() -> Bog:
+	var bog := BOG.instantiate() as Bog
+	add_child(bog)
+	bog.set_physics_process(false)
 	for spare in ["CameraRig", "Nameplate", "AnimationTree", "Combat"]:
-		var node := gub.get_node_or_null(spare)
+		var node := bog.get_node_or_null(spare)
 		if node != null:
 			node.queue_free()
-	return gub
+	return bog
 
 
 func _build_stage() -> void:
 	var label := Label3D.new()
 	label.text = "Swing %.3f-%.3f s   release %.3f s   advance %.3f m   sword x%.3f, %.2f m" % [
-		GubAnimator.SWING_CLIP_START, GubAnimator.SWING_CLIP_END,
-		GubAnimator.SWING_RELEASE_IN_CLIP, Gub.SPIN_ADVANCE, HeldGear.SWORD_SCALE,
+		BogAnimator.SWING_CLIP_START, BogAnimator.SWING_CLIP_END,
+		BogAnimator.SWING_RELEASE_IN_CLIP, Bog.SPIN_ADVANCE, HeldGear.SWORD_SCALE,
 		HeldGear.SWORD_LENGTH * HeldGear.SWORD_SCALE]
 	label.font_size = 72
 	label.pixel_size = 0.0013
-	label.position = Vector3(0.0, 3.75, Gub.SPIN_ADVANCE * -0.5)
+	label.position = Vector3(0.0, 3.75, Bog.SPIN_ADVANCE * -0.5)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	add_child(label)
 
@@ -481,7 +481,7 @@ func _build_stage() -> void:
 	add_child(fill)
 
 	# Orthographic, for `preview_anim.gd`'s reason: under perspective the end
-	# Gubs of a wide row are seen from a different side than the middle one, so
+	# Bogs of a wide row are seen from a different side than the middle one, so
 	# the same pose looks like a different pose in every sample. It matters twice
 	# here, because the other axis is a distance being measured off the picture:
 	# under perspective the far end of the staircase would be smaller than the
@@ -490,7 +490,7 @@ func _build_stage() -> void:
 	# Dead front, and lifted: the elevation is what turns the advance into
 	# something visible at all. At VIEW_ELEVATION a metre of travel is
 	# sin(VIEW_ELEVATION) of a metre up the screen, which over 1.712 m is most of
-	# a Gub's own height — enough to read against the chalk, and not so much that
+	# a Bog's own height — enough to read against the chalk, and not so much that
 	# the row climbs out of frame.
 	var elevation := deg_to_rad(VIEW_ELEVATION)
 	var eye := Vector3(0.0, sin(elevation), cos(elevation))
@@ -498,7 +498,7 @@ func _build_stage() -> void:
 	var aspect: float = view.x / maxf(view.y, 1.0)
 	var wide := (SHEET_SPREAD * float(samples - 1) + FRAME_MARGIN * 2.0) / aspect
 	var target := Vector3(0.0, (FRAME_LOW + FRAME_HIGH) * 0.5,
-		Gub.SPIN_ADVANCE * -0.5)
+		Bog.SPIN_ADVANCE * -0.5)
 	var cam := Camera3D.new()
 	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
 	cam.size = maxf(FRAME_MIN, wide)

@@ -35,7 +35,7 @@ const TEAM_ONLY := ["team_count", "random_teams", "friendly_fire"]
 ## Built in code, so it cannot be reached through `%` — nodes added at runtime
 ## have no owner to register a unique name with.
 var _seed_button: Button
-## The Capture G·U·B section's heading, separator and rules note, hidden with its
+## The Capture B·O·G section's heading, separator and rules note, hidden with its
 ## rows when another condition is picked (D-051).
 var _capture_section: Array[Control] = []
 var _capture_note: Label
@@ -77,8 +77,8 @@ func _build() -> void:
 	# In `MatchConfig.WinCondition` order, because `_choice` converts by index.
 	# Appending here is the other half of never reordering that enum.
 	_choice("win_condition", "Ends on",
-		["First to the kill limit", "Last Gub standing", "The clock",
-			"First to collect G·U·B", "Capture G·U·B (teams)"])
+		["First to the kill limit", "Last Bog standing", "The clock",
+			"First to collect B·O·G", "Capture B·O·G (teams)"])
 
 	_section("Limits")
 	_slider("kill_limit", "Kill limit", 1, 50, 1, func(v: float) -> String:
@@ -108,17 +108,17 @@ func _build() -> void:
 		func(v: float) -> String: return "%d%% of deaths" % roundi(v * 100.0))
 	# Beside the robe's chance and in the same words, because they are the same
 	# kind of row: both are named shares taken off the top of one drop table, and
-	# reading them together is the only way to see what is left for the mushroom
-	# and the lure (D-067).
+	# reading them together is the only way to see what is left for the shield
+	# and the magnet (D-067).
 	_slider("potion_drop_chance", "Heal potion chance", 0.0, 1.0, 0.01,
 		func(v: float) -> String: return "%d%% of deaths" % roundi(v * 100.0))
 	_toggle("friendly_fire", "Friendly fire")
 
-	# Capture G·U·B's own rules (D-051), a section of their own rather than rows
+	# Capture B·O·G's own rules (D-051), a section of their own rather than rows
 	# tucked into Limits, and shown only when that condition is picked: they
 	# describe a different game, and a host reading "Dropped letter returns"
 	# under a kill-limit match would be reading about rules that do not exist.
-	_capture_section = _section("Capture G·U·B")
+	_capture_section = _section("Capture B·O·G")
 	# How long a dead carrier's card lies where it fell before going home. The
 	# one number that decides what killing a carrier is worth.
 	_slider("capture_return_time", "Dropped letter returns", 3.0, 60.0, 1.0,
@@ -133,7 +133,7 @@ func _build() -> void:
 	# the hard way in a match.
 	_capture_note = _note("Three letters. Carry one into your team's ring to bank "
 		+ "it; it goes back to the middle. A carrier cannot throw. A dead carrier "
-		+ "drops the card for anyone to take. Bank G, U and B to win.")
+		+ "drops the card for anyone to take. Bank B, O and G to win.")
 	_capture_note.name = "CaptureRules"
 
 	_section("Feel")
@@ -154,37 +154,37 @@ func _build() -> void:
 		func(v: float) -> String: return "%.2f s" % v)
 	_slider("bow_recharge", "Bow recharge", 0.2, 15.0, 0.1,
 		func(v: float) -> String: return "%.1f s" % v)
-	# Damage as a fraction of a Gub rather than as a bare number, because "80"
-	# means nothing without knowing that a Gub is 100 — and the two numbers a
+	# Damage as a fraction of a Bog rather than as a bare number, because "80"
+	# means nothing without knowing that a Bog is 100 — and the two numbers a
 	# host is actually tuning against are `Nameplate`'s bands at 50 and 25
 	# (D-062).
 	_slider("bow_damage_snap", "Snap shot hits for", 1.0, 100.0, 1.0,
 		func(v: float) -> String:
-			return "%d  (%d%% of a Gub)" % [roundi(v), roundi(v / Gub.MAX_HEALTH * 100.0)])
+			return "%d  (%d%% of a Bog)" % [roundi(v), roundi(v / Bog.MAX_HEALTH * 100.0)])
 	_slider("bow_damage_full", "Full draw hits for", 1.0, 100.0, 1.0,
 		func(v: float) -> String:
-			return "%d  (%d%% of a Gub)" % [roundi(v), roundi(v / Gub.MAX_HEALTH * 100.0)])
+			return "%d  (%d%% of a Bog)" % [roundi(v), roundi(v / Bog.MAX_HEALTH * 100.0)])
 	# The four flight dials say what they *buy* as well as what they are: the
-	# flat band is the distance inside which you point at a Gub and hit it
-	# (`GubCombat.flat_band`), and it is the only reading of speed-against-drop
+	# flat band is the distance inside which you point at a Bog and hit it
+	# (`BogCombat.flat_band`), and it is the only reading of speed-against-drop
 	# that a host can act on. It is also the number the Elder's own range is now
 	# derived from, which is why the full draw's two rows say so.
 	_slider("bow_speed_snap", "Snap shot speed", 5.0, 120.0, 1.0,
 		func(v: float) -> String:
 			return "%d m/s  ·  flat to %.0f m" % [roundi(v),
-				GubCombat.flat_band(v, Net.config.bow_drop_snap)])
+				BogCombat.flat_band(v, Net.config.bow_drop_snap)])
 	_slider("bow_drop_snap", "Snap shot drop", 0.5, 40.0, 0.5,
 		func(v: float) -> String:
 			return "%.1f m/s²  ·  flat to %.0f m" % [v,
-				GubCombat.flat_band(Net.config.bow_speed_snap, v)])
+				BogCombat.flat_band(Net.config.bow_speed_snap, v)])
 	_slider("bow_speed_full", "Full draw speed", 5.0, 120.0, 1.0,
 		func(v: float) -> String:
 			return "%d m/s  ·  flat to %.0f m" % [roundi(v),
-				GubCombat.flat_band(v, Net.config.bow_drop_full)])
+				BogCombat.flat_band(v, Net.config.bow_drop_full)])
 	_slider("bow_drop_full", "Full draw drop", 0.5, 40.0, 0.5,
 		func(v: float) -> String:
 			return "%.1f m/s²  ·  flat to %.0f m  (and the bolt with it)" % [v,
-				GubCombat.flat_band(Net.config.bow_speed_full, v)])
+				BogCombat.flat_band(Net.config.bow_speed_full, v)])
 	# The great sword's two, under the bow's eight and above the Elder's, because
 	# that is the order a player meets the four weapons in — and because the row
 	# that matters is again the one against `spear_recharge`: what a sword trades
@@ -192,24 +192,24 @@ func _build() -> void:
 	# asked for against how often a spear can is the whole of that trade (D-068).
 	#
 	# There are only two of them because there is nothing else to tune. The
-	# damage is a whole Gub by construction and the sweep's shape is a fact about
-	# the weapon rather than a setting (`GubCombat.SWORD_ARC`).
+	# damage is a whole Bog by construction and the sweep's shape is a fact about
+	# the weapon rather than a setting (`BogCombat.SWORD_ARC`).
 	_slider("sword_reach", "Great sword reaches", 0.5, 6.0, 0.01,
 		func(v: float) -> String:
 			# Said with the advance in it, because the dial on its own is not
 			# the number a player experiences: the body covers
-			# `Gub.SPIN_ADVANCE` during the swing, so what a host is really
+			# `Bog.SPIN_ADVANCE` during the swing, so what a host is really
 			# dragging is where a swing can be *started* from.
-			return "%.2f m  ·  %.2f m with the advance" % [v, v + Gub.SPIN_ADVANCE])
+			return "%.2f m  ·  %.2f m with the advance" % [v, v + Bog.SPIN_ADVANCE])
 	_slider("sword_recharge", "Great sword recharge", 0.0, 10.0, 0.05,
 		func(v: float) -> String:
 			# And this one says what it buys, which is the chain: at the default
 			# the next swing becomes available on the tick the last one's spin
 			# ends, which is the one moment the momentum it built is still
 			# there to be added to (D-052, D-068).
-			var cycle := GubAnimator.SWING_RELEASE_TIME + v
+			var cycle := BogAnimator.SWING_RELEASE_TIME + v
 			return "%.2f s  ·  a swing every %.2f s%s" % [v, cycle,
-				"  (chains)" if cycle <= GubAnimator.SWING_SECONDS + 0.001 else ""])
+				"  (chains)" if cycle <= BogAnimator.SWING_SECONDS + 0.001 else ""])
 	# Directly under the spear's recharge, because the two are one question: how
 	# often anybody can commit to an attack — and since D-040 the Elder's is the
 	# *shorter* of the two, which is exactly the sort of thing a host should
@@ -246,37 +246,37 @@ func _build() -> void:
 	# And the jump is shown as the height it actually reaches, because the
 	# multiplier is on launch velocity and height goes as its square: +25% on
 	# this slider is +56% of apex, and a host reading "+25%" would be tuning the
-	# wrong number. 1.69 m at 1.0, and asked of `Gub` rather than worked out
+	# wrong number. 1.69 m at 1.0, and asked of `Bog` rather than worked out
 	# here, so a UI file cannot end up quoting an apex the physics stopped
 	# producing.
 	_slider("elder_jump_multiplier", "Elder jump", 1.0, 3.0, 0.05,
 		func(v: float) -> String:
-			return "%.2f m high" % Gub.apex_for(Gub.JUMP_VELOCITY * v))
+			return "%.2f m high" % Bog.apex_for(Bog.JUMP_VELOCITY * v))
 	_slider("respawn_delay", "Respawn delay", 0.0, 10.0, 0.5, func(v: float) -> String:
 		return "Instant" if v <= 0.0 else "%.1f s" % v)
-	# Not cooldowns. Mushrooms and lures are carried stock now (D-032) and these
+	# Not cooldowns. Shields and magnets are carried stock now (D-032) and these
 	# only decide how fast a stack can be emptied — which is why they are
 	# seconds and not tens of seconds.
-	_slider("mushroom_use_delay", "Mushroom delay", 0.1, 10.0, 0.1,
+	_slider("shield_use_delay", "Shield delay", 0.1, 10.0, 0.1,
 		func(v: float) -> String: return "%.1f s" % v)
-	_slider("lure_use_delay", "Lure delay", 0.1, 10.0, 0.1,
+	_slider("magnet_use_delay", "Magnet delay", 0.1, 10.0, 0.1,
 		func(v: float) -> String: return "%.1f s" % v)
 	# The potion's two, under the other carried stock. It has no use-delay row to
 	# sit beside them, and that is deliberate: the channel *is* the floor on how
 	# fast a stack can be emptied, and a second dial that also gated it would be
 	# two answers to one question (D-067).
 	#
-	# The heal is said as a fraction of a Gub rather than as "40", because what
-	# a player wants to know is how much of one this is worth and `Gub.MAX_HEALTH`
+	# The heal is said as a fraction of a Bog rather than as "40", because what
+	# a player wants to know is how much of one this is worth and `Bog.MAX_HEALTH`
 	# is the unit everything in this game is written in (D-062).
 	_slider("heal_amount", "Potion heals", 5.0, 100.0, 5.0,
 		func(v: float) -> String:
-			return "%d (%d%% of a Gub)" % [roundi(v),
-				roundi(100.0 * v / Gub.MAX_HEALTH)])
+			return "%d (%d%% of a Bog)" % [roundi(v),
+				roundi(100.0 * v / Bog.MAX_HEALTH)])
 	_slider("heal_channel", "Drinking takes", 0.5, 6.0, 0.1,
 		func(v: float) -> String: return "%.1f s standing still" % v)
 	_slider("max_players", "Lobby size", MatchConfig.MIN_PLAYERS, MatchConfig.MAX_PLAYERS,
-		1, func(v: float) -> String: return "%d Gubs" % int(v))
+		1, func(v: float) -> String: return "%d Bogs" % int(v))
 
 	_section("Map")
 	_map_row()
@@ -322,8 +322,8 @@ func slider_rows() -> Array[Dictionary]:
 # **Built from `MatchConfig.fields()`, never from a list written here.** That is
 # what travels on the wire, so a field missing from a capture is a setting the
 # person you sent it to would never see. Eight of those fields have no row in
-# this panel — `spawn_protection`, `warmup_time`, the mushroom's lifetime and
-# cap, the lure's four — and they are captured anyway, under their own heading,
+# this panel — `spawn_protection`, `warmup_time`, the shield's lifetime and
+# cap, the magnet's four — and they are captured anyway, under their own heading,
 # because "capture all the settings" means all of them and a dial that is not on
 # the panel is exactly the one somebody would otherwise forget.
 
@@ -357,7 +357,7 @@ func capture_rows() -> Array[Dictionary]:
 
 
 ## What one field reads as. The panel's own words wherever the panel has them —
-## a slider's formatter already says "80  (80% of a Gub)" and "a swing every
+## a slider's formatter already says "80  (80% of a Bog)" and "a swing every
 ## 1.47 s  (chains)", which is the whole reason those formatters exist and is far
 ## better than the float underneath. A field with no row falls back to the value.
 func _capture_value(field: String, entry: Dictionary, config: MatchConfig) -> String:
@@ -398,7 +398,7 @@ func transcript(title: String, notes: String) -> String:
 	var rows := capture_rows()
 	var lines: Array[String] = []
 	var named := title.strip_edges()
-	lines.append("GUB match config — %s" % (named if not named.is_empty()
+	lines.append("BOG match config — %s" % (named if not named.is_empty()
 		else "unnamed"))
 	lines.append(Net.config.summary())
 	var said := notes.strip_edges()
@@ -785,7 +785,7 @@ func _push(field: String, value: Variant) -> void:
 		return
 	var next := Net.config.duplicate_config()
 	next.set(field, value)
-	# Capture G·U·B is teams-only, and `MatchConfig._clamp_all` turns Teams on
+	# Capture B·O·G is teams-only, and `MatchConfig._clamp_all` turns Teams on
 	# whenever it is picked (D-051). That clamp cannot tell which of the two was
 	# just changed, so the other direction is decided here, where it can: a host
 	# who picks Free-for-all while Capture is selected gets a free-for-all, on

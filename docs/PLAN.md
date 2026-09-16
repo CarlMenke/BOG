@@ -1,8 +1,8 @@
-# GUB — Master Build Plan
+# BOG — Master Build Plan
 
 > Current position and how to resume: **`docs/STATUS.md`**.
 
-A match-based 3rd-person multiplayer game in Godot 4.7.2. Players are GUBs — small yellow
+A match-based 3rd-person multiplayer game in Godot 4.7.2. Players are BOGs — small yellow
 aliens — fighting on a floating enchanted-forest island with instant-kill thrown spears.
 
 This is the single source of truth for scope. Every item is tracked to completion.
@@ -26,25 +26,25 @@ pieces fit together is `docs/ARCHITECTURE.md`.
 - [x] 1.3  Main menu — name entry, Host, Join-by-code, Settings, Quit
 - [x] 1.4  Lobby UI — player list, invite code + copy, match settings (host-only),
            ready toggle, team pick, start button, chat
-- [x] 1.5  Lobby 3D backdrop — real Gubs standing in a ring with live nameplates
+- [x] 1.5  Lobby 3D backdrop — real Bogs standing in a ring with live nameplates
 - [x] 1.6  `MatchConfig` resource — mode, limits, timers, cooldowns, friendly fire
 - [x] 1.7  Scene flow — Menu → Lobby → Game → Results → Lobby
 - [~] 1.8  Robust disconnect handling — host leaves and client drops are done and
            now proven over a real socket by `tools/net_test.sh`: a dropped peer's
-           Gub is freed on every machine and the win check re-runs, so a lives
+           Bog is freed on every machine and the win check re-runs, so a lives
            match can still end. **Mid-match join as spectator is not**: a late
-           joiner is never told about Gubs that already exist, because
-           `_create_gub` is broadcast once at spawn time. It needs a
+           joiner is never told about Bogs that already exist, because
+           `_create_bog` is broadcast once at spawn time. It needs a
            world-state-on-join message. The UI's response to a mid-match
            disconnect has still only been seen in a harness.
 
-## Phase 2 — The Gub (character)
+## Phase 2 — The Bog (character)
 
-- [x] 2.1  Gub scene — CharacterBody3D, capsule, skinned mesh, skeleton
+- [x] 2.1  Bog scene — CharacterBody3D, capsule, skinned mesh, skeleton
 - [x] 2.2  Third-person camera rig — spring arm, collision, shoulder offset, aim zoom
 - [x] 2.3  Movement — walk / run / sprint, jump, crouch, slide, air control, coyote time
 - [x] 2.4  AnimationTree — a blend tree built in code over the nine clips of
-           `art/generated/gub.glb`: speed-driven ground cycles, arc-scrubbed air
+           `art/generated/bog.glb`: speed-driven ground cycles, arc-scrubbed air
            poses, one-shots for slide / land / roll / throw, and an upper-body
            throw layer so throwing works while moving (rebuilt in **D-029**)
 - [x] 2.5  Nameplate — billboarded Label3D, team tint, distance fade, occlusion
@@ -59,8 +59,8 @@ pieces fit together is `docs/ARCHITECTURE.md`.
 - [x] 3.3  Hit resolution (server-authoritative), instant kill
 - [x] 3.3a Spear sticks in the corpse
 - [x] 3.4  Spear regeneration — the hand empties on the throw and refills on the cooldown
-- [x] 3.5  Mushroom shield — deployed in front of the Gub, blocks spears, timed/HP, cooldown
-- [x] 3.6  Lure — thrown, arms on landing, briefly yanks nearby Gubs in and holds them
+- [x] 3.5  Shield — deployed in front of the Bog, blocks spears, timed/HP, cooldown
+- [x] 3.6  Magnet — thrown, arms on landing, briefly yanks nearby Bogs in and holds them
 - [x] 3.7  Death & respawn — spawn points, spawn protection, fall-off-island death
 - [x] 3.8  Feedback — sounds, hitmarker, camera shake and kill feed (6.3)
 
@@ -86,7 +86,7 @@ pieces fit together is `docs/ARCHITECTURE.md`.
 - [x] 5.1  `MatchManager` — warmup / playing / post-match phases, authoritative timers
 - [x] 5.2  Free-for-all — kill limit, time limit
 - [x] 5.3  Teams — assignment, team colours, team score, friendly fire toggle
-- [x] 5.4  Lives / elimination — last Gub standing, spectate on elimination
+- [x] 5.4  Lives / elimination — last Bog standing, spectate on elimination
 - [x] 5.5  Match end → results screen → rematch or back to lobby
 
 ## Phase 6 — UI / UX

@@ -59,11 +59,11 @@ func set_value(key: String, value: Variant) -> void:
 	save_to_disk()
 
 
-## A display name that is always safe to show above a Gub's head.
+## A display name that is always safe to show above a Bog's head.
 func sanitized_player_name() -> String:
 	var raw := String(get_value("player_name")).strip_edges()
 	if raw.is_empty():
-		return "Gub"
+		return "Bog"
 	# Collapse whitespace and clamp length so nameplates stay readable.
 	var collapsed := ""
 	var last_was_space := false

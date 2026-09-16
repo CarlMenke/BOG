@@ -36,7 +36,7 @@ enum Leave {
 
 signal roster_changed()
 ## A peer has gone, and whatever they left behind in the world is now orphaned.
-## `MatchState` listens for this to clear up their Gub — the roster is this
+## `MatchState` listens for this to clear up their Bog — the roster is this
 ## node's business, but a body standing in the arena is not.
 signal player_left(peer_id: int)
 signal joined_lobby()
@@ -225,7 +225,7 @@ func has_player(peer_id: int) -> bool:
 
 func player_name(peer_id: int) -> String:
 	var info: Dictionary = players.get(peer_id, {})
-	return info.get("name", "Gub")
+	return info.get("name", "Bog")
 
 
 func player_team(peer_id: int) -> int:
@@ -270,7 +270,7 @@ func can_start_match() -> bool:
 			return false
 	if config.mode == MatchConfig.Mode.TEAMS:
 		# Random teams are dealt at Start, and dealing round-robin puts two or
-		# more Gubs on at least two teams — so whatever the roster says right now
+		# more Bogs on at least two teams — so whatever the roster says right now
 		# is about to be overwritten, and only the head count matters.
 		if config.random_teams:
 			return players.size() >= 2
@@ -313,9 +313,9 @@ func _smallest_team() -> int:
 ## without a session.
 ##
 ## Round-robin over a shuffled order rather than "each to the smallest team" is
-## what makes the balance a property instead of a hope: after dealing k Gubs the
+## what makes the balance a property instead of a hope: after dealing k Bogs the
 ## team sizes are floor/ceil of k/team_count, so no two differ by more than one
-## however many there are. More teams than Gubs simply leaves the tail empty,
+## however many there are. More teams than Bogs simply leaves the tail empty,
 ## which is the same state a lobby of hand-picked teams is allowed to start in.
 static func deal_teams(ids: Array, team_count: int) -> Dictionary:
 	var order := ids.duplicate()
@@ -334,7 +334,7 @@ func _deal_random_teams() -> void:
 		players[peer_id]["team"] = dealt[peer_id]
 
 
-static func sanitize_name(raw: String, fallback: String = "Gub") -> String:
+static func sanitize_name(raw: String, fallback: String = "Bog") -> String:
 	var text := raw.strip_edges()
 	var out := ""
 	for c in text:
@@ -348,7 +348,7 @@ static func sanitize_name(raw: String, fallback: String = "Gub") -> String:
 	return out if not out.is_empty() else fallback
 
 
-## Names must be distinct or the nameplates above two Gubs become useless.
+## Names must be distinct or the nameplates above two Bogs become useless.
 func _unique_name(desired: String, for_peer: int) -> String:
 	var taken := {}
 	for peer_id: int in players:
@@ -392,10 +392,10 @@ func _on_peer_disconnected(peer_id: int) -> void:
 
 
 ## Told to everyone, not just the host, because every peer is carrying its own
-## copy of the departed player's Gub. Before this existed a client who alt-F4'd
-## mid-match left their Gub standing in the arena on all seven other machines,
+## copy of the departed player's Bog. Before this existed a client who alt-F4'd
+## mid-match left their Bog standing in the arena on all seven other machines,
 ## for the rest of the match — a permanently motionless target that could still
-## be thrown at and still counted toward "last Gub standing".
+## be thrown at and still counted toward "last Bog standing".
 @rpc("authority", "call_remote", "reliable")
 func _announce_departure(peer_id: int) -> void:
 	player_left.emit(peer_id)
@@ -658,7 +658,7 @@ func _deliver_chat(peer_id: int, text: String) -> void:
 ## Under random teams this is the one place teams are dealt. The roster goes out
 ## *before* `_begin_match`: both are reliable RPCs on the default channel, so
 ## ENet delivers them in the order they were sent, and every client has its new
-## team before it loads the arena that tints and labels Gubs by it (D-046,
+## team before it loads the arena that tints and labels Bogs by it (D-046,
 ## D-047). A rematch goes through `request_rematch` instead and deliberately
 ## deals nothing — the user asked that teams stand until everyone is back in
 ## the lobby (D-048).

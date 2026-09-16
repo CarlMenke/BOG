@@ -1,8 +1,8 @@
 [gd_scene load_steps=9 format=3 uid="uid://bgubmainmenu0"]
 
 [ext_resource type="Script" path="res://scripts/ui/main_menu.gd" id="1_menu"]
-[ext_resource type="Script" path="res://scripts/ui/gub_backdrop.gd" id="2_backdrop"]
-[ext_resource type="Theme" path="res://resources/ui/gub_theme.tres" id="3_theme"]
+[ext_resource type="Script" path="res://scripts/ui/bog_backdrop.gd" id="2_backdrop"]
+[ext_resource type="Theme" path="res://resources/ui/bog_theme.tres" id="3_theme"]
 [ext_resource type="PackedScene" path="res://scenes/ui/settings_panel.tscn" id="4_settings"]
 
 [sub_resource type="Gradient" id="Gradient_side"]
@@ -95,7 +95,7 @@ theme_override_constants/separation = 2
 layout_mode = 2
 theme_type_variation = &"DisplayLabel"
 theme_override_font_sizes/font_size = 148
-text = "GUB"
+text = "BOG"
 
 [node name="Rule" type="ColorRect" parent="UI/Root/Column/Stack/Wordmark"]
 custom_minimum_size = Vector2(118, 3)
@@ -130,7 +130,7 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(420, 0)
 layout_mode = 2
 max_length = 16
-placeholder_text = "Gub"
+placeholder_text = "Bog"
 caret_blink = true
 
 [node name="GapB" type="Control" parent="UI/Root/Column/Stack"]

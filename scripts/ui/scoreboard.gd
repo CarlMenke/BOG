@@ -163,7 +163,7 @@ func _player_row(peer_id: int, config: MatchConfig) -> Control:
 	var stripe := ColorRect.new()
 	stripe.custom_minimum_size = Vector2(3, 20)
 	stripe.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	stripe.color = UIPalette.GUB if mine else Color(0, 0, 0, 0)
+	stripe.color = UIPalette.BOG if mine else Color(0, 0, 0, 0)
 	line.add_child(stripe)
 
 	var name_label := Label.new()
@@ -171,7 +171,7 @@ func _player_row(peer_id: int, config: MatchConfig) -> Control:
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	if mine:
-		name_label.add_theme_color_override("font_color", UIPalette.GUB)
+		name_label.add_theme_color_override("font_color", UIPalette.BOG)
 	line.add_child(name_label)
 
 	if peer_id == 1:
@@ -219,7 +219,7 @@ func _mask_cell(mask: int) -> Control:
 		glyph.text = MatchState.letter_name(bit)
 		glyph.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		glyph.add_theme_color_override("font_color",
-			UIPalette.GUB if mask & bit != 0 else UIPalette.faded(UIPalette.TEXT, 0.22))
+			UIPalette.BOG if mask & bit != 0 else UIPalette.faded(UIPalette.TEXT, 0.22))
 		box.add_child(glyph)
 	return box
 

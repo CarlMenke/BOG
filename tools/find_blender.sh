@@ -2,7 +2,7 @@
 #
 #   BLENDER_TAG=build_elder . "$(dirname "$0")/find_blender.sh"
 #
-# This lived inside `tools/build_gub.sh` until `tools/build_elder.sh` needed the
+# This lived inside `tools/build_bog.sh` until `tools/build_elder.sh` needed the
 # same answer. It is the same argument `tools/find_godot.sh` makes at the top of
 # itself: a search for where somebody installed a big application has to stay in
 # step with reality, and two copies of it will not. `$BLENDER_TAG` is only the

@@ -27,21 +27,21 @@ extends RefCounted
 const NO_LAND := -1000.0
 
 ## Angular resolution. 144 sectors puts a vertex every 0.9 m on the main
-## island's rim, which is under the width of a Gub and so reads as a curve.
+## island's rim, which is under the width of a Bog and so reads as a curve.
 const SECTORS := 144
 ## Radial rings on the top surface, and on the underside cone.
 const SURFACE_RINGS := 30
 const UNDERSIDE_RINGS := 14
 
 ## Terrain relief from noise, in metres, before the shaping terms. Kept low on
-## purpose: this is a duelling map, and rolling ground that hides a crouched Gub
+## purpose: this is a duelling map, and rolling ground that hides a crouched Bog
 ## at 15 m is ground that makes an instant-kill weapon feel arbitrary. The read
 ## comes from the hollow, the knoll and the props, not from noise.
 const RELIEF := 1.15
 ## The rim lips downward over the last fifth of the radius, so the island reads
 ## as a torn-out chunk of world rather than as a table with a cloth on it. The
 ## drop is scaled by each landmass's radius: a fixed 1.6 m taken out of the last
-## fifth of a 5 m islet is a 1.5:1 bank a Gub cannot climb, and the islets are
+## fifth of a 5 m islet is a 1.5:1 bank a Bog cannot climb, and the islets are
 ## where the bridges land.
 const RIM_DROOP_START := 0.80
 const RIM_DROOP := 1.6
@@ -347,8 +347,8 @@ func _height_on(mass: Landmass, x: float, z: float) -> float:
 ## whether something can stand here. 0.0 is flat, 1.0 is 45°.
 ##
 ## Sampled rather than differentiated because the height is a sum of noise,
-## cosine features and a smoothstep, and the point of the number is "can a Gub
-## walk on it", which is a question about a Gub-sized patch — not about the
+## cosine features and a smoothstep, and the point of the number is "can a Bog
+## walk on it", which is a question about a Bog-sized patch — not about the
 ## analytic tangent at an infinitesimal point.
 func slope_at(x: float, z: float, span: float = 0.6) -> float:
 	var here := height_at(x, z)
@@ -434,7 +434,7 @@ func _build_landmass(mass: Landmass) -> Node3D:
 	root.add_child(visual)
 
 	# Collision is the **top surface only**. The rocky root is decoration hanging
-	# in a place no Gub can reach: anything that leaves the rim is already dead
+	# in a place no Bog can reach: anything that leaves the rim is already dead
 	# by `MatchState._tick_void`, and a second concave shape of five thousand
 	# triangles would be paid for on every broadphase query for nothing.
 	var body := StaticBody3D.new()

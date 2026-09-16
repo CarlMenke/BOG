@@ -3,9 +3,9 @@ extends VBoxContainer
 ## Who just killed whom (PLAN 3.8, 6.3), and who just picked up a letter (D-050).
 ##
 ## In a game where one hit kills, the feed is not trivia — it is the only way to
-## know that the Gub you were about to fight is already dead, or that the person
+## know that the Bog you were about to fight is already dead, or that the person
 ## who keeps killing you is on a streak. So rows you are in are marked: your own
-## name is always the Gub's yellow, and a row you are involved in keeps a bright
+## name is always the Bog's yellow, and a row you are involved in keeps a bright
 ## edge while the others sink back.
 ##
 ## Rows are plain nodes with a tween on their modulate rather than a timer that
@@ -25,12 +25,12 @@ func _ready() -> void:
 	add_theme_constant_override("separation", 4)
 
 
-## `cause` is a `Gub.Cause`. A victim who is their own killer fell off the
+## `cause` is a `Bog.Cause`. A victim who is their own killer fell off the
 ## island under their own steam, which the feed says in words rather than
 ## drawing an arrow from someone to themselves.
 func add_kill(victim_id: int, killer_id: int, cause: int) -> void:
 	if killer_id == victim_id or killer_id == 0:
-		# Name first, so every row in the feed starts with a Gub and the eye can
+		# Name first, so every row in the feed starts with a Bog and the eye can
 		# scan the left edge of the column for its own name.
 		add_event([victim_id, _self_death_text(cause)])
 	else:
@@ -110,7 +110,7 @@ func _name_label(peer_id: int) -> Label:
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	var colour := UIPalette.TEXT
 	if peer_id == Net.local_id():
-		colour = UIPalette.GUB
+		colour = UIPalette.BOG
 	elif Net.config.mode == MatchConfig.Mode.TEAMS:
 		colour = UIPalette.team_colour(Net.player_team(peer_id))
 	label.add_theme_color_override("font_color", colour)
@@ -130,27 +130,27 @@ func _word(text: String, colour: Color) -> Label:
 ## as "did this to" in every language a player is likely to bring.
 static func _cause_glyph(cause: int) -> String:
 	match cause:
-		Gub.Cause.SPEAR:
+		Bog.Cause.SPEAR:
 			return "⟶"
-		Gub.Cause.ARROW:
+		Bog.Cause.ARROW:
 			# A shorter arrow with a nock on the back of it, because the bow and
 			# the spear are otherwise the same sentence — "a pointy thing flew
 			# at you" — and the feed is where a player works out which of the
 			# two they keep dying to (D-065).
 			return "↣"
-		Gub.Cause.SWORD:
+		Bog.Cause.SWORD:
 			# Not an arrow at all, because nothing flew: the great sword is the
 			# one kill in this game that happened at arm's length, and the feed
 			# is where a player finds out that somebody got that close (D-068).
 			return "⚔"
-		Gub.Cause.LIGHTNING:
+		Bog.Cause.LIGHTNING:
 			# The one cause with a mark of its own rather than the generic
 			# arrow, because it is the one kill in the game that is worth
 			# reading the feed to find out about (D-038).
 			return "⚡"
-		Gub.Cause.VOID:
+		Bog.Cause.VOID:
 			return "pushed off"
-		Gub.Cause.FALL:
+		Bog.Cause.FALL:
 			return "dropped"
 		_:
 			return "⟶"
@@ -158,9 +158,9 @@ static func _cause_glyph(cause: int) -> String:
 
 static func _self_death_text(cause: int) -> String:
 	match cause:
-		Gub.Cause.VOID:
+		Bog.Cause.VOID:
 			return "fell off the island"
-		Gub.Cause.FALL:
+		Bog.Cause.FALL:
 			return "misjudged a drop"
 		_:
 			return "died"

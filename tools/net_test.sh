@@ -21,7 +21,7 @@
 # It holds itself to "the engine stayed quiet", not just "the assertions
 # passed": any ERROR line either process logs, outside exit-time leak reports,
 # fails the run. For a long time one always survived — reported as a race at
-# match start, and actually the harness's own client freeing its Gubs a frame
+# match start, and actually the harness's own client freeing its Bogs a frame
 # before it left (D-044). Nothing is excused now.
 #
 # Notes for anyone running it:
@@ -40,7 +40,7 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-LOG_DIR="${TMPDIR:-/tmp}/gub_net"
+LOG_DIR="${TMPDIR:-/tmp}/bog_net"
 HOST_LOG="$LOG_DIR/host.log"
 CLIENT_LOG="$LOG_DIR/client.log"
 
@@ -290,13 +290,13 @@ note_if "Failed to get cached node" \
     "* A MultiplayerSynchronizer published to a peer that had already freed its" \
     "  copy of that node. The sender has to stop before the receiver frees:" \
     "  MatchState._stop_publishing does that when a match ends (D-044). If this" \
-    "  is back, something now frees Gubs where the sender was not told first —" \
+    "  is back, something now frees Bogs where the sender was not told first —" \
     "  a new way out of a match, or a teardown in the harness."
 note_if "Unable to get unique ID" \
-    "* MatchState.local_gub() asks multiplayer for its unique id with no peer" \
-    "  assigned. Gub.is_local() already guards against exactly this and says so" \
+    "* MatchState.local_bog() asks multiplayer for its unique id with no peer" \
+    "  assigned. Bog.is_local() already guards against exactly this and says so" \
     "  in a comment; MatchState never got the same guard, and hud.gd reaches" \
-    "  local_gub() three times a frame — so leaving a match, or being dropped by" \
+    "  local_bog() three times a frame — so leaving a match, or being dropped by" \
     "  a host who closed the lobby, logs three of these per frame until the" \
     "  scene finally changes."
 

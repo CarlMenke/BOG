@@ -8,13 +8,13 @@ where it slid 1.36.
 
 Each of these needs its authored speed measured, the way `AUTHORED_RUN = 4.314`
 was: give the clip an `authored_as="AUTHORED_..."` in `PACKS` and the build
-prints the number to put in `gub.gd`. A locomotion clip that names no constant
+prints the number to put in `bog.gd`. A locomotion clip that names no constant
 is a clip whose speed nobody will ever match, and its feet will skate.
 
 **Five of the eleven files here are declared**, and a sixth clip is *built from*
 one of them rather than downloaded (D-071). What follows is the record of how
 they were chosen and what they cost; the numbers below are printed by `bash
-tools/build_gub.sh` on every run.
+tools/build_bog.sh` on every run.
 
 ## What is in here
 
@@ -67,15 +67,15 @@ had in it. Travel in degrees off the body's own forward:
 | `LeftStrafe.fbx` | **+8.6°** | **+27.5°** |
 | `StandingRunLeft.fbx` | +50.8° | **+76.5°** |
 
-`build_gub.py` aligns every clip by its **hip line**, because that is the one
+`build_bog.py` aligns every clip by its **hip line**, because that is the one
 measurement that stays put while the arms and torso animate. In a sidestep it is
 the pelvis that moves: it turns *into* the step and the chest does not. So
 aligning `LeftStrafe` by its pelvis drags the travel round with it and leaves the
-game a clip that moves 8.6° off forward — a Gub jogging very slightly to one
+game a clip that moves 8.6° off forward — a Bog jogging very slightly to one
 side, where the 28° this pack was chosen on is the **shoulder** figure.
 
 The four strafes are therefore declared with `face=CHEST_JOINTS` and nothing else
-is (D-066), and that reference is **load-bearing rather than tidy**: `GubAim`
+is (D-066), and that reference is **load-bearing rather than tidy**: `BogAim`
 turns `Spine`, `Spine1` and `Spine2` by a constant measured off the draw clip,
 and `Spine` sits below `UPPER_BODY_BONES`, so whatever yaw the locomotion clip
 puts on it goes straight into where the bow points. Read off the `Head` instead,
@@ -142,7 +142,7 @@ sideways off 0.80.
 which is the handedness this README is about.
 
 That one file also flips the blend-space position rule — see `_body_relative` in
-`gub_animator.gd`, which carries the derivation — and widens
+`bog_animator.gd`, which carries the derivation — and widens
 `STRAFE_SIDEWAYS_LIMIT` in `combat_range.gd`, which sits at 0.85 only because the
 walk legs are still where D-066 left them.
 
@@ -158,17 +158,17 @@ get there — so a backpedal now plants its feet as well as a forward walk does:
 The one thing to know about them is the **playback rate**. `WalkBack` is authored
 at 0.871 m/s and has to carry a 2.3 m/s backpedal, which is **2.64x** — the
 fastest of any cycle in the game. Its feet are planted, which is what the ratio
-is for, but a Gub backing away at walking pace is visibly scampering. If that
+is for, but a Bog backing away at walking pace is visibly scampering. If that
 ever needs to come down the lever is a backward speed penalty in
-`Gub.target_speed`, not a number in the animator.
+`Bog.target_speed`, not a number in the animator.
 
 ## What every clip in every pack has to be
 
 The same upload. These clips land on **one** skeleton, so each one has to come
-off *the Gub as uploaded to Mixamo*, in that same Adobe account, downloaded
+off *the Bog as uploaded to Mixamo*, in that same Adobe account, downloaded
 again with this animation applied to it. A stock Mixamo character, a CC0 pack
-from anywhere else, or even the same Gub uploaded a second time gives a
-different vertex count or a bind pose a fraction out, and `build_gub.py` refuses
+from anywhere else, or even the same Bog uploaded a second time gives a
+different vertex count or a bind pose a fraction out, and `build_bog.py` refuses
 it on the first import (`assert_same_character`) rather than shipping a subtly
 broken skin in one clip. There is no retarget stage here to bridge that gap —
 deliberately, because the five things this pipeline does that Godot's
@@ -183,7 +183,7 @@ put 105 files in `_rejected/`.
 ## Dropping files in here does nothing on its own
 
 A folder somebody dropped files into is not a promise; a line in `PACKS` is. Add
-a `Clip(...)` for each file in this pack's entry in `tools/build_gub.py`, with
+a `Clip(...)` for each file in this pack's entry in `tools/build_bog.py`, with
 its clip name, whether it loops, its alignment reference, and — for anything that
 moves sideways — `CHEST_JOINTS` as its `face`. Five files in here are deliberately
 *not* named, for the reasons above, and the build reports all five every run,
@@ -196,8 +196,8 @@ measure +76.5, −45.9, +126.5 and −46.3. `tools/preview_clips.sh` will draw a
 file in here with a floor compass under it without declaring anything, and the
 build prints the bearing of everything it does declare.
 
-    bash tools/build_gub.sh -- --list-packs   # what the pipeline thinks is here
-    bash tools/build_gub.sh                   # rebuild art/generated/gub.glb
+    bash tools/build_bog.sh -- --list-packs   # what the pipeline thinks is here
+    bash tools/build_bog.sh                   # rebuild art/generated/bog.glb
 
 Files sitting here that `PACKS` does not name are reported by both, which is
 what "I downloaded the clips and nothing changed" looks like from the inside.

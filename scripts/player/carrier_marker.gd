@@ -1,16 +1,16 @@
 class_name CarrierMarker
 extends Node3D
-## A gold card over the head of a Gub that is carrying something the whole
+## A gold card over the head of a Bog that is carrying something the whole
 ## lobby needs to know about, drawn through the scenery for everyone (D-050).
 ##
-## Today that is a letter hold: from the moment a Gub touches a card until it
+## Today that is a letter hold: from the moment a Bog touches a card until it
 ## banks the letter, dies or the match ends, every screen — both teams, and
 ## everyone in a free-for-all — sees a card with the letter on it hanging over
-## that Gub, through walls, at any range. The lit card in the fist (D-035) is
+## that Bog, through walls, at any range. The lit card in the fist (D-035) is
 ## still there; this is the part of the tell that does not need line of sight.
 ##
 ## **Knows nothing about letters.** It is a glyph and a colour, switched on and
-## off by whoever decides that a Gub is a carrier — `GubCombat` for a letter
+## off by whoever decides that a Bog is a carrier — `BogCombat` for a letter
 ## hold. The next thing that is carried (a capture-the-flag letter) turns on the
 ## same marker with `set_carrying`, so "somebody over there has the thing" reads
 ## the same way in every mode.
@@ -21,13 +21,13 @@ extends Node3D
 ## it and no text beside it — a shape, where a plate is lettering with an outline
 ## — and it sits above the plate, clear of even a teammate's enlarged one.
 ##
-## **Hidden over your own Gub.** You know you are carrying; the HUD lamps say so
+## **Hidden over your own Bog.** You know you are carrying; the HUD lamps say so
 ## and count the seconds, and a gold card parked above your head in the middle of
 ## your own view would be in the way of the fight the hold starts.
 ##
 ## **Hidden over a corpse**, from the frame `alive` drops. The host ends the hold
 ## a round trip later and that is what actually turns the marker off, but a card
-## floating over a Gub already mid-ragdoll for that round trip says the wrong
+## floating over a Bog already mid-ragdoll for that round trip says the wrong
 ## thing about who has it.
 
 ## World size of the card up close. At the distance it starts holding its size
@@ -56,7 +56,7 @@ const CARD_LIFT := \
 
 var _glyph: String = ""
 var _colour: Color = Color(1.00, 0.84, 0.26)
-var _gub: Gub
+var _bog: Bog
 var _camera: Camera3D
 var _back: MeshInstance3D
 var _card: MeshInstance3D
@@ -64,7 +64,7 @@ var _label: Label3D
 
 
 func _ready() -> void:
-	_gub = get_parent() as Gub
+	_bog = get_parent() as Bog
 	_back = _quad("Border", INK, 2)
 	_card = _quad("Card", _colour, 3)
 	_label = Label3D.new()
@@ -100,7 +100,7 @@ func glyph() -> String:
 
 
 ## Whether the marker is actually up on this screen — carrying, alive, and not
-## the local player's own Gub. What the checks ask.
+## the local player's own Bog. What the checks ask.
 func is_shown() -> bool:
 	return visible and _card != null and _card.visible
 
@@ -108,7 +108,7 @@ func is_shown() -> bool:
 func _process(_delta: float) -> void:
 	if not is_carrying() or _card == null:
 		return
-	var shown := _gub == null or (_gub.alive and _gub.peer_id != Net.local_id())
+	var shown := _bog == null or (_bog.alive and _bog.peer_id != Net.local_id())
 	visible = shown
 	if not shown:
 		return

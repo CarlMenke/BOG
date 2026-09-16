@@ -1,10 +1,10 @@
 # Where this is up to
 
-Resume point for GUB. Read this first, then `docs/ARCHITECTURE.md` (how it fits
+Resume point for BOG. Read this first, then `docs/ARCHITECTURE.md` (how it fits
 together), `docs/PLAN.md` (the full task list, with checkboxes) and
 `docs/DECISIONS.md` (why things are the way they are).
 
-Last updated: 2026-09-14.
+Last updated: 2026-09-15.
 
 ---
 
@@ -36,8 +36,16 @@ and the measurement. Stage 4 is the weapon pick crossing the socket (D-069),
 which is the one place it can be proved: every other harness drives it in an
 offline session, where `rpc_id` reaches nobody and the local call does the work.
 
-**Both binaries build**, which had never been done before: `build/windows/GUB.exe`
-and a universal `build/macos/GUB.app` that boots clean. See the README.
+**Both binaries build**, which had never been done before: `build/windows/BOG.exe`
+and a universal `build/macos/BOG.app` that boots clean. See the README.
+
+**The game is called BOG** (**D-081**). The GUB branding was swept out of every
+tracked file in one pass — 4,282 replacements across 137 files, plus twenty-four
+`git mv`s, so the character is `scripts/player/bog.gd`, the asset is
+`art/generated/bog.glb` and the build is `build/windows/BOG.exe`. Five things
+keep the old spelling on purpose and the entry says why each: Godot `uid://`
+strings, the `assets/source/GUB_2/` pack folder, playit's `angry-gub.at.ply.gg`,
+the `CarlMenke/Gubs_Game` repo URL, and two sentences quoting the user.
 
 The whole of it is merged to `main` and tagged **`v0.1.0`**, so Phase 7 is closed
 out. The one networking feature that was outstanding — hosting across the
@@ -50,10 +58,10 @@ play-testing, not build or release work.
 Worth reading as a list, because they are all the same shape and the next one
 will be too — **a thing wired into a testbed and into nothing else**:
 
-- Nothing in a real match **read the movement keys**. `Gub` exposed
+- Nothing in a real match **read the movement keys**. `Bog` exposed
   `input_direction` and nothing filled it; both testbeds had their own reader,
   so WASD worked everywhere except in the game. Abilities worked, because
-  `GubCombat` reads its own input inside the Gub scene — which is what made it
+  `BogCombat` reads its own input inside the Bog scene — which is what made it
   look like input was fine.
 - The arena **never instanced the HUD**, so a match had no crosshair, no score,
   no scoreboard, no pause menu and no results screen.
@@ -126,14 +134,14 @@ of what that means:
 - **The third map** (Kopje Crossing) is hand-made and has no import: a 96 m
   savanna plateau whose 123 rock platforms are laid out of tables in
   `safari_map.gd` and baked into collision by the same `StaticMap` (**D-042**).
-  A checker proves every platform is reachable on the Gub's real jump arc.
+  A checker proves every platform is reachable on the Bog's real jump arc.
 - **The fourth map** (Lantern Wharf) is built the same way and is the opposite
   kind of map: a 36 m walled box yard at dusk, mirror-symmetric between two
   bases, with no eye-to-eye sightline over 25 m on the ground (**D-056**). It
-  declares its own Capture G·U·B bases and letters.
+  declares its own Capture B·O·G bases and letters.
 - **The fifth map** (Halcyon Wake) is built the same way and is the tall one: a
   66 m superyacht on open water on a bright morning, with four decks joined by
-  stairs and hop steps, the sea as the void, and G two decks up (**D-057**).
+  stairs and hop steps, the sea as the void, and B two decks up (**D-057**).
 - **All four static maps have had an atmosphere pass** (**D-058** to **D-061**),
   one per map, after the user's verdict that Whisperbloom Hollow was the only one
   that felt like a place. Each got its own hour and its own weather rather than
@@ -147,35 +155,38 @@ of what that means:
   None of it is collision — all of it is built after `StaticMap`'s `super()` — and
   no pad, sightline or jump moved. The gate is still 63 of 63.
 - **The UI** is themed and complete: menu with a live glade behind it, an
-  eight-Gub lobby, HUD, scoreboard, kill feed, pause, settings, chat, results.
-- **Combat** is a one-hit spear, a mushroom you cannot be shot through, and a
-  lure that drags people into the open. The spear leaves the hand **half a
+  eight-Bog lobby, HUD, scoreboard, kill feed, pause, settings, chat, results.
+- **Combat** is a one-hit spear, a shield you cannot be shot through, and a
+  magnet that drags people into the open. The shield is a plank barricade
+  (**D-079**): 1.75 m tall and 1.22 wide, one box of collision solid from the
+  ground to the top, planted facing the planter's yaw exactly so a row of them
+  is a shield wall. The spear leaves the hand **half a
   second** after the click, on the frame the throwing arm reaches full extension
   (D-025, **D-063**) — an overhand delivery with the shaft raised over the head
   first, so the moment it goes has a shape of its own and nothing on the HUD has
   to explain it.
-- **The Gub itself was rebuilt** (D-029). Eight Mixamo FBX files become one
-  `art/generated/gub.glb` through `tools/build_gub.py` — nine clips, 10.5k
+- **The Bog itself was rebuilt** (D-029). Eight Mixamo FBX files become one
+  `art/generated/bog.glb` through `tools/build_bog.py` — nine clips, 10.5k
   triangles, 1.80 m, root motion locked and every clip's facing aligned — and
-  `GubAnimator` is a new tree built to a rule that makes the old freeze
+  `BogAnimator` is a new tree built to a rule that makes the old freeze
   impossible: ground poses come from speed, air poses come from the arc, events
   are one-shots. The collision capsule now follows the pose (stand 1.55, crouch
   1.35, slide 0.75), the spear sits in the fist instead of through the head, and
   a corpse reads as a body.
 - **The Elder is playable** (D-037 built the asset, **D-038** made it real,
   **D-040** turned it into the thing the user asked for after playing it).
-  `tools/build_elder.sh` fits a purple robe and a wizard hat to the Gub's
+  `tools/build_elder.sh` fits a purple robe and a wizard hat to the Bog's
   measured silhouette and writes `art/generated/elder.glb`: 4,352 triangles, no
-  animation data, bound onto a live Gub's own `Skeleton3D` at runtime. In a
+  animation data, bound onto a live Bog's own `Skeleton3D` at runtime. In a
   match it is a fourth kind of drop off a corpse at **2%** in **every** mode.
-  The Gub that walks over it becomes, on every peer's screen, **twenty seconds
+  The Bog that walks over it becomes, on every peer's screen, **twenty seconds
   of a thing that cannot be killed**: nothing but the void takes an Elder down,
   the robe burns out on a host-owned clock rather than on a death, and a spear
   thrown at one is turned aside in a violet flash. It moves 35% faster, jumps
   to 2.64 m instead of 1.69, and carries **no spear at all**. The same mouse
   button plays the same `Throw` clip — at 2.5x since D-063, derived from the delay so the
   arm keeps up — and fires a hitscan **bolt out of the hand 0.2 s after the
-  click**: 28 m, 1 s recharge, one hit kills, stopped by a shield mushroom
+  click**: 28 m, 1 s recharge, one hit kills, stopped by a shield
   exactly as a spear is, and refused during a letter hold. The fist crackles
   while it is loaded and is bare while it recharges, which is the spear's
   empty-hand tell kept intact, and the wearer gets a draining countdown above
@@ -197,7 +208,7 @@ of what that means:
    the big one.
 2. **Mid-match join as spectator** (PLAN 1.8). The other two disconnect cases
    are done and tested. This one needs a piece that does not exist: a late
-   joiner is never told about Gubs that already spawned, because `_create_gub`
+   joiner is never told about Bogs that already spawned, because `_create_bog`
    is broadcast once, at spawn time, and there is no world-state-on-join
    message. That is the whole of the work.
 3. **Rust has never been played on by a person.** The map itself is **done** —
@@ -208,7 +219,7 @@ of what that means:
    build. What no harness covers is the part that needs eyes and hands: whether
    the pads are *fair* rather than merely standable, whether a 42 x 64 m yard of
    shipping containers plays well with a spear that drops, and whether it holds
-   frame rate with eight Gubs and their ragdolls in it. Nobody has stood on it
+   frame rate with eight Bogs and their ragdolls in it. Nobody has stood on it
    in a real match. Two smaller things are also unconfirmed: the map is lit by
    one sun and no fill lights, so a container interior that turns out too dark
    in play wants a couple of shadowless `OmniLight3D`s under a `Lights` node
@@ -218,8 +229,8 @@ of what that means:
    walked end to end and checked for reachability by the gate, and never played
    by a person. Its open questions are its own — whether the 9.5 m summit is a
    hill to fight over or a perch nobody leaves, and whether knee-high grass hides
-   a crouched Gub more than a one-hit spear can afford. **Lantern Wharf** too
-   (**D-056**): whether a 36 m yard is chaos in the good sense for eight Gubs,
+   a crouched Bog more than a one-hit spear can afford. **Lantern Wharf** too
+   (**D-056**): whether a 36 m yard is chaos in the good sense for eight Bogs,
    and whether the dusk floodlights read in a fight, are for a person. And
    **Halcyon Wake** (**D-057**): whether the flybridge is a hill worth taking or
    a perch with no cover, whether the 2 m walkways under the upper deck are good
@@ -245,17 +256,17 @@ the codebase's `rpc()`-then-call-locally pattern has ever run.
 
 That is no longer true, and the first time people played it the gap showed:
 **a non-host's abilities happened for nobody**, because the recursive
-`set_multiplayer_authority` on a spawned Gub left the host's `_do_*` broadcasts
+`set_multiplayer_authority` on a spawned Bog left the host's `_do_*` broadcasts
 landing on a node the host did not own, and every peer refused them. The fix and
 the reason nothing caught it are **D-024**. `net_loopback` has a stage for it
-now — the client throws a spear, plants a mushroom and lobs a lure through the
-public `GubCombat` calls, and both processes assert the results — and
+now — the client throws a spear, plants a shield and lobs a magnet through the
+public `BogCombat` calls, and both processes assert the results — and
 `net_test.sh` fails a peer outright on `is not allowed on node`.
 
 `tools/net_loopback.tscn` and `tools/net_test.sh` exist to change that by running
 two real processes against 127.0.0.1. Read that tool's header for what it covers
 and what it found. Two things it still cannot tell you, and only two machines
-can: real latency, and whether a client-authoritative Gub feels right to the
+can: real latency, and whether a client-authoritative Bog feels right to the
 person driving it.
 
 Worth knowing before that session:
@@ -290,38 +301,38 @@ Three tiers, because three different kinds of claim need three different proofs
 | `tools/smoke_test.sh` | **the gate** — import, and one hundred and twenty-six checks |
 | `tools/cursor_flow.tscn` | entering a match takes the mouse, and leaving gives it back |
 | `tools/playthrough.tscn` | the whole path, menu to results; 50 assertions on the island, 58 on Rust. Takes a map id after a `--` |
-| `tools/match_rules.tscn` | 888 assertions across 20 scoring scenarios, the last of them three Gubs carrying three different weapons (D-069) |
+| `tools/match_rules.tscn` | 888 assertions across 20 scoring scenarios, the last of them three Bogs carrying three different weapons (D-069) |
 | `tools/invite_codes.tscn` | 2675 assertions over 1296 endpoints, plus the host's typed public address |
-| `tools/combat_range.tscn cover` | a mushroom stops a spear, the same throw without one does not, and a Gub cannot walk into the cap (D-039) |
+| `tools/combat_range.tscn cover` | a shield stops a spear, the same throw without one does not, and a Bog cannot walk through it (D-039, D-079) |
 | `tools/combat_range.tscn recharge` | the spear is back in the fist after twelve throws, and an emptied fist refills itself (D-039) |
 | `tools/combat_range.tscn release` | the shaft appears `THROW_RELEASE_TIME` after the click, the fist is empty on that same tick, and that tick is the one the throwing arm is furthest forward — the only check that reads the animation rather than the constant (D-063) |
 | `tools/combat_range.tscn bow` | the bow, in numbers (D-065): a letter hold refuses the draw and empties the bow hand, a snap shot let go one frame after the key went down takes exactly `bow_damage_snap` and flies the snap dials, and a full draw takes `bow_damage_full` and flies the full ones. Neither flight is read off the arrow — the speed and the drop are fitted off six ticks of its own positions. **In the gate**, headless |
-| `tools/combat_range.tscn draw` | the charge as a *tell*: one float published onto a **remote** Gub, and the two skeletons agreeing about how far the string is back to within a centimetre at five charge levels — with the control that the draw moved the hands 0.41 m, so agreeing means something (D-065). Also prints how far off the Gub's facing the composed bow points, which was **91°** when this weapon shipped and is 1° now that `GubAim` turns the torso onto the crosshair (D-066). **In the gate**, headless; through `snapshot.gd` it renders the two Gubs side by side |
-| `tools/preview_bow.tscn` | the bow in the hand across the charge: `-- measure` solves the grip off the draw clip and prints the three constants `HeldGear` carries, and the default sheet is six Gubs from brace to full draw with the string bending under the blend shape (D-065). `-- measure` also checks what the **carry tilt** buys on its own: the lowest limb tip over the twelve clips a Gub walks around in, which has to stay 0.15 m off the ground and reaches 0.284 m where `Run` used to plough by 0.158 (D-066). That is half the answer since D-070 — a carried bow wears a *pose* as well now, and `preview_carry` is what composes it — and it is kept because it is the half that says the tilt is still earning its keep. **In the gate**, headless |
-| `tools/combat_range.tscn strafe` | the feet, round the compass (D-066): eight bearings at walking and running speed on a Gub held facing one way, with the slower of its two toes measured every tick. Forward and backward plant at 0.28 of body speed or better and no leg passes 1.25, against 1.36 for the one-dimensional space this replaced — and the crouch, which is still one clip behind a line, is the control that spreads 0.21 to 1.41. Since D-071 it also holds the **strafe axis** itself: the four sideways legs plant at 0.85 or better (running sideways is 0.43 and 0.30 where it was 0.98 and 0.93), and the two halves of that axis have to be the **same move**, within 0.20 of each other. The second of those is the one that earns its place — Mixamo's aim-strafe families are handed, so a downloaded right strafe passes the first line by a hundredth and fails the second at 0.54. **In the gate**, headless with `--fixed-fps 60`; `-- strafing` is the picture |
+| `tools/combat_range.tscn draw` | the charge as a *tell*: one float published onto a **remote** Bog, and the two skeletons agreeing about how far the string is back to within a centimetre at five charge levels — with the control that the draw moved the hands 0.41 m, so agreeing means something (D-065). Also prints how far off the Bog's facing the composed bow points, which was **91°** when this weapon shipped and is 1° now that `BogAim` turns the torso onto the crosshair (D-066). **In the gate**, headless; through `snapshot.gd` it renders the two Bogs side by side |
+| `tools/preview_bow.tscn` | the bow in the hand across the charge: `-- measure` solves the grip off the draw clip and prints the three constants `HeldGear` carries, and the default sheet is six Bogs from brace to full draw with the string bending under the blend shape (D-065). `-- measure` also checks what the **carry tilt** buys on its own: the lowest limb tip over the twelve clips a Bog walks around in, which has to stay 0.15 m off the ground and reaches 0.284 m where `Run` used to plough by 0.158 (D-066). That is half the answer since D-070 — a carried bow wears a *pose* as well now, and `preview_carry` is what composes it — and it is kept because it is the half that says the tilt is still earning its keep. **In the gate**, headless |
+| `tools/combat_range.tscn strafe` | the feet, round the compass (D-066): eight bearings at walking and running speed on a Bog held facing one way, with the slower of its two toes measured every tick. Forward and backward plant at 0.28 of body speed or better and no leg passes 1.25, against 1.36 for the one-dimensional space this replaced — and the crouch, which is still one clip behind a line, is the control that spreads 0.21 to 1.41. Since D-071 it also holds the **strafe axis** itself: the four sideways legs plant at 0.85 or better (running sideways is 0.43 and 0.30 where it was 0.98 and 0.93), and the two halves of that axis have to be the **same move**, within 0.20 of each other. The second of those is the one that earns its place — Mixamo's aim-strafe families are handed, so a downloaded right strafe passes the first line by a hundredth and fails the second at 0.54. **In the gate**, headless with `--fixed-fps 60`; `-- strafing` is the picture |
 | `tools/combat_range.tscn spine` | the torso that aims (D-066), swept round the whole horizon and through the camera's whole pitch range at a full draw: the bow holds within 3° of bearing and 5° in space of the crosshair (against D-065's **91°**), tracks 123° of elevation, and two arrows fired from one spot at the two ends of that range leave from the *same point* 122° apart — D-025 and D-045 asserted against the thing most likely to break them. **In the gate**, headless; `-- aiming` is the picture |
-| `tools/combat_range.tscn sword` | the great sword, end to end (D-068). It opens with a **rehearsal** — one swing at nobody, with the blade read off the bone attachment at the release — because nothing in the mode can be placed until that number exists: `Swing` turns the body through a revolution inside the skeleton, and at the release the blade is **55–66° off the Gub's own facing**, so a sweep along `-basis.z` would point at empty grass. Then the fists are checked on all 112 ticks of a swing, the kill is required to land `SWING_RELEASE_TIME` after the click and *within three ticks of the blade's own full extension*, 0.35 m inside the reach dies and 0.35 m outside lives, and an Elder takes nothing and wards. **In the gate**, headless |
-| `tools/combat_range.tscn chain` | the swing as a movement tech, measured the way D-052 measured the hop and against the same ceiling (D-068). A Gub at a dead stop chains seven swings — 0.00, then 2.00 after the first, then **7.02** from the last, which is 1.30x run and is exactly `HOP_SPEED_CAP` — and a Gub that builds 7.02 with ten timed hops first has to *keep* it when it swings. Neither may pass the cap. **In the gate**, headless and deliberately **not** `--fixed-fps`: the spin and the recharge are wall-clock deadlines |
-| `tools/preview_sword.tscn` | the great sword in the hands (D-068): `-- measure` solves the grip as an equation — a two-handed hilt has to reach from the fist that holds it to the fist that joins it, so the sword's **size is a measurement of the swing** (1.26 m, from fists 0.096–0.231 m apart) — and prints the three constants `HeldGear` carries, the point's 1.412 m reach at the release, and how far the blade dips. That offset moved 3 cm at D-074 and neither the scale nor the rotation did: the sword's grip starts from `HeldGear.fist_offset()`, which is the spear's palm point, so correcting where a Gub's fist actually is corrected all three props at once. The default sheet is seven Gubs across the swing, each set back by the advance it has covered by then, with a compass ring and a hip-line spoke under every one. `-- carry` is **gone** (D-070) along with the `SWORD_CARRY_TILT` it swept: a great sword is carried in `GreatSwordIdle` now, whose fists were drawn holding this exact prop, so the grip solved here is the grip for the swing *and* for the carry and a tilt had nothing left to do. `preview_carry` measures what replaced it. **In the gate**, headless |
+| `tools/combat_range.tscn sword` | the great sword, end to end (D-068). It opens with a **rehearsal** — one swing at nobody, with the blade read off the bone attachment at the release — because nothing in the mode can be placed until that number exists: `Swing` turns the body through a revolution inside the skeleton, and at the release the blade is **55–66° off the Bog's own facing**, so a sweep along `-basis.z` would point at empty grass. Then the fists are checked on all 112 ticks of a swing, the kill is required to land `SWING_RELEASE_TIME` after the click and *within three ticks of the blade's own full extension*, 0.35 m inside the reach dies and 0.35 m outside lives, and an Elder takes nothing and wards. **In the gate**, headless |
+| `tools/combat_range.tscn chain` | the swing as a movement tech, measured the way D-052 measured the hop and against the same ceiling (D-068). A Bog at a dead stop chains seven swings — 0.00, then 2.00 after the first, then **7.02** from the last, which is 1.30x run and is exactly `HOP_SPEED_CAP` — and a Bog that builds 7.02 with ten timed hops first has to *keep* it when it swings. Neither may pass the cap. **In the gate**, headless and deliberately **not** `--fixed-fps`: the spin and the recharge are wall-clock deadlines |
+| `tools/preview_sword.tscn` | the great sword in the hands (D-068): `-- measure` solves the grip as an equation — a two-handed hilt has to reach from the fist that holds it to the fist that joins it, so the sword's **size is a measurement of the swing** (1.26 m, from fists 0.096–0.231 m apart) — and prints the three constants `HeldGear` carries, the point's 1.412 m reach at the release, and how far the blade dips. That offset moved 3 cm at D-074 and neither the scale nor the rotation did: the sword's grip starts from `HeldGear.fist_offset()`, which is the spear's palm point, so correcting where a Bog's fist actually is corrected all three props at once. The default sheet is seven Bogs across the swing, each set back by the advance it has covered by then, with a compass ring and a hip-line spoke under every one. `-- carry` is **gone** (D-070) along with the `SWORD_CARRY_TILT` it swept: a great sword is carried in `GreatSwordIdle` now, whose fists were drawn holding this exact prop, so the grip solved here is the grip for the swing *and* for the carry and a tilt had nothing left to do. `preview_carry` measures what replaced it. **In the gate**, headless |
 | `tools/combat_range.tscn cast` | the Elder's half of the same question, and a different question (D-064): the bolt appears `MatchConfig.lightning_delay` after the click, the composed arm is 83% of the way out when it does, and the tick it appears on is the tick that arm stops going forward — which on `Cast` is a third of a second before it is furthest forward |
-| `tools/combat_range.tscn potion` | the heal potion, end to end (D-067): a real death rolls the fifth `Pickup.Kind` and a dummy standing on the corpse collects it through its own `Area3D`; drinking it delivers **no** health on the frame of the click, some of it half way through and all forty at the end; a hit half way in ends the channel, spends the potion and keeps the half that had arrived; running ends a channel and a *lure* dragging the same Gub at 4.5 m/s does not; two potions are lost on death; and the three lobby dials survive `to_dict`/`apply_dict` and both clamps. Since D-075 it also reads the **fists**: half way through the channel there is a bottle in the drinking one and no spear, bow, arrow or great sword in either, and one frame after the arm comes down the bottle is gone and the fist agrees with `has_spear()` again. D-067 made a drink empty both hands and proved it with a sheet of a Gub raising nothing, which is a weak thing to assert — an empty hand is also what a broken attachment looks like — so the bottle is what turns it into a measurement. **In the gate**, headless, with the channel shortened to 1.5 s |
-| `tools/combat_range.tscn primary` | **one button, four weapons** (D-070). `throw_spear`, `draw_bow` and `swing_sword` are one `primary_attack` on LMB, and the four weapons do not read it the same way: a spear, a swing and the Elder's bolt fire on the **press**, a bow charges while **held** and fires on the **release**. So this presses the one action on a Gub carrying each in turn — moving the weapon the way the lobby does, `Gub.weapon` then `refresh_hand()` — and requires a windup, a draw, a spin and a windup. Through `Input.action_press` and not `try_throw_spear`, which is the opposite of every other mode here and the point of this one: the witness has to be the poll in `GubCombat._process`. The bow's round then **holds** the button for forty ticks, requires the draw to still be running on every one and past half charge, and requires letting go to loose. **In the gate**, headless |
+| `tools/combat_range.tscn potion` | the heal potion, end to end (D-067): a real death rolls the fifth `Pickup.Kind` and a dummy standing on the corpse collects it through its own `Area3D`; drinking it delivers **no** health on the frame of the click, some of it half way through and all forty at the end; a hit half way in ends the channel, spends the potion and keeps the half that had arrived; running ends a channel and a *magnet* dragging the same Bog at 4.5 m/s does not; two potions are lost on death; and the three lobby dials survive `to_dict`/`apply_dict` and both clamps. Since D-075 it also reads the **fists**: half way through the channel there is a bottle in the drinking one and no spear, bow, arrow or great sword in either, and one frame after the arm comes down the bottle is gone and the fist agrees with `has_spear()` again. D-067 made a drink empty both hands and proved it with a sheet of a Bog raising nothing, which is a weak thing to assert — an empty hand is also what a broken attachment looks like — so the bottle is what turns it into a measurement. **In the gate**, headless, with the channel shortened to 1.5 s |
+| `tools/combat_range.tscn primary` | **one button, four weapons** (D-070). `throw_spear`, `draw_bow` and `swing_sword` are one `primary_attack` on LMB, and the four weapons do not read it the same way: a spear, a swing and the Elder's bolt fire on the **press**, a bow charges while **held** and fires on the **release**. So this presses the one action on a Bog carrying each in turn — moving the weapon the way the lobby does, `Bog.weapon` then `refresh_hand()` — and requires a windup, a draw, a spin and a windup. Through `Input.action_press` and not `try_throw_spear`, which is the opposite of every other mode here and the point of this one: the witness has to be the poll in `BogCombat._process`. The bow's round then **holds** the button for forty ticks, requires the draw to still be running on every one and past half charge, and requires letting go to loose. **In the gate**, headless |
 | `tools/hud_range.tscn controls` | the input map, checked rather than read (D-070). Every action the settings panel names is in the map; **no two actions anywhere share a key or a mouse button** (`ui_*` excepted, which are meant to overlap); and the three actions D-070 retired are gone rather than orphaned. It exists because `swing_sword` and `respawn` were both physical keycode 82 for two decision records and nothing could say so. **In the gate**, headless |
 | `tools/combat_range.tscn ward` | a real spear cannot kill an Elder, the robe burns out on its own, and the same throw kills once it has (D-040) |
-| `tools/combat_range.tscn bhop` | timed hops climb to 1.3x run speed and no further, as a Gub, an Elder and a capture carrier; running, one jump, a late hop and a hop out of a dive roll do not beat run speed (D-052). **In the gate**, headless with `--fixed-fps 60` |
-| `tools/combat_range.tscn respawn` | a Gub that dies holding a mushroom and an Elder that dies in its robe both come back empty-handed, including a remote Gub whose client is 200 ms behind the host (D-043) |
-| `tools/preview_carry.tscn` | **the carry layer, for all three props at once** (D-070), and the one tool here that is not about one weapon — because the carry is one *mechanism*: a `Blend2` filtered to `UPPER_BODY_BONES` over the locomotion plane, pointed at `Loadout.CARRY_CLIPS` by a `Transition`. `-- measure` composes it a bone at a time, exactly as the graph does, and requires every prop to stay 0.15 m off the ground and 0.06 m off the Gub's **skinned trunk** over twelve clips — the real mesh, every head- and torso-weighted vertex, skinned by the formula the GPU runs, which is the method D-065 used and the reason its table is believable. It also requires the spear's shaft to stay within 30° of horizontal in every carried clip (D-072) — the one claim about this grip that was prose twice and went stale twice, once to D-066's six new clips and once to D-071's remirrored strafes; it is `LEVEL_MAX` now and a clip that swings the shaft fails the gate on the commit that lands it. It recomputes `HeldGear.GRIP_OFFSET` from `GRIP_ROTATION` and fails if the const has drifted, and checks the **letter card** — which rides the same grip and therefore moves with it — is out of the grass. Since D-074 it also asks the one question none of those can: whether the shaft is **in the hand**. A spear riding the knuckles is exactly as far from the trunk, as level and as high off the grass as one in the fist, so it measures the whole mitten — the hand bone and the three finger chains, 1,030 vertices skinned in the carry pose — and requires the shaft's axis to pass inside it (`PALM_MAX`, half the mitten's own 0.132 m thickness). D-072's grip passed everything else and reads 0.076 m here; the shipped one reads 0.050. `-- fist` is its picture, one Gub per palm point, framed on the hand from behind the right shoulder — which is the only angle the question can be seen from, because head-on a shaft passing in front of a fist looks the same as one passing through it. `-- solve` is how the spear's grip was found: aim the shaft where it is wanted in the Gub's own frame, read the grip back off the hand, and score every bearing against the trunk — 24 of them for D-070, and 288 for D-072, which had to find the bearing nearest straight forward that still clears the Gub. `-- poses` prints what each candidate clip does with the two fists; `-- sweep` nudges a lever and `-- sheet <weapon>` is the picture, one weapon in Idle, Walk and Run with the layer off and on. `-- hilt` is the **second** thing it is in the gate for (D-073) and is the general form of the fault `level` was a special case of: the great sword's three constants are seventeen poses of `Swing` averaged, so it averages them again and fails if they have drifted (`fit`), if `SWORD_GRIP_OFFSET` has been left behind by its own rotation — or, as at D-074, by the palm point both props hang off (`derived`), or if the pose the sword is *carried* in no longer closes its second fist on the hilt (`carried`) — it found a 0.6 mm drift four steps old on the commit it was written. `-- solve sword` and `-- elevations <weapon> plan` are what said the sword's 45° to the right is the carry pose's own fist line and not a fit. Since D-075 `measure` asks the palm question of the **other** hand as well (`bottle`): the heal potion is the first thing this game puts in a fist that is not a weapon, and it is measured off the left mitten's own 1,073 vertices in the pose `Drink` opens the fingers into — which is 9.5 cm further out along the hand's axis than the fist a spear is carried in, so the *shared* palm point `fist_offset()` lands 0.133 m away and the bottle is the one prop with its own. It reads 0.050 of `PALM_MAX`'s 0.066, and the 0.050 is deliberate: centred in that mitten the bottle spends half its belly inside the Gub's stomach. `-- potion` is the fit — the fist's centre, the two rotations worth arguing about and what each does across the window, and the scale table — and `-- drink fist|body` is the picture, three fists close or six whole Gubs across the channel. **In the gate** twice, headless — forty seconds for `measure` and four for `hilt` |
-| `tools/weapon_select.tscn` | the lobby weapon pick as a **roster row** (D-069): the default for a row that never heard of weapons, a request through the host and back on the rebroadcast, a bogus ordinal refused into a spear, the lock the moment Start is pressed, three rematches keeping it, the real lobby collapsing to the strip and back, and three **remote** backdrop Gubs each holding only what its row says — and, since D-070, *standing* in only what its row says: the ring asserts each Gub's `carry_pick` is pointing at its own weapon's pose, and that a change of pick moves the stance on the same call that moves the prop. The half that is a *Gub* — the gate, the hand and the three overrides — is `match_rules`. **In the gate**, headless |
-| `tools/team_tint.tscn` | every Gub's body is in its team's nameplate colour, free-for-all is the imported yellow, the Elder's robe stays purple, a corpse keeps its colour, and a lobby team switch repaints the Gub (D-046). **In the gate**, headless; through `snapshot.gd` it renders the lineup |
-| `tools/letter_carriers.tscn` | a letter card that starts a hold puts "Name picked up G" in the feed and a wasted duplicate puts nothing; carriers behind a wall, enemy included, have a gold card marker over their heads drawn through it and above the nameplate, your own hold marks nothing on your screen, and the marker goes on bank and on death; the same in free-for-all (`-- ffa`) (D-050). **In the gate**, headless; through `snapshot.gd` it renders the Gub's own view with the feed |
-| `tools/capture_preview.tscn` | a Capture G·U·B match in the real arena: both team bases drawn, three letter cards at home, every Gub on its own team's pad (D-051). **In the gate** on Kopje Crossing, headless; takes a map id; through `snapshot.gd` it renders the view from above Team 1's base. The mode's rules are `match_rules`, and the base/letter layout on every map is checked by `playthrough` |
-| `tools/team_plates.tscn` | a teammate's nameplate is drawn through a wall and never fades, an enemy's beside it is occluded and faded as before, the HUD chip says which team you are on, and free-for-all plates are unchanged (`-- ffa`) (D-047). **In the gate**, headless; through `snapshot.gd` it renders the Gub's own view |
+| `tools/combat_range.tscn bhop` | timed hops climb to 1.3x run speed and no further, as a Bog, an Elder and a capture carrier; running, one jump, a late hop and a hop out of a dive roll do not beat run speed (D-052). **In the gate**, headless with `--fixed-fps 60` |
+| `tools/combat_range.tscn respawn` | a Bog that dies holding a shield and an Elder that dies in its robe both come back empty-handed, including a remote Bog whose client is 200 ms behind the host (D-043) |
+| `tools/preview_carry.tscn` | **the carry layer, for all three props at once** (D-070), and the one tool here that is not about one weapon — because the carry is one *mechanism*: a `Blend2` filtered to `UPPER_BODY_BONES` over the locomotion plane, pointed at `Loadout.CARRY_CLIPS` by a `Transition`. `-- measure` composes it a bone at a time, exactly as the graph does, and requires every prop to stay 0.15 m off the ground and 0.06 m off the Bog's **skinned trunk** over twelve clips — the real mesh, every head- and torso-weighted vertex, skinned by the formula the GPU runs, which is the method D-065 used and the reason its table is believable. It also requires the spear's shaft to stay within 30° of horizontal in every carried clip (D-072) — the one claim about this grip that was prose twice and went stale twice, once to D-066's six new clips and once to D-071's remirrored strafes; it is `LEVEL_MAX` now and a clip that swings the shaft fails the gate on the commit that lands it. It recomputes `HeldGear.GRIP_OFFSET` from `GRIP_ROTATION` and fails if the const has drifted, and checks the **letter card** — which rides the same grip and therefore moves with it — is out of the grass. Since D-074 it also asks the one question none of those can: whether the shaft is **in the hand**. A spear riding the knuckles is exactly as far from the trunk, as level and as high off the grass as one in the fist, so it measures the whole mitten — the hand bone and the three finger chains, 1,030 vertices skinned in the carry pose — and requires the shaft's axis to pass inside it (`PALM_MAX`, half the mitten's own 0.132 m thickness). D-072's grip passed everything else and reads 0.076 m here; the shipped one reads 0.050. `-- fist` is its picture, one Bog per palm point, framed on the hand from behind the right shoulder — which is the only angle the question can be seen from, because head-on a shaft passing in front of a fist looks the same as one passing through it. `-- solve` is how the spear's grip was found: aim the shaft where it is wanted in the Bog's own frame, read the grip back off the hand, and score every bearing against the trunk — 24 of them for D-070, and 288 for D-072, which had to find the bearing nearest straight forward that still clears the Bog. `-- poses` prints what each candidate clip does with the two fists; `-- sweep` nudges a lever and `-- sheet <weapon>` is the picture, one weapon in Idle, Walk and Run with the layer off and on. `-- hilt` is the **second** thing it is in the gate for (D-073) and is the general form of the fault `level` was a special case of: the great sword's three constants are seventeen poses of `Swing` averaged, so it averages them again and fails if they have drifted (`fit`), if `SWORD_GRIP_OFFSET` has been left behind by its own rotation — or, as at D-074, by the palm point both props hang off (`derived`), or if the pose the sword is *carried* in no longer closes its second fist on the hilt (`carried`) — it found a 0.6 mm drift four steps old on the commit it was written. `-- solve sword` and `-- elevations <weapon> plan` are what said the sword's 45° to the right is the carry pose's own fist line and not a fit. Since D-075 `measure` asks the palm question of the **other** hand as well (`bottle`): the heal potion is the first thing this game puts in a fist that is not a weapon, and it is measured off the left mitten's own 1,073 vertices in the pose `Drink` opens the fingers into — which is 9.5 cm further out along the hand's axis than the fist a spear is carried in, so the *shared* palm point `fist_offset()` lands 0.133 m away and the bottle is the one prop with its own. It reads 0.050 of `PALM_MAX`'s 0.066, and the 0.050 is deliberate: centred in that mitten the bottle spends half its belly inside the Bog's stomach. `-- potion` is the fit — the fist's centre, the two rotations worth arguing about and what each does across the window, and the scale table — and `-- drink fist|body` is the picture, three fists close or six whole Bogs across the channel. **In the gate** twice, headless — forty seconds for `measure` and four for `hilt` |
+| `tools/weapon_select.tscn` | the lobby weapon pick as a **roster row** (D-069): the default for a row that never heard of weapons, a request through the host and back on the rebroadcast, a bogus ordinal refused into a spear, the lock the moment Start is pressed, three rematches keeping it, the real lobby collapsing to the strip and back, and three **remote** backdrop Bogs each holding only what its row says — and, since D-070, *standing* in only what its row says: the ring asserts each Bog's `carry_pick` is pointing at its own weapon's pose, and that a change of pick moves the stance on the same call that moves the prop. The half that is a *Bog* — the gate, the hand and the three overrides — is `match_rules`. **In the gate**, headless |
+| `tools/team_tint.tscn` | every Bog's body is in its team's nameplate colour, free-for-all is the body's own imported colour, the Elder's robe stays purple, a corpse keeps its colour, and a lobby team switch repaints the Bog (D-046). **In the gate**, headless; through `snapshot.gd` it renders the lineup |
+| `tools/letter_carriers.tscn` | a letter card that starts a hold puts "Name picked up G" in the feed and a wasted duplicate puts nothing; carriers behind a wall, enemy included, have a gold card marker over their heads drawn through it and above the nameplate, your own hold marks nothing on your screen, and the marker goes on bank and on death; the same in free-for-all (`-- ffa`) (D-050). **In the gate**, headless; through `snapshot.gd` it renders the Bog's own view with the feed |
+| `tools/capture_preview.tscn` | a Capture B·O·G match in the real arena: both team bases drawn, three letter cards at home, every Bog on its own team's pad (D-051). **In the gate** on Kopje Crossing, headless; takes a map id; through `snapshot.gd` it renders the view from above Team 1's base. The mode's rules are `match_rules`, and the base/letter layout on every map is checked by `playthrough` |
+| `tools/team_plates.tscn` | a teammate's nameplate is drawn through a wall and never fades, an enemy's beside it is occluded and faded as before, the HUD chip says which team you are on, and free-for-all plates are unchanged (`-- ffa`) (D-047). **In the gate**, headless; through `snapshot.gd` it renders the Bog's own view |
 | `tools/ragdoll_stability.tscn` | a corpse is still a corpse 150 ticks later |
-| `tools/combat_range.tscn` | the real match path: a spear, a mushroom, a lure, a letter, the Elder's bolt |
+| `tools/combat_range.tscn` | the real match path: a spear, a shield, a magnet, a letter, the Elder's bolt |
 | `tools/net_loopback.tscn` | two processes, one socket, including a *client* using all three abilities, dying and respawning, a weapon picked on the client and decided by the host (D-069), and ten rematches with the client in the lobby for half of them (D-044). **In the gate** through `net_test.sh`, bound to 127.0.0.1 on a random port |
 | `tools/preview_map.tscn` | Rust, Kopje Crossing, Lantern Wharf and Halcyon Wake: renders one, and checks every spawn pad with the physics. **In the gate** for all four |
 | `tools/island_report.tscn` | Whisperbloom Hollow as numbers: footprint, slope, every scatter layer's placed count, tree heights, spawn spacing and the capture bases (D-055). **In the gate** on four seeds |
-| `tools/parkour_report.tscn` | every platform on a built map has its rock, fits a Gub, and is reachable from the ground (D-042); on Lantern Wharf also that no jump reaches a tower or wall top, no sightline runs past 25 m (26 m from a roof), and no pad sees the other base's pads (D-056); on Halcyon Wake every deck reachable, the mast out of reach, sightlines under 21 m on the main deck and 38 m from a landing, and nothing but the void over every edge of the deck (D-057). **In the gate** for all three |
+| `tools/parkour_report.tscn` | every platform on a built map has its rock, fits a Bog, and is reachable from the ground (D-042); on Lantern Wharf also that no jump reaches a tower or wall top, no sightline runs past 25 m (26 m from a roof), and no pad sees the other base's pads (D-056); on Halcyon Wake every deck reachable, the mast out of reach, sightlines under 21 m on the main deck and 38 m from a landing, and nothing but the void over every edge of the deck (D-057). **In the gate** for all three |
 | `tools/bake_tiles.gd` | the ability bar's seven tiles, photographed from the real `.glb`s under one camera, one light rig and one framing rule — the geometric mean of a silhouette's on-screen width and height is 66% of the tile, capped at 88% on the longer side, slender props laid on the diagonal (D-076). `-- check` re-measures the **committed** PNGs and is **in the gate**, headless, because what has to hold on every machine is that the pictures in the repository obey the rule rather than that this machine's GPU can reproduce them; `-- sheet` writes `out/tiles_sheet.png`, the seven side by side, which is the only way to answer "do they read as a set" |
 | `tools/preview_*.tscn` | it *looks* right. Needs a person, always will |
 
@@ -343,7 +354,7 @@ screen to the flow.
 
 `preview_island` views: `wide under eye eye0..eye7 shrine grove arch bridge
 spawns hollow top canopy tree`,
-plus `match` for real Gubs and the diagnostic flags in its `FLAGS` dictionary.
+plus `match` for real Bogs and the diagnostic flags in its `FLAGS` dictionary.
 `ui_range` modes: `menu menu_join menu_notice settings settings_network lobby
 lobby_full lobby_teams lobby_client lobby_map lobby_capture lobby_weapons
 lobby_feel widths capture_config`. The last two print a verdict and sit in the
@@ -380,7 +391,7 @@ and the tool quietly uses its defaults. Pass them literally.
   briefly stretch during the tumble. It always settles — `ragdoll_stability`
   requires a compact, still corpse by tick 150 and that passes. The lever that
   worked before was **widening** the joint spans in `RagdollBuilder.SEGMENTS`,
-  not tightening them; `GubRagdoll.IMPACT_TRANSFER` (0.15) is the other dial, and
+  not tightening them; `BogRagdoll.IMPACT_TRANSFER` (0.15) is the other dial, and
   above ~0.2 contact starts amplifying and the corpse gets punted. Reproduce with
   `combat_range` in `hit` mode around tick 100. D-029 tightened the *neck* to
   35°/25° against that grain and swept the alternatives to find out why it could
@@ -407,15 +418,15 @@ D-029 argues each one out rather than pretending it is fixed:
 - **The nameplate crosses the model at dive apex.** The plate is pinned to the
   capsule at 1.80 m while `JumpTwo` keeps a 0.618 m pelvis rise. The fix is to
   offset it by the model's own head height, in `scripts/player/nameplate.gd`.
-- **A sliding Gub is hard to hit.** The slide capsule is vertically right but a
+- **A sliding Bog is hard to hit.** The slide capsule is vertically right but a
   vertical capsule cannot follow a prone body whose head is half a metre forward
   of the axis.
-- **A held spear vanishes when its Gub dies.** `GubRagdoll._adopt_spears` adopts
+- **A held spear vanishes when its Bog dies.** `BogRagdoll._adopt_spears` adopts
   embedded projectiles, not the carried one, so a corpse carries the spear that
   killed it and not the one it was holding. Pre-existing.
 
 One thing two reviewers flagged is settled: **`ROLL_LOCK` is a ground rule.**
-A Gub that rolls off a ledge inside the 0.45 s lock used to keep the lock in
+A Bog that rolls off a ledge inside the 0.45 s lock used to keep the lock in
 the air — no air control, `ROLL_FRICTION` (10.0) instead of `AIR_FRICTION`
 (1.5). `_tick_timers` now zeroes `_roll_lock` the moment the feet leave the
 floor, so the fall is an ordinary fall. Whether the lock itself (0.45 s of no
@@ -428,26 +439,26 @@ constant and 0.0 turns it off.
 
 - **When in doubt, open a ragdoll joint up.** A cone-twist driven past its limit
   adds energy rather than clamping. Too floppy looks rubbery; too tight explodes.
-- `LURE_GRAVITY` in `gub_combat.gd` must equal `Lure.GRAVITY`. The arc is solved
+- `MAGNET_GRAVITY` in `bog_combat.gd` must equal `Magnet.GRAVITY`. The arc is solved
   in one file and flown in the other (D-014).
-- **The Gub is authored at 1.80 m and imported at `root_scale 1.0`** — the whole
+- **The Bog is authored at 1.80 m and imported at `root_scale 1.0`** — the whole
   model, skeleton included, is in metres, so a bone attachment offset and a
   ragdoll capsule radius mean what they say. Never scale the model node instead:
   a scaled `Skeleton3D` gives scaled rigid bodies and the capsules stop matching
   the mesh. (The old asset was imported at 0.35; that is D-002, and D-029
   replaced it.)
-- The Gub mesh is authored facing **+Z**; `gub.tscn` turns the model 180° so
-  `body_yaw` means "the way the Gub is looking" in Godot's -Z-forward convention.
+- The Bog mesh is authored facing **+Z**; `bog.tscn` turns the model 180° so
+  `body_yaw` means "the way the Bog is looking" in Godot's -Z-forward convention.
 - Ragdolls are local and cosmetic and deliberately **not replicated** (D-010).
 - **Game speeds and clip speeds are separate numbers, and the animator divides
-  them.** `Gub.WALK_SPEED` / `RUN_SPEED` / `CROUCH_SPEED` are gameplay choices;
+  them.** `Bog.WALK_SPEED` / `RUN_SPEED` / `CROUCH_SPEED` are gameplay choices;
   `AUTHORED_WALK` / `AUTHORED_RUN` / `AUTHORED_CROUCH_WALK` are what
-  `tools/build_gub.py` measured in the clips. Each locomotion node plays at
+  `tools/build_bog.py` measured in the clips. Each locomotion node plays at
   `game / authored` in its own custom timeline, which is what keeps the feet
   planted. Change a game speed freely; only re-measure an authored one if the
   clip itself changes (D-029).
-- **One clip in `gub.glb` has no file behind it.** `StrafeRight` is `StrafeLeft`
-  reflected in the rig's own sagittal plane, built by `build_gub.py`'s
+- **One clip in `bog.glb` has no file behind it.** `StrafeRight` is `StrafeLeft`
+  reflected in the rig's own sagittal plane, built by `build_bog.py`'s
   `mirror_of` and measured, locked, aligned and exported like any other clip
   (D-071). It exists because **Mixamo's aim-strafe families are handed** — every
   right strafe in every pack is a −37 to −47 degree diagonal, while its left twin

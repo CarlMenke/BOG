@@ -12,7 +12,7 @@ extends Node
 ## and they fail in different places. Here is the half that is a *roster row*:
 ## where the weapon lives, who is allowed to change it, what a rebroadcast
 ## carries, what Start does to it and what a rematch does not. `match_rules`
-## has the half that is a *Gub*: the gate, the hand, and the three overrides that
+## has the half that is a *Bog*: the gate, the hand, and the three overrides that
 ## take a weapon away again. Neither would notice the other's bugs.
 ##
 ## What it asserts:
@@ -25,8 +25,8 @@ extends Node
 ##            makes it free again.
 ##   lobby  — the real scene: the panels collapse to the strip and back, the
 ##            strip's buttons pick, and they go dead while a match is running.
-##   ring   — `GubBackdrop.set_roster` puts three different weapons in three
-##            **remote** Gubs' hands, which is the lobby half of "your character
+##   ring   — `BogBackdrop.set_roster` puts three different weapons in three
+##            **remote** Bogs' hands, which is the lobby half of "your character
 ##            should only show the weapon you have selected".
 
 const LOBBY_SCENE := preload("res://scenes/ui/lobby.tscn")
@@ -116,7 +116,7 @@ func _run_roster() -> void:
 
 	# A row written by something that predates this — every harness in `tools/`
 	# does exactly this, and so would a peer on an older build. The key is simply
-	# absent, and absent has to read as the default or the lobby is full of Gubs
+	# absent, and absent has to read as the default or the lobby is full of Bogs
 	# holding nothing.
 	Net.players[952] = {"name": "Old", "team": 0, "ready": true}
 	_check("a row with no weapon key at all reads as a spear",
@@ -196,7 +196,7 @@ func _run_lock() -> void:
 		Net.request_rematch()
 		_check("rematch %d keeps the host's sword" % (round_number + 1),
 			Net.player_weapon(1), Loadout.Weapon.SWORD)
-		_check("rematch %d keeps the other Gub's bow" % (round_number + 1),
+		_check("rematch %d keeps the other Bog's bow" % (round_number + 1),
 			Net.player_weapon(951), Loadout.Weapon.BOW)
 		_check("and is still locked", Net.match_running, true)
 
@@ -325,7 +325,7 @@ func _run_lobby() -> void:
 func _run_ring() -> void:
 	_scenario("the ring carries what the roster says")
 	var before := _failures
-	var backdrop := GubBackdrop.new()
+	var backdrop := BogBackdrop.new()
 	add_child(backdrop)
 	backdrop.set_roster([
 		{"name": "Spearer", "team": MatchConfig.TEAM_NONE,
@@ -341,43 +341,43 @@ func _run_ring() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 
-	var gubs: Array = backdrop.get("_gubs")
-	_check("the ring stood up three Gubs", gubs.size(), 3)
-	if gubs.size() < 3:
+	var bogs: Array = backdrop.get("_bogs")
+	_check("the ring stood up three Bogs", bogs.size(), 3)
+	if bogs.size() < 3:
 		print("weapon_select: ring FAIL — the backdrop is empty")
 		_failures += 1
 		return
 
-	# **Remote Gubs, which is the point of the ring** (see `GubBackdrop`'s
+	# **Remote Bogs, which is the point of the ring** (see `BogBackdrop`'s
 	# header). If the hand were drawn from anything the owning client knows and
 	# nobody else does, these three would all be empty.
-	for gub: Gub in gubs:
-		_check("%s is a remote Gub" % gub.display_name, gub.is_local(), false)
+	for bog: Bog in bogs:
+		_check("%s is a remote Bog" % bog.display_name, bog.is_local(), false)
 
 	var want := [Loadout.Weapon.SPEAR, Loadout.Weapon.BOW, Loadout.Weapon.SWORD]
 	for i in 3:
-		var gub: Gub = gubs[i]
-		var hand: HeldGear = gub.held_gear
-		_check("%s was handed the weapon it picked" % gub.display_name,
-			gub.weapon, want[i])
+		var bog: Bog = bogs[i]
+		var hand: HeldGear = bog.held_gear
+		_check("%s was handed the weapon it picked" % bog.display_name,
+			bog.weapon, want[i])
 		# And **stands** in the weapon it picked (D-070). The pose is the other
 		# half of "your character should only show the weapon you have selected":
-		# a Gub holding a great sword in an archer's stance is showing two.
+		# a Bog holding a great sword in an archer's stance is showing two.
 		#
 		# Read off the graph's own parameter rather than off `Loadout`, so this
 		# is "what the animator is playing" and not "what the table says it
 		# should be" — the second would agree with itself whatever the graph had
 		# been built with.
-		_check("%s stands in its own carry pose" % gub.display_name,
-			_carry_pose(gub), Loadout.CARRY_CLIPS[want[i]])
-		_check("%s: a shaft?" % gub.display_name, hand.is_carried(),
+		_check("%s stands in its own carry pose" % bog.display_name,
+			_carry_pose(bog), Loadout.CARRY_CLIPS[want[i]])
+		_check("%s: a shaft?" % bog.display_name, hand.is_carried(),
 			want[i] == Loadout.Weapon.SPEAR)
-		_check("%s: a bow?" % gub.display_name, hand.has_bow(),
+		_check("%s: a bow?" % bog.display_name, hand.has_bow(),
 			want[i] == Loadout.Weapon.BOW)
-		_check("%s: a great sword?" % gub.display_name, hand.has_sword(),
+		_check("%s: a great sword?" % bog.display_name, hand.has_sword(),
 			want[i] == Loadout.Weapon.SWORD)
 		# Never an arrow: nothing in the lobby is drawing.
-		_check("%s: no arrow" % gub.display_name, hand.has_arrow(), false)
+		_check("%s: no arrow" % bog.display_name, hand.has_arrow(), false)
 
 	# And a change of mind moves it, which is the path a player arrowing through
 	# the strip takes — `set_roster` on every roster change, the same call that
@@ -393,39 +393,39 @@ func _run_ring() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 	_check("swapping a pick swaps the hand",
-		(gubs[0] as Gub).held_gear.has_sword(), true)
+		(bogs[0] as Bog).held_gear.has_sword(), true)
 	_check("and takes the old one out of it",
-		(gubs[0] as Gub).held_gear.is_carried(), false)
+		(bogs[0] as Bog).held_gear.is_carried(), false)
 	_check("the archer puts its bow down",
-		(gubs[1] as Gub).held_gear.has_bow(), false)
-	_check("and picks up a shaft", (gubs[1] as Gub).held_gear.is_carried(), true)
+		(bogs[1] as Bog).held_gear.has_bow(), false)
+	_check("and picks up a shaft", (bogs[1] as Bog).held_gear.is_carried(), true)
 	# The pose follows the prop, on the same frame and through the same call
-	# (D-070). `GubBackdrop._equip` sets `Gub.weapon` and asks
-	# `GubCombat.refresh_hand()`, which repaints the fists *and* re-points the
+	# (D-070). `BogBackdrop._equip` sets `Bog.weapon` and asks
+	# `BogCombat.refresh_hand()`, which repaints the fists *and* re-points the
 	# carry layer — two halves of one answer, so there is no frame on which a
-	# ring Gub is holding one weapon and standing in another's stance.
+	# ring Bog is holding one weapon and standing in another's stance.
 	_check("the swordsman's stance came with it",
-		_carry_pose(gubs[0] as Gub),
+		_carry_pose(bogs[0] as Bog),
 		Loadout.CARRY_CLIPS[Loadout.Weapon.SWORD])
 	_check("and the archer's went back",
-		_carry_pose(gubs[1] as Gub),
+		_carry_pose(bogs[1] as Bog),
 		Loadout.CARRY_CLIPS[Loadout.Weapon.SPEAR])
 
 	backdrop.queue_free()
 	print("weapon_select: ring %s" % ("PASS" if _failures == before else "FAIL"))
 
 
-## Which clip this Gub's carry layer is actually playing, off the animator's own
+## Which clip this Bog's carry layer is actually playing, off the animator's own
 ## `carry_pick` (D-070).
 ##
 ## The `transition_request` parameter is write-only in the sense that matters —
 ## it reports "" once the transition has been taken — so this reads
 ## `current_state`, which is the input name the node settled on, and maps it back
-## through `Loadout.CARRY_CLIPS`. The names are ordinals (`GubAnimator`'s own
+## through `Loadout.CARRY_CLIPS`. The names are ordinals (`BogAnimator`'s own
 ## `_carry_input`) rather than clip names precisely because two weapons share a
 ## clip, so the round trip has to go through the table.
-func _carry_pose(gub: Gub) -> String:
-	var animator := gub.get_node_or_null("AnimationTree") as GubAnimator
+func _carry_pose(bog: Bog) -> String:
+	var animator := bog.get_node_or_null("AnimationTree") as BogAnimator
 	if animator == null:
 		return "<no animator>"
 	var state := String(animator.get("parameters/carry_pick/current_state"))

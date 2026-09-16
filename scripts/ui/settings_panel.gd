@@ -41,8 +41,8 @@ const CONTROL_REFERENCE: Array[Array] = [
 	# have brought.
 	["Attack", "primary_attack"],
 	["Aim", "aim"],
-	["Plant mushroom", "place_mushroom"],
-	["Throw lure", "throw_lure"],
+	["Plant shield", "place_shield"],
+	["Throw magnet", "throw_magnet"],
 	["Drink potion", "drink_potion"],
 	["Scoreboard", "scoreboard"],
 	["Chat", "chat"],

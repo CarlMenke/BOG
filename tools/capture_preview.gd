@@ -1,5 +1,5 @@
 extends Node
-## A real Capture G·U·B match standing up on a real map, checked and then
+## A real Capture B·O·G match standing up on a real map, checked and then
 ## photographed from behind a base (D-051). Development tool, not shipped.
 ##
 ##   Godot --headless --path . tools/capture_preview.tscn -- [map id]
@@ -10,7 +10,7 @@ extends Node
 ## layout is sound on every map. Neither builds the arena *in this mode*, which
 ## is the only way to see what a player sees: `arena.gd` drawing a ring in each
 ## team's colour, the host settling three cards onto the map a couple of physics
-## frames in, and each Gub spawning on its own team's pads. So this instances
+## frames in, and each Bog spawning on its own team's pads. So this instances
 ## the real `arena.tscn` in an offline session with a Teams roster and checks
 ## all three, then — when there is a window — puts a camera behind Team 1's
 ## base looking at the middle of the map.
@@ -91,14 +91,14 @@ func _check() -> void:
 	for letter: int in MatchState.LETTERS:
 		_want("%s is at home" % MatchState.letter_name(letter),
 			MatchState.capture_state(letter) == "home")
-	# Every Gub on a pad of its own team's.
-	for peer_id: int in MatchState.gubs:
-		var gub: Gub = MatchState.gubs[peer_id]
+	# Every Bog on a pad of its own team's.
+	for peer_id: int in MatchState.bogs:
+		var bog: Bog = MatchState.bogs[peer_id]
 		var team := Net.player_team(peer_id)
 		var nearest := -1
 		var best := INF
 		for i in _arena.spawn_points.size():
-			var d := _arena.spawn_points[i].origin.distance_to(gub.global_position)
+			var d := _arena.spawn_points[i].origin.distance_to(bog.global_position)
 			if d < best:
 				best = d
 				nearest = i

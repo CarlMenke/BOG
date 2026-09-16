@@ -1,5 +1,5 @@
 extends Node3D
-## Walks the player's own Gub into the places a third-person camera ends up
+## Walks the player's own Bog into the places a third-person camera ends up
 ## inside the scenery, and counts the frames where it did (D-045).
 ## Development tool, not shipped. Headless, a couple of seconds.
 ##
@@ -9,7 +9,7 @@ extends Node3D
 ## are meshes behind the character". A screenshot can show that once; it cannot
 ## say how often, and it cannot say it stopped. So this stands up five stations
 ## — a long wall on each shoulder, a corner, a tree canopy with a trunk, a wall at
-## the Gub's back, and a low tunnel (the cave in PLAN 5.2) — and drives the view
+## the Bog's back, and a low tunnel (the cave in PLAN 5.2) — and drives the view
 ## round each of them the way a mouse would, walking where walking is the point.
 ##
 ## After the rig has placed its camera, every frame, the camera is **inside the
@@ -18,33 +18,33 @@ extends Node3D
 ##   - a sphere of `NEAR_CLEARANCE` there touches collision — the near plane is
 ##     0.05 m out and about 0.09 m to its corners, so a camera closer than this
 ##     to a face draws the inside of it;
-##   - a ray from the Gub's eye to the camera hits collision — the camera is on
+##   - a ray from the Bog's eye to the camera hits collision — the camera is on
 ##     the far side of a wall, which is what a player actually sees as "inside".
 ##     The first two cannot see this against a thin face or a trimesh.
 ##
 ## The second verdict is the aim. Pulling a camera in must not move the spear
 ## (D-025): the throw is aimed down the crosshair's ray, and the crosshair has to
-## mean the same thing whether or not a wall behind the Gub has shoved the lens
-## forward. Each checked frame the point `GubCombat` would throw at is compared
+## mean the same thing whether or not a wall behind the Bog has shoved the lens
+## forward. Each checked frame the point `BogCombat` would throw at is compared
 ## with the point worked out here, independently, from the *unobstructed* camera
 ## for the same view — the rig's own yaw and pitch at the full boom and shoulder.
-## It reaches past the public API once, into `GubCombat._aim_point`, because that
+## It reaches past the public API once, into `BogCombat._aim_point`, because that
 ## function is literally what a throw reads and a copy of it would prove nothing.
 
-## World and camera blockers, which is what the rig is meant to avoid. Gubs,
+## World and camera blockers, which is what the rig is meant to avoid. Bogs,
 ## projectiles and pickups are deliberately not in it.
 const WORLD_MASK := 1 | 64
-## What `GubCombat` aims against.
+## What `BogCombat` aims against.
 const AIM_MASK := 1 | 2 | 8
 
 const NEAR_CLEARANCE := 0.1
 const AIM_TOLERANCE := 0.01
 ## Ticks after a teleport before anything is checked: the rig eases after the
-## body (`GubCamera.FOLLOW_SPEED`), so for a moment after a forty-metre jump it
+## body (`BogCamera.FOLLOW_SPEED`), so for a moment after a forty-metre jump it
 ## is legitimately flying through whatever lies between two stations.
 const SETTLE_TICKS := 50
 
-## Each leg puts the Gub on `spot` facing -Z and then runs `ticks` of `drive`.
+## Each leg puts the Bog on `spot` facing -Z and then runs `ticks` of `drive`.
 const LEGS := [
 	{"name": "wall on the right", "spot": Vector3(0.0, 0.1, 12.0), "ticks": 200, "drive": "wall"},
 	{"name": "wall on the left", "spot": Vector3(2.4, 0.1, 12.0), "ticks": 200, "drive": "wall"},
@@ -67,7 +67,7 @@ const BLOCKS := [
 	# station 3: a tree — canopy underside at 2.0 m, and a trunk
 	[Vector3(80.0, 2.3, 0.0), Vector3(8.0, 0.6, 8.0)],
 	[Vector3(81.4, 1.0, 0.0), Vector3(0.7, 2.0, 0.7)],
-	# station 4: a wall at the Gub's back, face at z = 0.6
+	# station 4: a wall at the Bog's back, face at z = 0.6
 	[Vector3(120.0, 2.0, 0.9), Vector3(16.0, 4.0, 0.6)],
 	# station 5: a tunnel along Z — walls at x = ±1.3, ceiling at 2.2
 	[Vector3(158.4, 1.5, 0.0), Vector3(0.6, 3.0, 26.0)],
@@ -77,9 +77,9 @@ const BLOCKS := [
 
 var _leg: int = -1
 var _tick: int = 0
-var _gub: Gub
-var _rig: GubCamera
-var _combat: GubCombat
+var _bog: Bog
+var _rig: BogCamera
+var _combat: BogCombat
 
 var _leg_checked: int = 0
 var _leg_clipped: int = 0
@@ -114,13 +114,13 @@ func _ready() -> void:
 	var spot: Vector3 = LEGS[0]["spot"]
 	MatchState.register_arena(players, [Transform3D(Basis.IDENTITY, spot)] as Array[Transform3D])
 
-	_gub = MatchState.gubs.get(1) as Gub
-	if _gub == null:
-		print("camera_range: no local Gub was spawned — clip FAIL")
+	_bog = MatchState.bogs.get(1) as Bog
+	if _bog == null:
+		print("camera_range: no local Bog was spawned — clip FAIL")
 		get_tree().quit()
 		return
-	_rig = _gub.get_node("CameraRig") as GubCamera
-	_combat = _gub.get_node("Combat") as GubCombat
+	_rig = _bog.get_node("CameraRig") as BogCamera
+	_combat = _bog.get_node("Combat") as BogCombat
 	print("camera_range: starting, %d legs" % LEGS.size())
 	_next_leg()
 
@@ -143,11 +143,11 @@ func _next_leg() -> void:
 	if _leg >= LEGS.size():
 		_finish()
 		return
-	_gub.revive_at(Transform3D(Basis.IDENTITY, LEGS[_leg]["spot"]))
+	_bog.revive_at(Transform3D(Basis.IDENTITY, LEGS[_leg]["spot"]))
 
 
 func _physics_process(_delta: float) -> void:
-	if _gub == null or _leg < 0 or _leg >= LEGS.size():
+	if _bog == null or _leg < 0 or _leg >= LEGS.size():
 		return
 	var leg: Dictionary = LEGS[_leg]
 	_tick += 1
@@ -180,7 +180,7 @@ func _drive(kind: String, t: int) -> void:
 			yaw = t * 0.04
 			pitch = -0.25 + 0.85 * sin(t * 0.045)
 		"turn":
-			# Swing round through the wall at the Gub's back, then flick.
+			# Swing round through the wall at the Bog's back, then flick.
 			if t < 140:
 				yaw = 3.2 * sin(t * 0.045)
 			else:
@@ -198,7 +198,7 @@ func _drive(kind: String, t: int) -> void:
 
 
 func _process(_delta: float) -> void:
-	if _gub == null or _leg < 0 or _leg >= LEGS.size() or _tick <= 0:
+	if _bog == null or _leg < 0 or _leg >= LEGS.size() or _tick <= 0:
 		return
 	_check_frame()
 
@@ -206,9 +206,9 @@ func _process(_delta: float) -> void:
 func _check_frame() -> void:
 	var space := get_world_3d().direct_space_state
 	var cam := _rig.camera().global_position
-	var eye := _gub.global_position + Vector3.UP * _gub.eye_height()
+	var eye := _bog.global_position + Vector3.UP * _bog.eye_height()
 	if _leg_checked == 0:
-		_leg_from = _gub.global_position
+		_leg_from = _bog.global_position
 	_leg_checked += 1
 	# How far the scenery shoved the lens in, so a leg that never pushed the
 	# camera at all is visible as one rather than passing quietly.
@@ -249,31 +249,31 @@ func _check_frame() -> void:
 
 ## Where a throw should go for this view, worked out from the camera the rig
 ## would have with nothing in the way: the rig's pivot, its yaw and pitch, the
-## full boom and the full shoulder. The ray is only tested from the Gub's own
+## full boom and the full shoulder. The ray is only tested from the Bog's own
 ## depth outwards — nothing behind the thrower is something it can throw at, and
-## this is the same rule the rig promises (`GubCamera.aim_ray`).
+## this is the same rule the rig promises (`BogCamera.aim_ray`).
 func _unobstructed_aim_point(space: PhysicsDirectSpaceState3D) -> Vector3:
 	var basis := Basis(Vector3.UP, _rig.yaw()) * Basis(Vector3.RIGHT, _rig.pitch())
 	var origin := _rig.global_position \
-		+ basis * Vector3(GubCamera.SHOULDER_DEFAULT, 0.0, GubCamera.DISTANCE_DEFAULT)
+		+ basis * Vector3(BogCamera.SHOULDER_DEFAULT, 0.0, BogCamera.DISTANCE_DEFAULT)
 	var direction := -basis.z
-	var from := origin + direction * GubCamera.DISTANCE_DEFAULT
+	var from := origin + direction * BogCamera.DISTANCE_DEFAULT
 	var query := PhysicsRayQueryParameters3D.create(
-		from, origin + direction * GubCombat.MAX_AIM_DISTANCE, AIM_MASK)
-	query.exclude = [_gub.get_rid()]
+		from, origin + direction * BogCombat.MAX_AIM_DISTANCE, AIM_MASK)
+	query.exclude = [_bog.get_rid()]
 	var hit := space.intersect_ray(query)
 	if hit.is_empty():
-		return origin + direction * GubCombat.MAX_AIM_DISTANCE
+		return origin + direction * BogCombat.MAX_AIM_DISTANCE
 	var p: Vector3 = hit["position"]
-	if origin.distance_to(p) < GubCombat.MIN_AIM_DISTANCE:
-		return origin + direction * GubCombat.MIN_AIM_DISTANCE
+	if origin.distance_to(p) < BogCombat.MIN_AIM_DISTANCE:
+		return origin + direction * BogCombat.MIN_AIM_DISTANCE
 	return p
 
 
 func _report_leg() -> void:
 	var leg: Dictionary = LEGS[_leg]
 	print("camera_range: %-18s walked %4.1f m, camera as close as %.2f m; clipped %3d/%d frames (inside %d, near plane %d, behind a wall %d, worst %.2f m); aim off %d, worst %.3f m" % [
-		leg["name"], _gub.global_position.distance_to(_leg_from), _leg_nearest,
+		leg["name"], _bog.global_position.distance_to(_leg_from), _leg_nearest,
 		_leg_clipped, _leg_checked, _leg_inside, _leg_touching,
 		_leg_behind, _leg_worst_behind, _leg_aim_off, _leg_worst_aim])
 	_total_checked += _leg_checked

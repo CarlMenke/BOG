@@ -97,7 +97,7 @@ static func describe_leave(reason: int, message: String) -> Dictionary:
 				"body": "Nothing answered at that address.\nCheck the code, and that the host has the game open."}
 		NET.Leave.LOBBY_FULL:
 			return {"title": "Lobby full",
-				"body": "That lobby already has %d Gubs in it." % MatchConfig.MAX_PLAYERS}
+				"body": "That lobby already has %d Bogs in it." % MatchConfig.MAX_PLAYERS}
 		NET.Leave.MATCH_IN_PROGRESS:
 			return {"title": "Match already running",
 				"body": "That lobby is mid-match. You can join once it ends."}

@@ -1,11 +1,11 @@
 class_name RagdollBuilder
 extends RefCounted
-## Builds a physical-bone skeleton for the Gub rig at runtime.
+## Builds a physical-bone skeleton for the Bog rig at runtime.
 ##
 ## The alternative is the editor's "Create physical skeleton", which writes ~13
 ## `PhysicalBone3D` nodes with hand-fitted capsules straight into a `.tscn`.
 ## That file cannot be reviewed in a diff, cannot carry a comment explaining why
-## a shin is 0.3 units wide, and silently goes stale the moment `Gub.glb` is
+## a shin is 0.3 units wide, and silently goes stale the moment `Bog.glb` is
 ## re-imported with a different rest pose. Deriving it from the skeleton's own
 ## rest pose instead means it is always correct by construction.
 ##
@@ -15,7 +15,7 @@ extends RefCounted
 ##
 ## Not every bone: the rig has 49, and toes, fingers, shoulders and the
 ## intermediate spine links contribute nothing to how a corpse *falls* while
-## costing a solver island each. Thirteen bodies is enough for a Gub to tumble
+## costing a solver island each. Thirteen bodies is enough for a Bog to tumble
 ## convincingly. They are not enough for it to *deform* convincingly — an
 ## undriven link keeps the local pose it died with while the bodies either side
 ## of it are driven by physics, and the skin across that ring pays for the
@@ -24,7 +24,7 @@ extends RefCounted
 ##   tip     — the bone whose head marks the end of this one, giving length and
 ##             direction. Capsules are built along that line.
 ##   girth   — capsule radius as a fraction of length. Values **above 1.0 are
-##             normal here**: the Gub is a pear-shaped blob whose pelvis and
+##             normal here**: the Bog is a pear-shaped blob whose pelvis and
 ##             chest bones are only 18 and 24 cm long inside a body 50 cm wide
 ##             and 75 cm deep, so those two capsules are wider than they are
 ##             long. `CapsuleShape3D.height` counts the caps, so a segment whose
@@ -71,7 +71,7 @@ extends RefCounted
 ## underneath the big belly, and a settled corpse only 0.59 m across for a
 ## 1.80 m character. A p90 fit is the right call for a cylinder. It is the wrong
 ## call for three overlapping blobs that between them *are* the character: the
-## Gub's body is 0.47 m wide and 0.75 m deep, its head is 0.5 m of skull on a
+## Bog's body is 0.47 m wide and 0.75 m deep, its head is 0.5 m of skull on a
 ## 0.37 m bone, and a sphere sized to hug the average vertex of a blob that
 ## wide leaves the rest of the blob outside the physics entirely — so the mesh
 ## rests on nothing, and the two halves of the torso pass through each other.
@@ -99,7 +99,7 @@ extends RefCounted
 ## 0.289 (0.42 at rest) — but **below 30 degrees the ragdoll detonates**, and
 ## that is D-013's warning
 ## arriving on schedule rather than a solver mystery: the spans have to cover the
-## poses a Gub actually dies in, and those poses already exceed them. Measured
+## poses a Bog actually dies in, and those poses already exceed them. Measured
 ## with this file's own frame maths — the swing the *animation* puts into each
 ## joint, worst sample per clip:
 ##
@@ -124,10 +124,10 @@ extends RefCounted
 ## Two things this table was *blamed* for and did not cause. The report that a
 ## corpse's "eyeball meshes end up outside the head surface" with "black
 ## self-intersecting seams" was the corpse's material going transparent at
-## spawn and so stopping writing depth — see `gub_ragdoll.gd`; the bodies were
+## spawn and so stopping writing depth — see `bog_ragdoll.gd`; the bodies were
 ## always where they should be. And a settled spread of 0.59 m for a 1.80 m
 ## character read as a ball only because that figure is `ragdoll_stability`'s
-## radius from the centroid, not a length: a prone Gub's thirteen body centres
+## radius from the centroid, not a length: a prone Bog's thirteen body centres
 ## occupy 0.70 x 0.29 x 0.89 m, which is a body lying down, and a radius much
 ## above 0.75 is geometrically impossible for this rig.
 ##
@@ -221,7 +221,7 @@ static func _make_bone(skeleton: Skeleton3D, bone: int, tip: int,
 	physical.can_sleep = true
 
 	# Ragdolls collide with the world and nothing else. They do not push living
-	# Gubs around, they do not tangle with each other, and — because every bone
+	# Bogs around, they do not tangle with each other, and — because every bone
 	# shares one layer that is not in its own mask — they do not self-collide,
 	# which is the usual cause of a corpse exploding on the first frame.
 	physical.collision_layer = LAYER_RAGDOLL
@@ -251,7 +251,7 @@ static func _make_bone(skeleton: Skeleton3D, bone: int, tip: int,
 	physical.joint_type = PhysicalBone3D.JOINT_TYPE_CONE
 	physical.set("joint_constraints/swing_span", segment["swing"])
 	physical.set("joint_constraints/twist_span", segment["twist"])
-	# Soft, slack joints: the Gub is a rubbery cartoon blob, not a skeleton.
+	# Soft, slack joints: the Bog is a rubbery cartoon blob, not a skeleton.
 	physical.set("joint_constraints/softness", 0.92)
 	physical.set("joint_constraints/relaxation", 0.6)
 	physical.set("joint_constraints/bias", 0.25)
@@ -283,7 +283,7 @@ static func _basis_along(up: Vector3) -> Basis:
 
 
 ## Move every body to where its bone currently is. Needed before simulation
-## starts so the corpse begins in the pose the Gub died in rather than snapping
+## starts so the corpse begins in the pose the Bog died in rather than snapping
 ## to the rest pose first.
 static func snap_to_pose(skeleton: Skeleton3D, simulator: PhysicalBoneSimulator3D) -> void:
 	for child in simulator.get_children():

@@ -18,7 +18,7 @@ extends Node3D
 ## both — because the tell and the thing it is promising have to be recognisably
 ## the same substance. What is *not* shared is the cost: this is alive for as
 ## long as an Elder stands around, potentially minutes at a time and on up to
-## eight Gubs, where a bolt is alive for a fifth of a second. Hence three short
+## eight Bogs, where a bolt is alive for a fifth of a second. Hence three short
 ## arcs rather than eighteen-segment strokes with branches, one small light
 ## instead of two enormous ones, and a redraw cadence half the bolt's.
 
@@ -30,7 +30,7 @@ const ARCS := 3
 const ARC_LIFE := 0.09
 ## How far from the hand's own origin the arcs reach. Small — this is a fist, and
 ## the whole effect has to sit in the volume `held_gear.gd` measured as clear of
-## the Gub's skin in every carried clip.
+## the Bog's skin in every carried clip.
 const RADIUS := 0.16
 const ARC_SEGMENTS := 4
 const ARC_JITTER := 0.30
@@ -44,7 +44,7 @@ const ENERGY := 2.4
 
 ## A small light, because that is what actually carries. The lesson is D-035's,
 ## learned on the letter card: a glyph in a gold fist at twenty metres is a gold
-## smudge on a gold body, and what reads at that range is that the Gub is *lit*.
+## smudge on a gold body, and what reads at that range is that the Bog is *lit*.
 ## Dimmer and shorter-ranged than the card's 1.8 over 4 m, because unlike a hold
 ## this is the Elder's resting state and it is meant to be a hum rather than a
 ## lamp.
@@ -52,7 +52,7 @@ const LIGHT_ENERGY := 1.1
 const LIGHT_RANGE := 2.6
 ## How far the light breathes either side of that. Nothing in this game pulses,
 ## and it is worth one exception: a perfectly steady glow reads as a material
-## property of the Gub, and a wandering one reads as something being held in.
+## property of the Bog, and a wandering one reads as something being held in.
 const PULSE_DEPTH := 0.28
 const PULSE_SPEED := 7.0
 

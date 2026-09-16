@@ -1,5 +1,5 @@
 extends Node3D
-## Close-up of the Gub's hand across a clip, for tuning where the spear sits.
+## Close-up of the Bog's hand across a clip, for tuning where the spear sits.
 ## Development tool, not shipped.
 ##
 ## Godot --path . --resolution 2400x700 --script tools/snapshot.gd -- \
@@ -9,12 +9,12 @@ extends Node3D
 ## command line instead of edited and re-imported one at a time. `from`/`to`
 ## narrow the sheet to a window of the clip in seconds, which is how the throw
 ## release (1.567 s of a 2.83 s clip, D-063) gets more than one sample on it.
-## The window `gub_animator.gd` actually plays is 1.067-1.900, and the grip
+## The window `bog_animator.gd` actually plays is 1.067-1.900, and the grip
 ## numbers below were re-checked across it when the clip changed:
 ##
 ##     ... res://tools/preview_grip.tscn out/grip.png 25 Throw ##         -0.206,-0.582,0.097 -12,0,-15 1.067 1.90
 
-const GUB := preload("res://scenes/player/gub.tscn")
+const BOG := preload("res://scenes/player/bog.tscn")
 
 @export var clip: String = "Throw"
 @export var samples: int = 5
@@ -22,19 +22,19 @@ const GUB := preload("res://scenes/player/gub.tscn")
 
 ## Where the frame sits vertically. The hand lives between 0.9 and 1.5 m in
 ## every clip, so the sheet is centred on the chest rather than on the body:
-## a grip is judged on 12 cm of fist, and a full-height 1.80 m Gub in a 700 px
+## a grip is judged on 12 cm of fist, and a full-height 1.80 m Bog in a 700 px
 ## render leaves that fist 30 pixels tall.
 const FRAME_LOW := 0.35
 const FRAME_HIGH := 2.05
 const FRAME_MIN := 1.7
-## Elbow room past the two end Gubs. A spear is 1.24 m long and swings a long
+## Elbow room past the two end Bogs. A spear is 1.24 m long and swings a long
 ## way from the hand during a throw.
 const FRAME_MARGIN := 1.0
 
-## Where the camera stands, in degrees around the Gub. 0 would be dead in front
-## of it (the model faces −Z once `gub.tscn`'s 180° turn is applied), and dead
+## Where the camera stands, in degrees around the Bog. 0 would be dead in front
+## of it (the model faces −Z once `bog.tscn`'s 180° turn is applied), and dead
 ## in front cannot tell a spear pointing forward from one pointing across the
-## body — which is half of what this tool is for. 35° to the Gub's right puts
+## body — which is half of what this tool is for. 35° to the Bog's right puts
 ## the spear hand nearest the camera and reads both axes at once.
 const VIEW_AZIMUTH := 35.0
 const VIEW_ELEVATION := 12.0
@@ -51,7 +51,7 @@ func _ready() -> void:
 		_offset = _parse(args[4])
 		_rotation = _parse(args[5])
 
-	# The camera is orthographic (see _build_stage), so every Gub is seen from
+	# The camera is orthographic (see _build_stage), so every Bog is seen from
 	# exactly the same angle — but only if none of them hides another. Laying
 	# the row along the camera's own right vector instead of world X is what
 	# guarantees that at an oblique viewing angle.
@@ -72,21 +72,21 @@ func _ready() -> void:
 	var to := 0.0
 	var windowed := args.size() >= 8
 	for i in samples:
-		var gub := GUB.instantiate() as Gub
-		add_child(gub)
-		gub.position = row * (float(i) - float(samples - 1) * 0.5) * spacing
+		var bog := BOG.instantiate() as Bog
+		add_child(bog)
+		bog.position = row * (float(i) - float(samples - 1) * 0.5) * spacing
 		# No ground in this scene, and the body would happily fall through it.
-		gub.set_physics_process(false)
+		bog.set_physics_process(false)
 		# `get_node_or_null`, because this tool has to keep working while the
 		# animation tree is being rebuilt around it: the grip lives on the
 		# skeleton and does not care whether an AnimationTree exists. The tree
 		# goes away regardless — the AnimationPlayer below is driven directly.
 		for spare in ["CameraRig", "Nameplate", "AnimationTree"]:
-			var node := gub.get_node_or_null(spare)
+			var node := bog.get_node_or_null(spare)
 			if node != null:
 				node.queue_free()
 
-		var player := gub.find_child("AnimationPlayer", true, false) as AnimationPlayer
+		var player := bog.find_child("AnimationPlayer", true, false) as AnimationPlayer
 		length = player.get_animation(clip).length
 		from = float(args[6]) if windowed else 0.0
 		to = float(args[7]) if windowed else length
@@ -99,21 +99,21 @@ func _ready() -> void:
 		player.advance(at)
 		player.pause()
 		if _offset != Vector3.INF:
-			gub.held_gear.set_grip(_offset, _rotation)
+			bog.held_gear.set_grip(_offset, _rotation)
 
 		var stamp := Label3D.new()
 		stamp.text = "%.2f" % at
 		stamp.font_size = 64
 		stamp.pixel_size = 0.0016
 		stamp.position = Vector3(0.0, 1.98, 0.0)
-		# Billboarded, because this camera stands in *front* of the Gub — it has
+		# Billboarded, because this camera stands in *front* of the Bog — it has
 		# to, the whole point is to see whether the shaft crosses the face — and
 		# a Label3D faces its own +Z, which here is away from the camera. Left
 		# flat the text renders back-to-front, and a mirrored "0.83" over a
 		# mirrored sheet is what made the first pass misread which side of the
 		# head the spear was on.
 		stamp.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		gub.add_child(stamp)
+		bog.add_child(stamp)
 
 	_build_stage(length, from, to, eye)
 
@@ -149,7 +149,7 @@ func _build_stage(length: float, from: float, to: float, eye: Vector3) -> void:
 	add_child(fill)
 
 	# Orthographic for the same reason `preview_anim.gd` is: under perspective
-	# the end Gubs of a 5 m row are seen from a different side than the middle
+	# the end Bogs of a 5 m row are seen from a different side than the middle
 	# one, so the same grip looks like a different grip in every sample.
 	var view := get_viewport().get_visible_rect().size
 	var aspect: float = view.x / maxf(view.y, 1.0)

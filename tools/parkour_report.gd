@@ -5,13 +5,13 @@ extends Node3D
 ## 0.4 m to 9.5 m, and the only thing that makes it a map rather than a pile is
 ## that every one of them is reachable from the ground. That is not something a
 ## render can show and it is certainly not something a coordinate can: the
-## question "is this gap crossable" is a question about the Gub's jump arc, and
-## the arc is five constants in `gub.gd` and one in `project.godot`.
+## question "is this gap crossable" is a question about the Bog's jump arc, and
+## the arc is five constants in `bog.gd` and one in `project.godot`.
 ##
 ## So this rebuilds the arc from those constants, builds the whole reachability
 ## graph out of the map's `StaticMap.platforms`, and walks it from the ground. Anything it
 ## cannot reach is named. It also checks the *physics* against the table — a ray
-## down onto layer 1 from every landing and a Gub-sized capsule standing on it —
+## down onto layer 1 from every landing and a Bog-sized capsule standing on it —
 ## because the table is what the graph believes and the trimesh is what a player
 ## will actually meet, and a slab that is 30 cm lower than its record says is a
 ## gap that is 30 cm longer than the checker thinks.
@@ -46,7 +46,7 @@ const DEFAULT_MAP := "res://scenes/world/maps/safari.tscn"
 ##   min_big_edges   how many big-dive shortcuts the layout must offer
 ##   summit_zone     if set, the landing labelled "summit" must leap to a
 ##                   landing in this zone (Kopje Crossing's prize, D-042)
-##   sightline       if above zero, the longest line between two Gubs' eyes
+##   sightline       if above zero, the longest line between two Bogs' eyes
 ##                   standing on the ground may not be longer than this
 ##   roof_sightline  the same, with at least one of the two on a landing
 ##   reach           half the width of the square the ASCII map and the top
@@ -71,34 +71,34 @@ const EXPECT := {
 	},
 }
 
-## The sightline scan's grid, and where on a Gub the line runs between. Eye to
-## eye is the fair question: a Gub who can see another's eyes can be seen back.
+## The sightline scan's grid, and where on a Bog the line runs between. Eye to
+## eye is the fair question: a Bog who can see another's eyes can be seen back.
 const SIGHT_STEP := 2.0
 const EYE := 1.45
 
 ## How far past the edge of the deck the overboard check looks for anything to
 ## land on: a rail's thickness and a stride out. And how far under the lowest
 ## floor the void may sit — a fall of more than a few metres into water is a
-## Gub waiting to be told it is dead.
+## Bog waiting to be told it is dead.
 const OVERBOARD := 1.0
 const VOID_DEPTH := 5.0
 
-## The movement model, read off `Gub` and `ProjectSettings` rather than typed, so
+## The movement model, read off `Bog` and `ProjectSettings` rather than typed, so
 ## a change to the character's jump fails this check instead of quietly
 ## invalidating every gap on the map.
-const RUN := Gub.RUN_SPEED
-const JUMP := Gub.JUMP_VELOCITY
-const DIVE_FORWARD := Gub.DIVE_FORWARD_SPEED
-const DIVE_UP := Gub.DIVE_UP_VELOCITY
+const RUN := Bog.RUN_SPEED
+const JUMP := Bog.JUMP_VELOCITY
+const DIVE_FORWARD := Bog.DIVE_FORWARD_SPEED
+const DIVE_UP := Bog.DIVE_UP_VELOCITY
 ## The one number here that is a literal, because it is a literal in
-## `Gub._apply_gravity` too: falling is 1.35x as fast as rising, which is what
+## `Bog._apply_gravity` too: falling is 1.35x as fast as rising, which is what
 ## makes a jump feel decisive. If that ever becomes a constant, name it here.
 const FALL_MULTIPLIER := 1.35
 
-const CAPSULE_RADIUS := Gub.CAPSULE_RADIUS
-const CAPSULE_HEIGHT := Gub.STAND_HEIGHT
-## Where the capsule's centre sits above the Gub's feet — the offset on the
-## `Collision` node in `gub.tscn`. A test at the landing itself would be a
+const CAPSULE_RADIUS := Bog.CAPSULE_RADIUS
+const CAPSULE_HEIGHT := Bog.STAND_HEIGHT
+## Where the capsule's centre sits above the Bog's feet — the offset on the
+## `Collision` node in `bog.tscn`. A test at the landing itself would be a
 ## capsule buried half a metre in the rock and would fail on every platform.
 const CAPSULE_LIFT := 0.775
 
@@ -115,7 +115,7 @@ const RAY_BELOW := 1.5
 ## Take off from 0.1 m inside the near edge and land with 0.1 m of the far lip to
 ## spare — a landing that needs the very edge of the slab is a landing that
 ## works in a checker and not in a match. The 0.38 is the capsule's radius: the
-## Gub's leading edge has to clear the lip, not its centre.
+## Bog's leading edge has to clear the lip, not its centre.
 const EDGE_MARGIN := 0.1
 const LANDING_MARGIN := 0.2
 const LIP_CLEARANCE := 0.1
@@ -189,7 +189,7 @@ func _ready() -> void:
 	_gravity = float(ProjectSettings.get_setting("physics/3d/default_gravity", 24.0))
 	_apex = JUMP * JUMP / (2.0 * _gravity)
 	_dive_apex = _apex + DIVE_UP * DIVE_UP / (2.0 * _gravity)
-	# One physics tick after the jump the Gub has risen a little and lost a
+	# One physics tick after the jump the Bog has risen a little and lost a
 	# little speed; the dive then adds its whole upward kick to what is left.
 	var tick := 1.0 / float(ProjectSettings.get_setting(
 		"physics/common/physics_ticks_per_second", 60))
@@ -270,7 +270,7 @@ func _check_counts() -> void:
 ## Two questions, and they fail differently. The ray asks whether the *top* of
 ## the rock is where the record says it is — a slab placed by the wrong pillar,
 ## or a record written from the wrong scale, and the graph is reasoning about a
-## map that does not exist. The capsule asks whether a Gub actually fits there,
+## map that does not exist. The capsule asks whether a Bog actually fits there,
 ## which is the question a neighbouring slab overlapping this one answers no to.
 func _check_physics() -> void:
 	var space := get_world_3d().direct_space_state
@@ -309,7 +309,7 @@ func _check_physics() -> void:
 			blocked += 1
 
 	_want("every landing has the rock the table promises (%d wrong)" % missing, missing == 0)
-	_want("a Gub fits on every landing (%d blocked)" % blocked, blocked == 0)
+	_want("a Bog fits on every landing (%d blocked)" % blocked, blocked == 0)
 
 
 # ------------------------------------------------------------------- graph ---
@@ -338,7 +338,7 @@ func _build_graph() -> void:
 
 ## What it takes to get from A to B, or "" for nothing.
 ##
-## `needed` is the gap the Gub's *capsule* has to fly: take off 0.1 m inside A's
+## `needed` is the gap the Bog's *capsule* has to fly: take off 0.1 m inside A's
 ## lip, clear B's lip by its own radius with 0.2 m to spare. `Δy` is compared
 ## against the reach at one lip-clearance higher than the landing, so a jump that
 ## would scrape the edge of B on the way in does not count as making it.
@@ -541,14 +541,14 @@ func _check_off_limits() -> void:
 				reached.append("%s by a %s off %s" % [perch.label, jump, platform.label])
 				break
 	for what: String in reached:
-		print("  FAIL  a Gub can reach %s" % what)
+		print("  FAIL  a Bog can reach %s" % what)
 	_want("no jump reaches an off-limits top (%d tops, highest dive %.2f m, %d reached)" % [
 		perches.size(), _tick_apex, reached.size()], reached.is_empty())
 
 
 # -------------------------------------------------------------- sightlines ---
 
-## How far one Gub can see another, eye to eye, on this map.
+## How far one Bog can see another, eye to eye, on this map.
 ##
 ## Only for a map that states a limit. Every standable point on a two-metre grid
 ## of the ground, and every landing, is an eye 1.45 m up; every pair of eyes
@@ -602,7 +602,7 @@ func _check_sightlines() -> void:
 
 
 ## Every standable point of the ground on the sightline grid: a floor within
-## 0.6 m of y = 0 with a Gub's worth of room over it.
+## 0.6 m of y = 0 with a Bog's worth of room over it.
 func _ground_points(space: PhysicsDirectSpaceState3D) -> Array[Vector3]:
 	var capsule := CapsuleShape3D.new()
 	capsule.radius = CAPSULE_RADIUS
@@ -638,9 +638,9 @@ func _ground_points(space: PhysicsDirectSpaceState3D) -> Array[Vector3]:
 ## Two questions. Off both ends of every row of the ground grid — marched out
 ## to where the deck ends — a column `OVERBOARD` metres further out has nothing
 ## in it from above the rail down past the void:
-## no hull flare, no fender, no ledge a falling Gub lands on and stands up from.
+## no hull flare, no fender, no ledge a falling Bog lands on and stands up from.
 ## And the void is under every landing, and not so far under the lowest one
-## that a Gub falls for longer than a moment before the match calls it.
+## that a Bog falls for longer than a moment before the match calls it.
 func _check_overboard() -> void:
 	if not bool(_expect.get("overboard", false)):
 		return

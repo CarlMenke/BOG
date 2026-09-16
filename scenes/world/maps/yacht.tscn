@@ -33,10 +33,10 @@
 ;                opposite ends. Each faces the middle of the yacht.
 ;   Bases        Team 1 on the foredeck in front of the tender, Team 2 on the
 ;                aft deck at the foot of the aft stairs, 43.5 m apart (D-051).
-;   Letters      U and B in the open salon amidships, either side of the bar;
-;                G two decks up, on the sun deck above them.
+;   Letters      O and G in the open salon amidships, either side of the bar;
+;                B two decks up, on the sun deck above them.
 ;
-; `tools/preview_map.gd` stands a Gub on every pad, `tools/parkour_report.gd`
+; `tools/preview_map.gd` stands a Bog on every pad, `tools/parkour_report.gd`
 ; walks the jump graph up all four decks, proves the mast is out of reach,
 ; measures the longest sightline and proves there is nothing but water over the
 ; side, and `tools/playthrough.gd` plans the capture layout off the declared
@@ -75,7 +75,7 @@ directional_shadow_blend_splits = true
 ; A `DirectionalLight3D` pointing straight up, which lights **only** downward-
 ; facing surfaces: every top face on the map has a normal with no component
 ; along -Y, so this cannot touch a single deck, a single stair tread or a single
-; Gub's hat, and the 38-degree sun's deck-on-deck shadow stack is untouched by
+; Bog's hat, and the 38-degree sun's deck-on-deck shadow stack is untouched by
 ; construction rather than by taste. Shadows off, specular off, 0.18 energy.
 ; Cost is one more directional light and no shadow map.
 [node name="SeaBounce" type="DirectionalLight3D" parent="Lights"]
@@ -131,12 +131,12 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 20.5)
 
 [node name="Letters" type="Node3D" parent="."]
 
-; G on the sun deck, two decks over U and B
-[node name="G" type="Marker3D" parent="Letters"]
+; B on the sun deck, two decks over O and G
+[node name="B" type="Marker3D" parent="Letters"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6.2, 2.1)
 
-[node name="U" type="Marker3D" parent="Letters"]
+[node name="O" type="Marker3D" parent="Letters"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.8, 0, -0.5)
 
-[node name="B" type="Marker3D" parent="Letters"]
+[node name="G" type="Marker3D" parent="Letters"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.8, 0, -0.5)

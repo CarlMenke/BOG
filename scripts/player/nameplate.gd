@@ -1,8 +1,8 @@
 class_name Nameplate
 extends Node3D
-## The floating name above a Gub's head.
+## The floating name above a Bog's head.
 ##
-## Every Gub looks identical — the name is the *only* way to tell who you are
+## Every Bog looks identical — the name is the *only* way to tell who you are
 ## looking at, in the lobby and in the match. So it is treated as gameplay
 ## information, not decoration: always legible, never hidden by the crowd, and
 ## occluded by scenery so it cannot be used to see through a rock.
@@ -11,13 +11,13 @@ extends Node3D
 ## like everything else. It used to be `fixed_size`, which pinned it to a
 ## constant number of screen pixels — that reads as correct in a screenshot and
 ## wrong in motion, because a name across the island stayed exactly as large as
-## the one on the Gub beside you, so the crowd came out as a wall of identical
+## the one on the Bog beside you, so the crowd came out as a wall of identical
 ## floating text with the players somewhere behind it. Perspective is the cue
 ## that says which name belongs to which body, and it was the one thing being
 ## thrown away.
 
 ## The label's world size is `FONT_SIZE * PIXEL_SIZE` tall, which works out at
-## about 0.21 m — a Gub is 1.55 m, so a six-letter name is roughly the width of
+## about 0.21 m — a Bog is 1.55 m, so a six-letter name is roughly the width of
 ## its shoulders and sits like a label on the model rather than over it.
 ##
 ## The two numbers are not interchangeable even though only their product sets
@@ -38,7 +38,7 @@ const OUTLINE_SIZE := 14
 ## honest — the text was as big out there as it was in your face, so it was
 ## still worth drawing. In perspective a name at 34 m is four or five pixels
 ## tall and is no longer a name, it is a smear that says "somebody is over
-## there", which is information the Gub's own silhouette already gives you for
+## there", which is information the Bog's own silhouette already gives you for
 ## free. Fading it out at the distance it stops being readable is the same
 ## decision the old numbers made, applied to a plate that now has a size.
 const FADE_START := 20.0
@@ -66,7 +66,7 @@ const NEUTRAL_COLOUR := Color(0.94, 0.95, 0.97)
 ## it is still a *name* across the island rather than a smear.
 ##
 ## Enemies are untouched — occluded and faded exactly as before. Nothing about
-## this reaches a Gub on another team, which is the whole reason it is allowed.
+## this reaches a Bog on another team, which is the whole reason it is allowed.
 ##
 ## A little larger than an enemy's plate up close, and it keeps its size with
 ## distance where an enemy's does not, so the two read differently before the
@@ -87,7 +87,7 @@ const ALLY_BAR_DROP := 0.62
 ## (D-047). Health is combat information about a specific body, and the body is
 ## already the thing that carries it.
 ##
-## In metres at the plate's base scale. 0.66 m against a 1.55 m Gub is a bar a
+## In metres at the plate's base scale. 0.66 m against a 1.55 m Bog is a bar a
 ## little wider than its shoulders and a little narrower than a seven-letter
 ## name — measured against a rendered frame rather than reasoned about, because
 ## the first guess (0.52, "about shoulder width") came out visibly meaner than
@@ -104,8 +104,8 @@ const HEALTH_BAR := Vector2(0.66, 0.07)
 const HEALTH_BAR_DROP := 0.66
 const HEALTH_BAR_DROP_ALLY := 1.05
 ## Behind the fill, so a bar at 12% still has a full-width shape to be read
-## against. Without it a nearly-dead Gub's bar is a speck, and a speck reads as
-## "no bar" — which is what a Gub at *full* health looks like, so the two states
+## against. Without it a nearly-dead Bog's bar is a speck, and a speck reads as
+## "no bar" — which is what a Bog at *full* health looks like, so the two states
 ## furthest apart in the game would look the same.
 ##
 ## The empty part is the fill's own colour dimmed to `HEALTH_BACK_DIM` rather
@@ -116,7 +116,7 @@ const HEALTH_BAR_DROP_ALLY := 1.05
 ## `HEALTH_EDGE` is the same argument the name's outline makes (`OUTLINE_SIZE`,
 ## which is deliberately thick) — a dark border a fraction of the bar's height
 ## proud of it on every side, so the bar has an edge against whatever is behind
-## the Gub. Without it the whole thing disappears into a dark tree line, which
+## the Bog. Without it the whole thing disappears into a dark tree line, which
 ## is exactly where these fights happen.
 const HEALTH_BACK_DIM := 0.22
 const HEALTH_EDGE := Color(0.02, 0.03, 0.04, 0.92)
@@ -150,7 +150,7 @@ var _health_edge: MeshInstance3D
 var _health_back: MeshInstance3D
 var _health_fill: MeshInstance3D
 var _camera: Camera3D
-var _text: String = "Gub"
+var _text: String = "Bog"
 var _colour: Color = NEUTRAL_COLOUR
 var _ally: bool = false
 ## 1 -> 0. Starts full, which is also the state in which nothing is drawn.
@@ -160,7 +160,7 @@ var _health: float = 1.0
 func _ready() -> void:
 	_label = Label3D.new()
 	# Turned to face the camera, but not scaled to it: the plate keeps its world
-	# size and shrinks and grows with the Gub it belongs to.
+	# size and shrinks and grows with the Bog it belongs to.
 	_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	_label.fixed_size = false
 	_label.font_size = FONT_SIZE
@@ -226,9 +226,9 @@ func _hold_size(distance: float) -> void:
 func _place_health(alpha: float) -> void:
 	if _health_root == null:
 		return
-	# **Only a hurt Gub has a bar.** A row of full bars over a lobby says
+	# **Only a hurt Bog has a bar.** A row of full bars over a lobby says
 	# nothing and hides the one that matters; a bar appearing is itself the
-	# information, and it is how a player notices that the Gub they are chasing
+	# information, and it is how a player notices that the Bog they are chasing
 	# has already been in a fight.
 	_health_root.visible = _health < 1.0 and _label.visible and alpha > 0.01
 	if not _health_root.visible:
@@ -250,7 +250,7 @@ func _place_health(alpha: float) -> void:
 	(_health_back.mesh as QuadMesh).size = Vector2(width, height)
 	# Never thinner than it is tall while there is anything left: a fill of two
 	# pixels reads as an empty bar, and "empty" is the one state this cannot
-	# show — the Gub would be a corpse and the plate would be gone with it.
+	# show — the Bog would be a corpse and the plate would be gone with it.
 	var fill := maxf(width * _health, height)
 	(_health_fill.mesh as QuadMesh).size = Vector2(fill, height)
 	# Left-aligned: the fill keeps its left edge and loses its right one, which
@@ -270,7 +270,7 @@ func _place_health(alpha: float) -> void:
 		Color(HEALTH_EDGE, HEALTH_EDGE.a * alpha)
 
 
-## What the host says is left of this Gub, as a fraction. Pushed by `Gub` from
+## What the host says is left of this Bog, as a fraction. Pushed by `Bog` from
 ## its own `set_health` and from nowhere else, so the bar and the number the
 ## host is about to kill it on are the same number (D-062).
 func set_health(current: float, maximum: float) -> void:
@@ -290,7 +290,7 @@ func set_team(team: int) -> void:
 
 
 ## Whether this plate belongs to a teammate of the player looking at it, which
-## is decided by `MatchState` per peer — the same Gub is a teammate on one
+## is decided by `MatchState` per peer — the same Bog is a teammate on one
 ## screen and an enemy on the next. See `ALLY_SCALE` and D-047.
 func set_ally(value: bool) -> void:
 	_ally = value
@@ -345,13 +345,13 @@ func _build_bar() -> void:
 
 
 ## The health bar: a camera-facing root, a dark border, a dimmed backing and the
-## fill in front of them. Built for every plate and shown only on a Gub that has
+## fill in front of them. Built for every plate and shown only on a Bog that has
 ## been hurt.
 ##
 ## Each quad carries its own unshaded material rather than a shared copy: they
 ## all differ every frame — the fill's colour, the backing's dimmed copy of it,
 ## the border's alpha — and a shared material would be a mutable global
-## recoloured by whichever Gub happened to be drawn last.
+## recoloured by whichever Bog happened to be drawn last.
 func _build_health_bar() -> void:
 	_health_root = Node3D.new()
 	_health_root.name = "HealthBar"

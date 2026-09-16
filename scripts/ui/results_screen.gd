@@ -84,7 +84,7 @@ func _fill_headline(summary: Dictionary) -> void:
 	if teams:
 		var scores: Dictionary = summary.get("team_scores", {})
 		# Under letters the pooled masks decide it before kills do (D-049): the
-		# team that spelled GUB won, however few kills it took to do it. Absent
+		# team that spelled BOG won, however few kills it took to do it. Absent
 		# in every other condition, and then every team counts zero letters and
 		# kills decide exactly as they always have.
 		var pooled: Dictionary = summary.get("team_letters", {})
@@ -113,7 +113,7 @@ func _fill_headline(summary: Dictionary) -> void:
 		var mine := winner == Net.local_id()
 		_headline.text = "YOU WIN" if mine else "%s WINS" % Net.player_name(winner)
 		_headline.add_theme_color_override("font_color",
-			UIPalette.GUB if mine else UIPalette.AMBER)
+			UIPalette.BOG if mine else UIPalette.AMBER)
 
 	_subtitle.text = _reason_text(String(summary.get("reason", "")))
 	# In Teams no one hand needs all three (D-049), so "somebody" would be wrong.
@@ -128,11 +128,11 @@ static func _reason_text(reason: String) -> String:
 		"time":
 			return "Time ran out."
 		"elimination":
-			return "Last Gub standing."
+			return "Last Bog standing."
 		"letters":
 			return "Somebody spelled it."
 		"capture":
-			return "The team carried G·U·B home."
+			return "The team carried B·O·G home."
 		_:
 			return "The match ended."
 
@@ -191,7 +191,7 @@ func _row(place: int, peer_id: int, entry: Dictionary, teams: bool,
 	rank.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	rank.theme_type_variation = "LeadLabel" if place == 1 else "DimLabel"
 	if place == 1:
-		rank.add_theme_color_override("font_color", UIPalette.GUB)
+		rank.add_theme_color_override("font_color", UIPalette.BOG)
 	line.add_child(rank)
 
 	var name_label := Label.new()
@@ -199,7 +199,7 @@ func _row(place: int, peer_id: int, entry: Dictionary, teams: bool,
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	if mine:
-		name_label.add_theme_color_override("font_color", UIPalette.GUB)
+		name_label.add_theme_color_override("font_color", UIPalette.BOG)
 	elif teams:
 		name_label.add_theme_color_override("font_color",
 			UIPalette.team_colour(Net.player_team(peer_id)))
@@ -278,7 +278,7 @@ func _letters_stat(mask: int) -> Control:
 		# places in this game can disagree about which bit is which.
 		glyph.text = MatchState.letter_name(bit)
 		glyph.add_theme_color_override("font_color",
-			UIPalette.GUB if mask & bit != 0 else UIPalette.faded(UIPalette.TEXT, 0.22))
+			UIPalette.BOG if mask & bit != 0 else UIPalette.faded(UIPalette.TEXT, 0.22))
 		glyphs.add_child(glyph)
 	box.add_child(glyphs)
 

@@ -31,23 +31,24 @@ extends SceneTree
 ## **Why not the longest axis.** "Every prop's longest axis is the same fraction
 ## of the tile" is the obvious rule and it is the one that makes seven
 ## photographs look like seven unrelated pictures. These props are not the same
-## shape: the arrow is 1.000 x 0.134 m — 7.5:1 — and the mushroom is 1.797 x
-## 2.029 x 2.374 m, barely 1.2:1. Give both the same *length* and the arrow is a
-## hairline ruled across an empty square while the mushroom is a solid block
-## edge to edge. They would have one thing in common, and it would not be
+## shape: the arrow is 1.000 x 0.134 m — 7.5:1 — and the shield is 0.998 x
+## 0.701 x 0.182 m, barely 1.4:1 in the plane it is photographed in. Give both
+## the same *length* and the arrow is a hairline ruled across an empty square
+## while the shield is a solid block edge to edge. They would have one thing in common, and it would not be
 ## anything the eye reads.
 ##
 ## The geometric mean is the side of the square with the silhouette's own
 ## *proportions* built in, so it carries the shape's slenderness with it: a prop
 ## twice as slender is allowed to be √2 longer, in exact proportion, and the two
 ## end up occupying the same rectangle of the tile. The long ones stay visibly
-## the long ones — the spear runs 2.2x the length the mushroom is wide rather
-## than the same as it — and no prop is a hairline or a block.
+## the long ones — the spear's silhouette is still 7.3:1 on its tile where the
+## shield's is 1.4:1, rather than the two being ruled to one length — and no
+## prop is a hairline or a block.
 ##
 ## **What this equalises is the box, not the paint.** Measured off the finished
-## tiles, the seven share a bounding box to within 0.002 of the side, and their
-## actual inked area still runs from 4% (the arrow, a line) to 30% (the potion, a
-## sphere). That is the correct answer and not a miss: a rule that gave a line
+## tiles, the seven share a bounding box to within 0.003 of the side, and their
+## actual inked area still runs from 4% (the arrow, a line) to 33% (the shield, a
+## slab). That is the correct answer and not a miss: a rule that gave a line
 ## and a sphere the same number of lit pixels would have to draw the line half
 ## the width of the tile thick. Slender things cover less. What a set needs is
 ## that they are framed alike, and they are.
@@ -72,7 +73,7 @@ extends SceneTree
 ## and the emission is switched off, so all seven take the same key and the same
 ## fill. Nothing is written back to the asset.
 
-const SUBJECTS := ["spear", "bow", "arrow", "greatsword", "mushroom", "lure",
+const SUBJECTS := ["spear", "bow", "arrow", "greatsword", "shield", "magnet",
 	"heal_potion"]
 const SOURCE := "res://art/generated/%s.glb"
 const OUT_DIR := "res://resources/ui/tiles"

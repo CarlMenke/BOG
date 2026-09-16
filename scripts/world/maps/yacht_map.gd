@@ -17,7 +17,7 @@ extends StaticMap
 ##   sun deck      y = 6.2. Loungers, a hot tub, and G.
 ##   flybridge     y = 8.8. The small open top, under the mast.
 ##
-## **Every deck has two ways up and one of them is always a walk.** The Gub has
+## **Every deck has two ways up and one of them is always a walk.** The Bog has
 ## no step-up, so a staircase is a ramp in the collision (`floor_max_angle` is
 ## 52 degrees and every ramp here is under 30) and a flight of treads in the
 ## render. The other way up is a stack of hop steps, each a metre or so, so a
@@ -29,13 +29,13 @@ extends StaticMap
 ##                    upper deckhouse's forward face, off the balcony.
 ##   sun   -> fly     hop steps either side at the flybridge's aft face.
 ##
-## `tools/parkour_report.gd` walks the Gub's real jump arc over every landing
+## `tools/parkour_report.gd` walks the Bog's real jump arc over every landing
 ## declared here and fails the build if any deck is stranded, and proves the
 ## mast is out of reach of every jump including the one-tick dive.
 ##
 ## **The water is the void.** The hull stands on nothing: there is no collision
 ## below the waterline and no floor anywhere off the side, and `void_height`
-## sits half a metre under the water's surface, so a Gub that goes over the
+## sits half a metre under the water's surface, so a Bog that goes over the
 ## rail disappears into the sea and dies there. The report checks that from
 ## every edge of the deck.
 ##
@@ -168,7 +168,7 @@ const TREAD_RISE := 0.2
 
 ## Rails: Rect2(from x, from z, run along x, run along z) at a deck's height, a metre tall, with the
 ## gaps where a stair or a step arrives left out. Collision, all of them — a rail
-## is what stops a Gub backing off a deck in the middle of a fight. Jumping over
+## is what stops a Bog backing off a deck in the middle of a fight. Jumping over
 ## one is a hop, so going overboard on purpose is always possible.
 const RAILS: Array[Dictionary] = [
 	{"y": UPPER_Y, "runs": [
@@ -211,7 +211,7 @@ const FURNITURE: Array[Dictionary] = [
 	# middle of the bow, and it is a perch you can leap onto.
 	{"label": "tender", "rect": Rect2(-1.1, -33.0, 2.2, 5.0), "base": MAIN_Y, "top": 1.9,
 		"kind": "tender", "landing": true},
-	# The salon's bar, between U and B.
+	# The salon's bar, between O and G.
 	{"label": "bar", "rect": Rect2(-1.25, -1.05, 2.5, 1.1), "base": MAIN_Y, "top": 1.0,
 		"kind": "bar"},
 	# The aft deck's bar against the aft deckhouse, between the stairs.
@@ -241,7 +241,7 @@ const TUB_HEIGHT := 0.55
 const TILE := 2.2
 const TILE_RADIUS := 1.0
 ## A landing record is kept this far clear of anything standing on its deck, so a
-## Gub-sized capsule fits on every one of them.
+## Bog-sized capsule fits on every one of them.
 const TILE_CLEAR := 0.55
 
 ## Stair landings sit this far over the ramp's surface, so the report's capsule
@@ -608,7 +608,7 @@ func _build_mast() -> void:
 
 # ---------------------------------------------------------------- landings ---
 
-## Every place the parkour report should know a Gub can stand, above the main
+## Every place the parkour report should know a Bog can stand, above the main
 ## deck. The main deck itself is the report's ground.
 func _declare_landings() -> void:
 	# Open decks, tiled.
@@ -673,7 +673,7 @@ func _declare_landings() -> void:
 		TUB_RADIUS * 0.7 - 0.15, "furniture", "hot tub"))
 
 
-## Landing records on a grid over one open deck, skipping any a Gub would not
+## Landing records on a grid over one open deck, skipping any a Bog would not
 ## fit at because something stands there, each with the radius of floor it can
 ## promise before an edge or a thing on the deck.
 func _tile(region: Rect2, y: float, zone: String, blocks: Array) -> void:

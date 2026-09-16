@@ -7,7 +7,7 @@ extends Node3D
 ##   Godot --headless --path . tools/team_plates.tscn            # teams
 ##   Godot --headless --path . tools/team_plates.tscn -- ffa     # free-for-all
 ##
-## Through the snapshot it is the picture — the local Gub's own camera, a wall
+## Through the snapshot it is the picture — the local Bog's own camera, a wall
 ## fifteen metres out, a teammate and an enemy forty metres behind it and one of
 ## each in the open in front of it:
 ##
@@ -15,8 +15,8 @@ extends Node3D
 ##       res://tools/team_plates.tscn out/team_plates.png 40
 ##
 ## The real match path, as `combat_range` runs it: an offline session, a roster
-## written into `Net.players`, `MatchState.register_arena`, and Gubs spawned by
-## `MatchState._create_gub` — so the plates are set up by the code a match uses,
+## written into `Net.players`, `MatchState.register_arena`, and Bogs spawned by
+## `MatchState._create_bog` — so the plates are set up by the code a match uses,
 ## not by this file.
 ##
 ## What it asserts (teams):
@@ -207,8 +207,8 @@ func _verdict(name: String, ok: bool, detail: String) -> void:
 # ------------------------------------------------------------------ helpers ---
 
 func _plate(peer_id: int) -> Nameplate:
-	var gub := MatchState.gubs.get(peer_id) as Gub
-	return gub.get_node_or_null("Nameplate") as Nameplate if gub != null else null
+	var bog := MatchState.bogs.get(peer_id) as Bog
+	return bog.get_node_or_null("Nameplate") as Nameplate if bog != null else null
 
 
 func _label(plate: Nameplate) -> Label3D:
@@ -226,24 +226,24 @@ func _distance(plate: Nameplate) -> float:
 
 
 func _place_everyone() -> void:
-	var me := MatchState.gubs.get(ME) as Gub
+	var me := MatchState.bogs.get(ME) as Bog
 	if me != null:
 		me.revive_at(_facing(MY_SPOT, Vector3(0.0, 0.1, -40.0)))
 	for peer_id: int in SPOTS:
-		var gub := MatchState.gubs.get(peer_id) as Gub
-		if gub == null:
+		var bog := MatchState.bogs.get(peer_id) as Bog
+		if bog == null:
 			continue
-		gub.revive_at(_facing(SPOTS[peer_id], MY_SPOT))
-		gub.sync_position = gub.global_position
-		gub.sync_yaw = gub.body_yaw
-		gub.sync_velocity = Vector3.ZERO
-		gub.sync_grounded = true
-		gub.sync_crouching = false
-		gub.sync_sliding = false
+		bog.revive_at(_facing(SPOTS[peer_id], MY_SPOT))
+		bog.sync_position = bog.global_position
+		bog.sync_yaw = bog.body_yaw
+		bog.sync_velocity = Vector3.ZERO
+		bog.sync_grounded = true
+		bog.sync_crouching = false
+		bog.sync_sliding = false
 
 
 static func _facing(from: Vector3, towards: Vector3) -> Transform3D:
-	return Transform3D(Basis(Vector3.UP, Gub.yaw_towards(towards - from)), from)
+	return Transform3D(Basis(Vector3.UP, Bog.yaw_towards(towards - from)), from)
 
 
 func _build_stage() -> void:

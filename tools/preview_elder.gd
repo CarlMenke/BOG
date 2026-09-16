@@ -1,5 +1,5 @@
 extends Node3D
-## The Elder: a Gub, plus `art/generated/elder.glb` bound onto its own skeleton.
+## The Elder: a Bog, plus `art/generated/elder.glb` bound onto its own skeleton.
 ## Development tool, not shipped.
 ##
 ##   Godot --path . --resolution 1100x900 --script tools/snapshot.gd -- \
@@ -12,17 +12,17 @@ extends Node3D
 ## always the end of the clip, which is the right default for a cycle and the
 ## wrong one for a one-shot: the Elder's `Cast` is 2.283 s of which the graph
 ## plays 0.467-1.600, and five samples of the whole file put one of them in the
-## cast and four in a Gub standing about (D-064). Left off, it is the end of the
+## cast and four in a Bog standing about (D-064). Left off, it is the end of the
 ## clip and the sheet is what it always was.
 ##
 ## This scene is not only a camera. **It is the check that the robe binds**, and
-## it does the attach exactly the way a game would: load the Gub, find its
-## `Skeleton3D` (`gub.gd:_equip_spear` already does `find_child("Skeleton3D",
+## it does the attach exactly the way a game would: load the Bog, find its
+## `Skeleton3D` (`bog.gd:_equip_spear` already does `find_child("Skeleton3D",
 ## true, false)`, and `HeldGear.attach_to` is the precedent for reaching into
 ## it), take the `MeshInstance3D` out of the Elder scene and re-parent it under
 ## that skeleton with its `Skin` intact. Nothing copies an animation and nothing
 ## duplicates a bone. The bind names are printed and resolved against the target
-## skeleton on the way past, so a rename in `build_gub.py` fails here with a list
+## skeleton on the way past, so a rename in `build_bog.py` fails here with a list
 ## rather than in game with a robe lying on the floor.
 ##
 ## `light` is not decoration either. The brief is a material, and the two places
@@ -36,7 +36,7 @@ extends Node3D
 ## `studio` is the third: a neutral grey room, for judging the cloth itself
 ## without a map's colour cast on it.
 
-const GUB := "res://art/generated/gub.glb"
+const BOG := "res://art/generated/bog.glb"
 const ELDER := "res://art/generated/elder.glb"
 const ELDER_MESH := "Elder"
 
@@ -119,27 +119,27 @@ func _ready() -> void:
 
 # --------------------------------------------------------------- the Elder ---
 
-## A Gub wearing the robe, posed, returned with its own facing worked out.
+## A Bog wearing the robe, posed, returned with its own facing worked out.
 func _make_elder(clip: String, time: float, verbose: bool) -> Node3D:
-	var gub := (load(GUB) as PackedScene).instantiate() as Node3D
-	add_child(gub)
-	var skeleton := gub.find_child("Skeleton3D", true, false) as Skeleton3D
+	var bog := (load(BOG) as PackedScene).instantiate() as Node3D
+	add_child(bog)
+	var skeleton := bog.find_child("Skeleton3D", true, false) as Skeleton3D
 	if skeleton == null:
-		push_error("preview_elder: the Gub has no Skeleton3D")
-		return gub
+		push_error("preview_elder: the Bog has no Skeleton3D")
+		return bog
 
 	var wardrobe := (load(ELDER) as PackedScene).instantiate() as Node3D
 	var robe := wardrobe.find_child(ELDER_MESH, true, false) as MeshInstance3D
 	if robe == null:
 		push_error("preview_elder: %s has no MeshInstance3D called '%s'" % [ELDER, ELDER_MESH])
 		wardrobe.free()
-		return gub
+		return bog
 
 	if verbose:
 		_report_bind(skeleton, robe)
 
 	# The attach itself. The mesh keeps its `skin`; `skeleton` is left at the
-	# default `NodePath("..")`, which now means the Gub's skeleton, and the
+	# default `NodePath("..")`, which now means the Bog's skeleton, and the
 	# transform is cleared because a skinned mesh is drawn in skeleton space and
 	# a leftover parent transform is a silent double-move waiting to happen.
 	# Godot warns about an owner from another scene the moment the node changes
@@ -151,8 +151,8 @@ func _make_elder(clip: String, time: float, verbose: bool) -> Node3D:
 	robe.skeleton = NodePath("..")
 	wardrobe.free()
 
-	_pose(gub, clip, time)
-	return gub
+	_pose(bog, clip, time)
+	return bog
 
 
 func _report_bind(skeleton: Skeleton3D, robe: MeshInstance3D) -> void:
@@ -174,7 +174,7 @@ func _report_bind(skeleton: Skeleton3D, robe: MeshInstance3D) -> void:
 	print("preview_elder: robe skin has %d binds, by name: %s"
 		% [skin.get_bind_count(), ", ".join(names)])
 	if unresolved.is_empty():
-		print("preview_elder: BIND OK — every bind name resolves against the Gub's skeleton")
+		print("preview_elder: BIND OK — every bind name resolves against the Bog's skeleton")
 	else:
 		push_error("preview_elder: BIND FAILED — %s" % ", ".join(unresolved))
 
@@ -190,20 +190,20 @@ func _pose(model: Node3D, clip: String, time: float) -> void:
 	player.pause()
 
 
-func _make_gub(clip: String, time: float) -> Node3D:
-	var gub := (load(GUB) as PackedScene).instantiate() as Node3D
-	add_child(gub)
-	_pose(gub, clip, time)
-	return gub
+func _make_bog(clip: String, time: float) -> Node3D:
+	var bog := (load(BOG) as PackedScene).instantiate() as Node3D
+	add_child(bog)
+	_pose(bog, clip, time)
+	return bog
 
 
 ## Which way the body is actually pointing, asked of the rig rather than assumed.
 ##
-## The model's own facing depends on how `build_gub.py` aligned the clips and on
-## the 180-degree turn `gub.tscn` puts on the instance, and a preview that
+## The model's own facing depends on how `build_bog.py` aligned the clips and on
+## the 180-degree turn `bog.tscn` puts on the instance, and a preview that
 ## guessed wrong would frame the back of the head and call it a front view. The
 ## line between the two hip joints is the one pair of joints that stays put while
-## the arms and torso animate — the same measurement `build_gub.py` aligns the
+## the arms and torso animate — the same measurement `build_bog.py` aligns the
 ## clips on — so the facing is derived from it: with up = +Y, a body's left is
 ## up x forward, so forward is the hip line turned a quarter turn.
 func _facing(model: Node3D) -> Vector3:
@@ -236,27 +236,27 @@ func _build_single() -> void:
 func _build_pair() -> void:
 	var elder := _make_elder(_clip, _time, true)
 	elder.position = Vector3(0.75, 0.0, 0.0)
-	var gub := _make_gub(_clip, _time)
-	gub.position = Vector3(-0.75, 0.0, 0.0)
+	var bog := _make_bog(_clip, _time)
+	bog.position = Vector3(-0.75, 0.0, 0.0)
 	var forward := _facing(elder)
 	_ground(12.0)
 	_camera(forward * (MID_DISTANCE + 0.9) + Vector3(0.0, 1.2, 0.0),
 		Vector3(0.0, 1.0, 0.0), 42.0)
-	_caption("Gub / Elder  %s  %s" % [_light, _clip], Vector3(0.0, 2.5, 0.0))
+	_caption("Bog / Elder  %s  %s" % [_light, _clip], Vector3(0.0, 2.5, 0.0))
 
 
-## Both, at the range a silhouette has to carry at. The plain Gub is in frame on
+## Both, at the range a silhouette has to carry at. The plain Bog is in frame on
 ## purpose: "can you see it" is not the question at 20 m, "can you tell which one
 ## it is" is.
 func _build_far() -> void:
 	var elder := _make_elder(_clip, _time, true)
 	elder.position = Vector3(1.4, 0.0, 0.0)
-	var gub := _make_gub(_clip, _time)
-	gub.position = Vector3(-1.4, 0.0, 0.0)
+	var bog := _make_bog(_clip, _time)
+	bog.position = Vector3(-1.4, 0.0, 0.0)
 	var forward := _facing(elder)
 	_ground(70.0)
 	_camera(forward * FAR_DISTANCE + Vector3(0.0, 1.6, 0.0), Vector3(0.0, 1.1, 0.0), FAR_FOV)
-	_caption("Gub / Elder at %.0f m   (%.0f-degree lens)   %s"
+	_caption("Bog / Elder at %.0f m   (%.0f-degree lens)   %s"
 		% [FAR_DISTANCE, FAR_FOV, _light], Vector3(0.0, 2.75, 0.0))
 
 
@@ -264,7 +264,7 @@ func _build_far() -> void:
 ## across the cycle, orthographic so every one of them is seen from the same
 ## angle, over a ground line the hem either clears or does not.
 func _build_sheet() -> void:
-	var probe := (load(GUB) as PackedScene).instantiate()
+	var probe := (load(BOG) as PackedScene).instantiate()
 	var player := probe.find_child("AnimationPlayer", true, false) as AnimationPlayer
 	var length: float = player.get_animation(_clip).length if player.has_animation(_clip) else 1.0
 	probe.free()

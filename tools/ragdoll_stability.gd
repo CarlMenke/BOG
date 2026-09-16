@@ -17,13 +17,13 @@ extends Node3D
 ##               anything a spear can impart, so only a solver that is adding
 ##               energy can reach it.
 ##
-## It does NOT bound the peak spread or speed during the tumble. A Gub killed by
+## It does NOT bound the peak spread or speed during the tumble. A Bog killed by
 ## a 42 m/s spear is *supposed* to be thrown across the ground, and an earlier
 ## version of this file failed the fixed ragdoll for doing exactly that.
 ##
 ## Godot --path . --script tools/snapshot.gd -- res://tools/ragdoll_stability.tscn out.png 300
 
-const GUB := preload("res://scenes/player/gub.tscn")
+const BOG := preload("res://scenes/player/bog.tscn")
 
 ## Judged only once the corpse has had time to come to rest.
 const SPREAD_LIMIT := 1.5
@@ -34,8 +34,8 @@ const RUNAWAY_SPEED := 120.0
 ## Ticks to let the corpse settle before judging it.
 const SETTLE_BY := 150
 
-var _gub: Gub
-var _corpse: GubRagdoll
+var _bog: Bog
+var _corpse: BogRagdoll
 var _frames: int = 0
 var _worst_spread: float = 0.0
 var _worst_speed: float = 0.0
@@ -49,12 +49,12 @@ func _ready() -> void:
 	key.light_energy = 2.2
 	add_child(key)
 
-	_gub = GUB.instantiate()
-	add_child(_gub)
-	_gub.global_position = Vector3(0, 0.05, 0)
-	_gub.set_multiplayer_authority(multiplayer.get_unique_id())
-	(_gub.get_node("CameraRig") as Node3D).queue_free()
-	(_gub.get_node("Nameplate") as Node3D).queue_free()
+	_bog = BOG.instantiate()
+	add_child(_bog)
+	_bog.global_position = Vector3(0, 0.05, 0)
+	_bog.set_multiplayer_authority(multiplayer.get_unique_id())
+	(_bog.get_node("CameraRig") as Node3D).queue_free()
+	(_bog.get_node("Nameplate") as Node3D).queue_free()
 
 	var cam := Camera3D.new()
 	cam.look_at_from_position(Vector3(3.2, 1.3, 3.2), Vector3(-0.2, 0.35, -0.2), Vector3.UP)
@@ -69,10 +69,10 @@ func _physics_process(_delta: float) -> void:
 		# A real spear velocity, not a token nudge: the corpse is thrown hard
 		# now, and the joints have to survive being thrown hard and *then*
 		# hitting the ground.
-		_corpse = GubRagdoll.spawn_from(_gub, self,
+		_corpse = BogRagdoll.spawn_from(_bog, self,
 			Vector3(0, -0.12, -1).normalized() * SpearProjectile.SPEED, "Spine1")
-		_gub.visible = false
-		_gub.alive = false
+		_bog.visible = false
+		_bog.alive = false
 		return
 	if _corpse == null:
 		return

@@ -7,8 +7,8 @@ render_mode blend_mix, unshaded, cull_disabled, depth_draw_never, shadows_disabl
 // The map is 96 m of pale sand at noon. Sand at noon does one thing you can see
 // from anywhere: the air over it boils, and everything behind it wobbles. That
 // is a screen-space refraction, and screen-space refraction is exactly the kind
-// of effect that ruins a competitive shooter — a Gub silhouette that wobbles is
-// a Gub you cannot lead a spear onto. So the whole design of this is about
+// of effect that ruins a competitive shooter — a Bog silhouette that wobbles is
+// a Bog you cannot lead a spear onto. So the whole design of this is about
 // **where it is allowed to be**, not about how it looks.
 //
 // It lives on a cylinder of radius `SHIMMER_RADIUS` — 120 m — standing outside

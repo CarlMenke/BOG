@@ -67,7 +67,7 @@ func _ready() -> void:
 		"lobby_map", "lobby_capture":
 			_open_lobby(3, _mode == "lobby_capture", true)
 		"lobby_weapons":
-			# Three Gubs, three weapons, and the panels folded away so the ring
+			# Three Bogs, three weapons, and the panels folded away so the ring
 			# and the strip are what the shot is of (D-069).
 			_open_lobby(2, false, true)
 		"lobby_feel", "widths", "capture_config":
@@ -195,7 +195,7 @@ func _collapse_to_weapons(lobby: Node) -> void:
 	await get_tree().process_frame
 
 
-## Capture G·U·B picked, and the panel scrolled to its own rules section
+## Capture B·O·G picked, and the panel scrolled to its own rules section
 ## (D-051), which only exists while that condition is selected.
 func _show_capture_rules(lobby: Node) -> void:
 	var next := Net.config.duplicate_config()
@@ -465,7 +465,7 @@ func _capture_config(lobby: Node) -> void:
 		for row: Dictionary in panel.capture_rows():
 			if not payload.contains("  %s: %s" % [row["label"], row["value"]]):
 				absent.append(String(row["field"]))
-		var headed := payload.begins_with("GUB match config")
+		var headed := payload.begins_with("BOG match config")
 		var named := payload.contains(CAPTURE_NAME)
 		var noted := payload.contains("bow only, long recharge.") \
 			and payload.contains("checking the flat band reads right.")

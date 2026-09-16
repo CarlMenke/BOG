@@ -48,7 +48,7 @@ desktop.ini
 # skinned mesh in exactly one file of the batch and the rest as skeleton and
 # animation only; with no skin cluster there are no bind matrices, so Blender
 # rebuilds a different rest pose and every rotation curve in the file means
-# something else on the Gub's skeleton. 105 of the 110 files under here measure
+# something else on the Bog's skeleton. 105 of the 110 files under here measure
 # 1.39 off `GUB_2/Idle.fbx`'s bind pose against the 1e-5 `assert_same_character`
 # allows, and the delta does not shrink when a uniform scale is divided out — so
 # it is a different rest pose, not a rescale, and no arithmetic puts it back.

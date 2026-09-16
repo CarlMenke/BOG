@@ -33,12 +33,12 @@ const LIFE := 0.26
 ## **Both numbers came down after looking at it**, which is the same correction
 ## the bolt's flash needed (D-038) and the same mistake underneath: an additive
 ## sphere on a dark map is far brighter and far bigger than its numbers suggest.
-## At 0.22 -> 0.62 the ball was 1.24 m across against a 1.55 m Gub — it covered
+## At 0.22 -> 0.62 the ball was 1.24 m across against a 1.55 m Bog — it covered
 ## the body from the hem to the hat and read as a *shield bubble*, which is
 ## precisely the one thing this effect must not say. The Elder has no shield;
 ## it has a robe that turns one spear aside.
 ##
-## 0.12 -> 0.40 is 0.8 m across at its widest, about the width of the Gub's own
+## 0.12 -> 0.40 is 0.8 m across at its widest, about the width of the Bog's own
 ## capsule, so what is on screen is a hit on a body with the body still visible
 ## around it.
 const RADIUS_FROM := 0.12
@@ -53,7 +53,7 @@ const ENERGY := 2.4
 ## The light is what actually reads from across a clearing — D-035's lesson
 ## about the letter card, and D-038's about the crackling fist: at twenty metres
 ## a small violet shell on a purple robe is a smudge on a robe, and what carries
-## is that the Gub was *lit* for a moment. Shadowless, like every other
+## is that the Bog was *lit* for a moment. Shadowless, like every other
 ## short-lived light in this game.
 const LIGHT_ENERGY := 4.5
 const LIGHT_RANGE := 5.0

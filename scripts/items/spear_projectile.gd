@@ -1,7 +1,7 @@
 class_name SpearProjectile
 extends Node3D
-## A thrown spear. One hit anywhere is a kill — `GubCombat.SPEAR_DAMAGE` is a
-## whole Gub's health, so the promise is kept by the number and not by a rule in
+## A thrown spear. One hit anywhere is a kill — `BogCombat.SPEAR_DAMAGE` is a
+## whole Bog's health, so the promise is kept by the number and not by a rule in
 ## here (D-062).
 ##
 ## The shaft itself makes no such assumption. It sticks in whoever it lands on,
@@ -18,22 +18,22 @@ extends Node3D
 ##
 ## This is a plain `Node3D` integrated by hand rather than a `RigidBody3D`. At
 ## 42 m/s a physics body covers 0.7 m per tick and tunnels straight through a
-## Gub; stepping the flight and sweeping the segment between the old and new
+## Bog; stepping the flight and sweeping the segment between the old and new
 ## position is what makes an instant-kill weapon actually hit. At the bow's full
 ## draw it is 60 m/s and a metre a tick, so the sweep matters more rather than
 ## less.
 ##
 ## **`ArrowProjectile` is this class with four things swapped** (D-065): a
 ## different mesh, a launch speed and a drop that come off the draw instead of
-## out of a constant, and a damage number that is not a whole Gub. Everything
+## out of a constant, and a damage number that is not a whole Bog. Everything
 ## else an arrow needs — the hand-stepped flight, the segment sweep, the three
 ## endings in `_stick_in`, the ride on a living skeleton, the glow, the trail —
 ## is the same code and not a second copy of it. What made that a small change
 ## rather than a refactor is that this file never knew what the shaft was worth:
-## damage has always been the *caller's* to report (`GubCombat`, D-062), and the
+## damage has always been the *caller's* to report (`BogCombat`, D-062), and the
 ## flight has always been the same flight.
 
-signal struck_gub(victim: Gub, point: Vector3, bone: String)
+signal struck_bog(victim: Bog, point: Vector3, bone: String)
 signal struck_world(point: Vector3, normal: Vector3)
 
 const MODEL := preload("res://art/generated/spear.glb")
@@ -51,7 +51,7 @@ const STUCK_LINGER := 7.0
 const STUCK_FADE := 1.2
 ## How far past the impact point the head sinks.
 const BURY_DEPTH := 0.12
-## How long a shaft standing in a Gub that has **died** waits for a corpse to
+## How long a shaft standing in a Bog that has **died** waits for a corpse to
 ## claim it before giving up and removing itself. The host builds the ragdoll
 ## within the same frame; a client has to wait for the death to arrive over the
 ## network.
@@ -59,7 +59,7 @@ const BURY_DEPTH := 0.12
 ## It used to time every hit, because until D-062 a shaft went invisible the
 ## instant it struck a body and every one of them was waiting for a corpse — the
 ## grace was what stopped a hit that killed nobody leaving a spear parked on an
-## invisible list for ever. A shaft now rides a living Gub in plain sight and
+## invisible list for ever. A shaft now rides a living Bog in plain sight and
 ## waits for nothing, so this is down to the one case that still has a corpse
 ## coming and no corpse yet: the window between a death and the body that
 ## follows it. Past the window there is no ragdoll coming at all — a void death,
@@ -121,19 +121,19 @@ var _stuck_age: float = 0.0
 ## Set once a corpse has taken ownership of this spear.
 var _embedded: bool = false
 ## Seconds spent waiting for a corpse to claim this spear. Only ever counts up
-## while the Gub it is standing in is dead — see `ADOPTION_GRACE`.
+## while the Bog it is standing in is dead — see `ADOPTION_GRACE`.
 var _pending_age: float = 0.0
-## The Gub this shaft is standing in, while it is standing in a living one
+## The Bog this shaft is standing in, while it is standing in a living one
 ## (D-062), and the bone it is riding.
 ##
 ## The shaft keeps its own parent and copies the bone's pose every tick rather
 ## than being re-parented under a `BoneAttachment3D`. Three reasons, and the
 ## third is the one that decided it: a bone attachment is a node per hit that
-## somebody has to remember to free, `GubRagdoll._adopt_spears` re-parents out
+## somebody has to remember to free, `BogRagdoll._adopt_spears` re-parents out
 ## of *whatever* this is and would have to tear the mount down as well, and a
 ## shaft whose parent is still the arena keeps its world transform trivially
 ## true — which is what the ragdoll, the fade and the audio all read.
-var _rider: Gub
+var _rider: Bog
 var _rider_skeleton: Skeleton3D
 var _rider_bone: int = -1
 ## Where the shaft sits in the bone's own space, taken once at the moment of
@@ -145,14 +145,14 @@ var _rider_local: Transform3D = Transform3D.IDENTITY
 ## gone by the time anyone downstream asks about it.
 var _impact_velocity: Vector3 = Vector3.ZERO
 var _model: Node3D
-var _thrower: Gub
+var _thrower: Bog
 var _trail: SpearTrail
 ## The mesh nodes currently carrying the in-flight glow override.
 var _glowing: Array[MeshInstance3D] = []
 
 
 ## Launch a spear. `direction` is expected to be normalised.
-static func launch(parent: Node, thrower: Gub, origin: Vector3, direction: Vector3,
+static func launch(parent: Node, thrower: Bog, origin: Vector3, direction: Vector3,
 		is_authoritative: bool) -> SpearProjectile:
 	var spear := SpearProjectile.new()
 	spear.begin(parent, thrower, origin, direction, is_authoritative)
@@ -165,7 +165,7 @@ static func launch(parent: Node, thrower: Gub, origin: Vector3, direction: Vecto
 ## things to a different object without a second copy of them. A static that
 ## constructs cannot be overridden usefully in GDScript, and an arrow differs in
 ## what it *is* rather than in how it is launched.
-func begin(parent: Node, thrower: Gub, origin: Vector3, direction: Vector3,
+func begin(parent: Node, thrower: Bog, origin: Vector3, direction: Vector3,
 		is_authoritative: bool) -> void:
 	name = "%s_%d_%d" % [_shaft_name(), thrower.peer_id, Time.get_ticks_msec()]
 	thrower_id = thrower.peer_id
@@ -207,7 +207,7 @@ func _model_offset() -> Vector3:
 
 
 ## How big the mesh is drawn. One for the spear, which is modelled at the size
-## it is carried; the arrow is scaled to the Gub's own draw (`HeldGear`), so the
+## it is carried; the arrow is scaled to the Bog's own draw (`HeldGear`), so the
 ## one that leaves the bow is the one that was nocked in it.
 func _model_scale() -> float:
 	return 1.0
@@ -260,7 +260,7 @@ func _sweep(from: Vector3, to: Vector3) -> Dictionary:
 	query.collision_mask = LAYER_WORLD | LAYER_PLAYER | LAYER_DEPLOYABLE
 	query.collide_with_areas = false
 	query.collide_with_bodies = true
-	# A Gub cannot spear itself on the way out of its own hand.
+	# A Bog cannot spear itself on the way out of its own hand.
 	if is_instance_valid(_thrower):
 		query.exclude = [_thrower.get_rid()]
 	return space.intersect_ray(query)
@@ -271,9 +271,9 @@ func _resolve(hit: Dictionary) -> void:
 	var normal: Vector3 = hit["normal"]
 	var collider: Object = hit["collider"]
 
-	var victim := collider as Gub
+	var victim := collider as Bog
 	if victim != null:
-		# Spawn protection makes a Gub solid but unkillable, so the spear passes
+		# Spawn protection makes a Bog solid but unkillable, so the spear passes
 		# through rather than stopping short and looking like a miss.
 		if victim.alive and not victim.is_invulnerable():
 			var bone := nearest_bone(victim, point)
@@ -295,12 +295,12 @@ func _resolve(hit: Dictionary) -> void:
 			# both readings — so the shaft stops dead and is gone, and the ward
 			# is the feedback.
 			if not MatchState.damage_would_land(victim.peer_id, thrower_id,
-					Gub.Cause.SPEAR):
+					Bog.Cause.SPEAR):
 				_glance_off(point)
-				struck_gub.emit(victim, point, bone)
+				struck_bog.emit(victim, point, bone)
 				return
 			_stick_in(victim, point, bone)
-			struck_gub.emit(victim, point, bone)
+			struck_bog.emit(victim, point, bone)
 			return
 		global_position = point
 		return
@@ -317,7 +317,7 @@ func _resolve(hit: Dictionary) -> void:
 ## rig for the same reason (D-038), and the answer has to be the same answer: a
 ## corpse that spins differently depending on which weapon killed it would be
 ## two ragdoll behaviours where the physics only has one.
-static func nearest_bone(victim: Gub, point: Vector3) -> String:
+static func nearest_bone(victim: Bog, point: Vector3) -> String:
 	var skeleton := victim.find_child("Skeleton3D", true, false) as Skeleton3D
 	if skeleton == null:
 		return "Spine1"
@@ -335,7 +335,7 @@ static func nearest_bone(victim: Gub, point: Vector3) -> String:
 	return best
 
 
-## Bury the shaft in the Gub it just hit and leave it there.
+## Bury the shaft in the Bog it just hit and leave it there.
 ##
 ## Freeing it instead — which is what the very first version did — threw away
 ## the clearest read in the game: a body on the ground with a spear through it
@@ -345,20 +345,20 @@ static func nearest_bone(victim: Gub, point: Vector3) -> String:
 ## Since D-062 it does not wait for that corpse to exist, and that is the change
 ## the bow needed. The shaft **rides the living skeleton**: it stands in the
 ## victim, moves with the bone it went through, and is still there whether the
-## victim dies in a second or walks the rest of the round off with it. A Gub
+## victim dies in a second or walks the rest of the round off with it. A Bog
 ## with three arrows in it and a short bar is the best read this game has, and
 ## it costs one matrix multiply a tick.
 ##
 ## Three endings, and only the first is new:
 ##
-## * the victim lives — the shaft rides until they respawn, and `Gub`
-##   (`MAX_EMBEDDED_SHAFTS`) is what stops a Gub becoming a hedgehog;
-## * the victim dies with a corpse — `GubRagdoll` takes it off the list while it
+## * the victim lives — the shaft rides until they respawn, and `Bog`
+##   (`MAX_EMBEDDED_SHAFTS`) is what stops a Bog becoming a hedgehog;
+## * the victim dies with a corpse — `BogRagdoll` takes it off the list while it
 ##   is building the body and hangs it off the matching physical bone, so it
 ##   tumbles with the limb;
 ## * the victim dies with no corpse — a void death — and `_tick_stuck` gives up
 ##   after `ADOPTION_GRACE` rather than leaving a shaft hanging in the air.
-func _stick_in(victim: Gub, point: Vector3, bone: String) -> void:
+func _stick_in(victim: Bog, point: Vector3, bone: String) -> void:
 	_stuck = true
 	_stuck_age = 0.0
 	_pending_age = 0.0
@@ -378,7 +378,7 @@ func _stick_in(victim: Gub, point: Vector3, bone: String) -> void:
 ## can keep it there. A rig with no skeleton, or no such bone, simply leaves the
 ## shaft standing in the world at the point of impact — wrong, but only visibly
 ## wrong on a broken model, and better than refusing the hit.
-func _mount_on(victim: Gub, bone: String) -> void:
+func _mount_on(victim: Bog, bone: String) -> void:
 	var skeleton := victim.find_child("Skeleton3D", true, false) as Skeleton3D
 	if skeleton == null:
 		return
@@ -395,19 +395,19 @@ func _mount_on(victim: Gub, bone: String) -> void:
 ## Stop dead against a body the hit did nothing to, and cease to exist.
 ##
 ## Written for the Elder (D-040) and now the ending for every refused hit: a
-## robe, a team-mate with friendly fire off, a Gub the host had already killed.
+## robe, a team-mate with friendly fire off, a Bog the host had already killed.
 ## What they have in common since D-062 is a number — the damage was zero — and
 ## a shaft standing in somebody who was not hurt is a lie about the fight that
 ## the bar over their head then contradicts.
 ##
 ## Neither of the other two endings fits. `_stick_in` puts the shaft *in* them,
 ## which is the thing that must not happen here, and `_stick` would leave one
-## hanging in mid-air at chest height while the Gub it hit walks out from behind
+## hanging in mid-air at chest height while the Bog it hit walks out from behind
 ## it — a spear stuck in nothing, which reads as the game having lost track of
 ## the body.
 ##
 ## `_impact_velocity` is recorded before the velocity is cleared even though
-## nothing will use it: the host reads it out of `struck_gub`'s handler on the
+## nothing will use it: the host reads it out of `struck_bog`'s handler on the
 ## way into `report_kill`, which is about to refuse the kill, and a zero there
 ## would be a lie that happens not to matter today. The sound and the flash are
 ## not here — they are `WardFlash.burst`'s, fired once by the host from the one
@@ -423,7 +423,7 @@ func _glance_off(point: Vector3) -> void:
 		_trail.begin_fade()
 		_trail = null
 	visible = false
-	# Deferred, so the object is still perfectly alive for the `struck_gub`
+	# Deferred, so the object is still perfectly alive for the `struck_bog`
 	# handler the caller is about to run.
 	queue_free()
 
@@ -473,10 +473,10 @@ func _tick_stuck(delta: float) -> void:
 ##
 ## Three states, in the order they can happen:
 ##
-## **The Gub is gone.** Its peer left, or the arena was torn down under it.
+## **The Bog is gone.** Its peer left, or the arena was torn down under it.
 ## Nothing to ride and nothing to be adopted by.
 ##
-## **The Gub is dead and this has not been adopted yet.** The shaft goes
+## **The Bog is dead and this has not been adopted yet.** The shaft goes
 ## invisible immediately rather than at the end of the grace, because the body
 ## it is standing in has already been hidden (`MatchState._apply_death`) and a
 ## spear left visible for even a few frames is a spear hanging in mid-air. On
@@ -484,10 +484,10 @@ func _tick_stuck(delta: float) -> void:
 ## missing; on a client it comes back the moment the death arrives. If nothing
 ## claims it inside `ADOPTION_GRACE` there is no corpse coming.
 ##
-## **The Gub is alive.** Copy the bone's pose and stay in it. The skeleton's
+## **The Bog is alive.** Copy the bone's pose and stay in it. The skeleton's
 ## pose is in the *skeleton's* space, so the world transform is the skeleton's
 ## own global transform through the bone and then through the offset taken at
-## the moment of impact — which is why a shaft in a running Gub swings with the
+## the moment of impact — which is why a shaft in a running Bog swings with the
 ## arm rather than sliding about on the surface of it.
 func _tick_rider(delta: float) -> void:
 	if not is_instance_valid(_rider) or not is_instance_valid(_rider_skeleton):
@@ -506,7 +506,7 @@ func _tick_rider(delta: float) -> void:
 
 ## Put the flight glow on every surface of the model.
 ##
-## A copy of the imported material per spear, the same way `GubRagdoll` takes
+## A copy of the imported material per spear, the same way `BogRagdoll` takes
 ## its own copy to fade a corpse out — and for the same reason. The imported
 ## material is shared by every spear in the game, the one in your hand
 ## included, so lighting *it* up would light up all of them and leave them lit.
@@ -583,7 +583,7 @@ func is_stuck() -> bool:
 	return _stuck
 
 
-## Called by `GubRagdoll` once the spear has been re-parented onto a physical
+## Called by `BogRagdoll` once the spear has been re-parented onto a physical
 ## bone, so it stops running its own fade-out timer.
 ##
 ## The ride ends here: the physics carries the shaft from now on, and a pose

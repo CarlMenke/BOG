@@ -1,7 +1,7 @@
 class_name Loadout
 extends RefCounted
 ## Which weapon a player brought (D-069). One value, chosen in the lobby, and
-## the only thing about a Gub's armament that is a choice.
+## the only thing about a Bog's armament that is a choice.
 ##
 ## It is deliberately **not** a `MatchConfig` field. The dials in that resource
 ## are the host's — one value for the whole match, pushed to everybody — and
@@ -12,8 +12,8 @@ extends RefCounted
 ## (D-004). There is no parallel channel and no second copy.
 ##
 ## Why a class of static helpers rather than an enum dropped into `MatchConfig`
-## or `Net`: four files ask this question — `Net` stores it, `GubCombat` gates
-## on it, `GubBackdrop` and `MatchState` seed a Gub from it, and the lobby draws
+## or `Net`: four files ask this question — `Net` stores it, `BogCombat` gates
+## on it, `BogBackdrop` and `MatchState` seed a Bog from it, and the lobby draws
 ## it — and three of those must not have to load the other two to name a
 ## constant. A `class_name` with nothing but statics on it is reachable from all
 ## of them and owned by none.
@@ -36,7 +36,7 @@ enum Weapon {
 
 ## What a player who never opens the picker plays.
 ##
-## The spear, because it is what every Gub carried before this existed: the
+## The spear, because it is what every Bog carried before this existed: the
 ## whole point of the default is that a lobby which ignores the feature plays
 ## exactly the match it played yesterday.
 const DEFAULT := Weapon.SPEAR
@@ -90,21 +90,21 @@ static func all() -> Array[int]:
 	return [Weapon.SPEAR, Weapon.BOW, Weapon.SWORD]
 
 
-## The clip a Gub stands in while it is carrying this weapon and doing nothing
+## The clip a Bog stands in while it is carrying this weapon and doing nothing
 ## else with it (D-070), indexed by the enum.
 ##
 ## **This is the one table in the game that is indexed by the weapon**, and it is
 ## a table rather than a branch on purpose. D-069's own record is emphatic that
-## *"nothing anywhere branches on which weapon a Gub has"* — the three gates are
+## *"nothing anywhere branches on which weapon a Bog has"* — the three gates are
 ## four clauses of one sentence, the input polls all three unconditionally, and
 ## the hand is drawn from the gates. A carry pose cannot be any of that: a bow is
 ## held differently from a great sword, and no amount of phrasing makes those one
 ## pose. So the difference lives here, beside `NAMES` and `BLURBS`, in the file
 ## that already exists to say what the three weapons *are* — and every reader of
-## it is a lookup rather than a `match`. `GubAnimator` asks it once a frame and
+## it is a lookup rather than a `match`. `BogAnimator` asks it once a frame and
 ## hands the answer to a `Transition` node; nothing else asks it at all.
 ##
-## **The spear's row is the Gub's own `Idle`, and it is the one entry here that
+## **The spear's row is the Bog's own `Idle`, and it is the one entry here that
 ## is not a weapon clip at all** (D-072). The user, shown the spear standing in
 ## `SwordCarry`: *"This spear is only thrown so 2 hands doesnt make sense. I like
 ## the original one because it looks like hes holding it up with one hand ready
@@ -115,7 +115,7 @@ static func all() -> Array[int]:
 ## laid 1.24 m of shaft flattest:
 ##
 ##   pose over which the grip was solved   flattest   floor    trunk
-##   Idle, the Gub's own boxer's guard       12 deg    0.45 m   0.09 m
+##   Idle, the Bog's own boxer's guard       12 deg    0.45 m   0.09 m
 ##   BowCarry, a longbow at rest             55 deg    0.12 m   0.25 m
 ##   SwordCarry, a great sword at rest      **5 deg**  0.33 m   0.15 m
 ##
@@ -136,15 +136,15 @@ static func all() -> Array[int]:
 ## the difference is the whole reason this row is a clip name rather than `""`.
 ## The layer still holds `UPPER_BODY_BONES` in one pose across the whole
 ## locomotion plane, which is what gives the grip a single hand orientation to be
-## solved against — and a Gub standing still is in exactly the clip it would have
+## solved against — and a Bog standing still is in exactly the clip it would have
 ## been in anyway, so the idle the user asked for is the idle they get, in the
 ## ring and in a match. Taking the layer away was measured and is a different
 ## animal: the shaft swings 64 deg across the set, ploughs the grass in six of
 ## the twelve clips and passes 0.002 m from the chest in `StrafeRight` — and it
-## crashes `GubAnimator._build_graph`, which cannot build an
+## crashes `BogAnimator._build_graph`, which cannot build an
 ## `AnimationNodeAnimation` out of an empty clip name.
 ##
-## A spear Gub and a sword Gub now stand differently, which is the read
+## A spear Bog and a sword Bog now stand differently, which is the read
 ## `HeldGear`'s header wanted all along. **A spear idle of its own is no longer
 ## waiting on anybody**: what a download would buy is a pose built around the
 ## prop, and the pose the user asked for is the one already on disk.

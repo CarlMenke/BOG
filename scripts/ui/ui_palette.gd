@@ -1,6 +1,6 @@
 class_name UIPalette
 extends RefCounted
-## The colours and metrics every GUB screen is built from.
+## The colours and metrics every BOG screen is built from.
 ##
 ## These live in a class of their own rather than inside the theme because the
 ## HUD draws several things — the crosshair, the cooldown sweeps, the kill feed
@@ -10,7 +10,7 @@ extends RefCounted
 ## The scheme is the game's own lighting: a night-time enchanted forest lit by
 ## torches. Backgrounds are the project's clear colour and near-blacks of it;
 ## anything the player can act on is torch amber; anything that says "you, or
-## your readiness" is the Gub's own yellow. Nothing else is coloured, so the two
+## your readiness" is the Bog's own yellow. Nothing else is coloured, so the two
 ## accents keep their meaning.
 
 # ------------------------------------------------------------------ ground ---
@@ -42,9 +42,9 @@ const TEXT_ON_ACCENT := Color(0.05, 0.04, 0.02)
 const AMBER := Color(1.00, 0.64, 0.26)
 const AMBER_DIM := Color(0.72, 0.45, 0.18)
 const AMBER_GLOW := Color(1.00, 0.72, 0.38)
-## The Gub's own yellow: you, your state, "ready", "armed".
-const GUB := Color(1.00, 0.84, 0.26)
-const GUB_DIM := Color(0.62, 0.52, 0.18)
+## The Bog's own yellow: you, your state, "ready", "armed".
+const BOG := Color(1.00, 0.84, 0.26)
+const BOG_DIM := Color(0.62, 0.52, 0.18)
 
 const DANGER := Color(1.00, 0.36, 0.30)
 const GOOD := Color(0.48, 0.87, 0.51)
@@ -65,7 +65,7 @@ const GAP := 12
 const PAD := 20
 
 
-## Team tint, shared with the nameplate above the Gub's head so a row in the
+## Team tint, shared with the nameplate above the Bog's head so a row in the
 ## lobby and a name over a head are unmistakably the same player.
 static func team_colour(team: int) -> Color:
 	return Nameplate.colour_for_team(team)

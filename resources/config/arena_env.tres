@@ -1,7 +1,7 @@
 [gd_resource type="Environment" load_steps=2 format=3 uid="uid://bq2gubarenaenv"]
 
 ; Environment for Whisperbloom Hollow. Deep dusk, torch-lit, deliberately dark
-; but never crushed: every value below is picked so a Gub silhouette still reads
+; but never crushed: every value below is picked so a Bog silhouette still reads
 ; against the sky and the terrain edge is still findable outside torch range.
 ;
 ; Two things drive most of the look:
@@ -10,7 +10,7 @@
 ;     looks high at 2.5 because the source is a night sky: the radiance cubemap
 ;     averages out near-black, and at 1.0 anything outside a torch pool crushed
 ;     to literal (0, 0, 0) instead of reading as dark.
-;   * The glow threshold sits above a lit Gub. The Gub is near-saturated yellow;
+;   * The glow threshold sits above a lit Bog. The Bog is near-saturated yellow;
 ;     with the threshold at 1.0 he wore a permanent halo and read as a light
 ;     source. At 1.45 only torch flames, the moon and emissive props bloom.
 ;

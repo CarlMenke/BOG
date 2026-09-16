@@ -1,7 +1,7 @@
 [gd_scene load_steps=12 format=3 uid="uid://gubhud00000001"]
 
 [ext_resource type="Script" path="res://scripts/ui/hud.gd" id="1_hud"]
-[ext_resource type="Theme" path="res://resources/ui/gub_theme.tres" id="2_theme"]
+[ext_resource type="Theme" path="res://resources/ui/bog_theme.tres" id="2_theme"]
 [ext_resource type="Script" path="res://scripts/ui/crosshair.gd" id="3_crosshair"]
 [ext_resource type="Script" path="res://scripts/ui/kill_feed.gd" id="4_feed"]
 [ext_resource type="PackedScene" path="res://scenes/ui/ability_slot.tscn" id="5_slot"]
@@ -209,19 +209,19 @@ kind = 0
 action = "primary_attack"
 label_text = "Spear"
 
-[node name="MushroomSlot" parent="Root/BottomCentre/Abilities" instance=ExtResource("5_slot")]
+[node name="ShieldSlot" parent="Root/BottomCentre/Abilities" instance=ExtResource("5_slot")]
 unique_name_in_owner = true
 layout_mode = 2
 kind = 1
-action = "place_mushroom"
+action = "place_shield"
 label_text = "Shield"
 
-[node name="LureSlot" parent="Root/BottomCentre/Abilities" instance=ExtResource("5_slot")]
+[node name="MagnetSlot" parent="Root/BottomCentre/Abilities" instance=ExtResource("5_slot")]
 unique_name_in_owner = true
 layout_mode = 2
 kind = 2
-action = "throw_lure"
-label_text = "Lure"
+action = "throw_magnet"
+label_text = "Magnet"
 
 [node name="PotionSlot" parent="Root/BottomCentre/Abilities" instance=ExtResource("5_slot")]
 unique_name_in_owner = true

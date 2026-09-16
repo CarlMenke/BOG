@@ -18,7 +18,7 @@ extends Node3D
 ## core, the glow and every branch.
 ##
 ## Nothing here decides anything. The host has already ruled on the shot by the
-## time this exists (`GubCombat._host_cast_lightning`); every peer builds its own
+## time this exists (`BogCombat._host_cast_lightning`); every peer builds its own
 ## copy from the same two points and the same verdict, and those are the only
 ## things that travel. The jitter is deliberately *not* seeded to agree across
 ## peers — nobody can see two screens at once, and a shared seed would be a
@@ -159,7 +159,7 @@ const SCORCH_ALPHA := 0.85
 ## the rule reaches — a body the band is touching is a body that died.
 ##
 ## Flat, in the plane of the surface the bolt struck, or level when it struck a
-## Gub. The real zone is a sphere around the impact, and a sphere drawn in the
+## Bog. The real zone is a sphere around the impact, and a sphere drawn in the
 ## world is a glowing ball that hides the body it is killing; the ring on the
 ## ground is the part of that sphere anybody can read a distance off.
 ##
@@ -209,15 +209,15 @@ var _ring_fill_material: StandardMaterial3D
 ## Fire one bolt, on this peer, from `from` to `to`.
 ##
 ## `normal` is the surface it landed on, or `Vector3.ZERO` when it landed on a
-## Gub or on nothing — there is only something to scorch in the first case.
+## Bog or on nothing — there is only something to scorch in the first case.
 ## `caster` is who fired, so the shake can tell "I did that" from "that happened
 ## next to me".
 ##
 ## Every peer calls this with the same arguments from
-## `GubCombat._do_cast_lightning`, which is what makes the bolt an event
+## `BogCombat._do_cast_lightning`, which is what makes the bolt an event
 ## everybody saw rather than a private animation on the shooter's machine.
 static func strike(parent: Node, from: Vector3, to: Vector3, normal: Vector3,
-		caster: Gub, radius: float = 0.0) -> LightningBolt:
+		caster: Bog, radius: float = 0.0) -> LightningBolt:
 	var bolt := LightningBolt.new()
 	bolt.name = "Bolt_%d" % Time.get_ticks_msec()
 	bolt._from = from
@@ -414,19 +414,19 @@ func _thunder() -> void:
 
 ## Kick the caster's camera, and anyone standing near where it landed.
 ##
-## Only ever this client's own camera — `GubCamera` shuts itself down on every
+## Only ever this client's own camera — `BogCamera` shuts itself down on every
 ## copy but the owner's, so shaking somebody else's rig would be shaking a node
 ## attached to no viewport. This runs on every peer, so between them every
 ## player who should feel it does.
 ##
-## `GubCamera.shake` already multiplies by the `camera_shake` user setting, so
+## `BogCamera.shake` already multiplies by the `camera_shake` user setting, so
 ## somebody who has turned it down gets what they asked for and nothing here has
 ## to know the setting exists.
-func _shake(caster: Gub) -> void:
-	var local := MatchState.local_gub()
+func _shake(caster: Bog) -> void:
+	var local := MatchState.local_bog()
 	if local == null:
 		return
-	var rig := local.get_node_or_null("CameraRig") as GubCamera
+	var rig := local.get_node_or_null("CameraRig") as BogCamera
 	if rig == null:
 		return
 	var strength := SHAKE_CASTER if caster != null and caster == local else 0.0

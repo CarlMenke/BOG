@@ -1,14 +1,14 @@
 ---
 name: host
-description: Get GUB ready to play with other people. Rebuilds the Windows .exe if it is stale, hands back the path to share, makes sure the playit.gg tunnel is up, and prints the invite code to read out. Use whenever the user wants to host, play with friends, share a build, or says "set up multiplayer" / "let's play".
+description: Get BOG ready to play with other people. Rebuilds the Windows .exe if it is stale, hands back the path to share, makes sure the playit.gg tunnel is up, and prints the invite code to read out. Use whenever the user wants to host, play with friends, share a build, or says "set up multiplayer" / "let's play".
 ---
 
-# Host a GUB game
+# Host a BOG game
 
 One command between "I want to play with people" and a file plus a code to paste
 into chat. Four things, in order, each skippable if it is already true:
 
-1. **Build** `build/windows/GUB.exe` if it is older than the game's sources.
+1. **Build** `build/windows/BOG.exe` if it is older than the game's sources.
 2. **Path** — hand back the absolute path so it can be shared.
 3. **Tunnel** — playit agent running, public address set, hostname resolving.
 4. **Code** — the invite code the lobby will hand out, computed ahead of time.
@@ -41,10 +41,10 @@ reason it explains itself.
 Then check the game is not already running:
 
 ```bash
-tasklist 2>/dev/null | grep -i "GUB.exe" || echo "(GUB not running)"
+tasklist 2>/dev/null | grep -i "BOG.exe" || echo "(BOG not running)"
 ```
 
-**If GUB.exe is running, stop and say so.** Windows holds an open `.exe` locked,
+**If BOG.exe is running, stop and say so.** Windows holds an open `.exe` locked,
 so the export fails partway and leaves a truncated build. It matters for step 4
 too: the game rewrites `settings.cfg` when it quits, so anything written to that
 file while it is open is lost. Ask the user to close the game first.
@@ -52,7 +52,7 @@ file while it is open is lost. Ask the user to close the game first.
 ## 2. Decide whether the build is stale
 
 ```bash
-EXE="build/windows/GUB.exe"
+EXE="build/windows/BOG.exe"
 if [ ! -f "$EXE" ]; then
     echo "STALE: no build at all"
 else
@@ -85,13 +85,13 @@ than letting it be killed and retried.
 ```bash
 ROOT="$(pwd)"; GODOT_TAG=host . tools/find_godot.sh
 "$GODOT" --headless --path . --import
-"$GODOT" --headless --path . --export-release "Windows Desktop" "$GODOT_ROOT/build/windows/GUB.exe"
+"$GODOT" --headless --path . --export-release "Windows Desktop" "$GODOT_ROOT/build/windows/BOG.exe"
 ```
 
 For macOS, the same shape with the other preset:
 
 ```bash
-"$GODOT" --headless --path . --export-release "macOS" "$GODOT_ROOT/build/macos/GUB.app"
+"$GODOT" --headless --path . --export-release "macOS" "$GODOT_ROOT/build/macos/BOG.app"
 ```
 
 `$GODOT_ROOT` comes from `find_godot.sh` and is the project path in the form the
@@ -109,7 +109,7 @@ All three of these:
 * the log has no `ERROR:` or `SCRIPT ERROR` lines, and ends in `[ DONE ] savepack`.
 
 ```bash
-ls -la build/windows/GUB.exe
+ls -la build/windows/BOG.exe
 ```
 
 On size: it is **~295 MB** as of the two-map build, most of it the Rust map's
@@ -144,7 +144,7 @@ Read the `Phase:` line.
 Then the address the game hands out:
 
 ```bash
-grep public_address "$APPDATA/Godot/app_userdata/GUB/settings.cfg"
+grep public_address "$APPDATA/Godot/app_userdata/BOG/settings.cfg"
 ```
 
 * **Set** — good, carry on. It is remembered between runs, so this is normally a
@@ -194,12 +194,12 @@ this and compare `ip=`. That is the whole of "codes go stale".
 
 Give the user, in this shape:
 
-* **The path**, in Windows form — `C:\Users\...\build\windows\GUB.exe` — with its
+* **The path**, in Windows form — `C:\Users\...\build\windows\BOG.exe` — with its
   size, and whether it was rebuilt just now or reused.
 * **The invite code.**
 * **A blurb they can paste into chat**, something like:
 
-  > GUB — download, run it (Windows will warn: *More info → Run anyway*), click
+  > BOG — download, run it (Windows will warn: *More info → Run anyway*), click
   > **Join with a code**, paste `XXXXX-XXXXX`. Nothing to install. WASD to move,
   > left click throws.
 
@@ -208,5 +208,5 @@ Give the user, in this shape:
   people at once is worse than being told now.
 
 Offer, do not assume: opening the build folder is
-`explorer.exe /select,"C:\...\GUB.exe"`, and it is a reasonable thing to offer
+`explorer.exe /select,"C:\...\BOG.exe"`, and it is a reasonable thing to offer
 when the user is about to go and share the file. Only run it if they say yes.

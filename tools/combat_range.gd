@@ -1,17 +1,17 @@
 extends Node3D
 ## Firing range for Phase 3. Development tool, not shipped.
 ##
-## Unlike `tools/sandbox.tscn`, which instantiates one Gub directly to feel the
+## Unlike `tools/sandbox.tscn`, which instantiates one Bog directly to feel the
 ## movement, this runs the **real match path**: an offline session on `Net`, a
-## roster, `MatchState.register_arena`, Gubs spawned by `MatchState._create_gub`,
+## roster, `MatchState.register_arena`, Bogs spawned by `MatchState._create_bog`,
 ## and kills reported through `MatchState.report_kill`. Nothing here reaches past
 ## a public API into the combat code, so if a throw works in this scene it works
 ## in a match.
 ##
-## The opponents are ordinary Gubs owned by peer ids that will never connect, so
-## they are *remote* Gubs to this client: no input, no gravity, no camera. That
+## The opponents are ordinary Bogs owned by peer ids that will never connect, so
+## they are *remote* Bogs to this client: no input, no gravity, no camera. That
 ## is exactly what a target dummy should be, and it also means this scene is the
-## only place the remote-Gub code path gets looked at before eight people do.
+## only place the remote-Bog code path gets looked at before eight people do.
 ##
 ## Play it:
 ##   Godot --path . tools/combat_range.tscn
@@ -24,10 +24,10 @@ extends Node3D
 ## real peer can never collide with one.
 const DUMMY_BASE := 900
 
-## The same packed scene `GubCombat` plants, so the `cover` mode stands up the
-## shipping mushroom rather than a hand-built stand-in that happens to share its
+## The same packed scene `BogCombat` plants, so the `cover` mode stands up the
+## shipping shield rather than a hand-built stand-in that happens to share its
 ## constants.
-const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
+const SHIELD := preload("res://scenes/items/shield.tscn")
 
 ## What each mode does.
 ##
@@ -44,12 +44,12 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##              and from the thrower's own eye it is seen nearly edge-on, so
 ##              `pov` is worth passing to check exactly that and is the wrong
 ##              default for a still frame.
-##   mushroom — one planted, to check it lands on the ground the right size
-##   cover    — the mushroom as *cover*, which is the only thing about it that
+##   shield — one planted, to check it lands on the ground the right size
+##   cover    — the shield as *cover*, which is the only thing about it that
 ##              matters and the one thing nothing has ever checked. It stands a
 ##              real one up in front of a dummy, prints how wide the collision
-##              actually is at every height a Gub occupies, throws a spear at the
-##              dummy behind it, withers the mushroom and throws the *same* throw
+##              actually is at every height a Bog occupies, throws a spear at the
+##              dummy behind it, withers the shield and throws the *same* throw
 ##              again, and then walks the player into one. Three verdicts, and
 ##              the second is the reason the first means anything: a spear that
 ##              never kills anybody would sail through the blocked check.
@@ -83,23 +83,23 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##              off the arrow's own positions* rather than read out of the
 ##              object — and each is checked against `ArrowProjectile`'s own
 ##              statics at the charge the arrow says it left at. The third
-##              verdict is a letter hold refusing the draw: a Gub with a card up
+##              verdict is a letter hold refusing the draw: a Bog with a card up
 ##              cannot start one, the bow is out of its hand while it holds, and
 ##              both come back when the hold does (D-035).
 ##
 ##              What this cannot show is the pose. `draw` is that.
 ##   draw     — the charge as a **tell**, which is the half of this weapon that
-##              is not a number (D-065). The local Gub is drawn to a series of
+##              is not a number (D-065). The local Bog is drawn to a series of
 ##              charge levels and a *remote* one is handed the same charges over
-##              `Gub.sync_draw`, and the two skeletons have to agree: the
+##              `Bog.sync_draw`, and the two skeletons have to agree: the
 ##              drawing hand in the same place relative to the hips, to a
-##              centimetre, on a Gub nobody is driving. Then the control that
+##              centimetre, on a Bog nobody is driving. Then the control that
 ##              makes that mean anything — the pose at full draw has to be a
 ##              long way from the pose at brace, or "they agree" is satisfied by
-##              two Gubs standing still.
+##              two Bogs standing still.
 ##
 ##              It also prints where the composed bow is actually pointing, in
-##              degrees off the Gub's own facing, which is the one thing a
+##              degrees off the Bog's own facing, which is the one thing a
 ##              masked layer can silently get wrong (D-029, D-064).
 ##   recharge — throws until the spear has grown back a dozen times and requires
 ##              the shaft to be in the fist at the end of every one of them, then
@@ -108,23 +108,23 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##              the bug as a player meets it; the second is the property that
 ##              stops it coming back, checked without having to lose a race on
 ##              purpose.
-##   lure     — a lure lobbed at the middle dummy, held through the pull.
+##   magnet     — a magnet lobbed at the middle dummy, held through the pull.
 ##              Note what this mode can and cannot show: the catch *decision* is
 ##              the host's and is reported here, but the pull itself is applied
 ##              on each victim's own client, and these dummies are fake roster
 ##              entries with no client behind them. So the dummies will be
-##              listed as caught and will not visibly move. Only the local Gub
-##              can actually be dragged — see `lure_self`.
-##   lure_self— a lure dropped at the player's own feet, which is the only way
-##              to watch the pull actually move a Gub in a one-client testbed
+##              listed as caught and will not visibly move. Only the local Bog
+##              can actually be dragged — see `magnet_self`.
+##   magnet_self— a magnet dropped at the player's own feet, which is the only way
+##              to watch the pull actually move a Bog in a one-client testbed
 ##   letter   — kills a dummy with the letters condition on and the drop chance
 ##              forced to 1, puts the card down at the player's feet, and lets
 ##              the player's own body walk into it. So this is the *whole*
 ##              collection path — the roll, the `Pickup` area's overlap,
 ##              `claim_pickup`, the hold — and then it simply stands there, which
-##              is the state the mechanic is about: a Gub in the open with a
+##              is the state the mechanic is about: a Bog in the open with a
 ##              letter up and no spear (D-035). The only mode here whose picture
-##              is of a Gub doing nothing, on purpose.
+##              is of a Bog doing nothing, on purpose.
 ##   cards    — one of each letter set down on the ground in front of the
 ##              player, which is the picture of the three meshes themselves
 ##              (D-041). It is the only mode here that reaches past a public API
@@ -152,7 +152,7 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##              identical whether or not anybody died at the end of it.
 ##   blast    — the bolt's blast radius (D-053), measured rather than looked at.
 ##              The player is made the Elder and fires three bolts straight
-##              through `GubCombat._host_cast_lightning` with an exact origin and
+##              through `BogCombat._host_cast_lightning` with an exact origin and
 ##              aim, so where they land is a number and not a camera's opinion:
 ##              one into the ground between a dummy whose body is
 ##              `lightning_radius - 0.2` m from the impact and one that is
@@ -170,35 +170,35 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##              (D-040). `tools/match_rules.gd` can assert that `report_kill`
 ##              refuses the kill; it cannot assert that a shaft launched at a
 ##              body fourteen metres away arrives, is turned aside, and leaves
-##              the Gub standing. The mushroom spent its whole life passing a
+##              the Bog standing. The shield spent its whole life passing a
 ##              check that only proved a PNG existed (D-039) — this is that
 ##              lesson applied to the rule it would hurt most to get wrong.
 ##
 ##              Three verdicts out of one run, and the second is what makes the
 ##              first mean anything: the Elder survives a spear, the robe then
 ##              **burns out on its own clock** while the run is watching, and the
-##              *same* throw at the *same* Gub kills it once the robe is off.
+##              *same* throw at the *same* Bog kills it once the robe is off.
 ##              Without that control, "did not die" is satisfied by a spear that
 ##              never left the hand.
 ##   respawn  — both halves of "everything you carried is lost on death"
 ##              (D-032, D-038) at the moment a player found them failing: the
-##              player dies holding a mushroom, a dummy dies as the Elder holding
+##              player dies holding a shield, a dummy dies as the Elder holding
 ##              one too, both corpses are left lying in loot, and both come back.
 ##              A second after the respawn nobody may be holding anything,
 ##              wearing anything, or have picked up what they died on.
 ##
-##              The dummy is the half that matters. It is a *remote* Gub, and the
-##              bug was a remote Gub's: its owner's client is still dead when the
+##              The dummy is the half that matters. It is a *remote* Bog, and the
+##              bug was a remote Bog's: its owner's client is still dead when the
 ##              host revives it, and goes on publishing the corpse's position
 ##              until the respawn reaches it — so for a round trip the host's copy
 ##              was told to stand on its own loot, alive. No client exists here,
 ##              so the mode *is* that client, and replays the dead one's last
 ##              snapshot for `RESPAWN_STALE_TICKS` after the revive (D-043).
-##   walk     — holds W for a second and requires the Gub to have gone somewhere.
+##   walk     — holds W for a second and requires the Bog to have gone somewhere.
 ##              Trivial-looking, and it is here because movement was wired up in
 ##              this file and in the sandbox and nowhere else, so every testbed
 ##              could be walked around while the actual game could not.
-##   bhop     — runs the local Gub down the range three times, as itself, as the
+##   bhop     — runs the local Bog down the range three times, as itself, as the
 ##              Elder and as a capture carrier, and times its hops (D-052). Each
 ##              run: sprint, one jump, ten hops pressed on the first ground tick,
 ##              one hop pressed late, and a dive re-jumped out of its roll. Hop
@@ -206,26 +206,26 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##              run, the single jump, the late hop and the dive hop may not be
 ##              faster than run. Prints each run's numbers. Headless, run it with
 ##              `--fixed-fps 60` so it is not three runs of real time.
-##   leave    — tears the session down out from under a live Gub and keeps
+##   leave    — tears the session down out from under a live Bog and keeps
 ##              ticking, which is what leaving a match actually does: `Net`
 ##              nulls the multiplayer peer and `SceneFlow` then fades for 0.22 s
-##              before the arena is freed, so every Gub in the tree spends those
+##              before the arena is freed, so every Bog in the tree spends those
 ##              frames still being processed with no peer to ask.
 ##   health   — the damage model end to end (D-062), in numbers rather than in
 ##              pictures, because health is the one thing in this game that has
 ##              never been visible on a still frame. Five verdicts out of one
-##              run: a hit that takes 35 leaves a Gub standing on 65 and a
+##              run: a hit that takes 35 leaves a Bog standing on 65 and a
 ##              second hit takes it to 25 (`partial`); a third kills it
 ##              normally, with a corpse and the kill everyone else hears
 ##              (`lethal`); the robe rolled off that death makes an Elder, and
 ##              a hit on one takes **nothing** and still flashes the ward
 ##              (`elder`); the first dummy comes back on full health
-##              (`respawn`); and a real spear thrown at that full-health Gub
+##              (`respawn`); and a real spear thrown at that full-health Bog
 ##              kills it in one (`spear`). The last is the control in D-039's
 ##              sense and the one the whole plan turns on — a damage model that
 ##              quietly made the spear a two-shot would pass every other line
 ##              here.
-##   embed    — a shaft standing in a Gub who is **still alive**, which is what
+##   embed    — a shaft standing in a Bog who is **still alive**, which is what
 ##              the bow needs and what nothing could do before D-062. A spear
 ##              is launched by hand, with nothing listening for its hit, so it
 ##              lands on a dummy that takes no damage at all: it has to stick,
@@ -234,7 +234,7 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##              tell a spear stuck in a body from a spear stuck in the air
 ##              where the body was (`embed`). The dummy is then killed and the
 ##              same shaft has to be adopted by the corpse and be hanging off a
-##              physical bone of it, with nothing left on the Gub's list
+##              physical bone of it, with nothing left on the Bog's list
 ##              (`adopt`).
 ##   hurt     — the bars over other people's heads (D-062), which is the half of
 ##              the damage model a number cannot show. Two dummies are hurt by
@@ -243,17 +243,17 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##              plates, one amber and one red, at the distance a fight actually
 ##              happens at. `hud_range hud_health` is the same question for your
 ##              own bar. Nothing is asserted here; `health` does the asserting.
-##   strafe   — the feet, in eight directions (D-066). The Gub is held facing
+##   strafe   — the feet, in eight directions (D-066). The Bog is held facing
 ##              one way, as it is while aiming, and driven round the compass at
 ##              walking and at running speed; every tick the *slower* of its two
 ##              toes is measured in world space, which is the planted one, and
 ##              how fast that foot is sliding is the whole of the fault this
-##              step exists to remove. Printed as a fraction of the Gub's own
+##              step exists to remove. Printed as a fraction of the Bog's own
 ##              ground speed, so 0.0 is a foot nailed down and 2.0 is a foot
 ##              going backwards as fast as the body is going forwards.
 ##              `standing PASS` is the sixteen legs of the new plane; `crouch`
 ##              is the control, and it is a control that is *meant* to be bad —
-##              a crouching Gub still has one clip and a one-dimensional space
+##              a crouching Bog still has one clip and a one-dimensional space
 ##              behind it, so its sideways legs have to come out visibly worse
 ##              than its forward one or this measurement cannot see the thing
 ##              it is here to see.
@@ -268,11 +268,11 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##              two different ways (`release`). That last is D-025 and D-045
 ##              asserted rather than assumed: a modifier that moved the release
 ##              would be a spine that moved a shot.
-##   strafing — the picture `strafe` measures. Eight Gubs in a row facing the
+##   strafing — the picture `strafe` measures. Eight Bogs in a row facing the
 ##              camera, each running a different bearing at RUN_SPEED, posed
 ##              entirely out of the `sync_*` fields a real client would have
 ##              sent. Nothing is asserted; the eye does it.
-##   aiming   — the picture `spine` measures. Five Gubs side-on at a full draw,
+##   aiming   — the picture `spine` measures. Five Bogs side-on at a full draw,
 ##              at five pitches from `PITCH_MIN` to `PITCH_MAX`, posed the same
 ##              way — two replicated floats apiece and nothing else.
 ##   potion   — the heal potion, end to end (D-067). Six verdicts out of one run,
@@ -284,8 +284,8 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##              it at the finish; `interrupt` is the recorded rule, a hit
 ##              through `report_damage` half way in, with the potion spent and
 ##              the half that had arrived kept; `moved` is the other rule and
-##              its edge case, a Gub that runs losing the drink and a Gub
-##              *lured* at the same speed keeping it; `death` is D-032, two
+##              its edge case, a Bog that runs losing the drink and a Bog
+##              *pulled* at the same speed keeping it; `death` is D-032, two
 ##              potions going into the ground; and `config` is the three lobby
 ##              dials through `to_dict`/`apply_dict` and the clamps.
 ##   sword    — the great sword, end to end and in numbers (D-068). Four
@@ -296,16 +296,16 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##              the body through a revolution inside the skeleton, so the blade
 ##              at the release is nowhere near `-basis.z`, and everything after
 ##              this step is placed along the bearing the rehearsal measured
-##              rather than along the way the Gub is facing.
+##              rather than along the way the Bog is facing.
 ##
 ##              Then `reach`: a dummy just inside the dial dies and one just
 ##              outside it lives, with the distance each one actually was at the
 ##              instant of the hit printed beside the dial. `release` is the
 ##              timing read two ways off the same swing — the kill lands
-##              `GubAnimator.SWING_RELEASE_TIME` after the click to within a
+##              `BogAnimator.SWING_RELEASE_TIME` after the click to within a
 ##              frame and a half, on the tick the sword's own point is moving
 ##              fastest — and it carries the measurement the dial is fitted to:
-##              how far the point is from the Gub's axis at that instant, against
+##              how far the point is from the Bog's axis at that instant, against
 ##              `MatchConfig.sword_reach`. `elder` is D-040 restated for a fourth
 ##              weapon: a direct hit takes nothing and still flashes the ward.
 ##              And `hand` is the promise the hands make — the sword is in the
@@ -314,7 +314,7 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##              them for exactly that long.
 ##   chain    — the swing as a movement tech, measured the way D-052 measured the
 ##              bunny hop and against the same ceiling (D-068). Two subjects: a
-##              Gub that chains swings from a standing start, and a Gub that
+##              Bog that chains swings from a standing start, and a Bog that
 ##              builds speed with ten timed hops *first* and then chains swings
 ##              out of the top of it. What is asserted is the thing the design
 ##              turns on — the swing feeds `HOP_SPEED_CAP`'s budget rather than a
@@ -324,8 +324,8 @@ const MUSHROOM := preload("res://scenes/items/shield_mushroom.tscn")
 ##              reset to a walk by the first swing. Prints the top sustainable
 ##              speed for each. Headless with `--fixed-fps 60`.
 ##   free     — no script; play it yourself
-const MODES := ["flight", "hit", "arc", "miss", "aim", "mushroom", "cover",
-	"lure", "lure_self", "letter", "cards", "lightning", "blast", "ward", "recharge",
+const MODES := ["flight", "hit", "arc", "miss", "aim", "shield", "cover",
+	"magnet", "magnet_self", "letter", "cards", "lightning", "blast", "ward", "recharge",
 	"release", "cast", "bow", "draw", "strafe", "spine", "strafing", "aiming",
 	"respawn", "health", "potion", "embed", "hurt", "walk", "bhop", "leave",
 	"sword", "chain", "primary", "free"]
@@ -365,7 +365,7 @@ const BLAST_ELDER_SPOT := Vector3(-4.0, 0.1, -1.0)
 
 ## How long after the click a spear's verdict is taken, in physics ticks. Same
 ## arithmetic as the bolt's above and one more term: the click starts the
-## windup, the shaft leaves `GubAnimator.THROW_RELEASE_TIME` (0.50 s since
+## windup, the shaft leaves `BogAnimator.THROW_RELEASE_TIME` (0.50 s since
 ## D-063, 30 ticks) later, and then it has fourteen metres to cross at 42 m/s —
 ## twenty ticks. Ninety-five is that plus a margin, and it is left where it was
 ## when the release was 0.71 s rather than retuned down with it, for the reason
@@ -375,7 +375,7 @@ const BLAST_ELDER_SPOT := Vector3(-4.0, 0.1, -1.0)
 ## "not there yet".
 const SPEAR_VERDICT_DELAY := 95
 
-## How far the `walk` mode requires the Gub to travel. A Gub that is not walking
+## How far the `walk` mode requires the Bog to travel. A Bog that is not walking
 ## still drifts a little as it settles onto the ground on the first few frames,
 ## and this is comfortably clear of that.
 const WALK_MIN_DISTANCE := 1.0
@@ -383,38 +383,45 @@ const WALK_MIN_DISTANCE := 1.0
 ## The `cover` mode's ray profile: how high it climbs, how far either side it
 ## looks, and how finely it samples across. 3 cm across a 3.2 m span is 161 rays
 ## per height band and 18 bands, which is nothing to fire in one frame and is
-## fine enough to see a 5 cm hole between a stem and a cap — which is the shape
-## of gap that put this mode here.
+## fine enough to see a 5 cm hole anywhere in it — a gap that size, between a
+## mushroom's stem and its cap, is the shape of failure that put this mode here
+## and the shield's one solid box is the answer to it.
 const PROFILE_TOP := 2.70
 const PROFILE_STEP := 0.15
 const PROFILE_HALF_WIDTH := 1.60
 const PROFILE_SAMPLE := 0.02
 
-## How much the cap is allowed to let a walking Gub in past the distance the
-## geometry says it should be held off at — `CAP_RADIUS + CAPSULE_RADIUS`.
+## How much the shield is allowed to let a walking Bog in past the distance the
+## geometry says it should be held off at — `BOX_DEPTH * 0.5 + CAPSULE_RADIUS`.
 ##
-## Not a fudge factor. A `CharacterBody3D` pressed into a static cylinder is
-## resolved by depenetration rather than by a hard stop, and a capsule's top
-## hemisphere is narrower than its waist, so the honest contact distance is a
-## centimetre or two inside the sum of the two radii. A quarter of a metre is
-## comfortably outside that and still nowhere near the 0.66 m a Gub reached when
-## the only thing at its own height was the stem.
-const COVER_HOLD_OFF_SLACK := 0.25
+## Not a fudge factor, and much tighter than the quarter-metre the mushroom's
+## cylinders needed (D-039). A capsule pressed into a *cylinder* meets curve on
+## curve, and its top hemisphere is narrower than its waist, so the honest
+## contact distance was a centimetre or two inside the sum of the two radii and
+## nobody could say which centimetre. A capsule walked squarely into a flat
+## vertical face touches it at exactly one radius, and the only slop left is a
+## tick of travel: at `Bog.WALK_SPEED` a Bog covers 3.8 cm in a physics tick and
+## is depenetrated back out on the next one. Five centimetres is that tick with
+## a little over, and it is a fifth of what the cylinders were forgiven.
+const COVER_HOLD_OFF_SLACK := 0.05
 
-## How far to one side of the line of fire the mushroom in the `cover` mode is
+## How far to one side of the line of fire the shield in the `cover` mode is
 ## planted.
 ##
-## **Not zero, and this is the most important number in the check.** Lined up
-## perfectly, the stem alone blocks the shot — it is 0.55 m of post standing on
-## the exact line between the two Gubs — so a dead-centre throw is stopped by a
-## mushroom whose cap is a metre above the fight and the check passes while
-## proving nothing. It was written that way first and it did pass, which is how
-## the real mushroom got here.
+## **Not zero, and this is the most important number in the check.** It was
+## written for the mushroom, where lining the shot up perfectly meant the stem
+## alone blocked it — 0.55 m of post on the exact line between the two Bogs —
+## so a dead-centre throw passed while the canopy that was supposed to be doing
+## the work floated a metre above the fight. It was written that way first and
+## it did pass, which is how the real mushroom got here.
 ##
-## Half a metre out is a thirteen-degree difference at `MUSHROOM_DISTANCE`, which
-## is what happens when either Gub takes one step, and it is nowhere near the
-## edge of a cap 2 m across. Anything that stops the spear there is stopping it
-## with the cap, which is the thing being checked.
+## It is kept at half a metre for the shield, where the argument is the same one
+## turned the other way up: a slab is widest in the middle and the question is
+## whether it is still cover once a fight has moved you off your own centre
+## line. Half a metre out is a thirteen-degree difference at `SHIELD_DISTANCE`,
+## which is what happens when either Bog takes one step, and it is comfortably
+## inside a wall 1.23 m across — so anything that stops the spear there is
+## stopping it with boards and not with an edge.
 const COVER_OFFSET := 0.5
 
 ## How many throw-and-regrow cycles `recharge` drives before it is satisfied.
@@ -449,12 +456,12 @@ const RELEASE_SETTLE := 12
 ## known offsets, both of them in the measuring rather than in the throw.
 ##
 ## *The pose read here is a frame old.* The release fires from
-## `GubCombat._tick_windup` in `_process`; the arm is sampled in
+## `BogCombat._tick_windup` in `_process`; the arm is sampled in
 ## `_physics_process`, which runs before it, off a skeleton the AnimationTree
 ## last wrote during the previous frame.
 ##
 ## *The arm the player sees is not the arm in the clip.* The throw is a layer
-## filtered to `GubAnimator.UPPER_BODY_BONES`, so the clip's own forward pitch
+## filtered to `BogAnimator.UPPER_BODY_BONES`, so the clip's own forward pitch
 ## of the hips and lower spine — 19 deg of it at the release — never happens,
 ## and the hand's reach in front of the hips is 0.51 m here against the clip's
 ## own 0.718 m. Dropping a moving component moves the maximum: the clip peaks at
@@ -506,7 +513,7 @@ const CAST_ADVANCE_MIN := 0.10
 ## A snap shot leaves at 18 m/s and falls at 16 m/s², so over the 14 m the spear
 ## modes use it would be 4.85 m into the ground before it arrived — the check
 ## would be measuring a miss. Five metres is the distance at which an arrow
-## aimed at a Gub's eye still lands on its body (0.62 m of drop over 0.28 s),
+## aimed at a Bog's eye still lands on its body (0.62 m of drop over 0.28 s),
 ## which is the whole point being made about this weapon rather than a
 ## convenience: **a snap shot is a knife**. The full draw keeps the spear modes'
 ## own fourteen metres, drops 0.14 m getting there, and hits what it was aimed
@@ -543,23 +550,23 @@ const BOW_HIT_LIMIT := 90
 ## skeletons may be at any of them, in metres.
 ##
 ## A centimetre, which is far tighter than it sounds and is the right number
-## anyway: both Gubs are being scrubbed to the same clip time by the same
+## anyway: both Bogs are being scrubbed to the same clip time by the same
 ## function off the same float, so a disagreement is not drift, it is a
 ## different code path. The one thing that legitimately differs is that a remote
-## Gub's blend into the draw layer is driven by the same `DRAW_BLEND_SPEED` from
+## Bog's blend into the draw layer is driven by the same `DRAW_BLEND_SPEED` from
 ## a different starting frame, which is why the mode holds each level for
 ## `DRAW_SETTLE` ticks before reading.
 const DRAW_LEVELS: Array[float] = [0.0, 0.25, 0.5, 0.75, 1.0]
 const DRAW_TOLERANCE := 0.01
 const DRAW_SETTLE := 20
 ## How far the drawing hand has to travel between brace and full draw for the
-## agreement above to mean anything, in metres. Without this, two Gubs standing
+## agreement above to mean anything, in metres. Without this, two Bogs standing
 ## perfectly still agree perfectly.
 const DRAW_SPREAD_MIN := 0.20
 
 ## How long a full draw takes in the `draw` mode. See `_start_session`.
 const DRAW_MODE_DRAW_TIME := 2.0
-## Where the remote Gub stands: beside the local one, facing the same way, so
+## Where the remote Bog stands: beside the local one, facing the same way, so
 ## the two poses can be read off one frame.
 const DRAW_DUMMY_SPOT := Vector3(2.4, 0.1, 9.0)
 
@@ -569,8 +576,8 @@ const DRAW_DUMMY_SPOT := Vector3(2.4, 0.1, 9.0)
 ## slow, it is never coming back.
 const DESYNC_PATIENCE := 30
 
-## Where the `respawn` mode kills its two Gubs. Deliberately *off* every spawn
-## pad, and further from each than `Gub._follow_network` smooths across: a Gub
+## Where the `respawn` mode kills its two Bogs. Deliberately *off* every spawn
+## pad, and further from each than `Bog._follow_network` smooths across: a Bog
 ## that dies on a pad is handed that pad straight back, never leaves its loot's
 ## catch volume and so never enters it either, and the check passes whatever the
 ## code does. `tools/net_loopback.gd` fell into exactly that on its first run.
@@ -586,7 +593,7 @@ const RESPAWN_STALE_TICKS := 12
 ## been broadcast and applied.
 const RESPAWN_SETTLE_TICKS := 60
 
-## How long the mushroom under test lives. Far longer than the run, so that
+## How long the shield under test lives. Far longer than the run, so that
 ## nothing here is ever accidentally measuring a wither.
 const COVER_LIFETIME := 120.0
 
@@ -611,7 +618,7 @@ const WARD_DURATION := 3.0
 ## hanging a headless check for ever.
 const WARD_EXPIRY_LIMIT := 420
 
-## The `health` mode's three hits, in the units of `Gub.MAX_HEALTH`.
+## The `health` mode's three hits, in the units of `Bog.MAX_HEALTH`.
 ##
 ## 35, then 40, then 25 — three different numbers summing to exactly a hundred,
 ## which is the point of choosing them. Equal hits would pass against a model
@@ -619,7 +626,7 @@ const WARD_EXPIRY_LIMIT := 420
 ## 50 would pass against one that halved whatever it was given. Landing exactly
 ## on zero also pins the boundary: dead is `health <= 0`, not `health < 0`.
 const HEALTH_HITS: Array[float] = [35.0, 40.0, 25.0]
-## What the Elder is hit with. Enough to kill a Gub already down to 25 and not
+## What the Elder is hit with. Enough to kill a Bog already down to 25 and not
 ## enough to kill a fresh one, so "the Elder took zero" cannot be confused with
 ## "the Elder survived because the hit was small".
 const HEALTH_ELDER_HIT := 55.0
@@ -665,14 +672,14 @@ const POTION_KEPT_TOLERANCE := 2.0
 const POTION_EPSILON := 0.5
 ## How long the mode lets a body settle into or out of a state, in physics
 ## ticks. A quarter of a second — long enough for a standing start to pass
-## `GubCombat.CHANNEL_MOVE_SPEED` and short enough to be a small fraction of the
+## `BogCombat.CHANNEL_MOVE_SPEED` and short enough to be a small fraction of the
 ## channel it is being measured inside.
 const POTION_SETTLE := 15
-## Where the lure that must *not* cancel the drink is placed, relative to the
-## Gub, and how long it holds. Six metres is well past `Gub.LURE_GRIP`, so the
-## pull runs for the whole of it rather than parking the body at the crystal.
-const POTION_LURE_FROM := Vector3(0.0, 0.0, -6.0)
-const POTION_LURE_HOLD := 1.5
+## Where the magnet that must *not* cancel the drink is placed, relative to the
+## Bog, and how long it holds. Six metres is well past `Bog.MAGNET_GRIP`, so the
+## pull runs for the whole of it rather than parking the body at the magnet.
+const POTION_MAGNET_FROM := Vector3(0.0, 0.0, -6.0)
+const POTION_MAGNET_HOLD := 1.5
 ## How long the mode waits for a drop to be collected or a body to come back
 ## before calling it a failure, in physics ticks. Same argument as
 ## `HEALTH_RESPAWN_LIMIT`.
@@ -693,8 +700,8 @@ const EMBED_TOLERANCE := 0.2
 ## windup — the spear is put in the air by hand — so this is mostly margin.
 const EMBED_FLIGHT_LIMIT := 60
 
-## How long the player leans on the mushroom in the `solid` half, in physics
-## ticks. At `Gub.WALK_SPEED` a Gub covers the `MUSHROOM_DISTANCE` to it in
+## How long the player leans on the shield in the `solid` half, in physics
+## ticks. At `Bog.WALK_SPEED` a Bog covers the `SHIELD_DISTANCE` to it in
 ## under a second, so this is most of a second of actually pushing.
 const COVER_WALK_FRAMES := 100
 
@@ -715,7 +722,7 @@ const SILHOUETTE_COLS := 11
 const HAND_SYNC_GRACE := 4
 
 ## Every scripted mode is watched from the touchline. The thrower's own camera
-## looks *along* the throw, where the spear is a dot behind the Gub's head and a
+## looks *along* the throw, where the spear is a dot behind the Bog's head and a
 ## parabola is a straight line — the one view that cannot show whether any of
 ## this works. Pass `pov` as the argument after the mode to use it anyway.
 ##  mode -> {eye, look, fov}
@@ -724,22 +731,22 @@ const VIEWS := {
 	"hit": {"eye": Vector3(11.0, 3.4, -2.0), "look": Vector3(0.0, 1.0, -4.6), "fov": 55.0},
 	"arc": {"eye": Vector3(30.0, 10.0, -12.0), "look": Vector3(0.0, 2.5, -12.0), "fov": 62.0},
 	"miss": {"eye": Vector3(9.0, 3.0, -9.0), "look": Vector3(0.0, 0.6, -13.0), "fov": 50.0},
-	"mushroom": {"eye": Vector3(6.0, 2.6, 9.5), "look": Vector3(0.0, 1.1, 7.2), "fov": 50.0},
-	# Square on to the flight and level with the cap, because the whole subject
-	# of this one is a spear that stops in mid-air fourteen metres from where it
-	# was thrown. Down the throw it is a dot; from above, a stick lying on a
-	# mushroom. From the side the shaft is visibly buried in the cap with the
-	# dummy standing untouched two metres behind it, which is the picture.
+	"shield": {"eye": Vector3(6.0, 2.6, 9.5), "look": Vector3(0.0, 1.1, 7.2), "fov": 50.0},
+	# Square on to the flight and level with the boards, because the whole
+	# subject of this one is a spear that stops in mid-air fourteen metres from
+	# where it was thrown. Down the throw it is a dot; from above, a stick lying
+	# on a shield. From the side the shaft is visibly buried in the planks with
+	# the dummy standing untouched two metres behind it, which is the picture.
 	"cover": {"eye": Vector3(7.6, 2.0, -1.2), "look": Vector3(0.2, 1.25, -4.0), "fov": 42.0},
-	"lure": {"eye": Vector3(12.0, 8.0, -3.0), "look": Vector3(-3.0, 1.0, -12.0), "fov": 60.0},
-	"lure_self": {"eye": Vector3(9.0, 3.2, 12.0), "look": Vector3(0.0, 1.0, 7.0), "fov": 55.0},
+	"magnet": {"eye": Vector3(12.0, 8.0, -3.0), "look": Vector3(-3.0, 1.0, -12.0), "fov": 60.0},
+	"magnet_self": {"eye": Vector3(9.0, 3.2, 12.0), "look": Vector3(0.0, 1.0, 7.0), "fov": 55.0},
 	# Close, and level with the chest rather than looking down: the question
 	# this one answers is whether a card in a fist reads as a card in a fist,
 	# and from any distance that flatters it every glyph reads fine.
 	"letter": {"eye": Vector3(4.0, 1.9, 12.0), "look": Vector3(0.0, 1.5, 9.0), "fov": 45.0},
 	# Square on to the row and level with it, because the question is whether
-	# three 0.6 m letters read as G, U and B — which is a question about the
-	# meshes and not about the Gub, so the player stays behind the camera.
+	# three 0.6 m letters read as B, O and G — which is a question about the
+	# meshes and not about the Bog, so the player stays behind the camera.
 	"cards": {"eye": Vector3(2.2, 1.5, 8.6), "look": Vector3(0.0, 0.75, 6.0), "fov": 45.0},
 	# Square on to the bolt and well back from it. The bolt runs the fourteen
 	# metres from the player at z=9 to the dummy at z=-5, so the one view that
@@ -751,7 +758,7 @@ const VIEWS := {
 		"fov": 58.0},
 	# Close in on the Elder rather than on the flight, because the subject here
 	# is the *arrival*: a spear stopping at a robe and a violet flash where it
-	# stopped, with the Gub still on its feet. Down the throw the ward is behind
+	# stopped, with the Bog still on its feet. Down the throw the ward is behind
 	# the shaft; from the side it is the whole picture.
 	# Above and behind the survivor, looking back at the first impact, so the
 	# ring lies open on the ground with one dummy inside it and one just past
@@ -800,7 +807,7 @@ const VIEWS := {
 	# In *front* of the drinker and off to one side, which is the one place the
 	# three views above are not. A drink is a hand coming up to a face and a head
 	# going back over it, and side-on the arm crosses the body and disappears
-	# into a silhouette that is mostly Gub. Three quarters from the front is
+	# into a silhouette that is mostly Bog. Three quarters from the front is
 	# where the bottle, the hand and the tipped head are all separately visible
 	# — measured the same way, by putting the contact sheet's camera through
 	# every angle and keeping the one the gesture reads at (D-067).
@@ -815,11 +822,11 @@ const LINEUP_FIRST := Vector3(-8.75, 0.1, 0.0)
 const LINEUP_STEP := 2.5
 const AIM_LINEUP_FIRST := Vector3(-6.0, 0.1, 0.0)
 const AIM_LINEUP_STEP := 3.0
-## Five pitches, the two ends and three between. Read out of `GubCamera` rather
+## Five pitches, the two ends and three between. Read out of `BogCamera` rather
 ## than typed, so a view that is ever allowed to look further up or down takes
 ## this picture with it.
 const AIM_LINEUP_PITCHES: Array[float] = [
-	GubCamera.PITCH_MIN, -0.55, 0.0, 0.5, GubCamera.PITCH_MAX,
+	BogCamera.PITCH_MIN, -0.55, 0.0, 0.5, BogCamera.PITCH_MAX,
 ]
 
 const PLAYER_SPOT := Vector3(0.0, 0.1, 9.0)
@@ -833,7 +840,7 @@ const DUMMY_SPOTS: Array[Vector3] = [
 const ARC_TARGET := Vector3(0.0, 1.2, -34.0)
 ## Where `aim` points. The same far wall, shifted off the centre line on
 ## purpose: aimed straight down it the spear meets Dummy 1 at fourteen metres
-## and the landing ring is drawn on a Gub's chest, which proves the marker works
+## and the landing ring is drawn on a Bog's chest, which proves the marker works
 ## on players and shows nothing at all about drop. Offset, the flight has clear
 ## air all the way down and the ring lands on open dirt, where the gap between
 ## it and the point being aimed at is the whole picture.
@@ -845,9 +852,9 @@ const AIM_TARGET := Vector3(2.5, 1.2, -34.0)
 ## loot roll into a check that has nothing to do with any of them.
 const RECHARGE_TARGET := Vector3(0.0, 14.0, -30.0)
 
-## `strafe`'s compass, in the Gub's own input space — `Input.get_vector`'s
+## `strafe`'s compass, in the Bog's own input space — `Input.get_vector`'s
 ## convention, so -y is forward (D-066). Eight legs, and the diagonals are
-## deliberately unnormalised because `Gub._wish_direction` normalises what it is
+## deliberately unnormalised because `Bog._wish_direction` normalises what it is
 ## handed and a testbed that pre-normalised would be testing a path the keyboard
 ## never takes.
 const STRAFE_COMPASS: Array = [
@@ -886,7 +893,7 @@ const STRAFE_GAITS: Array = [
 const STRAFE_SETTLE := 30
 const STRAFE_SAMPLE := 40
 
-## What counts as a foot on the floor, in metres above the Gub's own feet.
+## What counts as a foot on the floor, in metres above the Bog's own feet.
 ##
 ## Only used to *report* how much of each leg had a foot down; the skate itself
 ## is measured off the slower of the two toes whether or not either is planted,
@@ -895,7 +902,7 @@ const STRAFE_SAMPLE := 40
 ## that is flat on the ground.
 const STRAFE_PLANT_HEIGHT := 0.08
 
-## How far a planted foot may slide, as a fraction of the Gub's own ground
+## How far a planted foot may slide, as a fraction of the Bog's own ground
 ## speed, averaged over a leg. Two limits, because the plane has two kinds of
 ## direction in it and one number over both would have to be the looser one.
 ##
@@ -930,7 +937,7 @@ const STRAFE_LIMIT := 1.25
 ## the walk legs that this step did not move, under the two run legs that it
 ## did. The old build fails it twice. The band is narrow — 0.80 under it and
 ## 0.93 over it — and it stays narrow until the walk poles are closed too; the
-## one download that would widen it is named in `build_gub.py`'s strafe block.
+## one download that would widen it is named in `build_bog.py`'s strafe block.
 ##
 ## What this line is **not** able to do on its own is worth writing down, because
 ## it is why there are two of them. Declaring the handed `StandingRunRight.fbx`
@@ -964,7 +971,7 @@ const STRAFE_MIRROR_LIMIT := 0.20
 ## How much worse the crouch's *worst* bearing has to be than its best, for the
 ## control to have shown anything.
 ##
-## Three, and it measures 6.7: a crouching Gub is still one clip behind a line,
+## Three, and it measures 6.7: a crouching Bog is still one clip behind a line,
 ## so it can only match one direction and the others fall where the geometry
 ## puts them. (Its best bearing is forward-**left**, not forward, because
 ## `CrouchWalk` is authored travelling 33.8° to the left — which is its own
@@ -975,7 +982,7 @@ const STRAFE_CONTROL_SPREAD := 3.0
 ## `PITCH_MIN` to `PITCH_MAX`, each held for `SPINE_SETTLE` ticks.
 ##
 ## Twenty ticks is a third of a second, and what it is waiting for is the
-## **body**, not the modifier: `Gub.TURN_SPEED` is 14 rad/s, so the widest step
+## **body**, not the modifier: `Bog.TURN_SPEED` is 14 rad/s, so the widest step
 ## in the yaw sweep (a quarter turn) takes ten ticks to arrive and the rest is
 ## margin. The torso itself is there in a twelfth of a second.
 const SPINE_YAWS := 8
@@ -1014,13 +1021,13 @@ const SPINE_PITCH_LIMIT := 10.0
 
 ## How far the bow's elevation has to travel across the pitch sweep for that
 ## agreement to mean anything, in degrees — the control on the same line. Two
-## Gubs holding perfectly level bows agree about everything.
+## Bogs holding perfectly level bows agree about everything.
 const SPINE_PITCH_SPAN_MIN := 60.0
 
 ## How far the release point may move between the two shots `spine` fires from
 ## one spot, in metres.
 ##
-## A millimetre, and it could be zero: `GubCombat._throw_origin` is built out of
+## A millimetre, and it could be zero: `BogCombat._throw_origin` is built out of
 ## `global_position`, `eye_height()` and `body_yaw`, and not one of those is on
 ## the skeleton. What is being asserted is exactly that — that no amount of
 ## torso turns into a moved shot (D-025, D-045) — so the tolerance is float
@@ -1031,7 +1038,7 @@ const SPINE_RELEASE_TOLERANCE := 0.001
 ## ticks — and it is four thousand of them for a reason worth knowing before
 ## anybody tightens it.
 ##
-## `GubCombat` measures a draw, a release and a recharge on a **wall clock**
+## `BogCombat` measures a draw, a release and a recharge on a **wall clock**
 ## (`_now()`), while everything in this mode counts physics ticks. Headless with
 ## `--fixed-fps 60` this scene gets through some thousands of ticks a real
 ## second, so a 1.2 s recharge is a few thousand ticks here and a few dozen on a
@@ -1116,9 +1123,9 @@ var _fixed_camera: Camera3D
 ## start failing the day somebody retunes `spear_recharge`.
 var _cover_step: int = 0
 var _cover_at: int = 0
-var _cover_mushroom: Node3D = null
-## The closest the walking Gub has come to the axis of the mushroom in its way.
-## A minimum rather than a final position, because a Gub pressed into a cylinder
+var _cover_shield: Node3D = null
+## The closest the walking Bog has come to the axis of the shield in its way.
+## A minimum rather than a final position, because a Bog pressed into a cylinder
 ## slides around it: where it *ends up* says nothing, and how far in it ever got
 ## says everything.
 var _cover_closest: float = INF
@@ -1199,7 +1206,7 @@ var _health_kill: Array = []
 ## dropped potion is lying in the world, because "the dummy has one" would also
 ## be true of a grant that never went through an item; `_potion_owed` is what
 ## the interrupted drink had earned at the instant it was broken, read off the
-## channel's own clock so it can be compared with what the Gub actually kept.
+## channel's own clock so it can be compared with what the Bog actually kept.
 var _potion_step: int = 0
 var _potion_at: int = 0
 var _potion_seen: bool = false
@@ -1207,7 +1214,7 @@ var _potion_health: float = 0.0
 var _potion_mid: float = 0.0
 var _potion_owed: float = 0.0
 var _potion_stock: int = 0
-## What was in the drinking Gub's two fists half way through the first
+## What was in the drinking Bog's two fists half way through the first
 ## channel, read there and asserted in the next step (D-075). Carried rather
 ## than asserted where it is read for one reason and it is a real one:
 ## `_potion_verdict` **clears** the problem list, so a failure appended in
@@ -1244,14 +1251,14 @@ var _embed_body_was: Vector3 = Vector3.ZERO
 var _sword_step: int = 0
 var _sword_clicked: int = 0
 ## The blade at the rehearsal's release: which way it pointed in the world, how
-## far its point was from the Gub's own axis, and how far round from the way the
+## far its point was from the Bog's own axis, and how far round from the way the
 ## body was facing. Everything after the rehearsal is placed off the first of
 ## these and the last two are printed as the measurement the dial is fitted to.
 var _sword_blade: Vector3 = Vector3.ZERO
 var _sword_blade_at: Vector3 = Vector3.ZERO
 var _sword_tip_reach: float = -1.0
 var _sword_bearing: float = 0.0
-## The furthest the point of the blade has been seen to get from the Gub's own
+## The furthest the point of the blade has been seen to get from the Bog's own
 ## axis in the swing that is running now, and the tick it happened on — which is
 ## the tick a sword connects on, read off the prop itself rather than off any
 ## constant. See `_watch_sword` for why it is the reach and not the speed.
@@ -1321,11 +1328,11 @@ func _ready() -> void:
 
 	_items = Node3D.new()
 	_items.name = "SpawnedItems"
-	# `GubCombat._spawn_root` looks for this group; without it every spear and
-	# mushroom is parented to the scene root and nothing can be swept up later.
+	# `BogCombat._spawn_root` looks for this group; without it every spear and
+	# shield is parented to the scene root and nothing can be swept up later.
 	_items.add_to_group("spawned_items")
 	add_child(_items)
-	# The lure reports its own catch list unconditionally: unlike a spear, there
+	# The magnet reports its own catch list unconditionally: unlike a spear, there
 	# is no frame in which "who did this pull?" is visible on screen.
 	_items.child_entered_tree.connect(_watch_spawned)
 
@@ -1349,23 +1356,23 @@ func _ready() -> void:
 
 ## A one-player host session with no socket, plus however many dummies the mode
 ## wants written straight into the roster. Faking roster entries is the whole
-## trick: `MatchState` spawns a Gub per entry and never asks whether the peer
+## trick: `MatchState` spawns a Bog per entry and never asks whether the peer
 ## behind it is real.
 func _start_session() -> void:
 	Net.start_offline()
 	# Everybody on the range brings the mode's weapon, including the player's own
 	# row, which `start_offline` has already written from `Settings` (D-069).
 	#
-	# Before the lobby pick this line did not need to exist: every Gub had all
+	# Before the lobby pick this line did not need to exist: every Bog had all
 	# three weapons and a mode simply used the one it was about. Now `has_bow()`
-	# and `has_sword()` are false for a spear Gub, so a range that did not say
+	# and `has_sword()` are false for a spear Bog, so a range that did not say
 	# which weapon it was testing would be a range where the bow and the sword
 	# modes silently do nothing at all.
 	#
 	# The dummies get it too rather than only the player. It costs nothing —
 	# they never attack — and it means a mode whose *subject* is a dummy gets
 	# the right one without a second rule: `draw` reads a bow off a **remote**
-	# Gub, which is the whole point of that mode.
+	# Bog, which is the whole point of that mode.
 	var weapon := _mode_weapon()
 	Net.players[1]["weapon"] = weapon
 	for i in _dummy_count():
@@ -1440,15 +1447,15 @@ func _start_session() -> void:
 
 func _dummy_count() -> int:
 	match _mode:
-		"lure", "blast":
+		"magnet", "blast":
 			return 3
-		"arc", "miss", "mushroom", "cover", "lure_self", "letter", "respawn":
+		"arc", "miss", "shield", "cover", "magnet_self", "letter", "respawn":
 			return 1
 		# Nobody to shoot at. `recharge` throws a dozen spears over the back
 		# wall on purpose (see `RECHARGE_TARGET`) and a dummy in the roster
 		# would only be something for one of them to find.
 		# Nobody to shoot at, and in `strafe`'s case nobody to walk into either:
-		# a second Gub standing in the range is a capsule eight of the sixteen
+		# a second Bog standing in the range is a capsule eight of the sixteen
 		# legs would run their subject straight through.
 		# `chain` is a movement measurement down an empty range, for `bhop`'s
 		# reason: a second capsule on the line is something for a chained swing
@@ -1466,7 +1473,7 @@ func _dummy_count() -> int:
 			return STRAFE_COMPASS.size()
 		"aiming":
 			return AIM_LINEUP_PITCHES.size()
-		# One each: something to shoot at, and — in `draw` — a *remote* Gub to put
+		# One each: something to shoot at, and — in `draw` — a *remote* Bog to put
 		# a charge on and read the pose back off.
 		"bow", "draw":
 			return 1
@@ -1478,7 +1485,7 @@ func _dummy_count() -> int:
 ##
 ## The spear unless the mode says otherwise, which is the same default the lobby
 ## has and for the same reason: every mode that predates the weapon select was
-## written against a Gub carrying one, and none of them should have to say so.
+## written against a Bog carrying one, and none of them should have to say so.
 ##
 ## **Never `Settings.chosen_weapon()`, tempting as it is for `free`.** `free` is
 ## also what this scene falls back to for any argument it does not recognise,
@@ -1491,7 +1498,7 @@ func _mode_weapon() -> int:
 		# Everything that draws a string. `spine` is the one that does not look
 		# like a bow mode and is: D-066 measured the aiming spine by where the
 		# *bow* ends up pointing, because a bow is the longest, straightest thing
-		# a Gub holds and is therefore the honest readout of where a torso is
+		# a Bog holds and is therefore the honest readout of where a torso is
 		# aimed. Starve it of one and it has nothing to measure.
 		"bow", "draw", "spine", "aiming":
 			return Loadout.Weapon.BOW
@@ -1522,32 +1529,32 @@ func _dummy_spot(index: int) -> Vector3:
 
 
 static func _facing(from: Vector3, towards: Vector3) -> Transform3D:
-	return Transform3D(Basis(Vector3.UP, Gub.yaw_towards(towards - from)), from)
+	return Transform3D(Basis(Vector3.UP, Bog.yaw_towards(towards - from)), from)
 
 
 ## `MatchState._next_spawn` deliberately shuffles pads so nobody opens on the
 ## same ledge twice; a testbed wants the opposite. Put everyone back afterwards.
 func _place_everyone() -> void:
-	var player := MatchState.gubs.get(1) as Gub
+	var player := MatchState.bogs.get(1) as Bog
 	if player != null:
 		player.revive_at(_facing(PLAYER_SPOT, Vector3(0.0, 0.1, 0.0)))
 	for i in _dummy_count():
-		var dummy := MatchState.gubs.get(DUMMY_BASE + i) as Gub
+		var dummy := MatchState.bogs.get(DUMMY_BASE + i) as Bog
 		if dummy != null:
 			dummy.revive_at(_facing(_dummy_spot(i), PLAYER_SPOT))
 			_stand_still(dummy)
 
 
-## Make a dummy read as a remote Gub whose client is publishing "standing on the
+## Make a dummy read as a remote Bog whose client is publishing "standing on the
 ## ground, not moving".
 ##
-## A remote Gub takes its whole animation state from replicated fields, and
+## A remote Bog takes its whole animation state from replicated fields, and
 ## nothing replicates for a fake roster entry — so `sync_grounded` sat at its
 ## default `false` and every dummy played the Jump clip forever, splayed out
 ## mid-leap in every screenshot this tool has ever produced. That is the same
-## class of bug as the real one this testbed found in `GubAnimator`, except here
+## class of bug as the real one this testbed found in `BogAnimator`, except here
 ## the missing publisher is the testbed itself.
-func _stand_still(dummy: Gub) -> void:
+func _stand_still(dummy: Bog) -> void:
 	dummy.sync_position = dummy.global_position
 	dummy.sync_yaw = dummy.body_yaw
 	dummy.sync_velocity = Vector3.ZERO
@@ -1567,8 +1574,8 @@ func _on_player_killed(victim_id: int, killer_id: int, cause: int) -> void:
 	# taken on the next `_physics_process` is already 15 mm out of date, and the
 	# whole verdict is a comparison between that distance and a dial.
 	if _mode == "sword":
-		var attacker := MatchState.gubs.get(killer_id) as Gub
-		var victim := MatchState.gubs.get(victim_id) as Gub
+		var attacker := MatchState.bogs.get(killer_id) as Bog
+		var victim := MatchState.bogs.get(victim_id) as Bog
 		_sword_kill_at = _frames
 		_sword_kill_of = victim_id
 		if attacker != null and victim != null:
@@ -1584,8 +1591,8 @@ func _physics_process(_delta: float) -> void:
 	if _trace:
 		_trace_frame()
 	if _mode == "free":
-		# No input reading here any more: `Gub._read_input` does it, for the
-		# local Gub, in the game and in this testbed alike. That it only ever
+		# No input reading here any more: `Bog._read_input` does it, for the
+		# local Bog, in the game and in this testbed alike. That it only ever
 		# happened here is what left the real arena unwalkable.
 		return
 	if _mode == "walk":
@@ -1597,7 +1604,7 @@ func _physics_process(_delta: float) -> void:
 	if _mode == "leave":
 		_drive_leave()
 		return
-	# Both of these steer the Gub themselves and must not reach the
+	# Both of these steer the Bog themselves and must not reach the
 	# `look_at_point` below: `strafe` needs the view held dead still while the
 	# body is driven round it, and `spine` *is* a view sweep, so a re-aim every
 	# frame would be the mode fighting itself.
@@ -1608,7 +1615,7 @@ func _physics_process(_delta: float) -> void:
 		_drive_spine()
 		return
 	# Both of these drive the body themselves and must not reach the
-	# `look_at_point` below: `sword` holds the Gub facing one way while the clip
+	# `look_at_point` below: `sword` holds the Bog facing one way while the clip
 	# turns the *skeleton* underneath it, and a re-aim every frame would be the
 	# mode moving the one thing it is measuring. `chain` is a run down the range.
 	if _mode == "sword":
@@ -1624,17 +1631,17 @@ func _physics_process(_delta: float) -> void:
 		_drive_lineup(_aiming_rows())
 		return
 
-	var player := MatchState.gubs.get(1) as Gub
+	var player := MatchState.bogs.get(1) as Bog
 	if player == null:
 		return
-	var rig := player.get_node_or_null("CameraRig") as GubCamera
-	var combat := player.get_node_or_null("Combat") as GubCombat
+	var rig := player.get_node_or_null("CameraRig") as BogCamera
+	var combat := player.get_node_or_null("Combat") as BogCombat
 	if rig == null or combat == null:
 		return
 
 	# Re-aim every frame until the moment of the throw. One call lands close and
 	# the next few converge, because moving the rig moves the camera it solved
-	# from — see `GubCamera.look_at_point`.
+	# from — see `BogCamera.look_at_point`.
 	_aim_at = _target_point()
 	if not _acted:
 		rig.look_at_point(_aim_at)
@@ -1716,7 +1723,7 @@ func _physics_process(_delta: float) -> void:
 	# spawn-frame transforms to have been published.
 	#
 	# Note what "acted" means for a spear since D-025: the click, not the throw.
-	# `GubCombat.try_throw_spear` only starts the windup, and the spear leaves
+	# `BogCombat.try_throw_spear` only starts the windup, and the spear leaves
 	# the hand THROW_RELEASE_TIME later — so a mode that waits for a spear has
 	# to allow the windup before the projectile even exists, and its whole
 	# flight after that. Since D-063 that is 0.50 s, which at 60 ticks a second
@@ -1724,17 +1731,17 @@ func _physics_process(_delta: float) -> void:
 	# 14 m at 42 m/s (0.33 s, 20 ticks) to the dummy, so the kill lands around
 	# tick 70. The warmup counts in `tools/smoke_test.sh` are sized for that —
 	# 95 for the kill, down from the 110 the 0.71 s release needed, and the
-	# lure's 132 is untouched because the lure leaves on the click.
+	# magnet's 132 is untouched because the magnet leaves on the click.
 	if _frames < 20 or _acted:
 		return
 	_acted = true
 	match _mode:
-		"mushroom":
+		"shield":
 			_stock(combat)
-			combat.try_place_mushroom()
-		"lure", "lure_self":
+			combat.try_place_shield()
+		"magnet", "magnet_self":
 			_stock(combat)
-			combat.try_throw_lure()
+			combat.try_throw_magnet()
 		"letter":
 			_drop_a_letter()
 		"cards":
@@ -1747,9 +1754,9 @@ func _physics_process(_delta: float) -> void:
 
 ## Put one letter card down at the player's feet and let them walk into it.
 ##
-## Deliberately *not* handed over the way `_stock` hands over a mushroom. The
+## Deliberately *not* handed over the way `_stock` hands over a shield. The
 ## card comes out of a real death, through `MatchState._drop_loot`'s own roll
-## with `letter_drop_chance` forced to 1 so it cannot come up a lure, and it is
+## with `letter_drop_chance` forced to 1 so it cannot come up a magnet, and it is
 ## claimed by the player's own body entering the `Pickup` area. That makes this
 ## the only place the whole chain runs in a world with geometry in it — which
 ## matters because the failure it guards is not a script error: an `Area3D` that
@@ -1759,14 +1766,14 @@ func _physics_process(_delta: float) -> void:
 ## The drop lands at the point the blow was struck rather than at the body, so
 ## the card can be set down in front of the player without moving anybody.
 func _drop_a_letter() -> void:
-	var player := MatchState.gubs.get(1) as Gub
+	var player := MatchState.bogs.get(1) as Bog
 	if player == null:
 		return
 	Net.config.win_condition = MatchConfig.WinCondition.LETTERS
 	Net.config.letter_drop_chance = 1.0
 	# Long enough that the frame is still mid-hold whenever the snapshot lands.
 	Net.config.letter_hold_time = 30.0
-	MatchState.report_kill(DUMMY_BASE, 1, Gub.Cause.SPEAR,
+	MatchState.report_kill(DUMMY_BASE, 1, Bog.Cause.SPEAR,
 		player.global_position + player.facing() * 1.2,
 		Vector3.FORWARD * 18.0, "Spine1")
 
@@ -1777,7 +1784,7 @@ func _drop_a_letter() -> void:
 ## goes the long way round on purpose — a real death, a real roll — and it gets
 ## whatever letter `randi() % 3` handed it, which is exactly right for a mode
 ## about the *hold* and useless for a mode about the three meshes. Naming them
-## is the only way to have G, U and B in one frame.
+## is the only way to have B, O and G in one frame.
 ##
 ## z = 6.0 is three metres ahead of `PLAYER_SPOT`, comfortably outside
 ## `Pickup.CATCH_RADIUS`, so the player standing there cannot collect one out of
@@ -1832,14 +1839,14 @@ func _report_cards() -> void:
 ## handing the state over: the roll, the `Pickup` area's overlap,
 ## `claim_pickup`, `_do_set_elder` and the re-parent of the cloth onto a live
 ## skeleton are all part of what this mode is for. Only `tools/preview_elder.gd`
-## has ever done that attach before, and it does it in a scene with one Gub in
+## has ever done that attach before, and it does it in a scene with one Bog in
 ## it and no match running.
 func _drop_a_robe() -> void:
-	var player := MatchState.gubs.get(1) as Gub
+	var player := MatchState.bogs.get(1) as Bog
 	if player == null:
 		return
 	Net.config.elder_drop_chance = 1.0
-	MatchState.report_kill(DUMMY_BASE + 1, 1, Gub.Cause.SPEAR,
+	MatchState.report_kill(DUMMY_BASE + 1, 1, Bog.Cause.SPEAR,
 		player.global_position + player.facing() * 1.2,
 		Vector3.FORWARD * 18.0, "Spine1")
 
@@ -1847,26 +1854,26 @@ func _drop_a_robe() -> void:
 ## Cast once the robe is on, then say whether anybody died.
 ##
 ## The verdict is the whole point. A still frame of a bolt looks the same
-## whether the Gub at the far end of it fell over or not, and "the spectacle
+## whether the Bog at the far end of it fell over or not, and "the spectacle
 ## works and the weapon does nothing" is precisely the failure a rendered check
 ## is here to catch.
-func _drive_lightning(combat: GubCombat) -> void:
+func _drive_lightning(combat: BogCombat) -> void:
 	if _cast_at == 0:
 		if not MatchState.is_elder(1) or not combat.has_lightning():
 			return
 		_cast_at = _frames
-		var hand := (MatchState.gubs.get(1) as Gub).held_gear
+		var hand := (MatchState.bogs.get(1) as Bog).held_gear
 		print("combat_range: robe claimed on frame %d — Elder, spear %s, crackle %s"
 			% [_frames, combat.has_spear(), hand != null and hand.is_charged()])
 		# The same call a click makes. `try_throw_spear` is the Elder's cast as
-		# well as the Gub's throw — it branches on the robe (D-038) — and going
+		# well as the Bog's throw — it branches on the robe (D-038) — and going
 		# through it rather than at `try_cast_lightning` is what makes this mode
 		# exercise the path a player's mouse actually takes.
 		combat.try_throw_spear()
 		return
 	if _frames != _cast_at + LIGHTNING_VERDICT_DELAY:
 		return
-	var target := MatchState.gubs.get(DUMMY_BASE) as Gub
+	var target := MatchState.bogs.get(DUMMY_BASE) as Bog
 	if target != null and not target.alive:
 		print("combat_range: the bolt killed %s — lightning PASS" % target.display_name)
 	else:
@@ -1877,10 +1884,10 @@ func _drive_lightning(combat: GubCombat) -> void:
 
 ## See `blast` in the mode list. Each cast is one step: place, measure, fire,
 ## and twenty ticks later read who is standing.
-func _drive_blast(player: Gub, combat: GubCombat) -> void:
-	var inside := MatchState.gubs.get(DUMMY_BASE) as Gub
-	var outside := MatchState.gubs.get(DUMMY_BASE + 1) as Gub
-	var elder := MatchState.gubs.get(DUMMY_BASE + 2) as Gub
+func _drive_blast(player: Bog, combat: BogCombat) -> void:
+	var inside := MatchState.bogs.get(DUMMY_BASE) as Bog
+	var outside := MatchState.bogs.get(DUMMY_BASE + 1) as Bog
+	var elder := MatchState.bogs.get(DUMMY_BASE + 2) as Bog
 	if inside == null or outside == null or elder == null:
 		return
 	var radius := Net.config.lightning_radius
@@ -1955,7 +1962,7 @@ func _drive_blast(player: Gub, combat: GubCombat) -> void:
 ## Fire the Elder's bolt from the player's hand at `target`, through the host's
 ## own cast. The aim is exact, so the impact is `target` unless the ray meets
 ## something before it — which `_blast_landed` is there to catch.
-func _blast_cast(combat: GubCombat, target: Vector3) -> void:
+func _blast_cast(combat: BogCombat, target: Vector3) -> void:
 	if not MatchState.is_elder(1):
 		print("combat_range: the player is not the Elder — blast FAIL")
 		return
@@ -1983,11 +1990,11 @@ func _blast_verdict(label: String, ok: bool, detail: String) -> void:
 
 ## Stand `dummy` on the ground along `away` from `impact`, with the surface of
 ## its capsule `distance` from it. Solved by stepping on the real measurement
-## rather than by formula, so the answer is whatever `Gub.distance_to_body`
+## rather than by formula, so the answer is whatever `Bog.distance_to_body`
 ## says it is — which is the thing the rule reads.
-func _place_at_surface_distance(dummy: Gub, impact: Vector3, away: Vector3,
+func _place_at_surface_distance(dummy: Bog, impact: Vector3, away: Vector3,
 		distance: float) -> void:
-	var along := distance + Gub.CAPSULE_RADIUS
+	var along := distance + Bog.CAPSULE_RADIUS
 	var ground := Vector3(impact.x, PLAYER_SPOT.y, impact.z)
 	for i in 6:
 		dummy.global_position = ground + away * along
@@ -2030,7 +2037,7 @@ func _blast_config_round_trips() -> bool:
 
 # ----------------------------------------------------------------- respawn ---
 
-## Kill a Gub carrying a mushroom and an Elder wearing a robe, leave both lying
+## Kill a Bog carrying a shield and an Elder wearing a robe, leave both lying
 ## in loot, respawn both, and require empty hands a second later.
 ##
 ## Steps, each on a gate rather than a frame number where there is one:
@@ -2038,11 +2045,11 @@ func _blast_config_round_trips() -> bool:
 ##   1  kill both where they stand and put loot on both corpses
 ##   2  wait for both to be revived, playing the dummy's dead client meanwhile
 ##   3  a second later, the verdict
-func _drive_respawn(player: Gub, combat: GubCombat) -> void:
-	var dummy := MatchState.gubs.get(DUMMY_BASE) as Gub
+func _drive_respawn(player: Bog, combat: BogCombat) -> void:
+	var dummy := MatchState.bogs.get(DUMMY_BASE) as Bog
 	if dummy == null:
 		return
-	var dummy_combat := dummy.get_node_or_null("Combat") as GubCombat
+	var dummy_combat := dummy.get_node_or_null("Combat") as BogCombat
 	# The dummy's client, from the kill on. Dead, or not yet told it has been
 	# revived, it publishes the corpse in the life it died in; caught up, it
 	# publishes the pad it was revived onto.
@@ -2053,8 +2060,8 @@ func _drive_respawn(player: Gub, combat: GubCombat) -> void:
 		0:
 			if _frames < 20:
 				return
-			combat.grant_mushroom(1)
-			dummy_combat.grant_mushroom(1)
+			combat.grant_shield(1)
+			dummy_combat.grant_shield(1)
 			MatchState._make_elder(DUMMY_BASE)
 			player.global_position = RESPAWN_PLAYER_CORPSE
 			player.velocity = Vector3.ZERO
@@ -2067,7 +2074,7 @@ func _drive_respawn(player: Gub, combat: GubCombat) -> void:
 			# which is the state the precondition below insists on.
 			if _frames - _respawn_at < 10:
 				return
-			var armed := combat.mushroom_count() == 1 and dummy_combat.mushroom_count() == 1 \
+			var armed := combat.shield_count() == 1 and dummy_combat.shield_count() == 1 \
 				and MatchState.is_elder(DUMMY_BASE) and dummy.elder_robe != null
 			if not armed:
 				print("combat_range: nobody was carrying anything to lose — respawn FAIL")
@@ -2083,14 +2090,14 @@ func _drive_respawn(player: Gub, combat: GubCombat) -> void:
 			# is the only death it has, and a void death drops nothing; its loot
 			# is put down by hand through the same `_spawn_drop` a roll uses.
 			Net.config.elder_drop_chance = 1.0
-			MatchState.report_kill(1, DUMMY_BASE, Gub.Cause.SPEAR,
+			MatchState.report_kill(1, DUMMY_BASE, Bog.Cause.SPEAR,
 				player.global_position, Vector3.FORWARD * 18.0, "Spine1")
-			MatchState.report_kill(DUMMY_BASE, DUMMY_BASE, Gub.Cause.VOID,
+			MatchState.report_kill(DUMMY_BASE, DUMMY_BASE, Bog.Cause.VOID,
 				dummy.global_position, Vector3.DOWN, "")
 			var player_spot: Vector3 = MatchState._drop_spot(player.global_position)
 			var dummy_spot: Vector3 = MatchState._drop_spot(dummy.global_position)
-			MatchState._spawn_drop(Pickup.Kind.MUSHROOM, 0, player_spot)
-			MatchState._spawn_drop(Pickup.Kind.MUSHROOM, 0, dummy_spot)
+			MatchState._spawn_drop(Pickup.Kind.SHIELD, 0, player_spot)
+			MatchState._spawn_drop(Pickup.Kind.SHIELD, 0, dummy_spot)
 			MatchState._spawn_drop(Pickup.Kind.ELDER_ROBE, 0, dummy_spot)
 			for item: Pickup in MatchState._pickups.values():
 				if is_instance_valid(item) and not item.is_taken():
@@ -2121,8 +2128,8 @@ func _drive_respawn(player: Gub, combat: GubCombat) -> void:
 ## pad, so no `Pickup` sees it leave and none sees it come back — the check goes
 ## green on the bug. Real packets do not arrive once per physics tick, and one
 ## tick at the pad is all it takes: the body leaves the catch volume, the stale
-## snapshot drags it back in, and `body_entered` fires on a Gub that is alive.
-func _publish_for_dummy(dummy: Gub) -> void:
+## snapshot drags it back in, and `body_entered` fires on a Bog that is alive.
+func _publish_for_dummy(dummy: Bog) -> void:
 	if not dummy.alive:
 		dummy.sync_position = RESPAWN_DUMMY_CORPSE
 		dummy.sync_life = _dummy_dead_life
@@ -2138,25 +2145,25 @@ func _publish_for_dummy(dummy: Gub) -> void:
 	dummy.sync_life = dummy.life
 
 
-func _report_respawn(player: Gub, combat: GubCombat, dummy: Gub,
-		dummy_combat: GubCombat) -> void:
+func _report_respawn(player: Bog, combat: BogCombat, dummy: Bog,
+		dummy_combat: BogCombat) -> void:
 	var taken := 0
 	for item: Pickup in _respawn_loot:
 		if not is_instance_valid(item) or item.is_taken():
 			taken += 1
 	var clear := RESPAWN_PLAYER_CORPSE.distance_to(player.global_position) > 6.0 \
 		and RESPAWN_DUMMY_CORPSE.distance_to(_dummy_pad) > 6.0
-	var carrying := "player %d mushrooms %d lures %s, dummy %d mushrooms %d lures %s" % [
-		combat.mushroom_count(), combat.lure_count(),
+	var carrying := "player %d shields %d magnets %s, dummy %d shields %d magnets %s" % [
+		combat.shield_count(), combat.magnet_count(),
 		"ELDER" if MatchState.is_elder(1) or player.elder_robe != null else "no robe",
-		dummy_combat.mushroom_count(), dummy_combat.lure_count(),
+		dummy_combat.shield_count(), dummy_combat.magnet_count(),
 		"ELDER" if MatchState.is_elder(DUMMY_BASE) or dummy.elder_robe != null else "no robe"]
-	var empty := combat.mushroom_count() == 0 and combat.lure_count() == 0 \
-		and dummy_combat.mushroom_count() == 0 and dummy_combat.lure_count() == 0 \
+	var empty := combat.shield_count() == 0 and combat.magnet_count() == 0 \
+		and dummy_combat.shield_count() == 0 and dummy_combat.magnet_count() == 0 \
 		and not MatchState.is_elder(1) and not MatchState.is_elder(DUMMY_BASE) \
 		and player.elder_robe == null and dummy.elder_robe == null
 	if not clear:
-		print("combat_range: a Gub was revived on top of its own corpse, so this proves nothing — respawn FAIL")
+		print("combat_range: a Bog was revived on top of its own corpse, so this proves nothing — respawn FAIL")
 	elif empty and taken == 0:
 		print("combat_range: a second after respawning, %s; %d of %d drops still on the corpses — respawn PASS"
 			% [carrying, _respawn_loot.size() - taken, _respawn_loot.size()])
@@ -2174,7 +2181,7 @@ func _report_respawn(player: Gub, combat: GubCombat, dummy: Gub,
 ##   1. `ward`    — a spear thrown at an Elder must not kill it.
 ##   2. `expiry`  — the robe must then come off **by itself**, on
 ##                  `MatchState._tick_elders` running in a real match loop.
-##   3. `control` — the *same* throw at the *same* Gub, once the robe is off,
+##   3. `control` — the *same* throw at the *same* Bog, once the robe is off,
 ##                  must kill it. Without this the first verdict is worth
 ##                  nothing: a spear that never left the hand, a dummy that was
 ##                  already dead, a `report_kill` that never arrived — every one
@@ -2182,22 +2189,22 @@ func _report_respawn(player: Gub, combat: GubCombat, dummy: Gub,
 ##                  green on invincibility that had been implemented as a
 ##                  `return` at the top of the throw.
 ##
-## That control is the whole lesson of D-039 restated. The mushroom passed a
+## That control is the whole lesson of D-039 restated. The shield passed a
 ## green gate for its entire life while stopping nothing, because the only thing
 ## anybody had ever asserted about it was that a PNG got written.
 ##
 ## The Elder here is a dummy rather than the player, which is the opposite way
 ## round from the `lightning` mode next door and is the only way to get a real
-## spear into the air at one: the player is the only Gub in this scene with a
+## spear into the air at one: the player is the only Bog in this scene with a
 ## camera to aim and a hand to throw from.
-func _drive_ward(combat: GubCombat) -> void:
-	var dummy := MatchState.gubs.get(DUMMY_BASE) as Gub
+func _drive_ward(combat: BogCombat) -> void:
+	var dummy := MatchState.bogs.get(DUMMY_BASE) as Bog
 	if dummy == null:
 		return
 
 	match _ward_step:
 		0:
-			# Late enough for both Gubs to have settled onto the ground and for
+			# Late enough for both Bogs to have settled onto the ground and for
 			# the spawn-frame transforms to have been published.
 			if _frames < 12:
 				return
@@ -2207,13 +2214,13 @@ func _drive_ward(combat: GubCombat) -> void:
 			# On the Elder state and not on a frame count, because what stands
 			# between the drop and the robe is an `Area3D` overlap resolving —
 			# and because a mode that threw its spear before the robe was on
-			# would be checking that a spear kills a Gub, which is the one thing
+			# would be checking that a spear kills a Bog, which is the one thing
 			# every other mode here already proves.
 			if not MatchState.is_elder(DUMMY_BASE):
 				return
 			# Both claims, printed together: the rules say Elder and the cloth
 			# is on the skeleton. A dummy that is the Elder in the bookkeeping
-			# and a plain Gub on screen would make the verdict below true for
+			# and a plain Bog on screen would make the verdict below true for
 			# entirely the wrong reason.
 			print("combat_range: %s took the robe on frame %d — Elder %s, worn %s, %.1f s left"
 				% [dummy.display_name, _frames, MatchState.is_elder(DUMMY_BASE),
@@ -2275,14 +2282,14 @@ func _drive_ward(combat: GubCombat) -> void:
 ## Collection is then the shipping path and not a hand-over: the `Pickup`'s
 ## `Area3D` finds the dummy's collision body already inside it on the next
 ## physics step and calls `MatchState.claim_pickup` itself. A dummy is a remote
-## Gub with no client behind it and cannot be walked anywhere, so dropping the
+## Bog with no client behind it and cannot be walked anywhere, so dropping the
 ## robe *under* one is the only way to make that overlap happen — and it is
 ## worth the trouble, because `claim_pickup` called by hand would skip the one
 ## part of the chain that has ever actually been broken (D-039's note about an
 ## `Area3D` that cannot stop monitoring from inside `body_entered`).
-func _robe_at_the_dummys_feet(dummy: Gub) -> void:
+func _robe_at_the_dummys_feet(dummy: Bog) -> void:
 	Net.config.elder_drop_chance = 1.0
-	MatchState.report_kill(DUMMY_BASE + 1, 1, Gub.Cause.SPEAR,
+	MatchState.report_kill(DUMMY_BASE + 1, 1, Bog.Cause.SPEAR,
 		dummy.global_position, Vector3.FORWARD * 18.0, "Spine1")
 
 
@@ -2301,15 +2308,15 @@ func _robe_at_the_dummys_feet(dummy: Gub) -> void:
 ## a death is reported at is where its loot lands, so a robe rolled off the near
 ## dummy's corpse comes down under the far one and is picked up by it. That is
 ## how a mode with one death in it gets an Elder to shoot at.
-func _drive_health(combat: GubCombat) -> void:
-	var near := MatchState.gubs.get(DUMMY_BASE) as Gub
-	var far := MatchState.gubs.get(DUMMY_BASE + 1) as Gub
+func _drive_health(combat: BogCombat) -> void:
+	var near := MatchState.bogs.get(DUMMY_BASE) as Bog
+	var far := MatchState.bogs.get(DUMMY_BASE + 1) as Bog
 	if near == null or far == null:
 		return
 
 	match _health_step:
 		0:
-			# Late enough for both Gubs to have settled onto the ground and for
+			# Late enough for both Bogs to have settled onto the ground and for
 			# the spawn-frame transforms to have been published.
 			if _frames < 12:
 				return
@@ -2319,7 +2326,7 @@ func _drive_health(combat: GubCombat) -> void:
 			# A frame later than the hit, deliberately: what is read here is
 			# what the body is carrying into the next tick, not what the call
 			# left behind on its way out.
-			var after_one := Gub.MAX_HEALTH - HEALTH_HITS[0]
+			var after_one := Bog.MAX_HEALTH - HEALTH_HITS[0]
 			_health_expect(near.alive, "the first hit killed it")
 			_health_expect(is_equal_approx(near.health, after_one),
 				"the body says %.1f and not %.1f" % [near.health, after_one])
@@ -2332,7 +2339,7 @@ func _drive_health(combat: GubCombat) -> void:
 			_health_took = _hit(near, HEALTH_HITS[1])
 			_health_step = 2
 		2:
-			var after_two := Gub.MAX_HEALTH - HEALTH_HITS[0] - HEALTH_HITS[1]
+			var after_two := Bog.MAX_HEALTH - HEALTH_HITS[0] - HEALTH_HITS[1]
 			_health_expect(near.alive, "the second hit killed it")
 			_health_expect(is_equal_approx(near.health, after_two),
 				"two hits left %.1f and not %.1f" % [near.health, after_two])
@@ -2345,7 +2352,7 @@ func _drive_health(combat: GubCombat) -> void:
 			# ...and the third takes it to exactly zero, with the robe it rolls
 			# put down under the far dummy.
 			_health_took = MatchState.report_damage(DUMMY_BASE, 1, HEALTH_HITS[2],
-				Gub.Cause.SPEAR, far.global_position, Vector3.FORWARD * 18.0, "Spine1")
+				Bog.Cause.SPEAR, far.global_position, Vector3.FORWARD * 18.0, "Spine1")
 			_health_at = _frames
 			_health_step = 3
 		3:
@@ -2357,7 +2364,7 @@ func _drive_health(combat: GubCombat) -> void:
 			_health_expect(is_equal_approx(_health_took, HEALTH_HITS[2]),
 				"the killing hit reported %.1f" % _health_took)
 			_health_expect(_corpses() > 0, "no corpse was made")
-			_health_expect(_health_kill == [DUMMY_BASE, 1, Gub.Cause.SPEAR],
+			_health_expect(_health_kill == [DUMMY_BASE, 1, Bog.Cause.SPEAR],
 				"the lobby was told %s" % [_health_kill])
 			_health_verdict("lethal", "the third hit killed %s, %d corpse(s), feed says %s"
 				% [near.display_name, _corpses(), _health_kill])
@@ -2379,7 +2386,7 @@ func _drive_health(combat: GubCombat) -> void:
 			_health_expect(is_equal_approx(_health_took, 0.0),
 				"the Elder took %.1f" % _health_took)
 			_health_expect(far.alive, "the Elder died")
-			_health_expect(is_equal_approx(far.health, Gub.MAX_HEALTH),
+			_health_expect(is_equal_approx(far.health, Bog.MAX_HEALTH),
 				"the Elder is down to %.1f" % far.health)
 			_health_expect(_wards > _wards_before, "no ward flashed")
 			_health_verdict("elder", "%.0f at an Elder took %.0f and flashed %d ward(s)"
@@ -2392,12 +2399,12 @@ func _drive_health(combat: GubCombat) -> void:
 					_health_verdict("respawn", "waited %d frames" % HEALTH_RESPAWN_LIMIT)
 					_health_finish()
 				return
-			_health_expect(is_equal_approx(near.health, Gub.MAX_HEALTH),
+			_health_expect(is_equal_approx(near.health, Bog.MAX_HEALTH),
 				"it came back on %.1f" % near.health)
 			_health_expect(_plate_agrees(near),
 				"its bar came back at %.2f" % _plate_fraction(near))
 			_health_verdict("respawn", "%s came back on %.0f of %.0f"
-				% [near.display_name, near.health, Gub.MAX_HEALTH])
+				% [near.display_name, near.health, Bog.MAX_HEALTH])
 			# Put it back on its own pad before the control throw. A respawn
 			# picks the pad furthest from everybody (`MatchState._next_spawn`),
 			# which can be thirty metres away — and a spear thrown thirty metres
@@ -2419,32 +2426,32 @@ func _drive_health(combat: GubCombat) -> void:
 			# would pass every other line in this mode.
 			_health_expect(not near.alive,
 				"%s survived a spear on %.0f health" % [near.display_name, near.health])
-			_health_verdict("spear", "one thrown spear at a Gub on full health")
+			_health_verdict("spear", "one thrown spear at a Bog on full health")
 			_health_finish()
 
 
 ## One hit through the real door, at the middle of a body, with a weapon's worth
 ## of geometry behind it. Returns what the host says it took.
-func _hit(victim: Gub, amount: float) -> float:
-	return MatchState.report_damage(victim.peer_id, 1, amount, Gub.Cause.SPEAR,
+func _hit(victim: Bog, amount: float) -> float:
+	return MatchState.report_damage(victim.peer_id, 1, amount, Bog.Cause.SPEAR,
 		victim.body_centre(), Vector3.FORWARD * 6.0, "Spine1")
 
 
-## What the bar over a Gub's head is showing, 1 -> 0, read off the plate itself
+## What the bar over a Bog's head is showing, 1 -> 0, read off the plate itself
 ## rather than recomputed — the point of asking is that the display path is a
 ## second copy of the number and either half can be wrong on its own.
-func _plate_fraction(gub: Gub) -> float:
-	return gub.nameplate._health if gub.nameplate != null else -1.0
+func _plate_fraction(bog: Bog) -> float:
+	return bog.nameplate._health if bog.nameplate != null else -1.0
 
 
-func _plate_agrees(gub: Gub) -> bool:
-	return is_equal_approx(_plate_fraction(gub), gub.health_fraction())
+func _plate_agrees(bog: Bog) -> bool:
+	return is_equal_approx(_plate_fraction(bog), bog.health_fraction())
 
 
 func _corpses() -> int:
 	var found := 0
 	for child in _players.get_children():
-		if child is GubRagdoll:
+		if child is BogRagdoll:
 			found += 1
 	return found
 
@@ -2476,15 +2483,15 @@ func _health_finish() -> void:
 ##
 ## Every number here comes off the real path: the potion is rolled by
 ## `MatchState._drop_loot` out of a real death, collected by a real `Area3D`
-## overlap, drunk through `GubCombat.try_drink_potion` and healed through
+## overlap, drunk through `BogCombat.try_drink_potion` and healed through
 ## `MatchState.report_heal`. Nothing in this mode writes a health field, a stock
 ## count or a channel clock by hand.
-func _drive_potion(player: Gub, combat: GubCombat) -> void:
-	var near := MatchState.gubs.get(DUMMY_BASE) as Gub
-	var far := MatchState.gubs.get(DUMMY_BASE + 1) as Gub
+func _drive_potion(player: Bog, combat: BogCombat) -> void:
+	var near := MatchState.bogs.get(DUMMY_BASE) as Bog
+	var far := MatchState.bogs.get(DUMMY_BASE + 1) as Bog
 	if near == null or far == null:
 		return
-	var far_combat := far.get_node_or_null("Combat") as GubCombat
+	var far_combat := far.get_node_or_null("Combat") as BogCombat
 	if far_combat == null:
 		return
 
@@ -2493,10 +2500,10 @@ func _drive_potion(player: Gub, combat: GubCombat) -> void:
 			if _frames < 12:
 				return
 			# The death point is the *far* dummy's feet, so what rolls out of the
-			# near one's corpse lands under a Gub that can walk into it — the
+			# near one's corpse lands under a Bog that can walk into it — the
 			# trick `_robe_at_the_dummys_feet` uses, and the only way a dummy
 			# with no client behind it ever collects anything.
-			MatchState.report_kill(DUMMY_BASE, 1, Gub.Cause.SPEAR,
+			MatchState.report_kill(DUMMY_BASE, 1, Bog.Cause.SPEAR,
 				far.global_position, Vector3.FORWARD * 18.0, "Spine1")
 			_potion_at = _frames
 			_potion_step = 1
@@ -2512,7 +2519,7 @@ func _drive_potion(player: Gub, combat: GubCombat) -> void:
 			_potion_verdict("drop", "%s's corpse left a potion and %s walked onto it"
 				% [near.display_name, far.display_name])
 
-			# On to the drink. The player is hurt first, because a Gub at full
+			# On to the drink. The player is hurt first, because a Bog at full
 			# health heals nothing and every number below would be zero.
 			_hit(player, POTION_WOUND)
 			combat.grant_potion(2)
@@ -2556,7 +2563,7 @@ func _drive_potion(player: Gub, combat: GubCombat) -> void:
 			# about has had every frame since the keypress to do it in. Read
 			# here and asserted in the next step; `_potion_hands` says why.
 			var fist := player.held_gear
-			_potion_expect(fist != null, "the Gub has no HeldGear at all")
+			_potion_expect(fist != null, "the Bog has no HeldGear at all")
 			_potion_hands.clear()
 			if fist != null:
 				_potion_hands.append_array([fist.has_potion(),
@@ -2578,7 +2585,7 @@ func _drive_potion(player: Gub, combat: GubCombat) -> void:
 			# **A drink empties both hands, with a bottle in one of them.**
 			# D-067 put `not is_channelling()` into `has_spear()` and `has_bow()`
 			# so that the *hand* obeys a drink, and proved it with a sheet of a
-			# Gub raising nothing. Two of these four were true of empty fists
+			# Bog raising nothing. Two of these four were true of empty fists
 			# already; what D-075 adds is the first one, and the first one is
 			# what makes the other four a measurement rather than an absence.
 			if not _potion_hands.is_empty():
@@ -2648,7 +2655,7 @@ func _drive_potion(player: Gub, combat: GubCombat) -> void:
 				% [POTION_INTERRUPT_AT * 100.0, kept, Net.config.heal_amount,
 					_potion_owed])
 
-			# Moving. The harness drives the body itself from here, so the Gub
+			# Moving. The harness drives the body itself from here, so the Bog
 			# stops reading a keyboard that is not there.
 			player.reads_local_input = false
 			player.input_direction = Vector2.ZERO
@@ -2667,7 +2674,7 @@ func _drive_potion(player: Gub, combat: GubCombat) -> void:
 			if _frames - _potion_at < POTION_SETTLE:
 				return
 			_potion_expect(combat.is_channelling(),
-				"the drink was over before the Gub moved")
+				"the drink was over before the Bog moved")
 			player.input_direction = Vector2(0.0, -1.0)
 			player.wants_sprint = true
 			_potion_at = _frames
@@ -2678,8 +2685,8 @@ func _drive_potion(player: Gub, combat: GubCombat) -> void:
 			_potion_expect(not combat.is_channelling(),
 				"running at %.1f m/s did not end the channel"
 					% _flat_speed(player))
-			_potion_expect(_flat_speed(player) > GubCombat.CHANNEL_MOVE_SPEED,
-				"the Gub never got moving: %.2f m/s" % _flat_speed(player))
+			_potion_expect(_flat_speed(player) > BogCombat.CHANNEL_MOVE_SPEED,
+				"the Bog never got moving: %.2f m/s" % _flat_speed(player))
 			_potion_expect(combat.potion_count() == _potion_stock - 1,
 				"the abandoned potion came back")
 			player.input_direction = Vector2.ZERO
@@ -2687,8 +2694,8 @@ func _drive_potion(player: Gub, combat: GubCombat) -> void:
 			_potion_at = _frames
 			_potion_step = 11
 		11:
-			# Stopped, and standing still again, before the lure control.
-			if _flat_speed(player) > GubCombat.CHANNEL_MOVE_SPEED * 0.5:
+			# Stopped, and standing still again, before the magnet control.
+			if _flat_speed(player) > BogCombat.CHANNEL_MOVE_SPEED * 0.5:
 				return
 			_potion_stock = combat.potion_count()
 			combat.try_drink_potion()
@@ -2699,32 +2706,32 @@ func _drive_potion(player: Gub, combat: GubCombat) -> void:
 				return
 			_potion_expect(combat.is_channelling(), "the second drink never started")
 			# **The control, and the edge case the rule was written for.** A
-			# lure drags a Gub without its owner pressing anything, and a rule
+			# magnet drags a Bog without its owner pressing anything, and a rule
 			# about displacement rather than about intent would cancel here —
-			# which would quietly make the lure the best answer to a drink.
-			# `apply_lure` is what a caught Gub's own client receives.
-			player.apply_lure(player.global_position + POTION_LURE_FROM,
-				Net.config.lure_pull_strength, POTION_LURE_HOLD)
+			# which would quietly make the magnet the best answer to a drink.
+			# `apply_magnet` is what a caught Bog's own client receives.
+			player.apply_magnet(player.global_position + POTION_MAGNET_FROM,
+				Net.config.magnet_pull_strength, POTION_MAGNET_HOLD)
 			_potion_at = _frames
 			_potion_step = 13
 		13:
 			if _frames - _potion_at < POTION_SETTLE:
 				return
 			_potion_expect(combat.is_channelling(),
-				"a lure cancelled the drink; it was doing %.2f m/s"
+				"a magnet cancelled the drink; it was doing %.2f m/s"
 					% _flat_speed(player))
-			_potion_expect(_flat_speed(player) > GubCombat.CHANNEL_MOVE_SPEED,
-				"the lure never actually moved it: %.2f m/s" % _flat_speed(player))
+			_potion_expect(_flat_speed(player) > BogCombat.CHANNEL_MOVE_SPEED,
+				"the magnet never actually moved it: %.2f m/s" % _flat_speed(player))
 			_potion_verdict("moved",
-				"running ended the channel at %.2f m/s and a lure dragging it at %.2f did not"
-				% [GubCombat.CHANNEL_MOVE_SPEED, _flat_speed(player)])
+				"running ended the channel at %.2f m/s and a magnet dragging it at %.2f did not"
+				% [BogCombat.CHANNEL_MOVE_SPEED, _flat_speed(player)])
 			_potion_step = 14
 		14:
-			# Everything carried is lost on death (D-032). Two potions on a Gub
+			# Everything carried is lost on death (D-032). Two potions on a Bog
 			# that is about to die, and a fresh life that has none.
 			combat.grant_potion(2)
 			_potion_stock = combat.potion_count()
-			MatchState.report_kill(1, DUMMY_BASE + 1, Gub.Cause.SPEAR,
+			MatchState.report_kill(1, DUMMY_BASE + 1, Bog.Cause.SPEAR,
 				player.body_centre(), Vector3.FORWARD * 6.0, "Spine1")
 			_potion_at = _frames
 			_potion_step = 15
@@ -2757,8 +2764,8 @@ func _note_pickup(item: Pickup) -> void:
 		_potion_seen = true
 
 
-func _flat_speed(gub: Gub) -> float:
-	return Vector3(gub.velocity.x, 0.0, gub.velocity.z).length()
+func _flat_speed(bog: Bog) -> float:
+	return Vector3(bog.velocity.x, 0.0, bog.velocity.z).length()
 
 
 ## The three dials this step added, through `to_dict`/`apply_dict` and out the
@@ -2825,17 +2832,17 @@ func _potion_finish() -> void:
 
 # ------------------------------------------------------------------- embed ---
 
-## A shaft standing in a Gub who is still alive, and then in the corpse that Gub
+## A shaft standing in a Bog who is still alive, and then in the corpse that Bog
 ## becomes (D-062). See the `embed` entry in MODES' notes.
 ##
 ## The spear is launched by hand rather than thrown, and that is the whole
-## design of the mode: `GubCombat` connects its own thrown spears to
+## design of the mode: `BogCombat` connects its own thrown spears to
 ## `report_damage`, so a thrown one would kill what it hit and there would be no
 ## living victim left to ride. Launched here, with nothing listening to
-## `struck_gub`, it lands on a Gub who takes no damage at all — which is exactly
+## `struck_bog`, it lands on a Bog who takes no damage at all — which is exactly
 ## the case every arrow from the bow will be, one step before that bow exists.
-func _drive_embed(player: Gub) -> void:
-	var near := MatchState.gubs.get(DUMMY_BASE) as Gub
+func _drive_embed(player: Bog) -> void:
+	var near := MatchState.bogs.get(DUMMY_BASE) as Bog
 	if near == null:
 		return
 
@@ -2862,8 +2869,8 @@ func _drive_embed(player: Gub) -> void:
 					_embed_finish()
 				return
 			# It has arrived. Move the body, and require the shaft to arrive
-			# with it: a spear parked in the air where a Gub used to be looks
-			# identical to one riding the Gub right up until the Gub moves.
+			# with it: a spear parked in the air where a Bog used to be looks
+			# identical to one riding the Bog right up until the Bog moves.
 			_embed_spear_was = _embed_spear.global_position
 			_embed_body_was = near.global_position
 			near.global_position += EMBED_MOVE
@@ -2894,7 +2901,7 @@ func _drive_embed(player: Gub) -> void:
 				_embed_failures += 1
 				print("combat_range: embed FAIL (%s)" % "; ".join(problems))
 			# Now kill it, and the same shaft has to end up on the corpse.
-			MatchState.report_damage(DUMMY_BASE, 1, Gub.MAX_HEALTH, Gub.Cause.SPEAR,
+			MatchState.report_damage(DUMMY_BASE, 1, Bog.MAX_HEALTH, Bog.Cause.SPEAR,
 				near.body_centre(), Vector3.FORWARD * 14.0, "Spine1")
 			_embed_at = _frames
 			_embed_step = 3
@@ -2910,11 +2917,11 @@ func _drive_embed(player: Gub) -> void:
 					after.append("it is invisible on the corpse")
 			if _corpses() < 1:
 				after.append("there is no corpse")
-			# Nothing may be left waiting on the Gub: a shaft on an invisible
+			# Nothing may be left waiting on the Bog: a shaft on an invisible
 			# list is the bug `SpearProjectile._glance_off` was written to avoid
 			# and the one this whole mechanism could quietly reintroduce.
 			if not near.take_embedded_spears().is_empty():
-				after.append("the Gub is still holding one on its list")
+				after.append("the Bog is still holding one on its list")
 			if after.is_empty():
 				print("combat_range: the corpse took the shaft off the body it was standing in — adopt PASS")
 			else:
@@ -2933,28 +2940,28 @@ func _embed_finish() -> void:
 ##     ... --resolution 1600x900 --script tools/snapshot.gd -- ##         res://tools/combat_range.tscn out/health_plates.png 40 hurt
 ##
 ## Through `report_damage` rather than by writing the field, so what is
-## photographed is the whole path — host, broadcast, `Gub.set_health`, plate —
+## photographed is the whole path — host, broadcast, `Bog.set_health`, plate —
 ## and not a bar this file filled in by hand.
 func _drive_hurt() -> void:
 	if _frames != 12:
 		return
 	var hurt := [38.0, 82.0]
 	for i in hurt.size():
-		var dummy := MatchState.gubs.get(DUMMY_BASE + i) as Gub
+		var dummy := MatchState.bogs.get(DUMMY_BASE + i) as Bog
 		if dummy == null:
 			continue
 		_hit(dummy, hurt[i])
 		print("combat_range: %s is on %.0f of %.0f"
-			% [dummy.display_name, dummy.health, Gub.MAX_HEALTH])
+			% [dummy.display_name, dummy.health, Bog.MAX_HEALTH])
 
 
-## Say what the Gub is holding, so a run means something without opening the
+## Say what the Bog is holding, so a run means something without opening the
 ## PNG. The two halves that must agree are printed together on purpose: a hold
 ## with a spear still in the hand is the bug this mode exists to catch.
-func _report_letter(combat: GubCombat) -> void:
+func _report_letter(combat: BogCombat) -> void:
 	if _frames != 60:
 		return
-	var player := MatchState.gubs.get(1) as Gub
+	var player := MatchState.bogs.get(1) as Bog
 	var hand := player.held_gear if is_instance_valid(player) else null
 	print("combat_range: holding %s with %.1f s left — can throw %s, shaft shown %s, card shown %s" % [
 		MatchState.letter_name(MatchState.letter_hold_letter(1)),
@@ -2964,48 +2971,50 @@ func _report_letter(combat: GubCombat) -> void:
 
 # ------------------------------------------------------------------- cover ---
 
-## Stand a mushroom up in front of a dummy, prove it is cover, prove the proof
+## Stand a shield up in front of a dummy, prove it is cover, prove the proof
 ## means something, and then walk into it.
 ##
 ## Three verdicts out of one run, in this order and for this reason:
 ##
-##   1. `cover`   — a spear thrown at a Gub standing behind a mushroom must not
+##   1. `cover`   — a spear thrown at a Bog standing behind a shield must not
 ##                  kill it.
-##   2. `control` — the *same* throw, after the mushroom has withered, must kill
+##   2. `control` — the *same* throw, after the shield has withered, must kill
 ##                  it. Without this the first verdict is worth nothing: a spear
 ##                  that had stopped killing anybody at all — a broken launch, a
 ##                  dummy that was already dead, a `report_kill` that never
 ##                  arrived — sails straight through "did not die", and the gate
-##                  goes green on a mushroom that stops nothing.
-##   3. `solid`   — a Gub walking into one is held off at the edge of the cap
+##                  goes green on a shield that stops nothing.
+##   3. `solid`   — a Bog walking into one is held off at the face of it
 ##                  instead of wading into the middle of it.
 ##
-## This is the check the mushroom spent its whole life without. The `mushroom`
+## This is the check the shield spent its whole life without. The `shield`
 ## mode above asserts `snapshot: wrote`, which proves a PNG exists, and while it
-## was passing the collision cap sat 31 cm above the head of the tallest thing
-## it was supposed to be hiding, with nothing in a Gub's height band but a
-## 0.55 m post. Nothing anywhere ever asked it to stop anything. See D-039.
-func _drive_cover(player: Gub, combat: GubCombat) -> void:
-	var dummy := MatchState.gubs.get(DUMMY_BASE) as Gub
+## was passing, the mushroom's collision cap sat 31 cm above the head of the
+## tallest thing it was supposed to be hiding, with nothing in a Bog's height
+## band but a 0.55 m post. Nothing anywhere ever asked it to stop anything. See
+## D-039 — and D-079, which is why the thing being profiled is now a slab that
+## starts at the ground.
+func _drive_cover(player: Bog, combat: BogCombat) -> void:
+	var dummy := MatchState.bogs.get(DUMMY_BASE) as Bog
 	if dummy == null:
 		return
 
 	match _cover_step:
 		0:
-			# Late enough for both Gubs to have settled onto the ground, early
-			# enough that the mushroom is standing before anything is aimed.
+			# Late enough for both Bogs to have settled onto the ground, early
+			# enough that the shield is standing before anything is aimed.
 			if _frames < 10:
 				return
-			_cover_mushroom = _plant_a_mushroom(dummy.global_position, PLAYER_SPOT,
+			_cover_shield = _plant_a_shield(dummy.global_position, PLAYER_SPOT,
 				COVER_OFFSET)
 			_cover_step = 1
 		1:
 			# A frame later, and that is not a stylistic pause. A `StaticBody3D`
 			# added to the tree does not exist to the physics server until the
 			# next step, so a ray fired on the frame it was planted reports a
-			# mushroom 0.00 m wide at every height — which is a convincing
+			# shield 0.00 m wide at every height — which is a convincing
 			# picture of exactly the bug being measured, and wrong.
-			_report_cover_profile(_cover_mushroom, dummy, player)
+			_report_cover_profile(_cover_shield, dummy, player)
 			_cover_step = 2
 		2:
 			if _frames < 20:
@@ -3019,14 +3028,14 @@ func _drive_cover(player: Gub, combat: GubCombat) -> void:
 			if dummy.alive:
 				print("combat_range: the spear did not get through — cover PASS")
 			else:
-				print("combat_range: %s died behind a mushroom — cover FAIL"
+				print("combat_range: %s died behind a shield — cover FAIL"
 					% dummy.display_name)
-			# Withered rather than freed: that is what a mushroom does at the
+			# Withered rather than freed: that is what a shield does at the
 			# end of its life, and it is the path the collision layer is
 			# actually cleared on, so the control throw flies through the same
 			# hole a real one would.
-			if is_instance_valid(_cover_mushroom):
-				_cover_mushroom.wither()
+			if is_instance_valid(_cover_shield):
+				_cover_shield.wither()
 			_cover_step = 4
 		4:
 			# On the gate rather than on a frame number, exactly as `lightning`
@@ -3042,12 +3051,12 @@ func _drive_cover(player: Gub, combat: GubCombat) -> void:
 			if _frames < _cover_at + SPEAR_VERDICT_DELAY:
 				return
 			if not dummy.alive:
-				print("combat_range: the same throw with the mushroom gone killed %s — control PASS"
+				print("combat_range: the same throw with the shield gone killed %s — control PASS"
 					% dummy.display_name)
 			else:
 				print("combat_range: nothing was blocking and nobody died — control FAIL")
 			# And now one in the player's own way, to lean on.
-			_cover_mushroom = _plant_a_mushroom(player.global_position,
+			_cover_shield = _plant_a_shield(player.global_position,
 				player.global_position + player.facing() * 10.0, 0.0)
 			Input.action_press("move_forward")
 			_cover_at = _frames
@@ -3061,56 +3070,63 @@ func _drive_cover(player: Gub, combat: GubCombat) -> void:
 			get_tree().quit()
 
 
-## Stand one up the way the ability does: `MUSHROOM_DISTANCE` in front of a Gub,
+## Stand one up the way the ability does: `SHIELD_DISTANCE` in front of a Bog,
 ## along the line to whatever it is taking cover from, on the ground.
 ##
-## Through `ShieldMushroom.plant` and the same packed scene `GubCombat` loads,
-## rather than through `try_place_mushroom`, and the difference is worth being
+## Through `Shield.plant` and the same packed scene `BogCombat` loads,
+## rather than through `try_place_shield`, and the difference is worth being
 ## explicit about because this file's own `_stock` comment is about exactly this
-## kind of shortcut. `try_place_mushroom` reads the *player's* camera and can
+## kind of shortcut. `try_place_shield` reads the *player's* camera and can
 ## only ever put one in front of the player; what this mode needs first is one
 ## in front of the dummy. Everything past the placement — the collision build,
 ## the layer, the eruption, the lifetime — is the shipping code either way, and
-## the `mushroom` mode next door is the one that walks the placement path.
-func _plant_a_mushroom(behind: Vector3, towards: Vector3,
-		offset: float) -> ShieldMushroom:
+## the `shield` mode next door is the one that walks the placement path.
+func _plant_a_shield(behind: Vector3, towards: Vector3,
+		offset: float) -> Shield:
 	var forward := towards - behind
 	forward.y = 0.0
 	forward = forward.normalized()
-	var spot := behind + forward * GubCombat.MUSHROOM_DISTANCE 		+ forward.cross(Vector3.UP) * offset
+	var spot := behind + forward * BogCombat.SHIELD_DISTANCE 		+ forward.cross(Vector3.UP) * offset
 	# The stage is one flat slab at y = 0 (see `_build_ground`), which is what
-	# `_mushroom_spot`'s downward ray would find anyway.
+	# `_shield_spot`'s downward ray would find anyway.
 	spot.y = 0.0
-	var mushroom := MUSHROOM.instantiate() as ShieldMushroom
-	_items.add_child(mushroom)
+	var shield := SHIELD.instantiate() as Shield
+	_items.add_child(shield)
 	# Long enough that nothing in this run is ever waiting on a wither it did
 	# not ask for; step 2 takes the first one away by hand.
-	mushroom.plant(spot, Gub.yaw_towards(-forward), COVER_LIFETIME, 1)
-	return mushroom
+	#
+	# `forward`, not `-forward`, which is what this said while the prop was a
+	# mushroom. `BogCombat._host_place_shield` plants along the planter's own
+	# look direction, so the node's forward points at the enemy; handing this
+	# the opposite turned the shield's braced back to the thrower and its
+	# weathered face to the Bog sheltering behind it. Invisible on something
+	# rotationally symmetric, and the first thing you see on a slab.
+	shield.plant(spot, Bog.yaw_towards(forward), COVER_LIFETIME, 1)
+	return shield
 
 
-## How wide the mushroom actually is, height by height, measured with the
-## physics rather than read off the constants in `shield_mushroom.gd`.
+## How wide the shield actually is, height by height, measured with the
+## physics rather than read off the constants in `shield.gd`.
 ##
-## Rays on the deployable layer alone, so what comes back is the mushroom and
-## nothing else — not the ground it stands on and not the Gub behind it. The
-## bands run well past the top of the cap on purpose: the failure this was
+## Rays on the deployable layer alone, so what comes back is the shield and
+## nothing else — not the ground it stands on and not the Bog behind it. The
+## bands run well past the top of the shield on purpose: the failure this was
 ## written for was a cap that had floated *above* everything it was covering,
-## and a profile that stopped at a Gub's head would have shown an empty column
+## and a profile that stopped at a Bog's head would have shown an empty column
 ## with no explanation in it.
 ##
 ## The last line is the one that answers the question a player would ask. A
 ## profile says how wide the thing is; what anybody standing behind it cares
-## about is how much of *them* it hides, so the silhouette of a standing Gub is
+## about is how much of *them* it hides, so the silhouette of a standing Bog is
 ## sampled point by point along the line to a thrower fourteen metres away and
 ## the share of it that is behind cover is printed as a percentage.
-func _report_cover_profile(mushroom: Node3D, target: Gub, thrower: Gub) -> void:
+func _report_cover_profile(shield: Node3D, target: Bog, thrower: Bog) -> void:
 	var space := get_world_3d().direct_space_state
-	var axis := mushroom.global_position
-	print("combat_range: mushroom collision, measured on layer %d at %.0f cm across."
-		% [ShieldMushroom.LAYER_DEPLOYABLE, PROFILE_SAMPLE * 100.0])
-	print("              A Gub stands 0.00-%.2f m, crouches to %.2f, has its eyes at %.2f,"
-		% [Gub.STAND_HEIGHT, Gub.CROUCH_HEIGHT, thrower.eye_height()])
+	var axis := shield.global_position
+	print("combat_range: shield collision, measured on layer %d at %.0f cm across."
+		% [Shield.LAYER_DEPLOYABLE, PROFILE_SAMPLE * 100.0])
+	print("              A Bog stands 0.00-%.2f m, crouches to %.2f, has its eyes at %.2f,"
+		% [Bog.STAND_HEIGHT, Bog.CROUCH_HEIGHT, thrower.eye_height()])
 	print("              and its antennae reach 1.80 m — above the hitbox, and meant to show.")
 	var y := PROFILE_STEP
 	while y <= PROFILE_TOP:
@@ -3121,31 +3137,31 @@ func _report_cover_profile(mushroom: Node3D, target: Gub, thrower: Gub) -> void:
 		for _i in int(round(width * 10.0)):
 			bar += "#"
 		var note := ""
-		if absf(y - Gub.STAND_HEIGHT) < PROFILE_STEP * 0.5:
-			note = "   <- the top of a standing Gub"
+		if absf(y - Bog.STAND_HEIGHT) < PROFILE_STEP * 0.5:
+			note = "   <- the top of a standing Bog"
 		print("              y %.2f m  %.2f m wide  %s%s" % [y, width, bar, note])
 		y += PROFILE_STEP
 	var eye := thrower.global_position + Vector3.UP * thrower.eye_height()
 	# Two stances, because they are two different questions and only the first
 	# one is flattering. Squarely behind your own cover is what the ability is
 	# for; half a metre out of line is what a fight does to you within a second
-	# of it starting, and it is the number the cap's *width* has to answer.
-	var square := _behind(axis, eye, GubCombat.MUSHROOM_DISTANCE)
-	print("              squarely behind it, a standing Gub is %.0f%% hidden from %.1f m"
+	# of it starting, and it is the number the wall's *width* has to answer.
+	var square := _behind(axis, eye, BogCombat.SHIELD_DISTANCE)
+	print("              squarely behind it, a standing Bog is %.0f%% hidden from %.1f m"
 		% [_hidden_fraction(space, square, eye) * 100.0, eye.distance_to(square)])
 	print("              standing %.2f m out of line, as the dummy is, %.0f%%"
 		% [COVER_OFFSET, _hidden_fraction(space, target.global_position, eye) * 100.0])
 
 
-## The spot `MUSHROOM_DISTANCE` behind a mushroom on the line from the thrower:
-## where a Gub that planted this thing and did not move would be standing.
+## The spot `SHIELD_DISTANCE` behind a shield on the line from the thrower:
+## where a Bog that planted this thing and did not move would be standing.
 func _behind(axis: Vector3, eye: Vector3, distance: float) -> Vector3:
 	var away := axis - eye
 	away.y = 0.0
 	return axis + away.normalized() * distance
 
 
-## How much of the mushroom is in the way at one height, in metres, found by
+## How much of the shield is in the way at one height, in metres, found by
 ## firing a comb of rays straight through it.
 func _blocked_width(space: PhysicsDirectSpaceState3D, axis: Vector3, y: float) -> float:
 	var blocked := 0
@@ -3154,19 +3170,19 @@ func _blocked_width(space: PhysicsDirectSpaceState3D, axis: Vector3, y: float) -
 		var query := PhysicsRayQueryParameters3D.create(
 			Vector3(axis.x + dx, y, axis.z + 4.0),
 			Vector3(axis.x + dx, y, axis.z - 4.0))
-		query.collision_mask = ShieldMushroom.LAYER_DEPLOYABLE
+		query.collision_mask = Shield.LAYER_DEPLOYABLE
 		if not space.intersect_ray(query).is_empty():
 			blocked += 1
 		dx += PROFILE_SAMPLE
 	return blocked * PROFILE_SAMPLE
 
 
-## What share of a standing Gub a thrower cannot see, because the mushroom is in
+## What share of a standing Bog a thrower cannot see, because the shield is in
 ## the way.
 ##
 ## The silhouette is the collision capsule rather than the mesh, because the
-## capsule is what a spear can actually hit: a Gub is 1.80 m of model inside
-## 1.55 m of hitbox (see `Gub.STAND_HEIGHT`), and the 25 cm of head and antennae
+## capsule is what a spear can actually hit: a Bog is 1.80 m of model inside
+## 1.55 m of hitbox (see `Bog.STAND_HEIGHT`), and the 25 cm of head and antennae
 ## above it are exactly the part that is *supposed* to be showing over the top of
 ## cover. The half-widths follow the capsule's real shape, hemispheres included,
 ## so the samples near the feet and the crown are not counted as though the body
@@ -3178,59 +3194,62 @@ func _hidden_fraction(space: PhysicsDirectSpaceState3D, at: Vector3,
 	# Across the line of sight, so the samples sweep the silhouette rather than
 	# some arbitrary slice through it.
 	var across := flat.normalized().cross(Vector3.UP)
-	var radius := Gub.CAPSULE_RADIUS
+	var radius := Bog.CAPSULE_RADIUS
 	var samples := 0
 	var hidden := 0
 	for row in SILHOUETTE_ROWS:
-		var y := (row + 0.5) / float(SILHOUETTE_ROWS) * Gub.STAND_HEIGHT
+		var y := (row + 0.5) / float(SILHOUETTE_ROWS) * Bog.STAND_HEIGHT
 		# The capsule narrows into a hemisphere at each end; anywhere between
 		# them it is a cylinder at full width.
 		var half := radius
 		if y < radius:
 			half = sqrt(maxf(0.0, radius * radius - (radius - y) * (radius - y)))
-		elif y > Gub.STAND_HEIGHT - radius:
-			var above := y - (Gub.STAND_HEIGHT - radius)
+		elif y > Bog.STAND_HEIGHT - radius:
+			var above := y - (Bog.STAND_HEIGHT - radius)
 			half = sqrt(maxf(0.0, radius * radius - above * above))
 		for col in SILHOUETTE_COLS:
 			var t := (col + 0.5) / float(SILHOUETTE_COLS) * 2.0 - 1.0
 			var point := at + Vector3.UP * y + across * (t * half)
 			var query := PhysicsRayQueryParameters3D.create(eye, point)
-			query.collision_mask = ShieldMushroom.LAYER_DEPLOYABLE
+			query.collision_mask = Shield.LAYER_DEPLOYABLE
 			samples += 1
 			if not space.intersect_ray(query).is_empty():
 				hidden += 1
 	return float(hidden) / float(samples) if samples > 0 else 0.0
 
 
-## How close the walking Gub has come to the middle of the mushroom in its way.
+## How close the walking Bog has come to the middle of the shield in its way.
 ##
 ## A running minimum rather than a final position, because a `CharacterBody3D`
-## pressed into a cylinder slides around it: where the Gub ends up says nothing
+## pressed into a cylinder slides around it: where the Bog ends up says nothing
 ## about whether it was stopped, and how far in it ever got says everything.
-func _watch_cover_approach(player: Gub) -> void:
-	if not is_instance_valid(_cover_mushroom):
+func _watch_cover_approach(player: Bog) -> void:
+	if not is_instance_valid(_cover_shield):
 		return
-	var axis := _cover_mushroom.global_position
+	var axis := _cover_shield.global_position
 	_cover_closest = minf(_cover_closest, Vector2(
 		player.global_position.x - axis.x,
 		player.global_position.z - axis.z).length())
 
 
-## Was the Gub held off by the cap, or did it walk in under it?
+## Was the Bog held off by the boards, or did it walk through them?
 ##
-## The threshold is derived from the two radii rather than typed in, so it
-## follows the constants instead of having to be remembered alongside them.
-## What it is really asking is *where* the solid part of the mushroom is: a Gub
-## that gets within its own width of the axis has found nothing at its own
-## height but the stem, which is the bug this whole mode exists for.
+## The threshold is derived from the shape rather than typed in, so it follows
+## the constants instead of having to be remembered alongside them. The walk is
+## straight into the face of the wall, so the contact distance is half the
+## slab's thickness plus the capsule's radius — 0.16 + 0.38 — and what this is
+## really asking is *where* the solid part of the shield is. A Bog that gets
+## inside that has found a hole at its own height, which is the bug this whole
+## mode exists for: the mushroom's answer here was 0.66 m into a cap 2.06 m
+## across, because everything in a Bog's height band was a 0.55 m stem.
 func _report_cover_solid() -> void:
-	var hold_off := ShieldMushroom.CAP_RADIUS + Gub.CAPSULE_RADIUS - COVER_HOLD_OFF_SLACK
+	var hold_off := Shield.BOX_DEPTH * 0.5 + Bog.CAPSULE_RADIUS - COVER_HOLD_OFF_SLACK
 	if _cover_closest >= hold_off:
 		print("combat_range: walked into it and was held %.2f m off the middle (wanted %.2f) — solid PASS"
 			% [_cover_closest, hold_off])
 	else:
-		print("combat_range: walked to %.2f m of the middle of a cap %.2f m across — solid FAIL"
-			% [_cover_closest, ShieldMushroom.CAP_RADIUS * 2.0])
+		print("combat_range: walked to %.2f m of the middle of a wall %.2f m thick — solid FAIL"
+			% [_cover_closest, Shield.BOX_DEPTH])
 
 
 # ---------------------------------------------------------------- recharge ---
@@ -3248,7 +3267,7 @@ func _report_cover_solid() -> void:
 ## That is what tells one or two frames of ordinary repaint lag apart from a
 ## shaft that is never coming back, which is the only distinction that matters
 ## here: "not reliably" is a duration, not a boolean.
-func _drive_recharge(player: Gub, combat: GubCombat) -> void:
+func _drive_recharge(player: Bog, combat: BogCombat) -> void:
 	var hand := player.held_gear
 	if hand == null or _frames < 20:
 		return
@@ -3278,7 +3297,7 @@ func _drive_recharge(player: Gub, combat: GubCombat) -> void:
 		_hand_out_of_step = 0
 
 	# Armed with a spear in hand: one good cycle. The first time round that is
-	# only the state a Gub spawns in, so it is not counted as a regrow.
+	# only the state a Bog spawns in, so it is not counted as a regrow.
 	if _recharge_thrown > 0:
 		_recharge_cycles += 1
 	_recharge_thrown += 1
@@ -3299,7 +3318,7 @@ func _drive_recharge(player: Gub, combat: GubCombat) -> void:
 ## the game reaches in and does this to itself; this is the fault stated
 ## directly rather than waited for, and it is the half of this check that cannot
 ## pass by luck.
-func _drive_desync(combat: GubCombat, hand: HeldGear) -> void:
+func _drive_desync(combat: BogCombat, hand: HeldGear) -> void:
 	if _desync_at == 0:
 		if not combat.has_spear() or not hand.is_carried():
 			return
@@ -3326,9 +3345,9 @@ func _drive_desync(combat: GubCombat, hand: HeldGear) -> void:
 ## the whole of D-025 is that the duration is the thing that was wrong. It is
 ## also the only check anywhere that reads the *animation* rather than the
 ## constant derived from it: `_hand_reach` walks the built skeleton, so a window
-## edited in `gub_animator.gd` without `THROW_RELEASE_TIME` following it lands
+## edited in `bog_animator.gd` without `THROW_RELEASE_TIME` following it lands
 ## the shaft somewhere the hand is not, and says so.
-func _drive_release(player: Gub, combat: GubCombat) -> void:
+func _drive_release(player: Bog, combat: BogCombat) -> void:
 	var hand := player.held_gear
 	if hand == null:
 		return
@@ -3363,14 +3382,14 @@ func _drive_release(player: Gub, combat: GubCombat) -> void:
 
 ## How far in front of the hips the throwing hand is, in metres.
 ##
-## Off the skeleton's own pose and projected onto the Gub's facing, which is the
-## same quantity `tools/hand_track.gd` prints and `tools/build_gub.py` reports
+## Off the skeleton's own pose and projected onto the Bog's facing, which is the
+## same quantity `tools/hand_track.gd` prints and `tools/build_bog.py` reports
 ## as "furthest forward" — so the frame this peaks on is the frame
-## `GubAnimator.THROW_RELEASE_IN_CLIP` was cut from, arrived at from a different
+## `BogAnimator.THROW_RELEASE_IN_CLIP` was cut from, arrived at from a different
 ## direction. Global rather than skeleton-local on purpose: which skeleton axis
 ## points forward is a fact about how the GLB was exported, and `facing()` is a
 ## fact about the game.
-func _hand_reach(player: Gub) -> float:
+func _hand_reach(player: Bog) -> float:
 	if _release_skeleton == null:
 		_release_skeleton = player.find_child("Skeleton3D", true, false) as Skeleton3D
 		if _release_skeleton == null:
@@ -3396,7 +3415,7 @@ func _hand_reach(player: Gub) -> float:
 ## hip-relative maximum arriving during the recovery, 0.35 s of clip too late.
 ## One function with a flag in it would have had to carry both rules anyway, and
 ## the flag is the thing that would rot.
-func _drive_cast(player: Gub, combat: GubCombat) -> void:
+func _drive_cast(player: Bog, combat: BogCombat) -> void:
 	if _cast_clicked == 0:
 		# The robe is put on by hand rather than dropped and walked over: what
 		# this mode is about is one tick of one animation, and `lightning` is
@@ -3472,8 +3491,8 @@ func _drive_cast(player: Gub, combat: GubCombat) -> void:
 ## reports it left at. So a curve that quietly went linear, a drop that stopped
 ## interpolating, or a charge the host clamped to nothing all fail here, and
 ## they fail with the number they produced printed beside the number they owed.
-func _drive_bow(player: Gub, combat: GubCombat) -> void:
-	var dummy := MatchState.gubs.get(DUMMY_BASE) as Gub
+func _drive_bow(player: Bog, combat: BogCombat) -> void:
+	var dummy := MatchState.bogs.get(DUMMY_BASE) as Bog
 	if dummy == null:
 		return
 	var elapsed := _frames - _bow_at
@@ -3556,7 +3575,7 @@ func _bow_next(step: int) -> void:
 
 ## Gather the arrow's flight and wait for it to land. True when there is
 ## something to report, whether that is a hit or a timeout.
-func _bow_collect(dummy: Gub) -> bool:
+func _bow_collect(dummy: Bog) -> bool:
 	if _bow_arrow != null and is_instance_valid(_bow_arrow) \
 			and not _bow_arrow.is_stuck() \
 			and _bow_samples.size() < BOW_FLIGHT_SAMPLES:
@@ -3595,10 +3614,10 @@ func _fit_flight() -> Dictionary:
 		drop += (vy[i - 1] - vy[i]) / dt
 	drop /= float(maxi(vy.size() - 1, 1))
 	var speed := Vector2(horizontal, vy[0] + drop * dt * 0.5).length()
-	return {"speed": speed, "drop": drop, "band": GubCombat.flat_band(speed, drop)}
+	return {"speed": speed, "drop": drop, "band": BogCombat.flat_band(speed, drop)}
 
 
-func _report_bow_shot(label: String, dummy: Gub, low: float, high: float) -> void:
+func _report_bow_shot(label: String, dummy: Bog, low: float, high: float) -> void:
 	if _bow_arrow == null:
 		_bow_fail(label, "no arrow was ever loosed")
 		return
@@ -3640,14 +3659,14 @@ func _bow_fail(label: String, why: String) -> void:
 	print("combat_range: %s FAIL — %s" % [label, why])
 
 
-## The charge as a **tell**, on a Gub nobody is driving (D-065).
+## The charge as a **tell**, on a Bog nobody is driving (D-065).
 ##
 ## This is the half of the bow that `bow` cannot reach. Everything that makes
-## the draw a number works on the local Gub by construction — the client that is
+## the draw a number works on the local Bog by construction — the client that is
 ## holding the key computes the charge and hands it to its own animator — and
-## none of that says a word about the seven Gubs whose charge has to arrive over
+## none of that says a word about the seven Bogs whose charge has to arrive over
 ## a wire. D-025's rule is that a tell only the attacker can see is not a tell,
-## and the only way to check that here is to have a remote Gub in the room.
+## and the only way to check that here is to have a remote Bog in the room.
 ##
 ## The dummy is exactly that: a roster entry with no client behind it, so the
 ## mode *is* its client, and all it publishes is `sync_draw` — the one float the
@@ -3657,20 +3676,20 @@ func _bow_fail(label: String, why: String) -> void:
 ## What is compared is the **draw length**: the distance from the bow fist to
 ## the drawing fist. Not the hand's position relative to the hips, which was the
 ## first attempt and is the wrong quantity — everything below `Spine1` comes
-## from the locomotion underneath (D-029), so two Gubs a few frames out of phase
+## from the locomotion underneath (D-029), so two Bogs a few frames out of phase
 ## in the same idle cycle disagree about it without disagreeing about the draw.
 ## The distance between two bones the layer fully owns is the thing the eye
 ## actually reads, and it is invariant to every part of this that is not the bow.
-func _drive_draw(player: Gub, combat: GubCombat) -> void:
-	var dummy := MatchState.gubs.get(DUMMY_BASE) as Gub
+func _drive_draw(player: Bog, combat: BogCombat) -> void:
+	var dummy := MatchState.bogs.get(DUMMY_BASE) as Bog
 	if dummy == null:
 		return
 	if _draw_step == 0:
 		if _frames < 20:
 			return
 		# Beside the player rather than down the range, because this mode's
-		# picture is the two of them together: the Gub you are driving and the
-		# Gub you are watching, at the same charge, from the same float.
+		# picture is the two of them together: the Bog you are driving and the
+		# Bog you are watching, at the same charge, from the same float.
 		dummy.revive_at(_facing(DRAW_DUMMY_SPOT, DRAW_DUMMY_SPOT + Vector3(0.0, 0.0, -10.0)))
 		_stand_still(dummy)
 		combat.try_draw_bow()
@@ -3679,7 +3698,7 @@ func _drive_draw(player: Gub, combat: GubCombat) -> void:
 		return
 
 	# The dummy's imaginary client, publishing once a frame. Nothing else about
-	# this Gub is ever written: if the pose appears, one float is what did it.
+	# this Bog is ever written: if the pose appears, one float is what did it.
 	dummy.sync_draw = player.draw_fraction()
 
 	if _draw_step > DRAW_LEVELS.size():
@@ -3701,12 +3720,12 @@ func _drive_draw(player: Gub, combat: GubCombat) -> void:
 	get_tree().quit()
 
 
-## How far this Gub's string is back, in metres of skeleton: the gap between the
+## How far this Bog's string is back, in metres of skeleton: the gap between the
 ## two fists. Both bones are above `Spine1` and so both are entirely the draw
 ## layer's, which is what makes this the one reading that says something about
 ## the bow and nothing about the legs.
-func _draw_length(gub: Gub) -> float:
-	var skeleton := gub.find_child("Skeleton3D", true, false) as Skeleton3D
+func _draw_length(bog: Bog) -> float:
+	var skeleton := bog.find_child("Skeleton3D", true, false) as Skeleton3D
 	if skeleton == null:
 		return -1.0
 	var left := skeleton.find_bone(HeldGear.BOW_HAND_BONE)
@@ -3717,7 +3736,7 @@ func _draw_length(gub: Gub) -> float:
 		skeleton.get_bone_global_pose(right).origin)
 
 
-## Where the composed bow is actually pointing, in degrees off the Gub's own
+## Where the composed bow is actually pointing, in degrees off the Bog's own
 ## facing.
 ##
 ## Printed rather than asserted, and it is the number to read if the bow ever
@@ -3731,32 +3750,32 @@ func _draw_length(gub: Gub) -> float:
 ##
 ## It does not decide where an arrow goes. That is read from the camera at the
 ## release and has never come from the body (D-025, D-045).
-func _aim_offset(gub: Gub) -> float:
-	var hands := _hand_attachments(gub)
+func _aim_offset(bog: Bog) -> float:
+	var hands := _hand_attachments(bog)
 	if hands.is_empty():
 		return 0.0
 	var along: Vector3 = hands[0].global_position - hands[1].global_position
 	var flat := Vector3(along.x, 0.0, along.z)
 	if flat.length_squared() < 0.0001:
 		return 0.0
-	return rad_to_deg(flat.normalized().signed_angle_to(gub.facing(), Vector3.UP))
+	return rad_to_deg(flat.normalized().signed_angle_to(bog.facing(), Vector3.UP))
 
 
 ## The two `BoneAttachment3D`s `HeldGear` hangs the bow and the arrow off, bow
-## hand first — or an empty array on a Gub that has not been given gear.
+## hand first — or an empty array on a Bog that has not been given gear.
 ##
 ## **Read off the attachments and not off `Skeleton3D.get_bone_global_pose`**,
 ## which is the thing D-066 had to find out the hard way. A `SkeletonModifier3D`
 ## writes into the pose the skin is built from and the skeleton then restores
 ## the animation's own pose behind it, so that the next frame starts clean —
 ## which means a bone pose read from `_physics_process` is the pose *before*
-## `GubAim` turned the torso, every time, and a check reading it would have gone
-## on reporting 91° at a Gub whose bow was pointing straight down the range.
+## `BogAim` turned the torso, every time, and a check reading it would have gone
+## on reporting 91° at a Bog whose bow was pointing straight down the range.
 ## `BoneAttachment3D` updates off `skeleton_updated`, which fires after the
 ## modifier stack, so these two nodes are where the props actually are — which
 ## is also the only thing a player can see.
-func _hand_attachments(gub: Gub) -> Array[Node3D]:
-	var skeleton := gub.find_child("Skeleton3D", true, false) as Skeleton3D
+func _hand_attachments(bog: Bog) -> Array[Node3D]:
+	var skeleton := bog.find_child("Skeleton3D", true, false) as Skeleton3D
 	if skeleton == null:
 		return []
 	var bow := skeleton.get_node_or_null("BowHand") as Node3D
@@ -3766,17 +3785,17 @@ func _hand_attachments(gub: Gub) -> Array[Node3D]:
 	return [bow, draw_hand]
 
 
-## Whether `gub.tscn` actually puts a field on the wire.
+## Whether `bog.tscn` actually puts a field on the wire.
 ##
 ## Off the live node rather than off the file, because what matters is what the
 ## synchroniser was handed — a property list edited in the scene and a
 ## synchroniser pointed at a different `SceneReplicationConfig` are two
 ## different bugs and only this catches both.
 func _replicates(field: String) -> bool:
-	var gub := MatchState.gubs.get(1) as Gub
-	if gub == null:
+	var bog := MatchState.bogs.get(1) as Bog
+	if bog == null:
 		return false
-	var sync := gub.get_node_or_null("Sync") as MultiplayerSynchronizer
+	var sync := bog.get_node_or_null("Sync") as MultiplayerSynchronizer
 	if sync == null or sync.replication_config == null:
 		return false
 	for path: NodePath in sync.replication_config.get_properties():
@@ -3803,11 +3822,11 @@ func _replicates(field: String) -> bool:
 ## `STRAFE_PLANT_HEIGHT`, only decorates the report with how much of each leg
 ## had a foot actually down.
 ##
-## The Gub is held facing one way with `set_view_basis(..., true, ...)`, which
+## The Bog is held facing one way with `set_view_basis(..., true, ...)`, which
 ## is the same flag the camera raises while somebody is aiming — so this is not
 ## an artificial pose, it is the pose this whole weapon set is used in.
 func _drive_strafe() -> void:
-	var player := MatchState.gubs.get(1) as Gub
+	var player := MatchState.bogs.get(1) as Bog
 	if player == null:
 		return
 	var rig := player.get_node_or_null("CameraRig")
@@ -3873,11 +3892,11 @@ func _drive_strafe() -> void:
 
 ## One tick of one leg: both toes in world space, and the slower of the two.
 ##
-## The toes are read off `get_bone_global_pose`, which on a Gub that is not
-## drawing is the whole pose — `GubAim` is the only modifier on this skeleton
+## The toes are read off `get_bone_global_pose`, which on a Bog that is not
+## drawing is the whole pose — `BogAim` is the only modifier on this skeleton
 ## and its weight is zero unless a bow is up. (If that ever stops being true,
 ## this has to move to the attachments the way `_aim_offset` did.)
-func _sample_strafe(player: Gub) -> void:
+func _sample_strafe(player: Bog) -> void:
 	var skeleton := player.find_child("Skeleton3D", true, false) as Skeleton3D
 	if skeleton == null:
 		return
@@ -3995,7 +4014,7 @@ func _report_strafe() -> void:
 		_strafe_fail("mirror", "%s — %.2f apart, past the %.2f limit"
 			% [mirror_where, worst_mirror, STRAFE_MIRROR_LIMIT])
 
-	# The control, and it is one that has to come out *badly*. A crouching Gub
+	# The control, and it is one that has to come out *badly*. A crouching Bog
 	# is still on one clip behind a one-dimensional space, which is what every
 	# direction was before this step; if its bearings do not disagree with each
 	# other then this measurement cannot see a skate at all and the sixteen
@@ -4019,33 +4038,33 @@ func _strafe_fail(label: String, why: String) -> void:
 
 # ------------------------------------------------------------ the pictures ---
 
-## Eight Gubs in a row, each running a different way while facing the camera,
+## Eight Bogs in a row, each running a different way while facing the camera,
 ## and five holding a full draw at five different pitches (D-066).
 ##
 ## These are the two frames the user judges this step by, and both of them are
-## built out of **replicated fields on dummies** rather than by driving one Gub
+## built out of **replicated fields on dummies** rather than by driving one Bog
 ## and photographing it eight times. That is not a shortcut, it is the sharper
 ## version of the check: a dummy is a roster entry with no client behind it, so
 ## the only things these modes write are the handful of `sync_*` floats a real
 ## client would have sent. If the poses appear, they appear for the reason they
 ## have to appear on somebody else's screen (D-025, D-065).
 func _drive_lineup(rows: Array) -> void:
-	# The Gub this testbed normally drives stands in the middle of the range and
+	# The Bog this testbed normally drives stands in the middle of the range and
 	# has nothing to do with either row, so it is simply not in the picture.
 	# Hidden rather than moved: the floor ends not far behind the camera, and a
 	# subject walked off it to get out of shot is a subject falling into the
 	# void through the whole exposure.
-	var player := MatchState.gubs.get(1) as Gub
+	var player := MatchState.bogs.get(1) as Bog
 	if player != null:
 		player.visible = false
 	for i in rows.size():
-		var dummy := MatchState.gubs.get(DUMMY_BASE + i) as Gub
+		var dummy := MatchState.bogs.get(DUMMY_BASE + i) as Bog
 		if dummy == null:
 			continue
 		var row: Dictionary = rows[i]
 		var spot: Vector3 = row["spot"]
 		dummy.sync_position = spot
-		dummy.sync_yaw = Gub.yaw_towards(row["look"] as Vector3)
+		dummy.sync_yaw = Bog.yaw_towards(row["look"] as Vector3)
 		dummy.sync_grounded = true
 		dummy.sync_crouching = false
 		dummy.sync_sliding = false
@@ -4056,7 +4075,7 @@ func _drive_lineup(rows: Array) -> void:
 			dummy.revive_at(Transform3D(Basis(Vector3.UP, dummy.sync_yaw), spot))
 
 
-## The strafing row: the eight compass bearings, every Gub facing the camera, so
+## The strafing row: the eight compass bearings, every Bog facing the camera, so
 ## what a column shows is one direction's cycle and what the row shows is how
 ## differently the plane poses them.
 func _strafing_rows() -> Array:
@@ -4065,20 +4084,20 @@ func _strafing_rows() -> Array:
 		var heading: Vector2 = STRAFE_COMPASS[i][1]
 		var spot := LINEUP_FIRST + Vector3(LINEUP_STEP * float(i), 0.0, 0.0)
 		# Facing the camera, which is down +Z here, so the row is read the way
-		# the keys are: a Gub strafing to *its* left moves to the viewer's right.
+		# the keys are: a Bog strafing to *its* left moves to the viewer's right.
 		var look := Vector3.BACK
 		var forward := -look
 		var right := Vector3(-forward.z, 0.0, forward.x)
 		var wish := (right * heading.x + forward * -heading.y).normalized()
 		rows.append({
-			"spot": spot, "look": look, "velocity": wish * Gub.RUN_SPEED,
+			"spot": spot, "look": look, "velocity": wish * Bog.RUN_SPEED,
 			"draw": -1.0, "pitch": 0.0,
 		})
 	return rows
 
 
-## The aiming row: five full draws at five pitches, every Gub side-on, because
-## the whole subject is how far the torso has tipped and a Gub photographed
+## The aiming row: five full draws at five pitches, every Bog side-on, because
+## the whole subject is how far the torso has tipped and a Bog photographed
 ## head-on has tipped by nothing at all.
 func _aiming_rows() -> Array:
 	var rows: Array = []
@@ -4099,11 +4118,11 @@ func _aiming_rows() -> Array:
 ## horizon and then from `PITCH_MIN` to `PITCH_MAX`. Three things come out of
 ## it, and the third is the one that had to be asserted rather than believed.
 func _drive_spine() -> void:
-	var player := MatchState.gubs.get(1) as Gub
+	var player := MatchState.bogs.get(1) as Bog
 	if player == null:
 		return
-	var rig := player.get_node_or_null("CameraRig") as GubCamera
-	var combat := player.get_node_or_null("Combat") as GubCombat
+	var rig := player.get_node_or_null("CameraRig") as BogCamera
+	var combat := player.get_node_or_null("Combat") as BogCombat
 	if rig == null or combat == null:
 		return
 	player.reads_local_input = false
@@ -4126,13 +4145,13 @@ func _drive_spine() -> void:
 			var yaw := 0.0
 			if _spine_sample < SPINE_YAWS:
 				# Round the horizon at a level view. The body follows, because a
-				# drawing Gub faces its own crosshair (`_face_view`), so this is
+				# drawing Bog faces its own crosshair (`_face_view`), so this is
 				# also a test that the correction is a *body-relative* rotation
 				# and not a world-space one that happens to work at yaw zero.
 				yaw = TAU * float(_spine_sample) / float(SPINE_YAWS)
 			else:
 				var step := _spine_sample - SPINE_YAWS
-				pitch = lerpf(GubCamera.PITCH_MIN, GubCamera.PITCH_MAX,
+				pitch = lerpf(BogCamera.PITCH_MIN, BogCamera.PITCH_MAX,
 					float(step) / float(SPINE_PITCHES - 1))
 			rig.set_view(yaw, pitch)
 			if elapsed < SPINE_SETTLE:
@@ -4148,7 +4167,7 @@ func _drive_spine() -> void:
 			_spine_at = _frames
 			if _spine_sample >= samples:
 				_report_spine_sweep()
-				rig.set_view(0.0, GubCamera.PITCH_MIN)
+				rig.set_view(0.0, BogCamera.PITCH_MIN)
 				_spine_next(3)
 		3:  # the first of two shots, at the bottom of the pitch range
 			if elapsed < SPINE_SETTLE:
@@ -4165,10 +4184,10 @@ func _drive_spine() -> void:
 			# a reason that had nothing to do with the spine.
 			if _spine_shots.is_empty() and elapsed < SPINE_PATIENCE:
 				return
-			rig.set_view(0.0, GubCamera.PITCH_MAX)
+			rig.set_view(0.0, BogCamera.PITCH_MAX)
 			_spine_next(5)
 		5:  # let the bow come back, then draw again at the top of the range
-			rig.set_view(0.0, GubCamera.PITCH_MAX)
+			rig.set_view(0.0, BogCamera.PITCH_MAX)
 			# Asked every tick until it takes, which is what a player holding
 			# the key does. One call on the frame `has_bow` first says yes is a
 			# frame earlier than the draw's own gate opens — the client spends
@@ -4203,8 +4222,8 @@ func _spine_next(step: int) -> void:
 ## How far above the horizon the composed bow is pointing, in degrees. The same
 ## line `_aim_offset` measures the bearing of — the two fists, off the
 ## attachments the props actually hang from — asked about its rise instead.
-func _bow_elevation(gub: Gub) -> float:
-	var hands := _hand_attachments(gub)
+func _bow_elevation(bog: Bog) -> float:
+	var hands := _hand_attachments(bog)
 	if hands.is_empty():
 		return 0.0
 	var along: Vector3 = hands[0].global_position - hands[1].global_position
@@ -4218,11 +4237,11 @@ func _bow_elevation(gub: Gub) -> float:
 ## at the sky as it is looking at the horizon.
 ##
 ## The crosshair's own direction comes from `aim_ray`, which is the *unobstructed*
-## camera's (D-045) and is the same vector `GubCombat` reads at the release, so
+## camera's (D-045) and is the same vector `BogCombat` reads at the release, so
 ## this compares the bow against the thing the arrow will actually follow rather
 ## than against the angles the mode happened to ask for.
-func _bow_off_crosshair(gub: Gub, rig: GubCamera) -> float:
-	var hands := _hand_attachments(gub)
+func _bow_off_crosshair(bog: Bog, rig: BogCamera) -> float:
+	var hands := _hand_attachments(bog)
 	if hands.is_empty():
 		return 0.0
 	var along: Vector3 = hands[0].global_position - hands[1].global_position
@@ -4300,7 +4319,7 @@ func _report_spine_release() -> void:
 	var moved: float = (a["origin"] as Vector3).distance_to(b["origin"])
 	var turned := rad_to_deg((a["direction"] as Vector3)
 		.angle_to(b["direction"] as Vector3))
-	var swept := rad_to_deg(GubCamera.PITCH_MAX - GubCamera.PITCH_MIN)
+	var swept := rad_to_deg(BogCamera.PITCH_MAX - BogCamera.PITCH_MIN)
 	var fails: Array[String] = []
 	if moved > SPINE_RELEASE_TOLERANCE:
 		fails.append("the release point moved %.4f m between them" % moved)
@@ -4345,28 +4364,28 @@ func _report_draw() -> void:
 			% [row["charge"], row["local"], row["remote"], apart, row["aim"]])
 	var spread := high - low
 	var fails: Array[String] = []
-	# The one part of this a testbed cannot reach by playing the game. Every Gub
+	# The one part of this a testbed cannot reach by playing the game. Every Bog
 	# here is in one process on an `OfflineMultiplayerPeer`, so `sync_draw` is
 	# read straight off the object and the `MultiplayerSynchronizer` never sees
 	# it — which means the rows above would pass just as happily on a build that
-	# had forgotten to list the field in `gub.tscn`'s replication config, and
+	# had forgotten to list the field in `bog.tscn`'s replication config, and
 	# the bow's tell would be invisible to every real client and to nothing else.
 	# So the list is read and asked directly. It is the same class of omission
 	# `MatchConfig._FIELDS` has, one layer down.
 	if not _replicates("sync_draw"):
-		fails.append("sync_draw is not in gub.tscn's replication config, "
+		fails.append("sync_draw is not in bog.tscn's replication config, "
 			+ "so nothing about the draw would ever leave this machine")
 	if _draw_rows.size() < DRAW_LEVELS.size():
 		fails.append("only %d of %d charge levels were reached"
 			% [_draw_rows.size(), DRAW_LEVELS.size()])
 	if worst > DRAW_TOLERANCE:
-		fails.append("the remote Gub was %.3f m out at its worst" % worst)
-	# The control, in D-039's sense: two Gubs standing still agree perfectly.
+		fails.append("the remote Bog was %.3f m out at its worst" % worst)
+	# The control, in D-039's sense: two Bogs standing still agree perfectly.
 	if spread < DRAW_SPREAD_MIN:
 		fails.append("the draw only moved the hands %.3f m, so agreeing means nothing"
 			% spread)
 	if fails.is_empty():
-		print("combat_range: a remote Gub drew the same bow, %.4f m out at worst over %.2f m of pull — draw PASS"
+		print("combat_range: a remote Bog drew the same bow, %.4f m out at worst over %.2f m of pull — draw PASS"
 			% [worst, spread])
 		return
 	print("combat_range: draw FAIL — %s" % "; ".join(fails))
@@ -4419,7 +4438,7 @@ func _report_release() -> void:
 		print("combat_range: clicked on tick %d and no spear ever appeared — release FAIL"
 			% _release_clicked)
 		return
-	var want := GubAnimator.THROW_RELEASE_TIME
+	var want := BogAnimator.THROW_RELEASE_TIME
 	var got := (_release_spear_ms - _release_clicked_ms) * 0.001
 	var frame := 1.0 / 60.0
 	var drift := absf(got - want)
@@ -4459,31 +4478,31 @@ func _report_recharge() -> void:
 				else "it took %d frames to notice" % _desync_recovered))
 
 
-## Put one mushroom and one lure in the Gub's hands.
+## Put one shield and one magnet in the Bog's hands.
 ##
 ## This is the testbed supplying by hand something the real game supplies some
 ## other way, which is the exact shape of every integration bug this project has
 ## had (D-018, D-019) — so it is worth saying plainly what is *not* being
-## checked here. A Gub spawns with nothing now and everything it gets comes off
+## checked here. A Bog spawns with nothing now and everything it gets comes off
 ## a corpse (D-032), so between `MatchState._drop_loot`, the `Pickup` area and
 ## `MatchState.claim_pickup` there is a whole path from "somebody died" to
-## "somebody is holding a mushroom" that this call steps over. `playthrough` is
+## "somebody is holding a shield" that this call steps over. `playthrough` is
 ## what walks it: it kills people in a real arena, which is what makes drops
 ## spawn at all.
 ##
-## It goes through `grant_mushroom`/`grant_lure` rather than poking a counter,
+## It goes through `grant_shield`/`grant_magnet` rather than poking a counter,
 ## so what it hands out arrives the same way a pickup's would — host-side, and
 ## broadcast.
-func _stock(combat: GubCombat) -> void:
-	combat.grant_mushroom(1)
-	combat.grant_lure(1)
+func _stock(combat: BogCombat) -> void:
+	combat.grant_shield(1)
+	combat.grant_magnet(1)
 
 
 ## Say where the ring ended up. A still frame shows a yellow circle on some
 ## dirt; only a number says whether that dirt is the dirt the ballistics picked,
 ## and the gap between it and the aim point *is* the drop the testers asked
 ## about.
-func _report_aim(combat: GubCombat) -> void:
+func _report_aim(combat: BogCombat) -> void:
 	# Late enough that `look_at_point` has converged and the rig has finished
 	# easing into the aimed field of view.
 	if _frames != 60:
@@ -4508,18 +4527,18 @@ func _target_point() -> Vector3:
 			return RECHARGE_TARGET
 		"draw":
 			# Straight down the range at nothing, so the aim never wanders onto the
-			# Gub whose *pose* is the subject of this mode.
+			# Bog whose *pose* is the subject of this mode.
 			return ARC_TARGET
 		"miss":
 			return Vector3(0.0, 0.05, -14.0)
-		"lure":
+		"magnet":
 			return DUMMY_SPOTS[1] + Vector3.UP * 0.2
-		"lure_self":
+		"magnet_self":
 			# Just in front of the player's own feet, so the pull has something
 			# to drag and the camera has something to show.
 			return PLAYER_SPOT + Vector3(0.0, 0.05, -3.0)
 		_:
-			var dummy := MatchState.gubs.get(DUMMY_BASE) as Gub
+			var dummy := MatchState.bogs.get(DUMMY_BASE) as Bog
 			if dummy == null:
 				return Vector3(0.0, 1.0, -5.0)
 			return dummy.global_position + Vector3.UP * dummy.eye_height()
@@ -4547,7 +4566,7 @@ func _watch_spawned(node: Node) -> void:
 			var names: Array[String] = []
 			for id: int in victim_ids:
 				names.append(Net.player_name(id))
-			print("combat_range: lure caught %d — %s"
+			print("combat_range: magnet caught %d — %s"
 				% [victim_ids.size(), ", ".join(names) if names else "nobody"]))
 		return
 	var bolt := node as LightningBolt
@@ -4558,7 +4577,7 @@ func _watch_spawned(node: Node) -> void:
 		# "the hand had got there" a measurement rather than a belief.
 		_cast_bolt_at = _frames
 		_cast_bolt_ms = Time.get_ticks_msec()
-		var caster := MatchState.gubs.get(1) as Gub
+		var caster := MatchState.bogs.get(1) as Bog
 		_cast_bolt_reach = _hand_reach(caster) if caster != null else -INF
 	# Caught before the `SpearProjectile` line below, because an arrow *is* one:
 	# `ArrowProjectile` extends it (D-065), so every `as SpearProjectile` in this
@@ -4584,17 +4603,17 @@ func _watch_spawned(node: Node) -> void:
 	if spear != null and _mode == "release" and _release_spear_at == 0:
 		# Read here and nowhere else, because "the fist empties when the spear
 		# leaves" is a statement about one instant and this is that instant.
-		# `GubCombat._do_throw_spear` empties the hand and *then* launches the
+		# `BogCombat._do_throw_spear` empties the hand and *then* launches the
 		# shaft, so a fist still holding something on this line is a hand that
 		# is lying about how dangerous its owner is (D-025, `HeldGear`).
-		var thrower := MatchState.gubs.get(1) as Gub
+		var thrower := MatchState.bogs.get(1) as Bog
 		_release_spear_at = _frames
 		_release_spear_ms = Time.get_ticks_msec()
 		_release_fist_full = (thrower != null and thrower.held_gear != null
 			and thrower.held_gear.is_carried())
 	if spear == null or not _trace:
 		return
-	spear.struck_gub.connect(func(victim: Gub, point: Vector3, bone: String) -> void:
+	spear.struck_bog.connect(func(victim: Bog, point: Vector3, bone: String) -> void:
 		print("  >> struck %s at %v (bone %s)" % [victim.display_name, point, bone]))
 	spear.struck_world.connect(func(point: Vector3, normal: Vector3) -> void:
 		print("  >> struck world at %v normal %v" % [point, normal]))
@@ -4605,14 +4624,14 @@ func _watch_spawned(node: Node) -> void:
 ## and nothing happened".
 func _trace_frame() -> void:
 	if _frames == 1:
-		print("combat_range: mode=%s phase=%d host=%s offline=%s gubs=%d" % [
+		print("combat_range: mode=%s phase=%d host=%s offline=%s bogs=%d" % [
 			_mode, MatchState.phase, Net.is_host, Net.is_offline,
-			MatchState.gubs.size()])
-		for peer_id: int in MatchState.gubs:
-			var gub: Gub = MatchState.gubs[peer_id]
-			print("  gub %d %s at %v local=%s alive=%s" % [
-				peer_id, gub.display_name, gub.global_position,
-				gub.is_local(), gub.alive])
+			MatchState.bogs.size()])
+		for peer_id: int in MatchState.bogs:
+			var bog: Bog = MatchState.bogs[peer_id]
+			print("  bog %d %s at %v local=%s alive=%s" % [
+				peer_id, bog.display_name, bog.global_position,
+				bog.is_local(), bog.alive])
 	if _frames == 2:
 		print("combat_range: frame 2 phase=%d (want %d = PLAYING) timer=%f" % [
 			MatchState.phase, MatchState.Phase.PLAYING, MatchState._phase_timer])
@@ -4627,11 +4646,11 @@ func _trace_frame() -> void:
 			_frames, spear.global_position, spear.is_stuck(), spear.authoritative])
 
 
-## Pull the peer out from under a live Gub and keep processing it.
+## Pull the peer out from under a live Bog and keep processing it.
 ##
 ## `announce` is false so that `left_lobby` does not fire and navigate this
 ## testbed away: the point is to hold the game in the state it is in during the
-## fade, with Gubs still in the tree and `multiplayer.multiplayer_peer` already
+## fade, with Bogs still in the tree and `multiplayer.multiplayer_peer` already
 ## null, and keep ticking them there.
 # ------------------------------------------------------------- great sword ---
 
@@ -4641,7 +4660,7 @@ const SWORD_PARK := Vector3(0.0, 0.1, -40.0)
 
 ## How far inside and outside the reach the two dummies stand, in metres of
 ## *surface* distance. Big enough that a tick of the attacker's own advance
-## cannot move a body across the line — the swing carries the Gub 0.917 m/s, so
+## cannot move a body across the line — the swing carries the Bog 0.917 m/s, so
 ## a tick is 15 mm — and small enough that "just inside" and "just outside" are
 ## still the same question asked twice.
 const SWORD_MARGIN := 0.35
@@ -4657,7 +4676,7 @@ const SWORD_REACH_TOLERANCE := 0.10
 
 ## How many ticks of a swing are not read for the point's extension.
 ##
-## `GubAnimator.SWING_FADE_IN` is 0.06 s, which is three and a half ticks during
+## `BogAnimator.SWING_FADE_IN` is 0.06 s, which is three and a half ticks during
 ## which the sword is being carried by a **cross-fade** out of whatever the body
 ## was doing rather than by the clip — so where the blade is during them is a
 ## blend of two poses and not a frame of this one. Five ticks is the fade plus
@@ -4675,7 +4694,7 @@ const SWORD_SETTLE := 5
 ## whip is four times that long.
 const SWORD_PEAK_TOLERANCE := 5
 
-## How far the kill may land from `GubAnimator.SWING_RELEASE_TIME` after the
+## How far the kill may land from `BogAnimator.SWING_RELEASE_TIME` after the
 ## click, in ticks. A frame and a half, which is `release`'s and `cast`'s own
 ## tolerance and for their reason: the click lands inside a tick and the hit
 ## resolves on one.
@@ -4690,18 +4709,18 @@ const SWORD_PATIENCE := 400
 ## Four verdicts and the order is the usual one of each being the control for the
 ## last — but the first *step* is not a verdict at all, it is the rehearsal, and
 ## that is the shape this weapon forced. Everything here has to be placed
-## somewhere, and where "in front of the Gub" is cannot be worked out from the
-## Gub: `Swing` turns the body through a revolution inside its own skeleton, so
+## somewhere, and where "in front of the Bog" is cannot be worked out from the
+## Bog: `Swing` turns the body through a revolution inside its own skeleton, so
 ## the blade at the release is more than a hundred degrees off `-basis.z`. So the
 ## mode swings once at nobody, reads the blade off the bone attachment at the
 ## release, prints the bearing, and puts every dummy after that on the line it
 ## measured. A mode that had assumed the facing would have placed its targets in
 ## empty grass and reported that a great sword cannot hit anything.
 func _drive_sword() -> void:
-	var player := MatchState.gubs.get(1) as Gub
-	var combat := player.get_node_or_null("Combat") as GubCombat if player != null else null
-	var near := MatchState.gubs.get(DUMMY_BASE) as Gub
-	var far := MatchState.gubs.get(DUMMY_BASE + 1) as Gub
+	var player := MatchState.bogs.get(1) as Bog
+	var combat := player.get_node_or_null("Combat") as BogCombat if player != null else null
+	var near := MatchState.bogs.get(DUMMY_BASE) as Bog
+	var far := MatchState.bogs.get(DUMMY_BASE + 1) as Bog
 	if player == null or combat == null or near == null or far == null:
 		return
 	var rig := player.get_node_or_null("CameraRig")
@@ -4805,7 +4824,7 @@ func _drive_sword() -> void:
 				return
 			_sword_expect(far.alive, "%s died %.2f m outside the reach"
 				% [far.display_name, SWORD_MARGIN])
-			_sword_expect(is_equal_approx(far.health, Gub.MAX_HEALTH),
+			_sword_expect(is_equal_approx(far.health, Bog.MAX_HEALTH),
 				"%s is down to %.1f" % [far.display_name, far.health])
 			_sword_expect(_sword_kill_of == 0,
 				"something died anyway: %d" % _sword_kill_of)
@@ -4828,7 +4847,7 @@ func _drive_sword() -> void:
 			if player.is_spinning() and _frames - _sword_clicked < SWORD_PATIENCE:
 				return
 			_sword_expect(far.alive, "the Elder died to a swing")
-			_sword_expect(is_equal_approx(far.health, Gub.MAX_HEALTH),
+			_sword_expect(is_equal_approx(far.health, Bog.MAX_HEALTH),
 				"the Elder is down to %.1f" % far.health)
 			_sword_expect(_wards > _wards_at_swing, "no ward flashed")
 			_sword_verdict("elder", "an Elder took a swing %.2f m inside the reach, "
@@ -4845,7 +4864,7 @@ func _drive_sword() -> void:
 ## button has to have started by the tick after the press.
 ##
 ## The Elder is last and is the round that would hurt most to lose. It is not a
-## fourth weapon — it is the spear's own click arriving at a Gub whose gate says
+## fourth weapon — it is the spear's own click arriving at a Bog whose gate says
 ## `has_lightning()` instead of `has_spear()` (D-038), and it goes down the same
 ## `try_throw_spear` that branches to `try_cast_lightning` inside itself. If
 ## consolidating four weapons onto one action had put a `match` on the loadout
@@ -4891,15 +4910,15 @@ var _primary_charge: float = 0.0
 ## other modes are about what happens after a click and go straight at the
 ## function so the tick is exact; this one is about the click itself — that one
 ## action, polled unconditionally, starts the right thing for whichever weapon a
-## Gub brought, and that its *release* ends a draw and does nothing at all to the
+## Bog brought, and that its *release* ends a draw and does nothing at all to the
 ## other three. The only witness that can say so is the poll in
-## `GubCombat._process`, so the press has to be a real press.
+## `BogCombat._process`, so the press has to be a real press.
 ##
-## The weapon is moved between rounds the way the lobby moves it — `Gub.weapon`
-## and then `refresh_hand()`, which is `GubBackdrop._equip`'s own two lines — so
+## The weapon is moved between rounds the way the lobby moves it — `Bog.weapon`
+## and then `refresh_hand()`, which is `BogBackdrop._equip`'s own two lines — so
 ## this also exercises the one path in the game that changes a loadout under a
-## Gub that already exists.
-func _drive_primary(player: Gub, combat: GubCombat) -> void:
+## Bog that already exists.
+func _drive_primary(player: Bog, combat: BogCombat) -> void:
 	var tick := _frames % PRIMARY_ROUND_TICKS
 	var round_index := _frames / PRIMARY_ROUND_TICKS
 	if round_index >= PRIMARY_ROUNDS.size():
@@ -4922,7 +4941,7 @@ func _drive_primary(player: Gub, combat: GubCombat) -> void:
 		# a swing and a bolt have already happened by this tick and the button
 		# coming up means nothing to them; a bow is *still being drawn*, and a
 		# release on this tick would loose a one-tick snap shot and leave every
-		# assertion after it satisfied by a Gub on a cooldown. It was written
+		# assertion after it satisfied by a Bog on a cooldown. It was written
 		# that way first, and the loose check passed without a string ever having
 		# gone back.
 		if not holds:
@@ -4954,9 +4973,9 @@ func _drive_primary(player: Gub, combat: GubCombat) -> void:
 			"letting the button go did not loose the arrow")
 
 
-## Put the round's weapon on the Gub, the lobby's way, and clear the state the
+## Put the round's weapon on the Bog, the lobby's way, and clear the state the
 ## last round left.
-func _begin_primary_round(player: Gub, combat: GubCombat) -> void:
+func _begin_primary_round(player: Bog, combat: BogCombat) -> void:
 	var row: Dictionary = PRIMARY_ROUNDS[_primary_round]
 	player.revive_at(_facing(PLAYER_SPOT, Vector3(0.0, 0.1, 0.0)))
 	player.input_direction = Vector2.ZERO
@@ -4967,12 +4986,12 @@ func _begin_primary_round(player: Gub, combat: GubCombat) -> void:
 	_primary_started = {}
 
 
-## What the press started, read off the body rather than off `GubCombat`'s own
+## What the press started, read off the body rather than off `BogCombat`'s own
 ## private fields: a windup is a spear or a bolt on its way, a draw is the
-## replicated float, a spin is `Gub`'s clock. All three are what every *other*
+## replicated float, a spin is `Bog`'s clock. All three are what every *other*
 ## peer would see, which is the right witness for a check about whether a button
 ## did anything.
-func _check_primary_started(player: Gub, combat: GubCombat,
+func _check_primary_started(player: Bog, combat: BogCombat,
 		row: Dictionary) -> void:
 	var started := ""
 	if player.is_spinning():
@@ -5020,7 +5039,7 @@ func _report_primary() -> void:
 ## proves the keyboard is wired, and this one is about what happens on one exact
 ## tick, which a press read a frame early or late would blur (`bhop`'s argument,
 ## one weapon along).
-func _begin_swing_at(player: Gub, combat: GubCombat) -> void:
+func _begin_swing_at(player: Bog, combat: BogCombat) -> void:
 	player.revive_at(_facing(PLAYER_SPOT, Vector3(0.0, 0.1, 0.0)))
 	player.input_direction = Vector2.ZERO
 	player.wants_sprint = false
@@ -5039,7 +5058,7 @@ func _begin_swing_at(player: Gub, combat: GubCombat) -> void:
 ## that window all three have to be the other way round. A sword that appeared a
 ## frame late, or hung about a frame after the spin, would be invisible to a
 ## check that only looked twice.
-func _watch_sword(player: Gub, combat: GubCombat) -> void:
+func _watch_sword(player: Bog, combat: BogCombat) -> void:
 	var gear := player.held_gear
 	if gear == null:
 		return
@@ -5080,7 +5099,7 @@ func _watch_sword(player: Gub, combat: GubCombat) -> void:
 		wrong = gear.has_sword() or gear.is_carried() != combat.has_spear()
 	# Counted as a *run* and not as a total, which is `recharge`'s own shape and
 	# is there for `HAND_SYNC_GRACE`'s reason: `_refresh_hand` runs in `_process`
-	# and the clock it reads (`Gub.is_spinning()`) runs out in wall-clock time,
+	# and the clock it reads (`Bog.is_spinning()`) runs out in wall-clock time,
 	# so the tick a swing ends on is always a tick where the clock has moved and
 	# the poll has not been round yet. One idle frame is what a poll costs; a
 	# *run* of them is the hand having stopped listening.
@@ -5091,10 +5110,10 @@ func _watch_sword(player: Gub, combat: GubCombat) -> void:
 		_sword_hand_run = 0
 
 
-## How far the point of the sword is from the Gub's own axis, flat — the quantity
+## How far the point of the sword is from the Bog's own axis, flat — the quantity
 ## `MatchConfig.sword_reach` is, measured in the game through the attachment
 ## rather than in Blender through a composed transform.
-func _tip_reach(player: Gub) -> float:
+func _tip_reach(player: Bog) -> float:
 	if player.held_gear == null:
 		return -1.0
 	var tip := player.held_gear.sword_blade()[0] as Vector3
@@ -5103,9 +5122,9 @@ func _tip_reach(player: Gub) -> float:
 
 
 ## Which way the blade is pointing right now, flat, off the bone attachment —
-## the same reading `GubCombat._blade_direction` makes and made here separately
+## the same reading `BogCombat._blade_direction` makes and made here separately
 ## on purpose: the mode has to be able to say the game is wrong.
-func _blade_now(player: Gub) -> Vector3:
+func _blade_now(player: Bog) -> Vector3:
 	if player.held_gear == null:
 		return player.facing()
 	var tip := player.held_gear.sword_blade()[0] as Vector3
@@ -5115,7 +5134,7 @@ func _blade_now(player: Gub) -> Vector3:
 
 
 ## Where a dummy has to stand for its *surface* to be `surface` metres from the
-## swinging Gub, along the bearing the rehearsal measured.
+## swinging Bog, along the bearing the rehearsal measured.
 ##
 ## Off `_sword_blade_at` — where the body will be when the blade connects — and
 ## not off where it is standing when the button goes down. The two are 0.978 m
@@ -5123,7 +5142,7 @@ func _blade_now(player: Gub) -> Vector3:
 ## placed its targets from the click would put every one of them a metre too far
 ## away and report that the reach is broken.
 func _sword_spot(surface: float) -> Vector3:
-	var spot := _sword_blade_at + _sword_blade * (surface + Gub.CAPSULE_RADIUS)
+	var spot := _sword_blade_at + _sword_blade * (surface + Bog.CAPSULE_RADIUS)
 	spot.y = 0.1
 	return spot
 
@@ -5131,7 +5150,7 @@ func _sword_spot(surface: float) -> Vector3:
 ## How many ticks after the click the blade connects, as the game's own constant
 ## rather than as a number typed here.
 func _release_ticks() -> int:
-	return int(round(GubAnimator.SWING_RELEASE_TIME * 60.0))
+	return int(round(BogAnimator.SWING_RELEASE_TIME * 60.0))
 
 
 func _sword_next(step: int) -> void:
@@ -5163,7 +5182,7 @@ const CHAIN_SUBJECTS := ["standing", "hop chain"]
 ## How many swings each subject chains, in the order of CHAIN_SUBJECTS.
 ##
 ## Seven for the standing start, because six is what it takes to climb from rest
-## to the cap at `Gub.SPIN_GAIN` — 0.00, 2.00, 3.08, 4.16, 5.24, 6.32, 7.02 — and
+## to the cap at `Bog.SPIN_GAIN` — 0.00, 2.00, 3.08, 4.16, 5.24, 6.32, 7.02 — and
 ## the seventh is what shows it *stays* there rather than climbing through. Three
 ## for the hop chain, because that subject arrives at the cap and the question
 ## asked of it is only whether a swing keeps what a hop earned; a longer chain
@@ -5194,17 +5213,17 @@ const CHAIN_PATIENCE := 1800
 ## a different thing. One function with a flag in it would carry both rules and
 ## the flag is what would rot.
 ##
-## What it proves is that there is one ceiling and not two. `Gub.begin_spin`
+## What it proves is that there is one ceiling and not two. `Bog.begin_spin`
 ## reads the speed the body already has, adds `SPIN_GAIN` of target and clamps to
 ## `hop_speed_cap()` — so a standing chain climbs to the same 1.3x a hop chain
 ## climbs to, and a hop chain that swings *keeps* its speed instead of being put
 ## back to the clip's own 0.917 m/s. Either of those failing would mean the
 ## sword had grown a speed system of its own.
 func _drive_chain() -> void:
-	var player := MatchState.gubs.get(1) as Gub
+	var player := MatchState.bogs.get(1) as Bog
 	if player == null:
 		return
-	var combat := player.get_node_or_null("Combat") as GubCombat
+	var combat := player.get_node_or_null("Combat") as BogCombat
 	if combat == null:
 		return
 	var rig := player.get_node_or_null("CameraRig")
@@ -5303,14 +5322,14 @@ func _chain_next(step: int) -> void:
 	_chain_at = _frames
 
 
-## One subject's numbers and whether they hold. The cap is `Gub.hop_speed_cap()`
+## One subject's numbers and whether they hold. The cap is `Bog.hop_speed_cap()`
 ## and not a number of this mode's own, which is the point being made: the swing
 ## and the hop are bounded by the same line (D-052, D-068).
-func _chain_verdict(player: Gub) -> void:
+func _chain_verdict(player: Bog) -> void:
 	var row := _chain_row
 	var target := player.target_speed()
 	var cap := player.hop_speed_cap()
-	var authored := Gub.SPIN_ADVANCE / GubAnimator.SWING_SECONDS
+	var authored := Bog.SPIN_ADVANCE / BogAnimator.SWING_SECONDS
 	var problems: Array[String] = []
 	if row["top"] > cap + CHAIN_EPSILON:
 		problems.append("the chain went past the hop cap")
@@ -5346,15 +5365,15 @@ func _drive_leave() -> void:
 	get_tree().quit()
 
 
-## Hold W for a second and see whether the Gub went anywhere.
+## Hold W for a second and see whether the Bog went anywhere.
 ##
 ## `Input.action_press` is a real press as far as everything downstream is
-## concerned, so this exercises the same path a player does: `Gub._read_input`
+## concerned, so this exercises the same path a player does: `Bog._read_input`
 ## reads the action, fills `input_direction`, and `_handle_movement` does the
 ## rest. Nothing here touches `input_direction` itself — that would test the
 ## movement code while skipping the wiring that was actually missing.
 func _drive_walk() -> void:
-	var player := MatchState.gubs.get(1) as Gub
+	var player := MatchState.bogs.get(1) as Bog
 	if player == null:
 		return
 
@@ -5379,11 +5398,11 @@ func _drive_walk() -> void:
 
 
 ## Where every `bhop` run starts and which way it goes: along +X, on a line clear
-## of both blocks and the back wall. A Gub that reaches BHOP_WRAP is moved back
+## of both blocks and the back wall. A Bog that reaches BHOP_WRAP is moved back
 ## by twice that, velocity and all, so ten Elder hops fit on a 90 m floor.
 const BHOP_START := Vector3(-38.0, 0.1, 25.0)
 const BHOP_WRAP := 40.0
-const BHOP_SUBJECTS := ["gub", "elder", "carrier"]
+const BHOP_SUBJECTS := ["bog", "elder", "carrier"]
 const BHOP_HOPS := 10
 ## Ground ticks a late hop waits before pressing: 0.25 s, well past LANDING_GRACE.
 const BHOP_LATE_TICKS := 15
@@ -5391,14 +5410,14 @@ const BHOP_LATE_TICKS := 15
 const BHOP_EPSILON := 0.02
 
 
-## Drive the local Gub through timed hops. See the `bhop` entry in MODES' notes.
+## Drive the local Bog through timed hops. See the `bhop` entry in MODES' notes.
 ##
 ## This writes `input_direction` and the view basis directly rather than pressing
 ## keys: the `walk` mode already proves the keyboard is wired, and this one is
 ## about what the movement code does with a press landing on one exact tick,
 ## which an `Input.action_press` a frame early or late would blur.
 func _drive_bhop() -> void:
-	var player := MatchState.gubs.get(1) as Gub
+	var player := MatchState.bogs.get(1) as Bog
 	if player == null:
 		return
 	var rig := player.get_node_or_null("CameraRig")
@@ -5485,7 +5504,7 @@ func _bhop_next(step: int) -> void:
 ## every multiplier in, which is what the cap is a multiple of.
 func _bhop_verdict(target: float) -> void:
 	var row := _bhop_row
-	var cap := target * Gub.HOP_SPEED_CAP
+	var cap := target * Bog.HOP_SPEED_CAP
 	var problems: Array[String] = []
 	if row["run"] > target + BHOP_EPSILON:
 		problems.append("running is faster than run speed")
@@ -5516,7 +5535,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _print_controls() -> void:
 	print("combat_range: WASD move, Shift sprint, Ctrl crouch, Space jump,")
-	print("              LMB spear, Q mushroom, E lure, RMB aim, Esc quit.")
+	print("              LMB spear, Q shield, E magnet, RMB aim, Esc quit.")
 
 
 # ------------------------------------------------------------------ stage ---
@@ -5528,7 +5547,7 @@ func _build_touchline_camera() -> void:
 	_fixed_camera.far = 400.0
 	_fixed_camera.look_at_from_position(view["eye"], view["look"], Vector3.UP)
 	add_child(_fixed_camera)
-	# Claimed after the Gubs exist, so it wins over the local rig's own camera.
+	# Claimed after the Bogs exist, so it wins over the local rig's own camera.
 	_fixed_camera.make_current()
 
 

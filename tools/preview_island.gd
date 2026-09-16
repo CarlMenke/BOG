@@ -11,7 +11,7 @@ extends Node3D
 ## so the shots keep pointing at the shrine after somebody moves the shrine.
 ##
 ## Add `match` as a second argument to run the **real match path** as well: an
-## offline session on `Net`, a fake roster, and Gubs spawned by `MatchState`
+## offline session on `Net`, a fake roster, and Bogs spawned by `MatchState`
 ## through `register_arena`. That is the check that matters — it is the
 ## difference between "the island renders" and "the island is a level".
 ##
@@ -25,7 +25,7 @@ extends Node3D
 ## `top` is straight down and orthographic, with the fog off — it is a plan of
 ## the map, not a picture of it. `canopy` is a third-person camera's height
 ## under the tree nearest pad 0, looking at the middle; `tree` is that same tree
-## from nine metres, to judge its proportions against the Gub-sized things
+## from nine metres, to judge its proportions against the Bog-sized things
 ## around it.
 
 const ARENA := preload("res://scenes/world/arena.tscn")
@@ -136,7 +136,7 @@ func _start_session() -> void:
 	Net.start_offline()
 	for i in DUMMY_COUNT:
 		Net.players[DUMMY_BASE + i] = {
-			"name": "Gub %d" % (i + 1), "team": 0, "ready": true,
+			"name": "Bog %d" % (i + 1), "team": 0, "ready": true,
 		}
 	Net.roster_changed.emit()
 	var config := Net.config
@@ -158,8 +158,8 @@ func _build_camera() -> void:
 		camera.projection = Camera3D.PROJECTION_ORTHOGONAL
 		camera.size = framing["ortho"]
 	camera.look_at_from_position(framing["eye"], framing["look"], Vector3.UP)
-	# Claimed after the arena — and after any Gub — so it wins the viewport over
-	# a `GubCamera` that has made itself current.
+	# Claimed after the arena — and after any Bog — so it wins the viewport over
+	# a `BogCamera` that has made itself current.
 	camera.make_current()
 
 
@@ -186,7 +186,7 @@ func _framing() -> Dictionary:
 			var inward := Vector3(-trunk.x, 0.0, -trunk.z).normalized()
 			if _view == "canopy":
 				# Where a third-person camera hangs: about two metres up and a
-				# couple back from a Gub standing at the trunk.
+				# couple back from a Bog standing at the trunk.
 				return {"eye": trunk + inward * 2.0 + Vector3.UP * 2.2,
 					"look": centre + Vector3.UP * 1.2, "fov": 75.0}
 			var side := inward.cross(Vector3.UP)
@@ -268,8 +268,8 @@ func _ground(at: Vector2) -> Vector3:
 # ------------------------------------------------------------------- match ---
 
 func _report_roster() -> void:
-	print("preview_island: phase=%d gubs=%d spawns=%d" % [
-		MatchState.phase, MatchState.gubs.size(), _arena.spawn_points.size()])
+	print("preview_island: phase=%d bogs=%d spawns=%d" % [
+		MatchState.phase, MatchState.bogs.size(), _arena.spawn_points.size()])
 	var closest := INF
 	for i in _arena.spawn_points.size():
 		var origin := _arena.spawn_points[i].origin
@@ -284,19 +284,19 @@ func _report_roster() -> void:
 	print("  closest pair %.1f m" % closest)
 
 
-## Every Gub's height above the ground it should be standing on. The one thing a
-## still frame cannot tell you is whether the Gubs are *falling* — at spawn they
+## Every Bog's height above the ground it should be standing on. The one thing a
+## still frame cannot tell you is whether the Bogs are *falling* — at spawn they
 ## are a few centimetres up by design, and by tick 30 they should have settled.
-## A Gub still descending here is a Gub on its way to `VOID_HEIGHT`.
+## A Bog still descending here is a Bog on its way to `VOID_HEIGHT`.
 func _physics_process(_delta: float) -> void:
 	_frames += 1
 	if not _run_match or (_frames != 5 and _frames != 60 and _frames != 150):
 		return
-	for peer_id: int in MatchState.gubs:
-		var gub: Gub = MatchState.gubs[peer_id]
-		if not is_instance_valid(gub):
+	for peer_id: int in MatchState.bogs:
+		var bog: Bog = MatchState.bogs[peer_id]
+		if not is_instance_valid(bog):
 			continue
-		var ground := _arena.island.height_at(gub.global_position.x, gub.global_position.z)
+		var ground := _arena.island.height_at(bog.global_position.x, bog.global_position.z)
 		print("  f%-4d %-8s y=%+.2f ground=%+.2f  above=%+.2f grounded=%s" % [
-			_frames, gub.display_name, gub.global_position.y, ground,
-			gub.global_position.y - ground, gub.is_on_floor()])
+			_frames, bog.display_name, bog.global_position.y, ground,
+			bog.global_position.y - ground, bog.is_on_floor()])
