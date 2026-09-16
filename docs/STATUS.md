@@ -141,6 +141,15 @@ of what that means:
   every line at head height, and tall rock is only for lines seen from above** —
   ten-metre columns box the third-person camera in, so there are eleven of them
   and not seventeen. It dresses itself out of the MegaKit, none of it collision.
+- **Capture G·U·B has a vault** (**D-068**, **D-070**): banked letters stand on
+  a point inside each base rather than teleporting home, so what a team holds is
+  visible in the world, and an enemy who stands on that vault for
+  `capture_steal_time` (a 1-5 s lobby dial) lifts one back out. It is the only
+  score in the game that can go down. Both ends of the clock are drawn — a bar
+  for the thief, an alarm for the team being robbed.
+- **Every letter is called out across the top of the screen** (**D-069**), in the
+  team's colour, in every mode: picked up, the full set, and stolen. Text only,
+  no sound.
 - **The camera near geometry is measured, not guessed at** (**D-064**).
   `tools/camera_range.gd` now carries a fourth verdict, `calm`, which watches the
   lens's own motion with the player's walking and turning subtracted out. The
