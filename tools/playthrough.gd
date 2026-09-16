@@ -371,6 +371,25 @@ func _stage_arena() -> bool:
 	call_strip.clear()
 	_check("and the strip can be cleared", call_strip.get_child_count(), 0)
 
+	# The steal bar (D-070), which is the other half of putting stealing on a
+	# clock: the timer only buys the defender time if something tells them to
+	# come. Driven through the HUD's own handler rather than the track's setter,
+	# so what is proved is the *wiring* — that the signal reaches the widget —
+	# and not merely that the widget has a method.
+	var track := hud.get_node_or_null("%Letters") as LetterTrack
+	if not _require("the HUD carries the letter track", track != null):
+		return false
+	var me := Net.local_id()
+	hud._on_steal_progress(me, MatchState.LETTER_B, 1, 0.5)
+	_check("a steal of mine draws a bar", track._steal_letter, MatchState.LETTER_B)
+	_check("and reads as mine, not as a robbery", track._steal_defending, false)
+	hud._on_steal_progress(me, 0, MatchConfig.TEAM_NONE, 0.0)
+	_check("stepping off clears it", track._steal_letter, 0)
+	# Somebody else robbing a team this player is not on draws nothing at all.
+	hud._on_steal_progress(FAKE_BASE, MatchState.LETTER_G, 99, 0.5)
+	_check("a robbery of a team I am not on is not my business",
+		track._steal_letter, 0)
+
 	if not _stage_map(arena):
 		return false
 

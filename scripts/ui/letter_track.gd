@@ -36,6 +36,12 @@ const GLYPH_SIZE := 26
 ## is the whole height of the control.
 const CAPTION_TOP := 50.0
 const CAPTION_SIZE := 15
+
+## The colour a steal is drawn in when it is being done *to you*. Not in
+## `UIPalette` because nothing else on the HUD means "somebody is taking
+## something off you right now" — the palette's warning red is the low-health
+## family, and this is not that.
+const STEAL_ALARM := Color(1.0, 0.36, 0.33)
 const HEIGHT := 70.0
 
 ## The unlit lamp is knocked back hard. Two of these are the normal state for
@@ -66,6 +72,14 @@ var _hold_seconds: int = 0
 ## Capture G·U·B (D-051): the card up is a carry with no clock, so the lamp is
 ## full and the caption says where to take it rather than how long is left.
 var _carrying: bool = false
+## A steal in progress that this player can see the point of (D-070): either
+## theirs, or one being committed against their own vault. 0 when there is none.
+var _steal_letter: int = 0
+var _steal_fill: float = 0.0
+## Whether this player is the one being robbed rather than the one robbing. The
+## two get the same bar and opposite words, because they are the same three
+## seconds read from opposite ends.
+var _steal_defending: bool = false
 
 
 func _ready() -> void:
@@ -104,6 +118,23 @@ func set_state(letters: int, hold_letter: int, remaining: float, total: float,
 	queue_redraw()
 
 
+## A steal, from whichever end this player is watching it. `letter` 0 clears it.
+##
+## It borrows the hold's lamp fill rather than inventing a second kind of
+## progress, because it is the same sentence: *this letter is filling up and
+## when it is full something happens to it*. The colour is what separates them —
+## a hold is amber, the map's own "you are earning this"; a steal is drawn in
+## alarm red when it is being done to you.
+func set_steal(letter: int, fill: float, defending: bool) -> void:
+	var clamped := clampf(fill, 0.0, 1.0)
+	if letter == _steal_letter and defending == _steal_defending 			and is_equal_approx(clamped, _steal_fill):
+		return
+	_steal_letter = letter
+	_steal_fill = clamped
+	_steal_defending = defending
+	queue_redraw()
+
+
 func _draw() -> void:
 	var row := CELL.x * 3.0 + CELL_GAP * 2.0
 	var left := (size.x - row) * 0.5
@@ -111,7 +142,11 @@ func _draw() -> void:
 	for bit: int in MatchState.LETTERS:
 		_draw_lamp(Rect2(Vector2(left + index * (CELL.x + CELL_GAP), 0.0), CELL), bit)
 		index += 1
-	if _hold_letter != 0:
+	# A steal outranks the hold caption, and the two cannot both be running: a
+	# steal needs empty hands (D-068), so nothing is being held while one is.
+	if _steal_letter != 0:
+		_draw_steal_caption()
+	elif _hold_letter != 0:
 		_draw_caption()
 	elif _team:
 		_draw_team_caption()
@@ -126,7 +161,14 @@ func _draw_lamp(rect: Rect2, bit: int) -> void:
 
 	var tint := UIPalette.faded(UIPalette.TEXT, UNLIT_GLYPH)
 	var border := UIPalette.faded(UIPalette.TEXT, UNLIT_BORDER)
-	if bit == _hold_letter:
+	if bit == _steal_letter:
+		var colour := STEAL_ALARM if _steal_defending else UIPalette.AMBER
+		var taken := rect.size.y * _steal_fill
+		draw_rect(Rect2(rect.position + Vector2(0.0, rect.size.y - taken),
+			Vector2(rect.size.x, taken)), UIPalette.faded(colour, 0.34), true)
+		tint = colour
+		border = UIPalette.faded(colour, 0.9)
+	elif bit == _hold_letter:
 		# Filling from the bottom, which is the direction a thing being *earned*
 		# fills — the opposite of a cooldown wedge draining from twelve o'clock,
 		# and the difference is the point. Nothing on this HUD drains any more.
@@ -162,6 +204,24 @@ func _draw_caption() -> void:
 	var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, CAPTION_SIZE).x
 	draw_string(font, Vector2((size.x - width) * 0.5, CAPTION_TOP + CAPTION_SIZE),
 		text, HORIZONTAL_ALIGNMENT_LEFT, -1, CAPTION_SIZE, UIPalette.AMBER)
+
+
+## What the bar over the lamp means, from whichever end you are watching it.
+##
+## The defender's wording names the thief's side and not the letter's fate,
+## because "SOMEBODY IS TAKING YOUR U" is a thing to run at and "U IS BEING
+## STOLEN" is a weather report.
+func _draw_steal_caption() -> void:
+	var name := MatchState.letter_name(_steal_letter)
+	var text := "YOUR %s IS BEING TAKEN  ·  %d%%" % [name, roundi(_steal_fill * 100.0)]
+	var colour := STEAL_ALARM
+	if not _steal_defending:
+		text = "TAKING %s  ·  %d%%" % [name, roundi(_steal_fill * 100.0)]
+		colour = UIPalette.AMBER
+	var font := get_theme_default_font()
+	var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, CAPTION_SIZE).x
+	draw_string(font, Vector2((size.x - width) * 0.5, CAPTION_TOP + CAPTION_SIZE),
+		text, HORIZONTAL_ALIGNMENT_LEFT, -1, CAPTION_SIZE, colour)
 
 
 ## "TEAM LETTERS" under the lamps in Teams, when no hold is using the caption
