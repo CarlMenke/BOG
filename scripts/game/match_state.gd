@@ -676,9 +676,18 @@ func _create_bog(peer_id: int, spawn: Transform3D, life: int) -> void:
 
 	var shown_team := bog.team if config().mode == MatchConfig.Mode.TEAMS \
 		else MatchConfig.TEAM_NONE
-	# The body and the plate always agree, including in free-for-all, where both
-	# are neutral (D-046).
-	bog.set_team_tint(shown_team)
+	# The body the lobby picked, off this peer's own copy of the roster exactly
+	# as the name, the team and the weapon above are — `Net.skin_for` is the one
+	# function that knows whether the answer is this player's own row or their
+	# team's, and the lobby ring asked it the same question a minute ago.
+	bog.wear_skin(Skins.texture_of(Net.skin_for(peer_id)))
+	# **Not also recoloured.** D-046 painted the body in its team's colour and
+	# the skin picker takes that over: in Teams the team *is* a body now, and a
+	# Bog wearing its team's skin under its team's paint is one team said twice
+	# and neither said clearly. The plate below keeps the colour, so "that is my
+	# team" is still on the screen in the UI's own palette — which is where the
+	# rest of the interface (the stripe, the scoreboard, the kill feed) says it.
+	bog.set_team_tint(MatchConfig.TEAM_NONE)
 	var plate := bog.get_node_or_null("Nameplate") as Nameplate
 	if plate != null:
 		plate.set_display_name(bog.display_name)
