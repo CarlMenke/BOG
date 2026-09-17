@@ -84,7 +84,7 @@ of things nothing else is checking.
 
 ---
 
-## The animation rebuild — steps 1 to 5 of 7 landed
+## The animation rebuild — steps 1 to 6 of 7 landed
 
 The character's animation pipeline is being rebuilt from scratch
 (`ANIMATION_REBUILD_PROMPT.md` is the brief; **D-095** to **D-098** are the
@@ -133,9 +133,11 @@ What exists now:
     res://tools/preview_bog.tscn out.png 30 Run-StandardRunning,Run-RunningForward-1
 ```
 
-**Next is step 6, skins**: one recolour as the worked example beside the
-robe (`art/skins/README.md` says how to add the next one), then step 7,
-retiring the old path: delete `tools/build_bog.py`, `tools/build_elder.py`,
+Skins are folders under `art/skins/` (D-100): the robe is the clothing
+example, `example/` the recolour (`tools/make_recolour.gd`,
+`Bog.wear_skin`), and `art/skins/README.md` says how to add the next one.
+
+**Next is step 7, retiring the old path:** delete `tools/build_bog.py`, `tools/build_elder.py`,
 `assets/source/`, `art/generated/bog.glb`, `elder.glb` and every script that
 only served them; move `assets/source_reorg/` to `assets/source/`; update
 `docs/ARCHITECTURE.md`, `docs/STATUS.md`, `docs/PLAN.md`.

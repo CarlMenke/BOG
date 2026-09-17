@@ -12,6 +12,8 @@ extends Node3D
 ## Clip keys are the library's: a role (`Walk`) once it has one clip, the file
 ## name while it still has candidates. Several keys separated by commas stack
 ## as rows. `from`/`to` narrow every row to a window of the clip in seconds.
+## A trailing `skin=<name>` dresses every BOG in `art/skins/<name>/basecolor.png`
+## (D-100).
 ##
 ## This is `preview_anim.gd` for the rebuilt body: the body is
 ## `art/bog/BOG.fbx` and the clips come from `art/generated/bog_clips.res`,
@@ -30,7 +32,13 @@ const LIBRARY := "res://art/generated/bog_clips.res"
 
 
 func _ready() -> void:
-	var args := OS.get_cmdline_user_args()
+	var args := PackedStringArray()
+	var skin: Texture2D = null
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("skin="):
+			skin = load("res://art/skins/%s/basecolor.png" % a.trim_prefix("skin="))
+		else:
+			args.append(a)
 	var keys: PackedStringArray = args[3].split(",", false) if args.size() >= 4 else PackedStringArray(["Idle"])
 	var scene := load(BODY) as PackedScene
 	var library := load(LIBRARY) as AnimationLibrary
@@ -62,6 +70,11 @@ func _ready() -> void:
 			var ap := n.find_child("AnimationPlayer", true, false) as AnimationPlayer
 			ap.remove_animation_library("")
 			ap.add_animation_library("", library)
+			if skin != null:
+				var body := n.find_child("Bog", true, false) as MeshInstance3D
+				var worn := body.mesh.surface_get_material(0).duplicate() as BaseMaterial3D
+				worn.albedo_texture = skin
+				body.set_surface_override_material(0, worn)
 			ap.play(key)
 			ap.seek(from + step * float(i), true)
 			ap.pause()

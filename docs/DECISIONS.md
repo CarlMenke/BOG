@@ -12424,3 +12424,42 @@ an Elder in it.
 - **Keeping the old robe weights and re-binding.** Above.
 - **Re-tuning the ragdoll's spans by hand.** The stability harness passed
   first time on the derived radii and the old spans.
+
+## D-100 — A skin is a folder: the recolour worked example, and how the next one is added
+Step 6 of the animation rebuild (design item 11). Two kinds of skin, two
+worked examples, one README: `art/skins/README.md` says what a skin is and
+how to make the next one, and each skin's own folder says what it is.
+
+**A clothing mesh** is a mesh bound to the body's skeleton by bone name with
+a `Skin` whose binds are the inverse of the body's rest pose. The Elder's
+robe is the example (D-099): `art/skins/elder/`, refit by
+`tools/refit_robe.gd`, worn by `ElderRobe.don`, which takes the mesh out of
+the skin's scene and re-parents it under the BOG's `Skeleton3D`. A mesh that
+arrives already skinned to a Mixamo rig binds without any of that, because
+its bones are the body's bones.
+
+**A recolour** is a texture in the body's UV layout, swapped in through the
+team-tint path. `tools/make_recolour.gd` makes one from the body's own
+texture: it finds the yellow skin by the same hue-and-saturation window the
+tint shader uses at draw time, turns its hue, and writes
+`art/skins/<name>/basecolor.png` at 2048² — the body's 4096² is 12 MB and a
+recolour does not need it. `art/skins/example/` is the body turned 150°, a
+cyan BOG with its eyes and teeth untouched, 3.6 million of 4.2 million
+texels turned.
+
+`Bog.wear_skin(texture)` is the one call: it carries the texture into the
+tint material's `albedo_texture` when the body has a team colour and into a
+plain copy of the imported material when it does not, so a recoloured body
+still takes its team's colour where the shader's window still matches and
+keeps the recolour where it does not. `null` puts the body's own texture
+back. `preview_bog.tscn ... skin=<name>` is the picture. Nothing in the
+lobby offers a skin yet; that is a picker on a roster row (D-069's shape)
+and a feature, not this step.
+
+### Rejected
+
+- **A recolour as a shader parameter** (a hue turn) rather than a texture.
+  The brief says a texture, and a texture is what an artist hands over; the
+  hue turn is only how this example was made.
+- **The example at the body's full 4096².** 12 MB in the repository to show
+  a colour.

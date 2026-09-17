@@ -392,6 +392,10 @@ var body_mesh: MeshInstance3D
 ## This Bog's copy of the team-colour material, made the first time it is
 ## tinted and reused after that. Null on a Bog that has never been on a team.
 var _tint_material: ShaderMaterial
+## The recolour skin this Bog wears, if any (D-100): the texture, and the plain
+## material carrying it for a Bog with no team colour.
+var _skin_texture: Texture2D
+var _skin_material: Material
 var alive: bool = true
 ## What is left of this Bog, from `MAX_HEALTH` down to zero (D-062).
 ##
@@ -542,12 +546,36 @@ func set_team_tint(new_team: int) -> void:
 	if body_mesh == null:
 		return
 	if new_team < 0:
-		body_mesh.set_surface_override_material(0, null)
+		body_mesh.set_surface_override_material(0, _skin_material)
 		return
 	if _tint_material == null:
 		_tint_material = make_tint_material(body_mesh.mesh.surface_get_material(0))
+		if _skin_texture != null:
+			_tint_material.set_shader_parameter("albedo_texture", _skin_texture)
 	_tint_material.set_shader_parameter("team_colour", Nameplate.colour_for_team(new_team))
 	body_mesh.set_surface_override_material(0, _tint_material)
+
+
+## A recolour skin: a texture in the body's own layout, through the team-tint
+## path (D-100, design item 11). `null` puts the body's own texture back. The
+## tint shader finds the skin by hue on whatever texture it is given, so a
+## recoloured body still takes its team's colour where the shader's window
+## still matches it, and keeps the recolour where it does not.
+func wear_skin(texture: Texture2D) -> void:
+	_skin_texture = texture
+	_skin_material = null
+	if body_mesh == null:
+		return
+	if texture != null:
+		var plain := body_mesh.mesh.surface_get_material(0).duplicate() as BaseMaterial3D
+		if plain != null:
+			plain.albedo_texture = texture
+			_skin_material = plain
+	if _tint_material != null:
+		_tint_material.set_shader_parameter("albedo_texture",
+			texture if texture != null else (body_mesh.mesh.surface_get_material(0) as BaseMaterial3D).albedo_texture)
+	if body_mesh.get_surface_override_material(0) != _tint_material:
+		body_mesh.set_surface_override_material(0, _skin_material)
 
 
 ## The team-colour shader, carrying over what the imported body material sets so
