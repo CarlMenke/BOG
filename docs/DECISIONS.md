@@ -13098,3 +13098,136 @@ keyboard's reach.
   are not proved over a real socket — only that the two new RPC arguments did
   not break the roster sync.
 - A fifteenth skin, or a wider swatch, brings the scrolling strip back.
+
+## D-110 — A layered clip's chest and head are squared to its hips at import, and that is two corrections
+The owner: *"in game the head and top are turned too far to the left for the
+bow and spear pretty much all the time, especially when they jump."* The sword
+was fine.
+
+The carry layer is an upper-body `Blend2` over `Spine1`…`Head`
+(`BogAnimator.UPPER_BODY_BONES` — not `Hips`, not `Spine`), so it copies the
+carry clip's own spine twist onto whatever the legs are doing: idle, run, and
+the scrubbed air pose, where it reads worst because there is no stride to
+distract the eye. **`face` cannot reach that twist.** D-097's yaw turns the
+hips' keys, and the hips carry the chest with them; what the layer copies is
+the chest-to-hips relationship, which a whole-body yaw leaves exactly as it
+found it. The sword has no seam because its carry is its plane's idle — a whole
+body, not a layer.
+
+**The twist is in the neck, and that is why one correction would not have
+worked.** Measured — `clip_measure` grew `twist` and `range` columns, and
+`preview_carry -- twist` asks the same of the composed body, a bone at a time,
+with `-- twist_sheet` shooting it dead from the front, which is the one camera
+that can answer "is the head facing me" — the shoulder line was **3.2°** off
+the hips in `SpearCarry` and **5.6°** in `BowCarry`, near enough square to have
+been dismissed. The head was another **+51.3°** and **+58.3°** off the chest,
+and composed over `Idle`, `Run` and `AirLoop` it landed at **+48° to +58°** on
+every base: a Bog standing square and looking over its own shoulder.
+`SwordCarry` reads +14.8° on its own plane and is never layered.
+
+So `untwist` is two constants, the chest's at `Spine1` and the head's at
+`Neck`. Squaring the shoulders alone leaves the head where it was, because an
+archer idle is *authored* square at the shoulders and looking sixty degrees
+down the arrow. Each correction is the clip's own **mean**, so the idle's sway
+survives it: 1.4° and 1.8° of range, identical before and after. Composed, the
+head comes to between −2.4° and +2.1° and the chest to between −2.6° and +3.2°
+across the three bases.
+
+**The axis is the parent's, as the clip holds it, not as the rest pose does.** A
+bone's keys are in its parent's frame, so a constant `Q` turns the bone in the
+world by `P·Q·P⁻¹`; for that to be a yaw the axis must be the world's up seen
+from `P`, and the `P` to use is the mean over the clip. The rest pose's own was
+tried first and left **7°** and **9°** on the two carry idles, because a
+standing Bog leans its spine about ten degrees forward and a turn about a
+leaning axis is not a yaw. Two consequences fall out: the hips' yaw drops out —
+`P⁻¹·up` is unchanged by any rotation of `P` about up — so a clip left side-on
+by `face: "none"` takes the same constant as a squared one, and the chest's
+correction does not disturb the head's axis. Which is why these are one pass
+and not a solve.
+
+**The rule is only for a layer over a square base**, and that is the line
+between the two bow clips. The carry layer sits over the plain plane, which
+faces the crosshair, so `SpearCarry` and `BowCarry` are the only two rows in
+`clips.json` carrying `untwist`. The draw layer sits over the archer's plane,
+which is turned −91° *on purpose* (D-097 trusted that frame); `BowReload`
+measures +65° of head over its hips and must keep it, because untwisting it
+would point the head out sideways while the Bog aims. `BowAim` and the rest of
+the archer set are full-body on that plane and are not touched at all.
+`clip_check` asserts both joints within 3° (`UNTWIST_TOLERANCE`) for any row
+carrying the rule.
+
+**Both props had to be re-solved under it, and that is the cost worth
+recording.** A rigid grip is a measurement of a pose, and the pose moved. The
+spear's trunk clearance fell from D-103's 0.128 m to **0.053 m** — the squared
+head is *in the shaft's path*, which the turned one was not — and the bow's
+composed floor clearance from 0.153 m to **0.127 m**, which was three
+millimetres of margin to begin with. Both failed the gate, which is the gate
+working.
+
+The spear was re-swept by D-103's own method, the same band and the same
+front-and-side sheet, and all three finalists pass both looks now, because a
+square head is a narrower silhouette from the front than a turned one. So
+margin decides, and the aim is D-103's with its bearing brought from +5° to the
+centre line — for the reason +5° was chosen in the first place: *the tip points
+where the Bog is looking*, which was +5° round while the head was turned and is
+0° now that it is not. `GRIP_ROTATION` **(20.79, 0.00, 22.98)**, `GRIP_OFFSET`
+**(0.2524, −0.4261, −0.1801)** derived, trunk **0.069 m** at ×1.15 and floor
+0.186 m. `GRIP_PALM` is untouched again and the shaft still passes 0.034 m from
+the centre of the fist; the card rides the shaft off `GRIP_ROTATION`, so it
+moved with it and re-reads **0.165 m** of letter above the grass.
+
+The bow's `CARRY_TILT` goes **(47.5, −40.0) → (47.5, −34.0)**. The layered
+sweep is monotone, so the pick came from `preview_bow`'s unlayered table, whose
+peak has not moved; six degrees on Z is in both bands and the Y axis cannot do
+it, because ten degrees there buys the layered table what it needs and takes
+the unlayered one under its own floor. Layered +0.173 m, unlayered +0.121 m.
+
+### Rejected
+
+- **Folding it into `face` as `"chest_over_hips"`.** `face` is exclusive and
+  names *which line to square*; `BowCarry` needs `face: "none"` and this at
+  once, and the two are orthogonal — a hips yaw cancels out of a
+  chest-over-hips measurement entirely.
+- **One correction on `Spine1`**, as first sketched. It squares the shoulders
+  and leaves the head 48° out, which is the whole of what the owner could see.
+- **Patching the animator or `bog_aim.gd`.** The posture is the clip's, the
+  clip table is where a clip's posture is declared, and the alternative is a
+  second place that knows about `Spine1`.
+- **The lowest elevation that clears for the spear's re-grip** (+40° at 0°),
+  which clears by one percent; and **+45° at −5°**, which measures marginally
+  better (×1.20) and cannot be said in a sentence.
+
+## D-111 — The backdrop ring faces the camera and turns back toward the fire, not the other way round
+The menu and the lobby read as Bogs looking past you. Half of that was the
+twist a layered clip carried in its neck, fixed at import by `untwist`
+(D-110); the other half was arithmetic here, and squaring the head could not
+reach it.
+
+`_slot_transform` faced each Bog at the fire and then, said its comment, turned
+it "a little toward the camera". It did the first and the opposite of the
+second. `Bog.yaw_towards(-spot)` is exactly `angle`, and from a spot on the +x
+side of the arc the camera sits at a *higher* yaw than the fire does — so
+`sin(angle) * -10` turned every Bog **away** from the lens, on top of the 52°
+that the end of a 150° arc is already off the camera merely by facing the
+flame. The end Bogs stood **62°** off the camera; the lobby was a row of
+profiles with one face in the middle.
+
+The fix inverts the frame of reference rather than the constant.
+`yaw_towards(eye - spot)` puts every face at the lens *by construction*, for
+any arc width and any roster count, and `sin(angle) * -12` is then a small
+deliberate turn inward rather than the remainder of a much larger error — the
+middle Bog square, the ends in by **11.6°**, the group still standing around a
+fire rather than lined up for a photograph. **12° is the ceiling the current
+`Idle` allows**: it is a boxer's guard that carries the head forward and down,
+so a Bog turned further gives the camera the top of his skull.
+
+The hero was the same fault in miniature. The lens is at **208.5°** from his
+spot and he was at **197°** — 11.5° off, not the "ten degrees" his comment
+claimed — at a 24° field of view with almost no frame to be looking into. He is
+at **204.5°** now, four degrees off the lens, which is still a three-quarter
+and lets his eyeline carry it.
+
+The general lesson is the one worth keeping: a facing built by correcting
+*away* from a landmark hides its error at the centre of the arc and pays for it
+at the ends, where nobody had looked. Start from the thing that must be true —
+the face is at the lens — and spend the small angle from there.

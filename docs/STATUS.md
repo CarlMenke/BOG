@@ -119,12 +119,22 @@ What exists now:
   spear also has its own overhead `Throw-SpearThrowObject` now (D-104).
 - `assets/source/clips.json` — **the rule table** (D-097): per clip
   `loop`, `face` (`hips` / `chest` / `none`: which body line the import
-  squares to the body's forward) and `markers` (its events in seconds). The
-  import script applies all three: records the authored speed, yaws the hips
-  by the facing rule, locks the hips, sets the loop mode, writes the markers
-  onto the `Animation`, and files it in `art/generated/bog_clips.res` (one
-  `.res` per clip under `art/generated/clips/`). Every library key is a role:
-  `Walk`, `Run`, `CrouchIdle`, `BowDraw`, `SwordCombo`, `Slide`.
+  squares to the body's forward), `untwist` and `markers` (its events in
+  seconds). The import script applies them all: records the authored speed,
+  yaws the hips by the facing rule, squares the chest and head over the hips
+  where `untwist` says to, locks the hips, sets the loop mode, writes the
+  markers onto the `Animation`, and files it in `art/generated/bog_clips.res`
+  (one `.res` per clip under `art/generated/clips/`). Every library key is a
+  role: `Walk`, `Run`, `CrouchIdle`, `BowDraw`, `SwordCombo`, `Slide`.
+- **`untwist` is D-110**, and only `SpearCarry` and `BowCarry` carry it. A
+  carry clip plays as an upper-body layer over `Spine1`…`Head`, so its own
+  spine twist lands on whatever the legs are doing — the head was 51° and 58°
+  off the chest, which read as a Bog looking over its own shoulder in every
+  pose and worst in the air. `face` cannot reach it, because a hips yaw carries
+  the chest with it. Two constant counter-turns at `Spine1` and `Neck`, each
+  the clip's own mean so the sway survives, and `clip_check` holds both joints
+  inside `UNTWIST_TOLERANCE` (3°). The archer's plane keeps its turned stance:
+  there the stance *is* the pose.
 - 112 markers on 52 clips, each from `tools/clip_events.gd`'s kinematics and
   a six-frame sheet: `release` on Throw (0.800), BowLoose (0.183) and Cast
   (1.000), with `windup` 0.300 on Throw — the spear's throw plays at rate 1.0
@@ -171,7 +181,17 @@ the fetch: the Magic pack's `Standing Run Left`, so the running strafes stop
 sliding at 1.12 of body speed (D-098 says what the import needs: a
 `mirror_of` rule for the right-hand twin). The other half of that item is
 done — the one-handed carry idle is `SpearCarry`, and the spear's trunk
-clearance is a measurement again at 0.110 m (D-103).
+clearance is a measurement again (D-103).
+
+**Both props were re-solved when `untwist` landed** (D-110), because a rigid
+grip is a measurement of a pose and squaring the head moved it: the spear's
+trunk clearance fell to 0.053 m against 0.06 allowed and the bow's composed
+floor clearance to 0.127 m against 0.15, and the gate said so. The spear's
+`GRIP_ROTATION` is **(20.79, 0.00, 22.98)** with `GRIP_OFFSET` **(0.2524,
+−0.4261, −0.1801)** derived — the bearing is on the centre line now, because
+"the tip points where the Bog is looking" moved when the head did — and the
+bow's `CARRY_TILT` is **(47.5, −34.0)**, six degrees on Z off D-070's. Trunk
+0.069 m, letter card 0.165 m above the grass, gate back to 135 of 135.
 
 Answered at the step 2 checkpoint by the user and built at step 4: **backing
 up is slower** (`Bog.BACK_SPEED_SCALE` 0.6); **the crouch is the deep squat**;
@@ -289,7 +309,12 @@ of what that means:
   eight-Bog lobby, HUD, scoreboard, kill feed, pause, settings, chat, results.
   On the home screen the hero Bog **stands across the fire** and turns back
   over it on a 24° lens, so the one warm light in the glade lands on his face
-  instead of outlining him (**D-106**). In the lobby the weapon strip is
+  instead of outlining him (**D-106**). Both he and the lobby's ring now
+  **face the lens and turn back toward the fire**, not the other way round
+  (**D-111**): the old arithmetic corrected away from the flame and so put the
+  Bogs at the ends of the arc 62° off the camera — a row of profiles with one
+  face in the middle. Every face is at the lens by construction now, with the
+  ends turned 11.6° inward and the hero 4° off. In the lobby the weapon strip is
   always on, over the ring's heads; the three panels each **fold to their own
   heading** rather than collapsing as a stack, the roster starts folded to
   its count and the match config is host-only, so a client sees the strip, a

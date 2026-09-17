@@ -563,7 +563,9 @@ also "every carried weapon clears the ground" "derived PASS"
 # fingers, which point at the ground when the arm hangs, so the card slides
 # *down* the shaft at −0.22 instead of up it. D-035
 # measured the bottom of the letter at 0.23 m off the ground and wrote it into a
-# comment; it is 0.158 m now, it is a check, and the pose it is measured in is
+# comment; it is 0.165 m now — D-110 re-aimed the grip and the card rode the
+# shaft round with it, which is exactly the point of deriving it — it is a
+# check, and the pose it is measured in is
 # the one a Bog holding a letter is actually in — a hold disarms it, so the carry
 # layer is off for the whole of one.
 also "every carried weapon clears the ground" "card PASS"
@@ -590,8 +592,10 @@ also "every carried weapon clears the ground" "level PASS"
 # was the `RightHand`-weighted skin at rest, which is the wrist: 918 of the
 # mitten's 1,030 vertices hang off the three finger chains and none of them were
 # in that span. This measures the whole mitten, skinned in the carry pose, and
-# requires the shaft's axis to pass inside it (`PALM_MAX`). It reads 0.050 m now
-# and D-072's grip reads 0.076 and fails it.
+# requires the shaft's axis to pass inside it (`PALM_MAX`). The spear reads
+# 0.034 m now — 0.050 is the *bottle's* figure, in the `bottle PASS` note below,
+# and the two were confused in this comment for three decision records — and
+# D-072's grip reads 0.076 and fails it.
 also "every carried weapon clears the ground" "palm PASS"
 # And `bottle PASS`, which is the **sixth** and is `palm` asked of the other
 # hand (D-075). The heal potion is the first thing this game puts in a fist that
