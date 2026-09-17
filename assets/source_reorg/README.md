@@ -7,10 +7,12 @@ loads is the products the import writes to `art/generated/`. The body itself is
 `assets/` is excluded from exported builds.
 
 ```
-clips.json       the clip table: every animation the game wants, with its Mixamo id,
-                 the file name it lands under, whether it is fetched in place, and
-                 whether it loops. One row per role: D-096 chose each from
-                 the candidates that were fetched, and deleted the rest.
+clips.json       the clip table, and the whole rule table (D-097): every animation
+                 the game wants, with its Mixamo id, the file name it lands under,
+                 whether it loops, which body line the import squares to the body's
+                 forward (`face`: hips, chest or none) and its events in seconds
+                 (`markers`). One row per role: D-096 chose each from the
+                 candidates that were fetched, and deleted the rest.
 anims/           one animation-only .fbx per row of clips.json, fetched by
                  tools/mixamo_fetch.py, each with the .import that
                  tools/clip_imports.sh writes. Never carries a mesh.
@@ -25,11 +27,18 @@ once as a T-pose with skin: 49 `mixamorig` bones, one mesh, one 4096² texture.
 
 Every clip's `.import` names `tools/import_clip.gd` as its post-import script.
 For each clip it records the hips' travel (and so the authored speed) as
-metadata, locks the hips to the vertical axis so the physics body does the
-moving, sets the loop mode from `clips.json`, saves the clip to
-`art/generated/clips/<file>.res` and files it in the shared library
-`art/generated/bog_clips.res` — keyed by role once a role has one file, by file
-name while it still has candidates.
+metadata, yaws the hips' keys so the line its `face` rule names is square to
+the body's forward, locks the hips to the vertical axis so the physics body
+does the moving, sets the loop mode and writes the markers from its row, saves
+the clip to `art/generated/clips/<file>.res` and files it in the shared library
+`art/generated/bog_clips.res` under its role.
+
+    "$GODOT" --headless --path . --script tools/clip_measure.gd   # every clip as numbers
+    "$GODOT" --headless --path . --script tools/clip_events.gd -- Throw   # where its events are
+
+To place or move a marker: run `clip_events` for the clip, render the window
+it proposes with `preview_bog` (`... out.png 30 Throw 0.6 1.1`), look, write
+the time into the row, re-import.
 
     "$GODOT" --headless --path . --import                  # the build, ~10 s
     "$GODOT" --headless --path . --script tools/clip_check.gd   # the gate check

@@ -1,5 +1,5 @@
 {
- "_about": "One row per clip to fetch from Mixamo on the BOG (tools/mixamo_fetch.py). `file` is the FBX name that lands in anims/, `role` is the game's name for the move; one row per role (D-096 chose each from the candidates fetched and deleted the rest). A row with `mixamo_query` instead of `mixamo_id` fetches every search result as `<file>-<Name>`, or only those named in `mixamo_keep`. `in_place` is false everywhere on purpose: Mixamo's in-place export flattens the hip bob along with the travel, so travel is stripped at import instead, where it also yields the authored speed. `loop` is provisional until the animator is rebuilt.",
+ "_about": "One row per clip to fetch from Mixamo on the BOG (tools/mixamo_fetch.py). `file` is the FBX name that lands in anims/, `role` is the game's name for the move; one row per role (D-096 chose each from the candidates fetched and deleted the rest). A row with `mixamo_query` instead of `mixamo_id` fetches every search result as `<file>-<Name>`, or only those named in `mixamo_keep`. `in_place` is false everywhere on purpose: Mixamo's in-place export flattens the hip bob along with the travel, so travel is stripped at import instead, where it also yields the authored speed. `loop` is provisional until the animator is rebuilt. `face` is how the import turns the clip onto the body's forward: `hips` squares the hip line to the rest pose, `chest` squares the shoulder line (the strafes, D-066), `none` trusts Mixamo's world frame (the archer set aims down it; a slide and a dive travel down it). `markers` are the clip's events in seconds, written onto the Animation as markers for the animator to read (D-097).",
  "fps": 30,
  "clips": [
   {
@@ -9,7 +9,9 @@
    "mixamo_name": "Breathing Idle",
    "mixamo_id": "c9c6d0d5-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": true
+   "loop": true,
+   "face": "hips",
+   "markers": {}
   },
   {
    "file": "IdleLook-StandingIdleLookingAround-2",
@@ -18,7 +20,9 @@
    "mixamo_name": "Standing Idle Looking Around",
    "mixamo_id": "2906468d-f1ee-4444-8c8a-76a95dcaea96",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "hips",
+   "markers": {}
   },
   {
    "file": "Walk-StandardWalk",
@@ -27,7 +31,12 @@
    "mixamo_name": "Standard Walk",
    "mixamo_id": "c9ccc2e9-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": true
+   "loop": true,
+   "face": "hips",
+   "markers": {
+    "step_right": 0.0,
+    "step_left": 0.367
+   }
   },
   {
    "file": "Run-StandardRunning",
@@ -36,7 +45,12 @@
    "mixamo_name": "Standard Running",
    "mixamo_id": "c9ccc5dd-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": true
+   "loop": true,
+   "face": "hips",
+   "markers": {
+    "step_right": 0.0,
+    "step_left": 0.267
+   }
   },
   {
    "file": "WalkBack-WalkingBackwards-2",
@@ -45,7 +59,12 @@
    "mixamo_name": "Walking Backwards",
    "mixamo_id": "c9cbef68-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": true
+   "loop": true,
+   "face": "hips",
+   "markers": {
+    "step_right": 0.0,
+    "step_left": 0.2
+   }
   },
   {
    "file": "RunBack-RunningBackwards",
@@ -54,7 +73,12 @@
    "mixamo_name": "Running Backwards",
    "mixamo_id": "c9ceedd8-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": true
+   "loop": true,
+   "face": "hips",
+   "markers": {
+    "step_right": 0.0,
+    "step_left": 0.3
+   }
   },
   {
    "file": "StrafeWalkLeft-WalkingStrafeToTheLeft-2",
@@ -63,7 +87,12 @@
    "mixamo_name": "Walking Strafe To The Left",
    "mixamo_id": "c9c9829c-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": true
+   "loop": true,
+   "face": "chest",
+   "markers": {
+    "step_right": 0.0,
+    "step_left": 0.4
+   }
   },
   {
    "file": "StrafeWalkRight-WalkingStrafeToTheRight-1",
@@ -72,7 +101,12 @@
    "mixamo_name": "Walking Strafe To The Right",
    "mixamo_id": "c9c985b7-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": true
+   "loop": true,
+   "face": "chest",
+   "markers": {
+    "step_right": 0.0,
+    "step_left": 0.367
+   }
   },
   {
    "file": "StrafeLeft-RunningStrafeToTheLeft-2",
@@ -81,7 +115,12 @@
    "mixamo_name": "Running Strafe To The Left",
    "mixamo_id": "c9c97b90-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": true
+   "loop": true,
+   "face": "chest",
+   "markers": {
+    "step_right": 0.0,
+    "step_left": 0.3
+   }
   },
   {
    "file": "StrafeRight-RunningStrafeToTheRight-1",
@@ -90,7 +129,12 @@
    "mixamo_name": "Running Strafe To The Right",
    "mixamo_id": "c9c97c58-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": true
+   "loop": true,
+   "face": "chest",
+   "markers": {
+    "step_right": 0.0,
+    "step_left": 0.333
+   }
   },
   {
    "file": "CrouchIdle-CrouchIdle-2",
@@ -99,7 +143,9 @@
    "mixamo_name": "Crouch Idle",
    "mixamo_id": "18b23688-f7fd-4653-9105-b2238f09c4c5",
    "in_place": false,
-   "loop": true
+   "loop": true,
+   "face": "hips",
+   "markers": {}
   },
   {
    "file": "CrouchWalk-CrouchedWalk",
@@ -108,7 +154,12 @@
    "mixamo_name": "Crouched Walk",
    "mixamo_id": "c9c640fa-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": true
+   "loop": true,
+   "face": "hips",
+   "markers": {
+    "step_right": 0.0,
+    "step_left": 0.3
+   }
   },
   {
    "file": "CrouchWalkBack-WalkingBackwardsWhileCrouched-2",
@@ -117,7 +168,12 @@
    "mixamo_name": "Walking Backwards While Crouched",
    "mixamo_id": "dbc327f5-1358-4c2a-8d00-4a377a9a7978",
    "in_place": false,
-   "loop": true
+   "loop": true,
+   "face": "hips",
+   "markers": {
+    "step_right": 0.0,
+    "step_left": 0.367
+   }
   },
   {
    "file": "CrouchStrafeLeft-WalkingLeftWhileCrouched-2",
@@ -126,7 +182,12 @@
    "mixamo_name": "Walking Left While Crouched",
    "mixamo_id": "b4421182-22f7-4ec6-a13b-abfb900a6bfe",
    "in_place": false,
-   "loop": true
+   "loop": true,
+   "face": "hips",
+   "markers": {
+    "step_right": 0.0,
+    "step_left": 0.333
+   }
   },
   {
    "file": "CrouchStrafeRight-WalkingRightWhileCrouched-2",
@@ -135,7 +196,12 @@
    "mixamo_name": "Walking Right While Crouched",
    "mixamo_id": "7ae2d141-55c2-406e-b395-5e4f2bc2af23",
    "in_place": false,
-   "loop": true
+   "loop": true,
+   "face": "hips",
+   "markers": {
+    "step_right": 0.0,
+    "step_left": 0.267
+   }
   },
   {
    "file": "CrouchDown-StandingToCrouchingTransition",
@@ -144,7 +210,11 @@
    "mixamo_name": "Standing To Crouching Transition",
    "mixamo_id": "c9c877e6-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "hips",
+   "markers": {
+    "down": 0.733
+   }
   },
   {
    "file": "CrouchUp-CrouchToStandTransition",
@@ -153,7 +223,11 @@
    "mixamo_name": "Crouch To Stand Transition",
    "mixamo_id": "c9cc0a18-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "hips",
+   "markers": {
+    "up": 0.5
+   }
   },
   {
    "file": "JumpStart-JumpingUpFromActionIdleGameBlend",
@@ -162,7 +236,11 @@
    "mixamo_name": "Jumping Up From Action Idle Game Blend",
    "mixamo_id": "c9c9d019-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "hips",
+   "markers": {
+    "lift": 0.2
+   }
   },
   {
    "file": "AirLoop-MidAirFallingIdle",
@@ -171,7 +249,9 @@
    "mixamo_name": "Mid-Air Falling Idle",
    "mixamo_id": "c9c991b1-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": true
+   "loop": true,
+   "face": "hips",
+   "markers": {}
   },
   {
    "file": "Land-JumpingDownFromFallingIdleGameBlend",
@@ -180,7 +260,11 @@
    "mixamo_name": "Jumping Down From Falling Idle Game Blend",
    "mixamo_id": "c9c9d197-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "hips",
+   "markers": {
+    "absorb": 0.267
+   }
   },
   {
    "file": "LandHard-MidAirFallingToAHardLandingGameBlend",
@@ -189,7 +273,13 @@
    "mixamo_name": "Mid-Air Falling To A Hard Landing Game Blend",
    "mixamo_id": "c9c9d323-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "hips",
+   "markers": {
+    "impact": 0.1,
+    "absorb": 0.333,
+    "up": 1.467
+   }
   },
   {
    "file": "RunJump-ForwardRunningJump",
@@ -198,7 +288,13 @@
    "mixamo_name": "Forward Running Jump",
    "mixamo_id": "c9ccebcf-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "none",
+   "markers": {
+    "lift": 0.067,
+    "apex": 0.367,
+    "land": 0.7
+   }
   },
   {
    "file": "Roll-DiveRollFromStanding-2",
@@ -207,7 +303,14 @@
    "mixamo_name": "Dive Roll From Standing",
    "mixamo_id": "c9c9a122-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "none",
+   "markers": {
+    "dive": 0.767,
+    "apex": 0.833,
+    "land": 1.033,
+    "up": 1.867
+   }
   },
   {
    "file": "Throw-ThrowingAnObjectFromAStandardPose",
@@ -216,7 +319,11 @@
    "mixamo_name": "Throwing An Object From A Standard Pose",
    "mixamo_id": "c9cb09fa-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "hips",
+   "markers": {
+    "release": 0.867
+   }
   },
   {
    "file": "ThrowRun-ThrowGrenadeWhileRunning",
@@ -225,7 +332,11 @@
    "mixamo_name": "Throw Grenade While Running",
    "mixamo_id": "c9c89b1d-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "none",
+   "markers": {
+    "release": 1.933
+   }
   },
   {
    "file": "ThrowWalk-ThrowingAGrenadeWhileWalking",
@@ -234,7 +345,11 @@
    "mixamo_name": "Throwing A Grenade While Walking",
    "mixamo_id": "c9c889b1-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "none",
+   "markers": {
+    "release": 2.167
+   }
   },
   {
    "file": "BowEquip-EquippingBow",
@@ -243,7 +358,11 @@
    "mixamo_name": "Equipping Bow",
    "mixamo_id": "c9ceb097-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "none",
+   "markers": {
+    "swap": 0.4
+   }
   },
   {
    "file": "BowUnequip-DisarmingBow",
@@ -252,7 +371,11 @@
    "mixamo_name": "Disarming Bow",
    "mixamo_id": "c9cec14d-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "none",
+   "markers": {
+    "swap": 0.3
+   }
   },
   {
    "file": "BowCarry-StandingIdleWithBow",
@@ -261,7 +384,9 @@
    "mixamo_name": "Standing Idle With Bow",
    "mixamo_id": "c9ceb236-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": true
+   "loop": true,
+   "face": "none",
+   "markers": {}
   },
   {
    "file": "BowAim-AimingIdleWithBow",
@@ -270,7 +395,9 @@
    "mixamo_name": "Aiming Idle With Bow",
    "mixamo_id": "123cd592-6ad3-4ecc-9199-d4179124fa01",
    "in_place": false,
-   "loop": true
+   "loop": true,
+   "face": "none",
+   "markers": {}
   },
   {
    "file": "BowDraw-ChargingBowForPowershot",
@@ -279,7 +406,11 @@
    "mixamo_name": "Charging Bow For Powershot",
    "mixamo_id": "c9cebbb5-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "none",
+   "markers": {
+    "hold": 0.1
+   }
   },
   {
    "file": "BowLoose-StandingAimFireArrow",
@@ -288,7 +419,11 @@
    "mixamo_name": "Standing Aim Fire Arrow",
    "mixamo_id": "c9cebedc-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "none",
+   "markers": {
+    "release": 0.183
+   }
   },
   {
    "file": "BowReload-ReloadingBow",
@@ -297,7 +432,11 @@
    "mixamo_name": "Reloading Bow",
    "mixamo_id": "c9ceacc6-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "none",
+   "markers": {
+    "swap": 0.367
+   }
   },
   {
    "file": "BowAimWalk-WalkingForwardWhileAimingWithBow",
@@ -306,7 +445,12 @@
    "mixamo_name": "Walking Forward While Aiming With Bow",
    "mixamo_id": "c9cec780-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": true
+   "loop": true,
+   "face": "none",
+   "markers": {
+    "step_right": 0.0,
+    "step_left": 0.333
+   }
   },
   {
    "file": "BowAimWalkBack-WalkingBackwardsWhileAimingWithBow",
@@ -315,7 +459,12 @@
    "mixamo_name": "Walking Backwards While Aiming With Bow",
    "mixamo_id": "c9cec5f5-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": true
+   "loop": true,
+   "face": "none",
+   "markers": {
+    "step_right": 0.0,
+    "step_left": 0.2
+   }
   },
   {
    "file": "BowAimStrafeLeft-WalkingLeftWhileAimingWithBow",
@@ -324,7 +473,12 @@
    "mixamo_name": "Walking Left While Aiming With Bow",
    "mixamo_id": "c9cec90b-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": true
+   "loop": true,
+   "face": "none",
+   "markers": {
+    "step_right": 0.0,
+    "step_left": 0.367
+   }
   },
   {
    "file": "BowAimStrafeRight-WalkingRightWhileAimingWithBow",
@@ -333,7 +487,12 @@
    "mixamo_name": "Walking Right While Aiming With Bow",
    "mixamo_id": "c9ceca90-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": true
+   "loop": true,
+   "face": "none",
+   "markers": {
+    "step_right": 0.0,
+    "step_left": 0.533
+   }
   },
   {
    "file": "Cast-OneHandedCastingSpellFowards",
@@ -342,7 +501,11 @@
    "mixamo_name": "One Handed Casting Spell Fowards",
    "mixamo_id": "a3d120fd-c26a-46c7-a4a0-59c1c5d8157c",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "hips",
+   "markers": {
+    "release": 0.833
+   }
   },
   {
    "file": "CastIdle-StandingIdleReadyToCastSpell",
@@ -351,7 +514,9 @@
    "mixamo_name": "Standing Idle Ready To Cast Spell",
    "mixamo_id": "b3bcc81a-5213-451e-bcec-294026c5984a",
    "in_place": false,
-   "loop": true
+   "loop": true,
+   "face": "hips",
+   "markers": {}
   },
   {
    "file": "Heal-CastingAHealingSpellWithOneHand",
@@ -360,7 +525,11 @@
    "mixamo_name": "Casting A Healing Spell With One Hand",
    "mixamo_id": "c9c80212-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "hips",
+   "markers": {
+    "release": 1.067
+   }
   },
   {
    "file": "SwordCarry-GreatSwordIdle",
@@ -369,7 +538,9 @@
    "mixamo_name": "Great Sword Idle",
    "mixamo_id": "c9cc7140-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": true
+   "loop": true,
+   "face": "hips",
+   "markers": {}
   },
   {
    "file": "SwordDraw-TransitionFromStandingToDrawingAGreatSword",
@@ -378,7 +549,11 @@
    "mixamo_name": "Transition From Standing To Drawing A Great Sword",
    "mixamo_id": "c9cca50e-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "hips",
+   "markers": {
+    "swap": 0.1
+   }
   },
   {
    "file": "SwordSheathe-TransitionFromIdleToSheathingAGreatSword-2",
@@ -387,7 +562,11 @@
    "mixamo_name": "Transition From Idle To Sheathing A Great Sword",
    "mixamo_id": "c9ccc0b3-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "hips",
+   "markers": {
+    "swap": 0.5
+   }
   },
   {
    "file": "SwordSpin-GreatSwordHighSpinAttackFromRun",
@@ -396,7 +575,13 @@
    "mixamo_name": "Great Sword High Spin Attack From Run",
    "mixamo_id": "c9cc8d52-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "hips",
+   "markers": {
+    "swing": 0.933,
+    "hit": 1.067,
+    "end": 1.233
+   }
   },
   {
    "file": "SwordJumpAttack-GreatSwordJumpAttackFromRun",
@@ -405,7 +590,16 @@
    "mixamo_name": "Great Sword Jump Attack From Run",
    "mixamo_id": "c9cc8bd6-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "hips",
+   "markers": {
+    "lift": 0.733,
+    "apex": 0.767,
+    "swing": 0.933,
+    "hit": 1.033,
+    "end": 1.533,
+    "land": 1.233
+   }
   },
   {
    "file": "SwordPowerSlash-GreatSwordPowerSlash",
@@ -414,7 +608,13 @@
    "mixamo_name": "Great Sword Power Slash",
    "mixamo_id": "c9cc7fdc-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "hips",
+   "markers": {
+    "swing": 0.667,
+    "hit": 0.733,
+    "end": 0.8
+   }
   },
   {
    "file": "SwordDownSlash-GreatSwordDownwardSlash",
@@ -423,7 +623,13 @@
    "mixamo_name": "Great Sword Downward Slash",
    "mixamo_id": "c9cc7d9c-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "hips",
+   "markers": {
+    "swing": 0.5,
+    "hit": 0.533,
+    "end": 0.733
+   }
   },
   {
    "file": "SwordCombo-GreatSwordComboSlash",
@@ -432,7 +638,19 @@
    "mixamo_name": "Great Sword Combo Slash",
    "mixamo_id": "c9cc7e5c-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "hips",
+   "markers": {
+    "swing_1": 0.667,
+    "hit_1": 0.733,
+    "end_1": 0.933,
+    "swing_2": 1.567,
+    "hit_2": 1.667,
+    "end_2": 1.933,
+    "swing_3": 2.4,
+    "hit_3": 2.633,
+    "end_3": 2.8
+   }
   },
   {
    "file": "SwordWalk-GreatSwordWalk",
@@ -441,7 +659,12 @@
    "mixamo_name": "Great Sword Walk",
    "mixamo_id": "c9cc7257-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": true
+   "loop": true,
+   "face": "hips",
+   "markers": {
+    "step_right": 0.0,
+    "step_left": 0.4
+   }
   },
   {
    "file": "SwordRun-GreatSwordRun",
@@ -450,7 +673,12 @@
    "mixamo_name": "Great Sword Run",
    "mixamo_id": "c9cce2a9-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": true
+   "loop": true,
+   "face": "hips",
+   "markers": {
+    "step_right": 0.0,
+    "step_left": 0.233
+   }
   },
   {
    "file": "SwordWalkBack-GreatSwordBackwardWalk",
@@ -459,7 +687,12 @@
    "mixamo_name": "Great Sword Backward Walk",
    "mixamo_id": "c9cc73a7-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": true
+   "loop": true,
+   "face": "hips",
+   "markers": {
+    "step_right": 0.0,
+    "step_left": 0.167
+   }
   },
   {
    "file": "SwordRunBack-GreatSwordBacwardRun",
@@ -468,7 +701,12 @@
    "mixamo_name": "Great Sword Bacward Run",
    "mixamo_id": "c9cc7906-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": true
+   "loop": true,
+   "face": "hips",
+   "markers": {
+    "step_right": 0.0,
+    "step_left": 0.3
+   }
   },
   {
    "file": "SwordStrafeWalkLeft-GreatSwordStrafeLeftWalk",
@@ -477,7 +715,12 @@
    "mixamo_name": "Great Sword Strafe Left Walk",
    "mixamo_id": "c9cc747b-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": true
+   "loop": true,
+   "face": "hips",
+   "markers": {
+    "step_left": 0.0,
+    "step_right": 0.467
+   }
   },
   {
    "file": "SwordStrafeWalkRight-GreatSwordStrafeRightWalk",
@@ -486,7 +729,12 @@
    "mixamo_name": "Great Sword Strafe Right Walk",
    "mixamo_id": "c9cc753e-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": true
+   "loop": true,
+   "face": "hips",
+   "markers": {
+    "step_right": 0.0,
+    "step_left": 0.733
+   }
   },
   {
    "file": "SwordStrafeLeft-GreatSwordStrafeLeftRun",
@@ -495,7 +743,12 @@
    "mixamo_name": "Great Sword Strafe Left Run",
    "mixamo_id": "c9cc7a8d-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": true
+   "loop": true,
+   "face": "hips",
+   "markers": {
+    "step_right": 0.133,
+    "step_left": 0.5
+   }
   },
   {
    "file": "SwordStrafeRight-GreatSwordStrafeRightRun",
@@ -504,7 +757,12 @@
    "mixamo_name": "Great Sword Strafe Right Run",
    "mixamo_id": "c9cc7b4d-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": true
+   "loop": true,
+   "face": "hips",
+   "markers": {
+    "step_left": 0.0,
+    "step_right": 0.3
+   }
   },
   {
    "file": "Drink-MaleDrinking",
@@ -513,7 +771,14 @@
    "mixamo_name": "Male Drinking",
    "mixamo_id": "c9c63255-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "hips",
+   "markers": {
+    "raise": 2.067,
+    "sip": 2.667,
+    "lower": 4.633,
+    "done": 5.533
+   }
   },
   {
    "file": "PickUp-PickingUpAnObject",
@@ -522,7 +787,13 @@
    "mixamo_name": "Picking Up An Object",
    "mixamo_id": "c9c6d7aa-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "hips",
+   "markers": {
+    "start": 0.633,
+    "grab": 2.2,
+    "up": 3.1
+   }
   },
   {
    "file": "Hit-HitReaction",
@@ -531,7 +802,9 @@
    "mixamo_name": "Hit Reaction",
    "mixamo_id": "c9c947d0-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "hips",
+   "markers": {}
   },
   {
    "file": "HitBack-LargeHitReactionFromTheBack",
@@ -540,7 +813,9 @@
    "mixamo_name": "Large Hit Reaction From The Back",
    "mixamo_id": "deb3ef18-8cf1-48ae-a8e5-5bd3b9e81a7d",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "hips",
+   "markers": {}
   },
   {
    "file": "HitLeft-LargeHitReactionFromTheLeft",
@@ -549,7 +824,9 @@
    "mixamo_name": "Large Hit Reaction From The Left",
    "mixamo_id": "8e0cf713-44d4-4a6e-af01-64e83af3fbb5",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "hips",
+   "markers": {}
   },
   {
    "file": "HitRight-LargeHitReactionFromTheRight",
@@ -558,7 +835,9 @@
    "mixamo_name": "Large Hit Reaction From The Right",
    "mixamo_id": "9f1f301e-3b08-4403-ae42-7ebc34cee551",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "hips",
+   "markers": {}
   },
   {
    "file": "HitSmallFront-SmallHitReactionFromTheFront",
@@ -567,7 +846,9 @@
    "mixamo_name": "Small Hit Reaction From The Front",
    "mixamo_id": "3faceec0-f022-4e81-8da2-5b0e38a66087",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "hips",
+   "markers": {}
   },
   {
    "file": "HitSmallBack-SmallHitReactionFromTheBack",
@@ -576,7 +857,9 @@
    "mixamo_name": "Small Hit Reaction From The Back",
    "mixamo_id": "0b890d95-c50e-4ece-a663-56f1870cc4f4",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "hips",
+   "markers": {}
   },
   {
    "file": "HitSmallLeft-SmallHitReactionFromTheLeft",
@@ -585,7 +868,9 @@
    "mixamo_name": "Small Hit Reaction From The Left",
    "mixamo_id": "63fd9933-26cb-40f9-b804-8f76768674dc",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "hips",
+   "markers": {}
   },
   {
    "file": "HitSmallRight-SmallHitReactionFromTheRight",
@@ -594,7 +879,9 @@
    "mixamo_name": "Small Hit Reaction From The Right",
    "mixamo_id": "b099a412-5194-4a60-850f-2306308fba1e",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "hips",
+   "markers": {}
   },
   {
    "file": "Death-DeathFromStandingIdle",
@@ -603,7 +890,11 @@
    "mixamo_name": "Death From Standing Idle",
    "mixamo_id": "c9c899a0-b96c-11e4-a802-0aaa78deedf9",
    "in_place": false,
-   "loop": false
+   "loop": false,
+   "face": "none",
+   "markers": {
+    "fall": 1.2
+   }
   },
   {
    "file": "Slide",
@@ -616,7 +907,13 @@
    "loop": false,
    "mixamo_keep": [
     "Running To Slide And Back To Running"
-   ]
+   ],
+   "face": "none",
+   "markers": {
+    "down": 0.3,
+    "flat": 0.367,
+    "up": 1.267
+   }
   }
  ]
 }

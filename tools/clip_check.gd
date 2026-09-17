@@ -22,6 +22,19 @@ const HIPS := "mixamorig_Hips"
 const RETARGET_SAMPLE := ["Walk-StandardWalk", "SwordCombo-GreatSwordComboSlash",
 	"Roll-DiveRollFromStanding-2", "BowDraw-ChargingBowForPowershot"]
 const RETARGET_TOLERANCE := 0.0005
+const ImportClip := preload("res://tools/import_clip.gd")
+## The events the animator and the combat code read (D-097); a re-import that
+## loses one fails here rather than in a match.
+const REQUIRED_MARKERS := {
+	"Throw": ["release"], "BowLoose": ["release"], "Cast": ["release"],
+	"SwordSpin": ["swing", "hit", "end"], "SwordPowerSlash": ["swing", "hit", "end"],
+	"SwordDownSlash": ["swing", "hit", "end"], "SwordCombo": ["hit_1", "hit_2", "hit_3"],
+	"SwordJumpAttack": ["hit", "land"],
+	"JumpStart": ["lift"], "Land": ["absorb"], "LandHard": ["absorb", "up"],
+	"Roll": ["dive", "apex", "land", "up"], "Slide": ["down", "up"],
+	"Drink": ["raise", "done"], "Death": ["fall"],
+	"SwordDraw": ["swap"], "SwordSheathe": ["swap"], "BowEquip": ["swap"], "BowUnequip": ["swap"],
+}
 
 var _failures := 0
 
@@ -69,6 +82,29 @@ func _initialize() -> void:
 
 	for file in RETARGET_SAMPLE:
 		_check_retarget(file, by_file.get(file, ""), player, skeleton)
+
+	# The rule table's two other columns, applied (D-097): a squared line
+	# measures square on the body, and every marker the animator will read is
+	# on its clip and inside it.
+	for row in table:
+		var key: String = by_file.get(row.file, "")
+		if key.is_empty():
+			continue
+		var anim := lib.get_animation(key)
+		var face: String = row.get("face", "hips")
+		if ImportClip.LINES.has(face):
+			var yaw := ImportClip._line_yaw(anim, skeleton, ImportClip._tracks_by_bone(anim), ImportClip.LINES[face])
+			_want("%s: %s line squared to the body (%.2f°)" % [key, face, yaw], absf(yaw) < 1.0)
+		for marker in row.get("markers", {}):
+			_want("%s: marker '%s' is on the clip" % [key, marker], anim.has_marker(marker))
+		for marker in anim.get_marker_names():
+			var at := anim.get_marker_time(marker)
+			_want("%s: marker '%s' at %.3f is inside the clip" % [key, marker, at], at >= 0.0 and at <= anim.length)
+		for marker in REQUIRED_MARKERS.get(row.role, []):
+			_want("%s: has the '%s' marker the animator reads" % [key, marker], anim.has_marker(marker))
+		if anim.loop_mode != Animation.LOOP_NONE and anim.get_meta("authored_speed", 0.0) > 0.3:
+			_want("%s: a travelling cycle has both footsteps" % key,
+				anim.has_marker("step_left") and anim.has_marker("step_right"))
 
 	body.free()
 	print("clip_check: %s" % ("PASS" if _failures == 0 else "FAIL (%d)" % _failures))
@@ -122,13 +158,17 @@ func _check_retarget(file: String, key: String, player: AnimationPlayer, skeleto
 		own_player.seek(t, true)
 		var here_all := _bone_positions(skeleton)
 		var there_all := _bone_positions(own_skeleton)
+		# The import turned the clip onto the body's forward (D-097); turn the
+		# reference the same way, so what is compared is the pose and not the
+		# stance.
+		var turn := Quaternion(Vector3.UP, deg_to_rad(player.get_animation(key).get_meta("facing_fix", 0.0)))
 		for b in skeleton.get_bone_count():
 			var here: Vector3 = here_all[b]
 			var there: Vector3 = there_all[own_skeleton.find_bone(skeleton.get_bone_name(b))]
 			# The hips are locked on the body and travel on the reference, so
 			# compare relative to the hips rather than in the skeleton's frame.
 			here -= here_all[skeleton.find_bone(HIPS)]
-			there -= there_all[own_skeleton.find_bone(HIPS)]
+			there = turn * (there - there_all[own_skeleton.find_bone(HIPS)])
 			if here.distance_to(there) > worst:
 				worst = here.distance_to(there)
 				worst_where = "%s at %.2f s" % [skeleton.get_bone_name(b), t]

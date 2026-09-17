@@ -12039,3 +12039,127 @@ run speed is for the user.
   pitch 11). It is a jog and would play at 2.8x.
 - **Picking on the sheets alone.** The strafe and crouch families look alike
   on a sheet; the yaw and hip columns are what separated them.
+
+## D-097 — The clip table gets two columns, facing and markers, and every event the animator reads is placed on the clip from the clip
+Step 3 of the animation rebuild. `assets/source_reorg/clips.json` is now the
+whole rule table the brief asked for: per clip, `loop`, `face` and `markers`.
+`tools/import_clip.gd` applies all three on import, so the animator (step 4)
+reads a facing-squared clip with its events on it and never carries a clip
+time of its own. The old `bog_animator.gd` carried about thirty (D-029, D-063,
+D-064, D-068); the survey at step 1 counted them.
+
+### `face`: which line the import squares, per family
+
+D-096 found that Mixamo authors the *world's* forward and lets the actor's
+stance turn: travel bearings were exact while hip lines sat 20–90° off. So the
+import yaws the hips' keys by the negative of a body line's mean angle off the
+rest pose, and the table says which line:
+
+| `face` | clips | what it does |
+|---|---|---|
+| `hips` (47) | idles, walks, runs, the crouch set, the jump set, the hits, the casts, the sword set, the throws | the hip line squared: the body faces the crosshair; a travelling clip's feet then step wherever they were authored relative to that stance |
+| `chest` (4) | the four strafes | the shoulder line squared and the hips left turned into the step (D-066) |
+| `none` (17) | the archer set, the slide, the dive roll, the death, the throw-while-moving pair | the authored frame trusted: an archer is side-on with the bow down world forward; a slide and a dive travel down it |
+
+Measured after import by `clip_measure`, every `hips` row reads **-0.0°** on
+its hip line and every `chest` row **-0.0°** on its chest line, and
+`clip_check` now fails any that drifts past 1°.
+
+**What squaring costs, said plainly.** A clip whose stance was turned 30° and
+whose travel was straight now travels 30° off the body's forward, and that is
+foot skate at that angle. After alignment the bearings that are not 0/±90/180:
+
+    CrouchWalk        +43°     SwordRun            +27°    SwordRunBack       -154°
+    CrouchStrafeRight -49°     SwordStrafeRight    -58°    SwordStrafeWalkLeft +129°
+    StrafeWalkLeft    +46°     StrafeLeft          +24°    SwordJumpAttack     +32°
+
+The forward walk, run and back cycles are within 7°, which is the set that is
+on screen most. The strafes are D-066's diagonals again (24° for the run pair,
+46° for the walk pair). The crouch and sword sets are the price of a squared
+body over a crab walk, and the choice was made on the crosshair: a BOG whose
+model faces 43° away from where its player aims reads as broken, feet that
+slip at 1.6 m/s in a crouch read as Mixamo. Step 4's strafe harness measures
+the skate; the fix for any leg that measures badly is a true lateral clip, not
+a number.
+
+Rejected for the sword set: leaving the stance (`none`), because the sword
+attacks themselves are authored square (`SwordDownSlash` -3°, `SwordCombo`
++12°) while its walks are turned 25–41°, so the stance would pop 30° on the
+first step; and `chest`, whose lines sit 16–41° off and would leave the same
+skate with a twisted spine on top.
+
+### `markers`: 109 events on 52 clips, each from a measurement and a sheet
+
+`tools/clip_events.gd` reads every frame of a clip by forward kinematics on the
+body and proposes: each toe's plant (low, and still in the world the clip was
+authored in — the hips are locked, so a planted foot moves backward at exactly
+the authored speed), each hand's furthest-forward frame and every speed peak
+with its half-peak window, the hips' lowest, highest and recovered frames, the
+last frame a toe is down before both leave, and the frames the left hand is at
+head height. Every proposal that the animator or the combat code will read was
+then rendered as a six-frame window on `preview_bog` (`out/step3/*.png`) and
+placed by eye against it. The ones that matter:
+
+| clip | marker | at | read off |
+|---|---|---|---|
+| Throw | `release` | **0.867** | the throwing hand furthest ahead of the hips (0.39 m) *and* fastest (6.2 m/s) on the same frame; on the sheet the hand is by the head at 0.80 and out in front at 0.90 (D-063's rule) |
+| BowLoose | `release` | **0.183** | the draw hand's 3.4 m/s spike between frames 5 and 6; open hand at 0.22 |
+| Cast | `release` | **0.833** | the casting hand furthest forward (0.58 m), a frame after its 4.8 m/s peak; wound back at 0.73, thrust at 0.82 |
+| SwordSpin | `swing` / `hit` / `end` | 0.933 / **1.067** / 1.233 | the hands' 5.6 m/s peak and its half-peak window; blade through at 1.15 on the sheet. The old `Swing` was this clip and D-068 measured its release at 1.067 |
+| SwordCombo | `hit_1..3` | 0.733, 1.667, 2.633 | three peaks at 5.5, 5.5 and 4.5 m/s, each with `swing_n`/`end_n` |
+| SwordPowerSlash | `hit` | 0.733 | 4.4 m/s; the 4.0 m/s peak at 0.30 is the wind-up turn |
+| SwordDownSlash | `hit` | 0.533 | 5.9 m/s, window 0.500–0.733 |
+| SwordJumpAttack | `lift` / `apex` / `hit` / `land` | 0.733 / 0.767 / 1.033 / 1.233 | toes leave, hips top out at 0.75 m, the landing slash peaks, the right foot plants |
+| Roll (the dive) | `dive` / `apex` / `land` / `up` | 0.767 / 0.833 / 1.033 / 1.867 | toes leave; hips top out (0.60 m — it is a low dive); the left hand takes the ground; hips back to 90% of standing. The old `JumpTwo` had 0.58 / 0.90 / 1.48 and a roll from 1.62 |
+| Slide | `down` / `flat` / `up` | 0.300 / 0.367 / 1.267 | toes leave; hips bottom out at **0.147 m**; the left foot plants to stand |
+| JumpStart | `lift` | 0.200 | last frame a toe is down, of eight |
+| Land | `absorb` | 0.267 | hips lowest |
+| LandHard | `impact` / `absorb` / `up` | 0.100 / 0.333 / 1.467 | first plant; hips lowest at 0.296 m with both hands on the ground; recovered |
+| Drink | `raise` / `sip` / `lower` / `done` | 2.067 / 2.667 / 4.633 / 5.533 | the left hand's three swings: up, at the head (2.6–5.2 at head height), down. The old window was 1.267–4.20 of the old clip |
+| PickUp | `start` / `grab` / `up` | 0.633 / 2.200 / 3.100 | the bend begins; the right hand's lowest frame (0.16 m); hips recovered |
+| Death | `fall` | 1.200 | toes leave the ground: where the ragdoll takes over |
+| SwordDraw / SwordSheathe | `swap` | 0.100 / 0.500 | the hand at the shoulder: where the prop moves between back and fist |
+| BowEquip / BowUnequip / BowReload | `swap` | 0.400 / 0.300 / 0.367 | the bow hand's fastest frame coming off or onto the back; the quiver hand's highest |
+| every travelling cycle | `step_right` / `step_left` | 0.000 / see the table | **every Mixamo cycle starts on a right-foot plant**, so `step_right` is 0.000 on 22 of 24 and the stride phase the brief asked to match is matched already: `Walk`'s left plant is at 31% of its cycle, `Run`'s at 36%, `RunBack`'s at 39%, `CrouchWalk`'s at 29%. No re-phasing was needed and none was done. The two sword strafes that start with both feet down are placed by hand |
+
+`BowDraw` gets a `hold` at 0.100 and nothing else, because the clip is not a
+draw: "Charging Bow For Powershot" holds a full draw for 3.8 s with the hands
+moving under 0.1 m/s. The pull itself is the blend from `BowAim` to `BowDraw`,
+which is step 4's to build; the old `Draw` clip's 0.567–1.017 pull has no
+counterpart here and the charge scrub cannot scrub a still pose.
+
+### What the import does now, in order
+
+Per clip: record the travel; yaw the hips' keys by the `face` rule; lock the
+hips to the axis; set the loop mode; write the markers (refusing one outside
+the clip); save; file in the library. 190 lines with its comments, and the
+facing needs a forward-kinematics pass over the tracks because nothing is in a
+scene tree during import — the same `_positions` that `clip_check`,
+`clip_measure` and `clip_events` reuse.
+
+### What proves it
+
+`clip_check` gained, per row: the squared line measures square (under 1°),
+every table marker is on the clip, every marker on the clip is inside it, the
+markers the animator reads are present (`REQUIRED_MARKERS`, 19 roles), and a
+travelling cycle has both footsteps. Run against the code without the things
+it checks (D-015): with the yaw step skipped, 49 rows fail the line check at
+their D-096 angles (`Idle` and `Run` were within a degree already); with the
+marker loop skipped, 51 rows fail on 162 missing markers. Smoke test
+135 of 135.
+
+### Rejected
+
+- **Re-phasing every cycle to start on the left plant** in the import. Mixamo
+  already starts them on the right one, and moving keys around a loop for
+  nothing is a way to make a seam.
+- **Markers from the kinematics alone.** `SwordDownSlash`'s speed peak is a
+  frame before the blade reaches chest height, `SwordPowerSlash`'s biggest
+  peak is its wind-up, and `Drink`'s "hand near the head" was true for the
+  whole clip because the head is 0.36 m across. Each of those was a sheet.
+- **A `freeze` rule to make the crouch idle from the walk's passing pose**
+  (D-029's fix for the same 21 cm). The user chose the deep squat at the step
+  2 checkpoint; the pop is the crouch.
+- **Per-clip rate hints in the table.** Every rate the animator needs is
+  either game speed over `authored_speed` or a window over a target time, and
+  both are derivations, not table entries.

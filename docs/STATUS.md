@@ -84,7 +84,7 @@ of things nothing else is checking.
 
 ---
 
-## The animation rebuild — steps 1 and 2 of 7 landed
+## The animation rebuild — steps 1 to 3 of 7 landed
 
 The character's animation pipeline is being rebuilt from scratch
 (`ANIMATION_REBUILD_PROMPT.md` is the brief; **D-095** is the first step's
@@ -98,15 +98,26 @@ What exists now:
   `root_scale = 180` (1.80 m, feet at 0). Its texture `art/bog/BOG_0.png` is
   extracted on import and gitignored.
 - `assets/source_reorg/anims/*.fbx` — **68 clips, one per role** (D-096 chose
-  them from 104), each with a `.import` that names `tools/import_clip.gd`, the
-  post-import script that records the authored speed, locks the hips, sets the
-  loop mode and files the clip in `art/generated/bog_clips.res` (one `.res`
-  per clip under `art/generated/clips/`). Every library key is a role:
+  them from 104), each with a `.import` that names `tools/import_clip.gd`.
+- `assets/source_reorg/clips.json` — **the rule table** (D-097): per clip
+  `loop`, `face` (`hips` / `chest` / `none`: which body line the import
+  squares to the body's forward) and `markers` (its events in seconds). The
+  import script applies all three: records the authored speed, yaws the hips
+  by the facing rule, locks the hips, sets the loop mode, writes the markers
+  onto the `Animation`, and files it in `art/generated/bog_clips.res` (one
+  `.res` per clip under `art/generated/clips/`). Every library key is a role:
   `Walk`, `Run`, `CrouchIdle`, `BowDraw`, `SwordCombo`, `Slide`.
-- `tools/clip_check.gd` — in the gate. `tools/clip_measure.gd` — every clip
-  as numbers (hip height, pitch, facing, travel bearing, loop seam).
+- 109 markers on 52 clips, each from `tools/clip_events.gd`'s kinematics and
+  a six-frame sheet: `release` on Throw (0.867), BowLoose (0.183) and Cast
+  (0.833); `swing`/`hit`/`end` on every sword attack; `dive`/`apex`/`land`/
+  `up` on the roll; `down`/`up` on the slide; `raise`..`done` on the drink;
+  `step_left`/`step_right` on every travelling cycle. The animator reads
+  these; it carries no clip times.
+- `tools/clip_check.gd` — in the gate, now also holding the squared lines
+  under 1° and the required markers present. `tools/clip_measure.gd` — every
+  clip as numbers. `tools/clip_events.gd` — where a clip's events are.
   `tools/preview_bog.tscn` — the picture, one row per clip key, several keys
-  stack.
+  stack, a `from`/`to` window zooms.
 
 ```
 "$GODOT" --headless --path . --import                       # the build, ~10 s
@@ -115,22 +126,28 @@ What exists now:
     res://tools/preview_bog.tscn out.png 30 Run-StandardRunning,Run-RunningForward-1
 ```
 
-**Next is step 3, the clip table and markers.** D-096 left it three findings
-to act on first: most clips face a *stance* rather than the rest pose (the
-jump family 34–43° right, the sword set 25–41°, the crouch set 21–46°, the
-archer set 60–93°) while every travel bearing is exact, so facing alignment
-is a per-family rule-table row; the crouch idle is a squat 21 cm below the
-crouch walk's stoop, which D-029 solved by freezing the walk's passing pose;
-and `RunBack` would play at 3.6x. Then every event marker (spear release,
-arrow loose, cast, sword hit window, footsteps, landing) placed by looking at
-the clip. Then the animator (4), grips, aim, ragdoll and robe (5), skins (6),
-and retiring the old path (7). Do not start a later step before the earlier
-one is green.
+**Next is step 4, the animator.** Rebuild `scripts/player/bog_animator.gd`
+around the library and the markers: keep its structure where it is sound
+(the blend tree in code, the one-shots, the arc-scrubbed air pose, the
+upper-body layers), delete every hardcoded clip time and every `AUTHORED_*`
+constant in `bog.gd` in favour of the clips' `authored_speed` metadata and
+markers. Locomotion, crouch, jumps (take-off / air loop / light and hard
+landing), the dive, actions, carry poses, weapon locomotion. Point
+`scenes/player/bog.tscn` at `art/bog/BOG.fbx`, and every bone name gains its
+`mixamorig_` prefix (the survey at step 1 lists the files). Smoke test green
+at each sub-step. Then grips, aim, ragdoll and robe (5), skins (6), and
+retiring the old path (7).
 
-Three design questions are open for the user, batched at this checkpoint:
-whether a BOG backs up at full run speed; whether the crouch is a squat or a
-stoop; and whether the double jump is a head-first dive (as before) or a jump
-with a rolling landing.
+Answered at the step 2 checkpoint by the user: **backing up is slower than
+running forward** (a movement cap in step 4, sized so the backward cycles
+play near the forward walk's 2.1x); **the crouch is the deep squat** (the 21
+cm pop into the crouch walk stays); **the double jump is a head-first dive**.
+Three things step 4 has to build that the clips do not give it: the bow's
+pull is a blend from `BowAim` to `BowDraw` (the draw clip is a 3.8 s hold);
+the dive's airborne part is 0.27 s of a low dive, scrubbed over the whole
+arc; and the strafe, crouch and sword cycles travel 24–58° off the body's
+forward after facing alignment (D-097 lists them), which the strafe harness
+will measure as skate.
 
 ---
 
