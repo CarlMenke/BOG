@@ -76,12 +76,12 @@ const WEAPON_ICON := 56
 ## running out to both edges of the screen; 64 of thumbnail inside it is the
 ## largest head that leaves a line for the name underneath in a 122 px band.
 ##
-## Measured, not chosen: at 84 the fourteen tiles come to 1176 px of a possible
-## 1488, so **the strip does not scroll and must not have to**. A horizontally
-## scrolling strip was the fallback if they would not fit, and it would have put
-## some of the fourteen behind a gesture on the one screen where "what can I be?"
-## is the whole question being asked. A wider tile, or a great many more skins,
-## brings that fallback back.
+## Measured, not chosen: at 84 wide with 6 between them the fourteen tiles come
+## to 1254 px of a possible 1488, so **the strip does not scroll and must not
+## have to**. A horizontally scrolling strip was the fallback if they would not
+## fit, and it would have put some of the fourteen behind a gesture on the one
+## screen where "what can I be?" is the whole question being asked. A wider
+## tile, or a great many more skins, brings that fallback back.
 const SKIN_TILE := Vector2(84, 92)
 const SKIN_THUMB := 64
 
