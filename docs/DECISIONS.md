@@ -11935,3 +11935,107 @@ from. `out/step1_walk.png` and `out/step1_runs.png` are the first two.
 - **Locking the hips to their first key.** Above.
 - **A project-wide importer default** for the clip settings. It would put
   `root_scale = 180` on every map and prop in the project.
+
+## D-096 — One clip per role: 68 clips chosen from 104 on posture, speed and family, and what the measurements said about Mixamo on the way
+Step 2 of the animation rebuild. 22 roles had more than one candidate; every
+candidate was measured (`tools/clip_measure.gd`) and rendered as a row of
+`tools/preview_bog.tscn` beside its rivals (`out/step2/*.png`), and one was
+kept. 36 files, their rows in `clips.json` and `VERIFIED.md`, and their
+products are deleted. The library is 68 clips, **4.8 MB**, and every key is
+now a role.
+
+### The rule, and the numbers it was applied on
+
+The brief's rule: one cohesive family, so posture does not pop between
+locomotion, jumps and crouch, and weapon sets that match. `clip_measure`
+prints, per clip, the mean hip height, the mean torso pitch (Hips→Neck off
+vertical), how far the hip line and the chest line are turned from the rest
+pose (+ to the BOG's left), the bearing of the authored travel, and the loop
+seam. The ground locomotion set that came out:
+
+    clip                     length   m/s   hips   pitch  hipyaw  chest
+    Idle (BreathingIdle)      9.933  0.000  0.597  12.5     0.6   -4.8
+    Walk (StandardWalk)       1.167  1.103  0.584   9.1     3.9    2.5
+    Run (StandardRunning)     0.733  3.115  0.514  19.3    -0.4    1.2
+    WalkBack (-2)             1.200  0.799  0.567   3.4     1.1    6.4
+    RunBack                   0.767  1.496  0.584  11.8    -6.8   -4.4
+    StrafeWalkLeft (-2)       0.933  1.374  0.582   6.8    83.5   44.0
+    StrafeWalkRight (-1)      0.933  1.374  0.582   6.8   -84.3  -44.8
+    StrafeLeft (Running -2)   0.667  2.550  0.581   3.5    77.1   65.9
+    StrafeRight (Running -1)  0.667  2.550  0.581   3.5   -77.2  -66.0
+
+Every hip height is within 83 mm of every other and every pitch within 16°,
+which is inside the 82 mm / 41° `Walk ↔ Run` boundary the old build shipped
+and the user liked (D-066). Idle, Walk, Run and the backward pair all face
+within 7° of the rest pose. The strafe pairs are exact mirrors of each other
+(`RunningStrafeToTheLeft-2` and `-Right-1` agree to 0.1° and 0.000 m/s; the
+walking pair likewise), which is what D-071 had to build in Blender.
+
+### The choices, role by role
+
+| role | kept | over | why |
+|---|---|---|---|
+| Idle | BreathingIdle | StandardIdle, StandingIdle-1/2/3 | square (0.6°/-4.8°) and breathing; StandardIdle has 0.000 m of bob and reads frozen; -1 and -2 are turned 29° and 43° with a hand at the chin and a cocked hip; -3 is square and would also do |
+| IdleLook | -2 | -1, -3 | -1 turns fully round (-56°); -3 leans 16.7°; -2 looks over both shoulders at 6° pitch |
+| Run | StandardRunning | RunningForward-1 | a run (3.1 m/s, 1.73x at the game's 5.4) against a jog (1.9 m/s, 2.8x) |
+| WalkBack | -2 | -1, -3 | -1 is turned 37°/50° with an arm out; -3 is 0.63 m/s, 3.7x at the game's 2.3 |
+| StrafeWalkLeft/Right | -2 / -1 (a mirror pair) | -1 / -2 | the other pair is 0.43 m/s — a shuffle at 5.3x — and barely lifts a foot |
+| StrafeLeft/Right | Running -2 / -1 (a mirror pair) | Running -1 / -2, LeftMaleStrafe-1/2, RightMaleStrafe-1/2 | upright (3.5°) with the chest at 66° and legs crossing; the -1 pair leans 15.8° and turns the chest only 57°; the MaleStrafes are 0.95 m/s walks turned 45° |
+| CrouchIdle, CrouchWalkBack, CrouchStrafeLeft/Right | the `-2` family | the `-1` family | two Mixamo crouch sets: `-1` carries a hand up by the face in every clip, `-2` keeps the hands low, which is what the single `CrouchWalk` does |
+| JumpStart | JumpingUpFromActionIdleGameBlend | JumpUp | the brief's jump is three pieces; this is a 0.23 s take-off that ends airborne, where JumpUp is a 2.4 s hop in place that never leaves the ground on the sheet |
+| AirLoop | MidAirFallingIdle | FallingInTheAirIdle | arms up, legs down; the other is a skydive at 70° pitch |
+| Land | JumpingDownFromFallingIdleGameBlend | LandFromFallAToStandingIdle-1/2 | the light landing (0.37 s); `LandHard` is the hard one; -1 stumbles 1.3 m forward and -2 is a second hard landing |
+| RunJump | ForwardRunningJump | JumpingWhileRunning | a leap that tucks its feet; the other barely leaves the floor |
+| Roll | DiveRollFromStanding-2 | -1, MidAirFallingIntoARollGameBlend, SprintToForwardRollToSprinting, ActionMoveRunningAndRolling | the brief asks for a dive and roll; -2 dives head first and rolls out in 2.4 s where -1 takes 3.9 s with a hand-clasp; the game-blend one is a fall with a roll landing and no dive; the sprint roll starts mid-stride; the action roll travels at 107° |
+| Throw | ThrowingAnObjectFromAStandardPose | ThrowingAndObject | the arm goes up over the head at 1.10 s and is out in front by 1.47 — the silhouette change D-063 says a release needs — in place, in 2.2 s; the other is 5.6 s with a step |
+| BowLoose | StandingAimFireArrow | ShootingWithBowAndArrow | a 0.7 s release from the drawn pose, which is what follows `BowDraw`; the other is a 5 s draw-aim-loose cycle |
+| Cast | OneHandedCastingSpellFowards | CastingASpellWithOneHand | a wind-up and a forward thrust at 0.8–1.2 s in 2.3 s; the other is a 4.3 s ritual |
+| SwordSheathe | -2 | -1 | starts with both hands on the hilt in front, as `SwordDraw` ends, and reaches back; -1 has the hand at the shoulder throughout |
+| Death | DeathFromStandingIdle | DyingFallingBackward-1/2 | square (-2.8°), clutches the chest and crumples in place; the ragdoll takes over after the first frames, so the tell is what matters |
+
+### What the measurements say about the whole set, for step 3
+
+**Most clips do not face the rest pose, and it is a stance, not an error.** The
+game-blend jump family (take-off, air loop, light landing) is turned 34–43° to
+the right in every clip; the great sword set 25–41°; the crouch set 21–46°;
+the hit reactions 40–62°; the archer set 60–93° (an archer is side-on). The
+travel bearings, meanwhile, are exact: 0.0°, ±90°, 180° — Mixamo authors the
+*world* forward and lets the actor's stance turn. So `CrouchWalk` walks
+straight down +Z with its hips at -43°. The old build aligned every clip's
+hips to the rest pose (D-029, D-066) and accepted the travel going off-axis
+(D-066's crouch at 33.8°). What to do per family — align the hips, align the
+chest, or leave the stance — is a row in the rule table and a few lines in
+`import_clip.gd`, and it is step 3's first job. It is not chosen here, and it
+did not change a pick: within each family the candidates agree with each other.
+
+**Mixamo still has no lateral run**, five decisions after D-071 found the same.
+Both running strafes turn the hips 77° into the step and the chest 57–66°, so
+aligned by the chest they are 24–33° forward diagonals, exactly the class
+D-066 measured at 27°. The mirror pair at least makes both sides the same
+diagonal, which is what D-071's `mirror` check demands.
+
+**The crouch idle is a squat and the crouch walk is a stoop.** `CrouchIdle-2`
+holds the hips at **0.305 m**, `CrouchWalk` at **0.515 m** — a 21 cm pop on the
+first step, in both families (the `-1` idle is 0.317). `CrouchDown`/`CrouchUp`
+go to the squat. D-029 met the same and froze the walk's passing pose as the
+idle; that is one rule-table row (`freeze` a frame of another clip) and step
+3's second job, unless the user prefers the squat as the BOG's crouch.
+
+**Backward is slow on paper.** `RunBack` is authored at 1.50 m/s against a
+5.4 m/s run (3.6x), `WalkBack` at 0.80 against 2.3 (2.9x). D-066 called the
+backpedal a movement decision, and it still is: whether a BOG backs up at full
+run speed is for the user.
+
+### Rejected
+
+- **Keeping two candidates for a role** (a dive and a landing roll, two idles
+  to alternate). The brief's shape is one clip per role and one row per clip;
+  a second idle is a new role (`IdleLook` already is one) and a landing roll is
+  a new row the day it is wanted.
+- **Choosing the `-1` crouch family for its hip height** (0.48 m, closer to
+  `CrouchWalk`'s 0.515). It carries a raised hand through every clip; the pop
+  is fixable in the table and the hand is not.
+- **`RunningForward-1` as the run** to match Walk's posture (hips 0.582,
+  pitch 11). It is a jog and would play at 2.8x.
+- **Picking on the sheets alone.** The strafe and crouch families look alike
+  on a sheet; the yaw and hip columns are what separated them.

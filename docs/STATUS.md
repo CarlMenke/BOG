@@ -84,7 +84,7 @@ of things nothing else is checking.
 
 ---
 
-## The animation rebuild — step 1 of 7 landed
+## The animation rebuild — steps 1 and 2 of 7 landed
 
 The character's animation pipeline is being rebuilt from scratch
 (`ANIMATION_REBUILD_PROMPT.md` is the brief; **D-095** is the first step's
@@ -97,15 +97,16 @@ What exists now:
 - `art/bog/BOG.fbx` — the body as Mixamo rigged it, imported by Godot at
   `root_scale = 180` (1.80 m, feet at 0). Its texture `art/bog/BOG_0.png` is
   extracted on import and gitignored.
-- `assets/source_reorg/anims/*.fbx` — 104 clips, each with a `.import` that
-  names `tools/import_clip.gd`, the post-import script that records the
-  authored speed, locks the hips, sets the loop mode and files the clip in
-  `art/generated/bog_clips.res` (one `.res` per clip under
-  `art/generated/clips/`). Keys are roles where a role has one file
-  (`Walk`, `Slide`), file names where it still has candidates
-  (`Run-StandardRunning`, `Run-RunningForward-1`).
-- `tools/clip_check.gd` — in the gate. `tools/preview_bog.tscn` — the picture,
-  one row per clip key, several keys stack.
+- `assets/source_reorg/anims/*.fbx` — **68 clips, one per role** (D-096 chose
+  them from 104), each with a `.import` that names `tools/import_clip.gd`, the
+  post-import script that records the authored speed, locks the hips, sets the
+  loop mode and files the clip in `art/generated/bog_clips.res` (one `.res`
+  per clip under `art/generated/clips/`). Every library key is a role:
+  `Walk`, `Run`, `CrouchIdle`, `BowDraw`, `SwordCombo`, `Slide`.
+- `tools/clip_check.gd` — in the gate. `tools/clip_measure.gd` — every clip
+  as numbers (hip height, pitch, facing, travel bearing, loop seam).
+  `tools/preview_bog.tscn` — the picture, one row per clip key, several keys
+  stack.
 
 ```
 "$GODOT" --headless --path . --import                       # the build, ~10 s
@@ -114,12 +115,22 @@ What exists now:
     res://tools/preview_bog.tscn out.png 30 Run-StandardRunning,Run-RunningForward-1
 ```
 
-**Next is step 2, clip choice**: for every role with more than one candidate,
-render them as rows of `preview_bog` and pick, keeping one family for
-locomotion, jumps and crouch; delete the losers and their rows; record the
-choice. Then the rule table and markers (3), the animator (4), grips, aim,
-ragdoll and robe (5), skins (6), and retiring the old path (7). Do not start a
-later step before the earlier one is green.
+**Next is step 3, the clip table and markers.** D-096 left it three findings
+to act on first: most clips face a *stance* rather than the rest pose (the
+jump family 34–43° right, the sword set 25–41°, the crouch set 21–46°, the
+archer set 60–93°) while every travel bearing is exact, so facing alignment
+is a per-family rule-table row; the crouch idle is a squat 21 cm below the
+crouch walk's stoop, which D-029 solved by freezing the walk's passing pose;
+and `RunBack` would play at 3.6x. Then every event marker (spear release,
+arrow loose, cast, sword hit window, footsteps, landing) placed by looking at
+the clip. Then the animator (4), grips, aim, ragdoll and robe (5), skins (6),
+and retiring the old path (7). Do not start a later step before the earlier
+one is green.
+
+Three design questions are open for the user, batched at this checkpoint:
+whether a BOG backs up at full run speed; whether the crouch is a squat or a
+stoop; and whether the double jump is a head-first dive (as before) or a jump
+with a rolling landing.
 
 ---
 

@@ -9,8 +9,8 @@ loads is the products the import writes to `art/generated/`. The body itself is
 ```
 clips.json       the clip table: every animation the game wants, with its Mixamo id,
                  the file name it lands under, whether it is fetched in place, and
-                 whether it loops. Several rows per role are candidates; the
-                 preview pass picks one and the rest are deleted.
+                 whether it loops. One row per role: D-096 chose each from
+                 the candidates that were fetched, and deleted the rest.
 anims/           one animation-only .fbx per row of clips.json, fetched by
                  tools/mixamo_fetch.py, each with the .import that
                  tools/clip_imports.sh writes. Never carries a mesh.

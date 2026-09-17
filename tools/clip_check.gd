@@ -20,7 +20,7 @@ const BONES := 49
 const HIPS := "mixamorig_Hips"
 ## The retarget check plays these on the body and on their own skeleton.
 const RETARGET_SAMPLE := ["Walk-StandardWalk", "SwordCombo-GreatSwordComboSlash",
-	"Roll-DiveRollFromStanding-1", "BowDraw-ChargingBowForPowershot"]
+	"Roll-DiveRollFromStanding-2", "BowDraw-ChargingBowForPowershot"]
 const RETARGET_TOLERANCE := 0.0005
 
 var _failures := 0
