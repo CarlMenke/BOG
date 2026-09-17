@@ -8,8 +8,12 @@ extends SceneTree
 ##
 ## Per clip: length, loop, authored speed, hip bob; the hips' mean height and
 ## the torso's mean pitch (Hips→Neck off vertical); how far the hip line and
-## the chest line are turned from the rest pose (+ to the BOG's left); the
-## bearing of the authored travel off the body's forward (+ to the left); and
+## the chest line are turned from the rest pose (+ to the BOG's left); how far
+## the chest line is turned from the *hip* line, mean and range, which is the
+## twist a clip carries in its own spine and the only part of a stance the
+## `face` yaw cannot reach, because that yaw turns the hips and the chest
+## together — an upper-body layer copies exactly that twist and nothing else;
+## the bearing of the authored travel off the body's forward (+ to the left); and
 ## the loop seam (the largest bone jump from the last frame back to the
 ## first, relative to the hips). It also names clips whose poses are identical,
 ## because Mixamo lists the same motion under more than one id.
@@ -42,8 +46,8 @@ func _initialize() -> void:
 	var only := OS.get_cmdline_user_args()
 	var keys := lib.get_animation_list()
 	keys.sort()
-	print("%-46s %6s %4s %6s %5s %5s %6s %6s %6s %7s %6s" % ["clip", "len", "loop", "m/s", "bob",
-		"hips", "pitch", "hipyaw", "chest", "bearing", "seam"])
+	print("%-46s %6s %4s %6s %5s %5s %6s %6s %6s %6s %6s %7s %6s" % ["clip", "len", "loop", "m/s", "bob",
+		"hips", "pitch", "hipyaw", "chest", "twist", "range", "bearing", "seam"])
 	var signatures := {}
 	for key in keys:
 		var anim := lib.get_animation(key)
@@ -53,6 +57,9 @@ func _initialize() -> void:
 		var pitch := 0.0
 		var hip_yaw := 0.0
 		var chest_yaw := 0.0
+		var twist := 0.0
+		var twist_low := INF
+		var twist_high := -INF
 		var sig := PackedFloat32Array()
 		for i in SAMPLES:
 			var t := anim.length * (float(i) + 0.5) / float(SAMPLES)
@@ -60,8 +67,18 @@ func _initialize() -> void:
 			hips += pos[_b("Hips")].y
 			var spine := pos[_b("Neck")] - pos[_b("Hips")]
 			pitch += rad_to_deg(spine.angle_to(Vector3.UP))
-			hip_yaw += _yaw(_flat(pos[_b("LeftUpLeg")] - pos[_b("RightUpLeg")]), _rest_left)
-			chest_yaw += _yaw(_flat(pos[_b("LeftShoulder")] - pos[_b("RightShoulder")]), _rest_chest)
+			var hip_line := _flat(pos[_b("LeftUpLeg")] - pos[_b("RightUpLeg")])
+			var chest_line := _flat(pos[_b("LeftShoulder")] - pos[_b("RightShoulder")])
+			hip_yaw += _yaw(hip_line, _rest_left)
+			chest_yaw += _yaw(chest_line, _rest_chest)
+			# The chest over the hips, on this frame: the shoulder line against the
+			# hip line, with the rest pose's own offset between the two lines taken
+			# out. A whole-body yaw moves both and cancels here, which is why this
+			# and not `chest` is the number a layered clip is judged on.
+			var t_i := _yaw(chest_line, _rest_chest) - _yaw(hip_line, _rest_left)
+			twist += t_i
+			twist_low = minf(twist_low, t_i)
+			twist_high = maxf(twist_high, t_i)
 			for bone in ["LeftArm", "RightUpLeg", "Spine", "Head"]:
 				var p := (pos[_b(bone)] - pos[_b("Hips")]).snapped(Vector3.ONE * 0.001)
 				sig.append_array([p.x, p.y, p.z])
@@ -72,10 +89,11 @@ func _initialize() -> void:
 			seam = maxf(seam, (first[b] - first[0]).distance_to(last[b] - last[0]))
 		var travel: Vector3 = anim.get_meta("travel", Vector3.ZERO)
 		var bearing := _yaw(_flat(travel), _rest_forward) if travel.length() > 0.05 else 0.0
-		print("%-46s %6.3f %4s %6.3f %5.3f %6.3f %5.1f %6.1f %6.1f %7.1f %6.3f" % [key, anim.length,
+		print("%-46s %6.3f %4s %6.3f %5.3f %6.3f %5.1f %6.1f %6.1f %6.1f %6.1f %7.1f %6.3f" % [key, anim.length,
 			"yes" if anim.loop_mode != Animation.LOOP_NONE else "no",
 			anim.get_meta("authored_speed", 0.0), anim.get_meta("hips_bob", 0.0),
-			hips / SAMPLES, pitch / SAMPLES, hip_yaw / SAMPLES, chest_yaw / SAMPLES, bearing, seam])
+			hips / SAMPLES, pitch / SAMPLES, hip_yaw / SAMPLES, chest_yaw / SAMPLES,
+			twist / SAMPLES, twist_high - twist_low, bearing, seam])
 		var h := sig.to_byte_array().hex_encode().md5_text()
 		signatures[h] = signatures.get(h, []) + [key]
 	for h in signatures:

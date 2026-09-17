@@ -387,6 +387,13 @@ func _ready() -> void:
 	if mode == "candidates":
 		_candidates(args.slice(4))
 		return
+	if mode == "twist":
+		_twist()
+		get_tree().quit()
+		return
+	if mode == "twist_sheet":
+		_twist_sheet()
+		return
 	_sheet(args[4] if args.size() > 4 else "spear",
 		args[5] if args.size() > 5 else "",
 		args[6] if args.size() > 6 else "")
@@ -2337,3 +2344,192 @@ func _drink(view: String, tune: Vector3 = Vector3.ZERO) -> void:
 	camera.size = float(fractions.size() - 1) * spread + FIST_FRAME
 	add_child(camera)
 	camera.look_at_from_position(centre + eye * 10.0, centre, Vector3.UP)
+
+
+# -------------------------------------------------------------- the twist ---
+
+## The clips the twist report reads on their own, and the bases it composes a
+## carry layer over. The three bases are the ones the bug is seen in: standing,
+## running, and the air loop, where a turned chest reads worst because there is
+## no stride to distract the eye.
+const TWIST_CLIPS := ["SpearCarry", "BowCarry", "BowAim", "Idle", "Run", "AirLoop", "SwordCarry"]
+const TWIST_BASES := ["Idle", "Run", "AirLoop"]
+const TWIST_SAMPLES := 12
+
+
+## How far the chest and the head are turned off the hips, per clip on its own
+## and on the **composed** body the game actually draws — the carry layer over a
+## base, a bone at a time, exactly as `_pose` composes it for every other
+## measurement in this file.
+##
+##   Godot --headless --path . --script tools/snapshot.gd -- \
+##       res://tools/preview_carry.tscn <png> 4 twist
+##
+## Two angles, not one, because the layer copies two joints that can turn
+## independently: `Spine1`/`Spine2` carry the chest and `Neck`/`Head` carry the
+## head on top of it. A clip can be square at the shoulders and still be looking
+## sixty degrees off, which is what an archer idle is.
+func _twist() -> void:
+	var bog := _bare_bog()
+	var skeleton := bog.find_child("Skeleton3D", true, false) as Skeleton3D
+	var player := bog.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	var rest := _twist_rest(skeleton)
+
+	print("preview_carry: the clip on its own (+ is to the BOG's left)")
+	print("  %-14s %8s %8s %8s %8s %8s %8s" % ["clip", "hips", "chest", "head",
+		"chest-hip", "head-hip", "range"])
+	for clip: String in TWIST_CLIPS:
+		if not player.has_animation(clip):
+			continue
+		var chest: Array[float] = []
+		var head: Array[float] = []
+		var hips: Array[float] = []
+		for i in TWIST_SAMPLES:
+			var t := player.get_animation(clip).length * (float(i) + 0.5) / TWIST_SAMPLES
+			_pose(player, skeleton, clip, t, "", 0.0)
+			var now := _twist_now(skeleton, rest)
+			hips.append(now.x)
+			chest.append(now.y)
+			head.append(now.z)
+		print("  %-14s %8.1f %8.1f %8.1f %8.1f %8.1f %8.1f" % [clip,
+			_mean(hips), _mean(chest), _mean(head),
+			_mean(chest) - _mean(hips), _mean(head) - _mean(hips),
+			maxf(_spread(chest), _spread(head))])
+
+	print("preview_carry: the composed body — the carry layer over a base")
+	print("  %-10s %-10s %10s %10s %10s %10s" % ["carry", "base",
+		"chest off", "head off", "chest bare", "head bare"])
+	for weapon: int in [Loadout.Weapon.SPEAR, Loadout.Weapon.BOW, Loadout.Weapon.SWORD]:
+		var carry := Loadout.carry_clip(weapon)
+		for base: String in TWIST_BASES:
+			if not player.has_animation(base) or not player.has_animation(carry):
+				continue
+			var on := _twist_over(player, skeleton, rest, base, carry)
+			var off := _twist_over(player, skeleton, rest, base, "")
+			print("  %-10s %-10s %10.1f %10.1f %10.1f %10.1f" % [carry, base,
+				on.x, on.y, off.x, off.y])
+
+
+## The mean chest-off-hips and head-off-hips of one composition, over a turn of
+## both clips at once: `(chest, head)`.
+func _twist_over(player: AnimationPlayer, skeleton: Skeleton3D, rest: Array,
+		base: String, carry: String) -> Vector2:
+	var chest: Array[float] = []
+	var head: Array[float] = []
+	for i in TWIST_SAMPLES:
+		var f := (float(i) + 0.5) / TWIST_SAMPLES
+		_pose(player, skeleton, base, player.get_animation(base).length * f, carry,
+			player.get_animation(carry).length * f if not carry.is_empty() else 0.0)
+		var now := _twist_now(skeleton, rest)
+		chest.append(now.y - now.x)
+		head.append(now.z - now.x)
+	return Vector2(_mean(chest), _mean(head))
+
+
+## `(hip line, chest line, head)` as yaws off the rest pose, in degrees, read off
+## whatever the skeleton is posed as right now. The head is read off its own
+## bone's turn rather than off a pair of points, because there is no second head
+## bone that is not straight above the first.
+func _twist_now(skeleton: Skeleton3D, rest: Array) -> Vector3:
+	var hips := _line_yaw_now(skeleton, "mixamorig_LeftUpLeg", "mixamorig_RightUpLeg", rest[0])
+	var chest := _line_yaw_now(skeleton, "mixamorig_LeftShoulder", "mixamorig_RightShoulder", rest[1])
+	var head_basis := skeleton.get_bone_global_pose(skeleton.find_bone("mixamorig_Head")).basis
+	var turn := head_basis * (rest[2] as Basis).inverse()
+	var head := rad_to_deg(Vector3.RIGHT.signed_angle_to(_flat_dir(turn * Vector3.RIGHT), Vector3.UP))
+	return Vector3(hips, chest, head)
+
+
+func _line_yaw_now(skeleton: Skeleton3D, left: String, right: String, reference: Vector3) -> float:
+	var a := skeleton.get_bone_global_pose(skeleton.find_bone(left)).origin
+	var b := skeleton.get_bone_global_pose(skeleton.find_bone(right)).origin
+	return rad_to_deg(reference.signed_angle_to(_flat_dir(a - b), Vector3.UP))
+
+
+## The two lines and the head's basis in the rest pose, which is what every yaw
+## above is measured off.
+func _twist_rest(skeleton: Skeleton3D) -> Array:
+	var hips := _flat_dir(skeleton.get_bone_global_rest(skeleton.find_bone("mixamorig_LeftUpLeg")).origin
+		- skeleton.get_bone_global_rest(skeleton.find_bone("mixamorig_RightUpLeg")).origin)
+	var chest := _flat_dir(skeleton.get_bone_global_rest(skeleton.find_bone("mixamorig_LeftShoulder")).origin
+		- skeleton.get_bone_global_rest(skeleton.find_bone("mixamorig_RightShoulder")).origin)
+	return [hips, chest, skeleton.get_bone_global_rest(skeleton.find_bone("mixamorig_Head")).basis]
+
+
+static func _flat_dir(v: Vector3) -> Vector3:
+	return Vector3(v.x, 0.0, v.z).normalized()
+
+
+static func _mean(values: Array[float]) -> float:
+	var total := 0.0
+	for v in values:
+		total += v
+	return total / maxf(values.size(), 1.0)
+
+
+static func _spread(values: Array[float]) -> float:
+	var low := INF
+	var high := -INF
+	for v in values:
+		low = minf(low, v)
+		high = maxf(high, v)
+	return high - low
+
+
+## The twist as a picture: the carry layer on, over the three bases the bug is
+## seen in, seen **dead from the front** — the one camera that can answer "is the
+## head facing me".
+##
+##   Godot --path . --resolution 2000x1400 --script tools/snapshot.gd -- ##       res://tools/preview_carry.tscn build/review/carry_twist_after.png 25 twist_sheet
+##
+## Two bands rather than two rows, for `_candidates`' reason: the camera is
+## orthographic and dead in front, so a body standing behind another renders on
+## top of it. The spear band is on the floor and the bow band is lifted, and feet
+## off the floor is a lie this sheet can afford because nothing here is measured
+## against the ground.
+## The bow band is lifted clear of the spear band's stamp, and every stamp sits
+## **above** its own body. Below it was tried first and is invisible: the camera
+## is at eye level and the stage's floor plane hides anything under y = 0.
+const TWIST_SHEET_SPREAD := 2.6
+const TWIST_SHEET_LIFT := 2.5
+const TWIST_SHEET_STAMP := 2.05
+## The frame, as a width, because `_build_stage` sizes on the horizontal and what
+## this sheet has to fit is 4.8 m of stacked bands: two Bogs and two labels.
+const TWIST_SHEET_WIDTH := 6.35
+const TWIST_SHEET_TOP := 5.1
+
+
+func _twist_sheet() -> void:
+	var weapons: Array[int] = [Loadout.Weapon.SPEAR, Loadout.Weapon.BOW]
+	_sheet_width = TWIST_SHEET_WIDTH
+	_sheet_centre = TWIST_SHEET_TOP * 0.5 - (FRAME_LOW + FRAME_HIGH) * 0.5
+	for band in weapons.size():
+		var weapon: int = weapons[band]
+		var carry := Loadout.carry_clip(weapon)
+		for i in TWIST_BASES.size():
+			var base: String = TWIST_BASES[i]
+			var bog := _bare_bog()
+			var skeleton := bog.find_child("Skeleton3D", true, false) as Skeleton3D
+			var player := bog.find_child("AnimationPlayer", true, false) as AnimationPlayer
+			bog.position = Vector3(
+				(float(i) - float(TWIST_BASES.size() - 1) * 0.5) * TWIST_SHEET_SPREAD,
+				TWIST_SHEET_LIFT if band == 1 else 0.0, 0.0)
+			bog.weapon = weapon
+			_show(bog, weapon)
+			# A third of the way into both clips: a fixed fraction rather than the
+			# worst frame, because the claim here is about the whole of a carried
+			# pose and not about one bad moment of it, and because the before and
+			# the after have to be the same frame to be a comparison.
+			_pose(player, skeleton, base, player.get_animation(base).length / 3.0,
+				carry, player.get_animation(carry).length / 3.0)
+
+			var stamp := Label3D.new()
+			stamp.text = "%s over %s" % [carry, base]
+			stamp.font_size = 40
+			stamp.pixel_size = 0.0016
+			stamp.position = Vector3(0.0, TWIST_SHEET_STAMP, 0.0)
+			stamp.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+			bog.add_child(stamp)
+
+	# Barely above the horizon, because a head that is turned is only obviously
+	# turned from eye level.
+	_build_stage(Vector3(0.0, 0.06, -1.0).normalized())
