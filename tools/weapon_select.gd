@@ -27,7 +27,13 @@ extends Node
 ##            instead of them, the three panels fold to their own headings on
 ##            their own toggles and open at the defaults the lobby ships with,
 ##            the config is not shown to a client at all, the strip's buttons
-##            pick, and they go dead while a match is running.
+##            pick, and they go dead while a match is running. **And the skin
+##            strip under it**, which is the same feature with a second owner:
+##            a pick round-trips through the roster in free-for-all, a pick in
+##            Teams moves the *team's* body and every member of the team wears
+##            it, a skin another team holds is a disabled tile and a refused
+##            request, and the Bog standing in the ring is wearing whatever the
+##            strip says.
 ##   ring   — `BogBackdrop.set_roster` puts three different weapons in three
 ##            **remote** Bogs' hands, which is the lobby half of "your character
 ##            should only show the weapon you have selected".
@@ -50,11 +56,15 @@ var _checks: int = 0
 ## put this back would quietly change the weapon the next real game starts
 ## with. `tools/ui_range.gd` makes the same point about a public address.
 var _saved_weapon: int = Loadout.DEFAULT
+## And the skin, for the same reason: `Net.set_skin` writes a free-for-all pick
+## through to `Settings["skin"]` exactly as `set_weapon` writes the weapon.
+var _saved_skin: int = Skins.DEFAULT
 
 
 func _ready() -> void:
 	print("weapon_select: starting")
 	_saved_weapon = Settings.chosen_weapon()
+	_saved_skin = Settings.chosen_skin()
 	# A harness that cannot reach the thing it is testing must not print PASS.
 	# See `match_rules.gd`, which learned this the hard way.
 	if Net == null or MatchState == null:
@@ -69,6 +79,7 @@ func _ready() -> void:
 	print("weapon_select: %d checks, %d failures" % [_checks, _failures])
 	print("weapon_select: %s" % ("PASS" if _failures == 0 else "FAIL"))
 	Settings.set_value("weapon", _saved_weapon)
+	Settings.set_value("skin", _saved_skin)
 	Net.leave_lobby(Net.Leave.LOCAL_REQUEST, "", false)
 	for i in 3:
 		await get_tree().process_frame
@@ -369,6 +380,129 @@ func _run_lobby() -> void:
 	_check("on the weapon that is picked",
 		(picker.get_child(Loadout.Weapon.SWORD) as Button).has_focus(), false)
 
+	# ------------------------------------------------------------ the skins ---
+	#
+	# The strip under the weapon strip, and the half of this feature the weapon
+	# never had: a second owner. In free-for-all a skin is a roster key and reads
+	# exactly like a weapon. In Teams it belongs to the **team** - any member may
+	# change it, everyone on it wears it, and no two teams may have the same one.
+	var skin_row := lobby.get_node_or_null("%SkinRow") as Control
+	var skins := lobby.get_node_or_null("%SkinPicker") as HBoxContainer
+	var caption := lobby.get_node_or_null("%SkinCaption") as Label
+	var ring := lobby.get_node_or_null("%Backdrop") as BogBackdrop
+	_check("the lobby has a skin row", skin_row != null, true)
+	_check("a skin strip", skins != null, true)
+	_check("a caption under the weapon blurb", caption != null, true)
+	if skin_row == null or skins == null or caption == null or ring == null:
+		print("weapon_select: lobby FAIL - the scene has no skin strip")
+		_failures += 1
+		lobby.queue_free()
+		return
+	_check("the strip is on beside the weapon strip, not instead of it",
+		skin_row.visible and row.visible, true)
+	_check("one tile per pickable skin", skins.get_child_count(), Skins.NAMES.size())
+	_check("fourteen of them", Skins.NAMES.size(), 14)
+	# The two folders under `art/skins/` that are not a pick: the worked example
+	# and the Elder's robe. A list that grew one of those by accident would put a
+	# garment on a strip of bodies.
+	_check("and the worked example is not one of them",
+		Skins.NAMES.has("example"), false)
+	_check("nor is the Elder's robe", Skins.NAMES.has("elder"), false)
+	_check("the plain body is the first and the default",
+		Skins.NAMES[Skins.DEFAULT], "bog")
+
+	# Free-for-all: the round trip, through the real tile, into the roster row
+	# and back out onto the strip.
+	_check("the plain body is the one lit",
+		_skin_tile(skins, Skins.DEFAULT).button_pressed, true)
+	_check("and the caption says it is yours", caption.text, "YOUR SKIN")
+	var muck := Skins.NAMES.find("muck")
+	_skin_tile(skins, muck).pressed.emit()
+	await get_tree().process_frame
+	_check("pressing a tile asks for that skin", Net.player_skin(1), muck)
+	_check("and it is the body that player is wearing", Net.skin_for(1), muck)
+	_check("the strip comes back showing it",
+		_skin_tile(skins, muck).button_pressed, true)
+	_check("with only one lit",
+		_skin_tile(skins, Skins.DEFAULT).button_pressed, false)
+	_check("and nobody else's body moved", Net.skin_for(951), Skins.DEFAULT)
+	# **The ring is wearing it**, which is the whole reason a skin is a roster
+	# key and not a local variable: eight Bogs' picks, not one. A second frame,
+	# for `_run_ring`'s reason.
+	await get_tree().process_frame
+	var ring_bogs: Array = ring.get("_bogs")
+	_check("the backdrop stood Bogs up", ring_bogs.size() >= 2, true)
+	if ring_bogs.size() >= 2:
+		_check("the ring's own Bog wears the pick",
+			_worn(ring_bogs[0]), Skins.texture_of(muck))
+		_check("and the Bog beside it does not",
+			_worn(ring_bogs[1]) == Skins.texture_of(muck), false)
+
+	# Teams. The same strip, a different owner.
+	var teamed := Net.config.duplicate_config()
+	teamed.mode = MatchConfig.Mode.TEAMS
+	teamed.team_count = 2
+	Net.update_config(teamed)
+	Net.players[1]["team"] = 0
+	Net.players[951]["team"] = 1
+	Net.players[952]["team"] = 0
+	Net.roster_changed.emit()
+	await get_tree().process_frame
+	_check("in Teams the team column means a body", Net.teams_decided(), true)
+	_check("team 1 starts on the plain body", Net.team_skin(0), Skins.DEFAULT)
+	_check("team 2 on the next skin along", Net.team_skin(1), 1)
+	_check("so two teams never start alike",
+		Net.team_skin(0) == Net.team_skin(1), false)
+	_check("the caption says whose skin the row changes",
+		caption.text.begins_with("TEAM 1'S SKIN"), true)
+	_check("the lit tile is the team's, not the player's",
+		_skin_tile(skins, Net.team_skin(0)).button_pressed, true)
+	_check("and the player's own free-for-all pick is not lit",
+		_skin_tile(skins, muck).button_pressed, false)
+	# **The other team's skin is a disabled tile**, which is where the rule is
+	# drawn before it is ever enforced.
+	_check("a skin the other team holds is disabled",
+		_skin_tile(skins, 1).disabled, true)
+	_check("while a free one is not", _skin_tile(skins, muck).disabled, false)
+
+	var slag := Skins.NAMES.find("slag")
+	_skin_tile(skins, slag).pressed.emit()
+	await get_tree().process_frame
+	_check("a pick in Teams moves the team's body", Net.team_skin(0), slag)
+	_check("and leaves the player's own row alone", Net.player_skin(1), muck)
+	_check("the one who pressed it is wearing it", Net.skin_for(1), slag)
+	_check("and so is a teammate who did not", Net.skin_for(952), slag)
+	_check("while the other team is not", Net.skin_for(951), 1)
+
+	# **The host refuses a skin another team holds**, whatever the strip did or
+	# did not let anybody press. Driven through `_request_skin`, the door a
+	# client's packet actually arrives at.
+	Net._request_skin(1)
+	_check("a request for the other team's skin is refused",
+		Net.team_skin(0), slag)
+	_check("and the other team still has it", Net.team_skin(1), 1)
+	_check("no two teams ever share one", _skins_are_unique(), true)
+
+	# A team switch is a change of clothes, with nothing sent: the body comes
+	# from the team, so joining a team is putting on its shirt.
+	Net.set_team(1)
+	await get_tree().process_frame
+	_check("switching team switches body", Net.skin_for(1), 1)
+	_check("and the tile the old team holds is now the disabled one",
+		_skin_tile(skins, slag).disabled, true)
+	_check("with the new team's lit", _skin_tile(skins, 1).button_pressed, true)
+	_check("the caption follows", caption.text.begins_with("TEAM 2'S SKIN"), true)
+
+	# Home again, so the checks after this read the screen they expect.
+	var ffa := Net.config.duplicate_config()
+	ffa.mode = MatchConfig.Mode.FREE_FOR_ALL
+	Net.update_config(ffa)
+	Net.roster_changed.emit()
+	await get_tree().process_frame
+	_check("back in free-for-all the player's own pick is theirs again",
+		Net.skin_for(1), muck)
+	_check("and the caption is back to yours", caption.text, "YOUR SKIN")
+
 	# The strip goes dead rather than lying about what it can do, once a match is
 	# running. `match_running` is set by hand here and not by pressing Start,
 	# because pressing Start is also what walks this scene into the arena - the
@@ -379,6 +513,11 @@ func _run_lobby() -> void:
 	await get_tree().process_frame
 	_check("a running match disables every button",
 		(picker.get_child(0) as Button).disabled, true)
+	_check("and every skin tile with them",
+		_skin_tile(skins, Skins.DEFAULT).disabled, true)
+	_skin_tile(skins, Skins.NAMES.find("void")).pressed.emit()
+	_check("a tile pressed after Start does nothing", Net.player_skin(1),
+		Skins.NAMES.find("muck"))
 	(picker.get_child(Loadout.Weapon.SPEAR) as Button).pressed.emit()
 	_check("and a press does nothing", Net.player_weapon(1), Loadout.Weapon.BOW)
 	Net.match_running = false
@@ -386,6 +525,7 @@ func _run_lobby() -> void:
 	await get_tree().process_frame
 	_check("and back in the lobby they are live again",
 		(picker.get_child(0) as Button).disabled, false)
+	_check("the tiles too", _skin_tile(skins, Skins.DEFAULT).disabled, false)
 
 	# Escape has one meaning again. D-069 gave it a branch that closed the picker
 	# surface first; there is no such surface, so there is no branch, and the
@@ -410,6 +550,7 @@ func _run_lobby() -> void:
 	await get_tree().process_frame
 	var client_settings := client.get_node_or_null("%MatchSettings") as Control
 	var client_row := client.get_node_or_null("%WeaponRow") as Control
+	var client_skins := client.get_node_or_null("%SkinRow") as Control
 	var client_count := client.get_node_or_null("%PlayerCount") as Label
 	var client_list := client.get_node_or_null("%Scroll") as Control
 	if client_settings == null or client_row == null or client_count == null \
@@ -420,6 +561,8 @@ func _run_lobby() -> void:
 		_check("a client is not shown the config at all",
 			client_settings.visible, false)
 		_check("but still gets the weapon strip", client_row.visible, true)
+		_check("and the skin strip with it",
+			client_skins != null and client_skins.visible, true)
 		_check("and still gets the roster count", client_count.visible, true)
 		_check("folded, exactly as the host's is", client_list.visible, false)
 	client.queue_free()
@@ -539,3 +682,35 @@ func _carry_pose(bog: Bog) -> String:
 		if state == "w%d" % i:
 			return Loadout.CARRY_CLIPS[i]
 	return "<%s>" % state
+
+
+## One tile off the skin strip. The strip is built in `Skins.all()` order, so a
+## skin index is a child index -- which is also what makes "only one is lit" a
+## thing this file can ask.
+func _skin_tile(strip: HBoxContainer, skin: int) -> Button:
+	return strip.get_child(skin) as Button
+
+
+## The texture a Bog's body is actually drawn with, read off the material the
+## renderer will use rather than off whatever was handed to `wear_skin` -- the
+## rule `tools/team_tint.gd` reads a tint by, and for its reason: what is
+## asserted has to be what ends up on the screen.
+func _worn(bog: Bog) -> Variant:
+	if bog == null or bog.body_mesh == null:
+		return "<no body>"
+	var material := bog.body_mesh.get_active_material(0) as BaseMaterial3D
+	if material == null:
+		return "<not a standard material>"
+	return material.albedo_texture
+
+
+## Whether every team is in a different body. The invariant the whole Teams half
+## rests on, asked of the array rather than of the path that maintains it.
+func _skins_are_unique() -> bool:
+	var seen := {}
+	for team in Net.config.team_count:
+		var skin := Net.team_skin(team)
+		if seen.has(skin):
+			return false
+		seen[skin] = true
+	return true

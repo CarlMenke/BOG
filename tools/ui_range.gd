@@ -14,7 +14,8 @@ extends Node
 ##
 ## Modes: menu, menu_join, menu_notice, settings, settings_network,
 ##        lobby, lobby_full, lobby_teams, lobby_client, lobby_map, lobby_capture,
-##        lobby_weapons, lobby_chat, lobby_feel, widths, capture_config.
+##        lobby_weapons, lobby_skins, lobby_ffa_skins, lobby_chat, lobby_feel,
+##        widths, capture_config.
 ##
 ## `widths` and `capture_config` print a verdict and are in the gate (D-076).
 ## Everything else is a photograph.
@@ -47,6 +48,24 @@ const FAKE_WEAPONS := [Loadout.Weapon.BOW, Loadout.Weapon.SWORD,
 	Loadout.Weapon.SPEAR, Loadout.Weapon.BOW, Loadout.Weapon.SWORD,
 	Loadout.Weapon.SPEAR, Loadout.Weapon.BOW]
 
+## What each stand-in is wearing in `lobby_ffa_skins`, and what the two teams
+## wear in `lobby_skins`. Named rather than indexed so the shot's caption and
+## this list can be read against each other, and deliberately far apart in the
+## picker's order so the lit tile is never next to its neighbour.
+##
+## Only those two modes deal skins. Every other lobby mode leaves the roster's
+## `skin` key alone and photographs a ring of plain Bogs, which keeps the
+## reference shots that existed before the picker did comparable with
+## themselves — the weapons are cycled everywhere because the ring is the only
+## place a weapon can be seen, and a skin is on a strip of its own.
+const FAKE_SKINS := ["toad", "rime", "slag", "gilt", "boo", "crag", "muck"]
+
+## The two teams in `lobby_skins`: the local player's, then the other one. Not
+## the defaults (team 0 is the plain body) — the shot is about two teams that
+## have *chosen*, and about the second one's tile being disabled on the first
+## one's strip.
+const TEAM_SKINS := ["toad", "rime"]
+
 var _mode: String = "lobby"
 
 
@@ -72,6 +91,16 @@ func _ready() -> void:
 			# strip is on in every lobby shot now, and this mode is what makes
 			# sure all three of its buttons are represented in the ring.
 			_open_lobby(2, false, true)
+		"lobby_skins":
+			# Two teams of three, each in its own body, and the local player on
+			# one of them — so the strip shows a lit tile, a disabled tile in
+			# the other team's colour, and a caption that says whose skin the
+			# row is changing.
+			_open_lobby(5, true, true)
+		"lobby_ffa_skins":
+			# Free-for-all, where a skin is one player's own. Six stand-ins in
+			# six different bodies, so the ring is six answers at once.
+			_open_lobby(6, false, true)
 		"lobby_chat":
 			# The one panel whose open state is not a stored boolean: the chat
 			# unfolds while the caret is in its input box.
@@ -168,6 +197,10 @@ func _open_lobby(extra: int, teams: bool, as_host: bool) -> void:
 		await _show_capture_rules(lobby)
 	elif _mode == "lobby_weapons":
 		await _dress_weapons()
+	elif _mode == "lobby_skins":
+		await _dress_team_skins()
+	elif _mode == "lobby_ffa_skins":
+		await _dress_own_skins()
 	elif _mode == "lobby_chat":
 		await _open_chat(lobby)
 	elif _mode == "lobby_feel" or _mode == "widths":
@@ -193,6 +226,35 @@ func _dress_weapons() -> void:
 	# `user://settings.cfg`, and a screenshot tool has no business changing the
 	# weapon the next real game starts with.
 	Net.players[1]["weapon"] = Loadout.Weapon.SPEAR
+	Net.roster_changed.emit()
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+
+## Two teams, two bodies, and the local player standing on one of them.
+##
+## Written into `Net.team_skins` rather than requested through `Net.set_skin`,
+## which is where the host would have put it — the request path is
+## `tools/weapon_select.gd`'s business and this file's business is a picture.
+## Nothing here reaches `Settings`: a team's skin is never saved locally anyway,
+## but the roster's own `skin` key would be, and `_dress_weapons` above says why
+## a screenshot tool must not write that file.
+func _dress_team_skins() -> void:
+	var dealt: Array[int] = []
+	for skin_name: String in TEAM_SKINS:
+		dealt.append(Skins.NAMES.find(skin_name))
+	Net.team_skins = dealt
+	Net.roster_changed.emit()
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+
+## Free-for-all: everybody in their own body, including the local player, so the
+## ring is as many answers as there are Bogs and the strip lights exactly one.
+func _dress_own_skins() -> void:
+	var ids := Net.peer_ids()
+	for i in ids.size():
+		Net.players[ids[i]]["skin"] = Skins.NAMES.find(FAKE_SKINS[i % FAKE_SKINS.size()])
 	Net.roster_changed.emit()
 	await get_tree().process_frame
 	await get_tree().process_frame
