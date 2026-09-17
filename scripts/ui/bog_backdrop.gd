@@ -60,13 +60,24 @@ const FLOOR_DRESSING := ["Mushroom_Common", "Rock_Medium_1", "Rock_Medium_2",
 ## into the upper third of the screen — the only band of a lobby that is not
 ## covered in panels.
 ##
+## **HERO is a long lens on purpose.** The Bog stands on the far side of the
+## fire, so the fire is nearer the camera than he is and is therefore drawn
+## larger than life by any wide lens — at 42 degrees from 4.5 m the flame was
+## the subject and he was the thing behind it. Pulling the eye back to 6.7 m and
+## closing down to 24 brings the two distances within ten per cent of each
+## other, which is what puts the fire at his feet instead of across his chest.
+## It flattens him, and a hero shot is the one place that is a gift.
+##
 ## `clear_radius` is the hole in the middle of the scatter. In RING it has to
 ## be wider than the ring itself: the first version planted boulders at three
-## metres and the lobby became six Bogs standing behind a rock.
+## metres and the lobby became six Bogs standing behind a rock. HERO needs one
+## now for the same reason and it did not use to: the hero Bog stands *inside*
+## the scatter's own arc rather than in the clear wedge in front of the camera,
+## so at the old 1.1 m a fern could be planted in him.
 ##
 ## There used to be a `plate_scale` here, and it is worth saying why there is
 ## not one now. `Nameplate` was `fixed_size`, so its height on screen came from
-## the field of view and nothing else — and these formations are shot at 42 and
+## the field of view and nothing else — and these formations are shot at 24 and
 ## 36 degrees against the game's 75, which made a lobby plate about twice the
 ## size of the one over the same head in a match. Shrinking the node was the
 ## only lever from out here. The plate now has a real size in the world, so a
@@ -74,10 +85,10 @@ const FLOOR_DRESSING := ["Mushroom_Common", "Rock_Medium_1", "Rock_Medium_2",
 ## amount, and the two stay matched with nothing to tune.
 const FRAMING := {
 	Formation.HERO: {
-		"eye": Vector3(2.90, 1.78, 4.55),
-		"look": Vector3(-1.65, 1.16, -0.20),
-		"fov": 42.0,
-		"clear_radius": 1.1,
+		"eye": Vector3(3.60, 2.15, 5.70),
+		"look": Vector3(-1.01, 0.87, -1.20),
+		"fov": 24.0,
+		"clear_radius": 2.6,
 	},
 	Formation.RING: {
 		"eye": Vector3(0.0, 3.10, 8.20),
@@ -233,11 +244,19 @@ func _equip(bog: Bog, weapon: int) -> void:
 
 func _slot_transform(index: int, count: int) -> Transform3D:
 	if formation == Formation.HERO or count <= 1:
-		# Stood in front of the fire rather than on it, so the flame is a rim
-		# light behind him and his silhouette has something to be a silhouette
-		# against. Turned a few degrees off the camera so the pose reads as
-		# three-quarter rather than as a mugshot.
-		return Transform3D(Basis(Vector3.UP, deg_to_rad(166.0)), Vector3(0.10, 0.0, 1.85))
+		# Stood on the *far* side of the fire from the camera, facing back across
+		# it. The fire is then between him and the lens, which is the whole of
+		# the lighting: it is the only warm source in the glade, so whichever
+		# side of it he stands on is the side that gets a face. He used to stand
+		# in front of it and be a silhouette with a rim on it — handsome, and a
+		# menu whose subject you could not actually see. Turned ten degrees off
+		# the camera, into the frame, so the pose reads as three-quarter rather
+		# than as a mugshot.
+		#
+		# 1.65 m out, which is as close to the flame as the pose survives: nearer
+		# and the fire is lighting his shins and blowing out his belly, further
+		# and he walks out of the only light there is.
+		return Transform3D(Basis(Vector3.UP, deg_to_rad(197.0)), Vector3(-0.37, 0.0, -1.61))
 
 	# Fill the far arc, centred on the back of the ring. One Bog is at the
 	# middle of the arc, two straddle it, and so on outward.
