@@ -1,0 +1,1 @@
+Raw prop sources for tools/decimate_assets.py; the game loads art/generated/. Godot must not import 500k-triangle scans.

@@ -1,5 +1,10 @@
 # Plan — health, the bow, and a spear you can see leave the hand
 
+> **Historical since D-101.** Every clip, build script and constant this plan
+> names belonged to the old character pipeline (`build_bog.py`, `bog.glb`), which
+> was replaced end to end by **D-095..D-101**. The mechanics it designed are
+> still the game's; the numbers and file names are not.
+
 > **COMPLETE.** All eleven steps are done and the gate is at **113 checks**,
 > green. The plan added **D-062..D-070**: health and one door for every hit, a
 > throw you can see leave the hand, the Elder's own cast, the bow, the locomotion

@@ -240,7 +240,7 @@ and `tools/` is full of scenes for it:
 |---|---|
 | `combat_range.tscn` | **the combat testbed** — a real match, one player, dummies |
 | `sandbox.tscn` | flat playground for movement |
-| `preview_assets`, `preview_anim`, `preview_grip` | the art, the clips, the spear in the hand |
+| `preview_assets`, `preview_bog`, `preview_grip` | the art, the clips on the body, the spear in the hand |
 | `preview_ragdoll`, `ragdoll_stability` | how a corpse falls, and whether it survives |
 | `preview_sky` | the sky and environment |
 | `preview_island` | **the island** — a dozen framings (plan view, eye height on any pad, under a tree), `match` for real Bogs, `hud` to keep the HUD |
@@ -251,7 +251,7 @@ and `tools/` is full of scenes for it:
 | `match_rules.tscn` | 195 assertions across 14 scoring scenarios, headless |
 | `net_loopback.tscn` | two real processes over a real socket, ten rematches included. Run by hand through `net_test.sh` (not in the gate, ~45 s); binds loopback only |
 | `inspect_scene.gd` | dump a scene's tree, clips, bones and triangle counts |
-| `preview_anim`, `preview_grip`, `preview_ragdoll` | contact sheets of a clip, the spear in the fist, a corpse falling |
+| `preview_bog`, `preview_carry`, `preview_ragdoll` | contact sheets of a clip (rows of candidates, a window, a skin), the props in the fists, a corpse falling |
 
 `combat_range` runs the **real match path** — an offline session on `Net`, a
 roster, `MatchState.register_arena`, kills through `MatchState.report_kill` — so
@@ -288,11 +288,11 @@ left the hand.
 Both are committed, so you only need this if you change a source file:
 
 ```bash
-bash tools/build_bog.sh             # the Bog: several Mixamo packs → one .glb. Needs Blender 5.2
+"$GODOT" --headless --path . --import   # the BOG: 68 Mixamo clips → one library. No Blender (D-095)
 python tools/decimate_assets.py     # spear, magnet, shield, B, O, G. numpy, scipy, pillow, fast_simplification
 python tools/make_sfx.py            # needs numpy
 python tools/prepare_map.py         # needs numpy, pillow
-python tools/rig_report.py          # checks the Bog's rig; prints, changes nothing
+"$GODOT" --headless --path . --script tools/clip_check.gd   # checks the BOG's body and clips; in the gate
 ```
 
 The three props arrive at ~500k triangles each and leave at 19k between them,
@@ -305,19 +305,19 @@ down to 512, the embedded image being renamed so Godot extracts it as
 `letter_g_basecolor.png` rather than `letter_g_G_LETTER_basecolor.jpg.png`, and
 the repack into one clean single-buffer `.glb`. The O (**D-080**) is the odd one
 out: it arrives at 429,870 triangles, a prop-sized mesh in a letter's clothing,
-and takes the same 6000 as a real 1.4% decimation. **The Bog has its own pipeline** and does
-not go through `decimate_assets` at all: `tools/build_bog.sh` runs
-`tools/build_bog.py` in headless Blender, which consolidates the declared FBX files
-in `assets/source/GUB_2/` into one 1.5 MB `art/generated/bog.glb` — one armature,
-one mesh, nine clips, 10.5k triangles, 1.80 m tall, root motion locked, every
-clip's facing aligned — and prints every measurement it takes (**D-029**). Three
-runs of it produce a byte-identical file, and it refuses to write one whose jump
-clips go through the floor. After a rebuild, run
-`"$GODOT" --headless --path . --import` once so Godot re-extracts the texture.
+and takes the same 6000 as a real 1.4% decimation. **The BOG has its own pipeline** and does
+not go through `decimate_assets` at all: Godot imports `art/bog/BOG.fbx` (the
+sculpt as Mixamo rigged it) and the 68 animation-only clips under
+`assets/source/anims/` directly, and `tools/import_clip.gd` runs inside the
+importer on each clip, applying its row of `assets/source/clips.json` — the
+authored speed, the facing, the loop, the event markers — and filing it in
+`art/generated/bog_clips.res`. A re-import is the build, about ten seconds
+(**D-095**). Adding a clip is a row, `python tools/mixamo_fetch.py`, and
+`bash tools/clip_imports.sh`; `assets/source/README.md` walks it through.
 
-`tools/rig_report.py` is how you tell whether a rig change helped, and is worth
-running after any change to the rig or to a source file. Sources in `assets/` are
-never modified; re-running any of these is always safe.
+`tools/clip_check.gd` is how you tell whether the body and the library still
+agree, and is in the gate. Sources in `assets/` are never modified; re-running
+any of these is always safe.
 
 **Maps are split raw/processed, and only the processed half is in the repository.**
 `tools/prepare_map.py` reads `assets/source/Rust/rust.glb` — a 337 MB Blender

@@ -937,7 +937,7 @@ const STRAFE_LIMIT := 1.25
 ## the walk legs that this step did not move, under the two run legs that it
 ## did. The old build fails it twice. The band is narrow — 0.80 under it and
 ## 0.93 over it — and it stays narrow until the walk poles are closed too; the
-## one download that would widen it is named in `build_bog.py`'s strafe block.
+## one download that would widen it is named in D-098's strafe section.
 ##
 ## What this line is **not** able to do on its own is worth writing down, because
 ## it is why there are two of them. Declaring the handed `StandingRunRight.fbx`
@@ -3399,7 +3399,7 @@ func _drive_release(player: Bog, combat: BogCombat) -> void:
 ## How far in front of the hips the throwing hand is, in metres.
 ##
 ## Off the skeleton's own pose and projected onto the Bog's facing, which is the
-## same quantity `tools/hand_track.gd` prints and `tools/build_bog.py` reports
+## same quantity `tools/clip_events.gd` proposes a release from
 ## as "furthest forward" — so the frame this peaks on is the frame
 ## `BogAnimator.THROW_RELEASE_IN_CLIP` was cut from, arrived at from a different
 ## direction. Global rather than skeleton-local on purpose: which skeleton axis

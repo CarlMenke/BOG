@@ -14,7 +14,7 @@ extends Node3D
 ##       res://tools/preview_sky.tscn out.png 45 [horizon|up|edge]
 
 const ENV_PATH := "res://resources/config/arena_env.tres"
-const BOG_PATH := "res://art/generated/bog.glb"
+const BOG_PATH := "res://art/bog/BOG.fbx"
 
 ## Where the sky's moon sits. Must match `moon_direction` in `arena_sky.tres`:
 ## the shader reads the DirectionalLight3D when one exists, and a mismatch would

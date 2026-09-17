@@ -18,7 +18,7 @@ Static, unskinned meshes only. The Bog came through here too until D-029: a
 skinned photogrammetry mesh whose hand-made rig had to be repaired on the way
 past, which is what the skin binding, the animation-curve cleanup, the clip
 facing alignment and the root-motion stripping in this script existed for. It is
-now built from Mixamo FBX by `tools/build_bog.py`, which does all of that at the
+now imported straight from Mixamo FBX by Godot (`tools/import_clip.gd`, D-095), which does all of that at the
 source instead, so all of it is gone from here and every remaining *source* is
 one unskinned mesh with one material and no animation.
 
@@ -159,16 +159,16 @@ OUT_DIR = os.path.join(REPO, "art", "generated")
 # and the four sunken faces under them; the glow in those faces is texture and
 # costs nothing.
 TARGETS = {
-    "spear":       ("assets/source/Spear.glb", 3000, 512),
-    "magnet":      ("assets/source/MAGNET.glb", 6000, 512),
-    "shield":      ("assets/source/SHIELD.glb", 10000, 1024),
-    "letter_g":    ("assets/source/G_LETTER.glb", 6000, 512),
-    "letter_o":    ("assets/source/O_LETTER.glb", 6000, 512),
-    "letter_b":    ("assets/source/B_LETTER.glb", 6000, 512),
-    "arrow":       ("assets/source/ARROW.glb", 1200, 512),
-    "bow":         ("assets/source/BOW.glb", 4000, 1024),
-    "heal_potion": ("assets/source/HEAL_POTION.glb", 6000, 512),
-    "greatsword":  ("assets/source/GreatSword.glb", 3000, 1024),
+    "spear":       ("assets/source/props/Spear.glb", 3000, 512),
+    "magnet":      ("assets/source/props/MAGNET.glb", 6000, 512),
+    "shield":      ("assets/source/props/SHIELD.glb", 10000, 1024),
+    "letter_g":    ("assets/source/props/G_LETTER.glb", 6000, 512),
+    "letter_o":    ("assets/source/props/O_LETTER.glb", 6000, 512),
+    "letter_b":    ("assets/source/props/B_LETTER.glb", 6000, 512),
+    "arrow":       ("assets/source/props/ARROW.glb", 1200, 512),
+    "bow":         ("assets/source/props/BOW.glb", 4000, 1024),
+    "heal_potion": ("assets/source/props/HEAL_POTION.glb", 6000, 512),
+    "greatsword":  ("assets/source/props/GreatSword.glb", 3000, 1024),
 }
 
 # Targets that get something added after the decimator has finished with them.

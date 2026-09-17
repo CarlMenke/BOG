@@ -1,5 +1,5 @@
 extends Node3D
-## The Elder: a Bog, plus `art/generated/elder.glb` bound onto its own skeleton.
+## The Elder: a Bog, plus `art/skins/elder/robe.tscn` bound onto its own skeleton.
 ## Development tool, not shipped.
 ##
 ##   Godot --path . --resolution 1100x900 --script tools/snapshot.gd -- \
@@ -22,7 +22,7 @@ extends Node3D
 ## it), take the `MeshInstance3D` out of the Elder scene and re-parent it under
 ## that skeleton with its `Skin` intact. Nothing copies an animation and nothing
 ## duplicates a bone. The bind names are printed and resolved against the target
-## skeleton on the way past, so a rename in `build_bog.py` fails here with a list
+## skeleton on the way past, so a renamed bone fails here with a list
 ## rather than in game with a robe lying on the floor.
 ##
 ## `light` is not decoration either. The brief is a material, and the two places
@@ -199,11 +199,11 @@ func _make_bog(clip: String, time: float) -> Node3D:
 
 ## Which way the body is actually pointing, asked of the rig rather than assumed.
 ##
-## The model's own facing depends on how `build_bog.py` aligned the clips and on
+## The model's own facing depends on how `import_clip.gd` aligned the clips and on
 ## the 180-degree turn `bog.tscn` puts on the instance, and a preview that
 ## guessed wrong would frame the back of the head and call it a front view. The
 ## line between the two hip joints is the one pair of joints that stays put while
-## the arms and torso animate — the same measurement `build_bog.py` aligns the
+## the arms and torso animate — the same measurement `import_clip.gd` aligns the
 ## clips on — so the facing is derived from it: with up = +Y, a body's left is
 ## up x forward, so forward is the hip line turned a quarter turn.
 func _facing(model: Node3D) -> Vector3:
@@ -275,7 +275,7 @@ func _build_sheet() -> void:
 	var x := -SHEET_SPACING * (SHEET_SAMPLES - 1) * 0.5
 	var forward := Vector3.BACK
 	# The last sample lands *on* `to` when a window was asked for and one step
-	# short of it when it was not, which is `tools/preview_anim.gd`'s rule and
+	# short of it when it was not, which is `tools/preview_bog.gd`'s rule and
 	# is there for the same reason: a looping clip's last frame is its first.
 	var steps := float(SHEET_SAMPLES if _until < 0.0 else maxi(SHEET_SAMPLES - 1, 1))
 	for i in SHEET_SAMPLES:

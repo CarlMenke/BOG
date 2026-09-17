@@ -12463,3 +12463,69 @@ and a feature, not this step.
   hue turn is only how this example was made.
 - **The example at the body's full 4096².** 12 MB in the repository to show
   a colour.
+
+## D-101 — Retire the old character pipeline; `assets/source/` is the clips
+Step 7 of the animation rebuild, the last. Everything the game ran on before
+D-095 is gone from the tree in one commit, and `assets/source/` means the
+new thing: the 68 animation-only clips under `anims/`, `clips.json`, the
+README that says how a clip is added, and beside them the raw props and the
+raw map the other pipelines still read.
+
+**Deleted, 66 files, 75 MB out of the repository.** The Blender builds and
+everything that only served them: `tools/build_bog.py` and `.sh`,
+`tools/build_elder.py` and `.sh`, `tools/find_blender.sh`,
+`tools/rig_report.py`, `tools/audit_source_packs.py`,
+`tools/preview_clips.py` and `.sh`, `tools/hand_track.gd`,
+`tools/preview_anim.gd` and `.tscn`; their outputs `art/generated/bog.glb`,
+`bog_basecolor.jpg`, `elder.glb`, `elder_basecolor.png`, `elder_emissive.png`
+with their `.import`s; and the source packs those builds read —
+`2_Spear_Suite`, `3_Bow_Suite`, `4_Elder_Suite`, `5_Locomotion`,
+`6_Utility`, `7_GreatSword_Suite`, `GUB_2`, `BOG.glb`, the `_rejected`
+manifest. Nothing in `scenes/`, `scripts/` or the gate referenced any of
+them after D-098 and D-099 (a grep sweep, then the gate). `tools/refit_robe.gd`
+read `elder.glb` for the robe's geometry and cannot run again as it stands;
+its header names the commit that still has its inputs, and the robe it wrote
+is committed, so that is a note and not a loss.
+
+**Moved.** `assets/source_reorg/` → `assets/source/` (151 renames), and
+every path that named it — the clips' `.import` files, `tools/import_clip.gd`,
+`tools/clip_check.gd`, `tools/clip_imports.sh`, `tools/mixamo_fetch.py`,
+the README — follows. The twelve raw prop GLBs that sat loose in
+`assets/source/` went into `assets/source/props/`, and
+`tools/decimate_assets.py` reads them there.
+
+**The rule that came out of it: every raw folder under `assets/source/`
+carries a `.gdignore`, and `anims/` is the only one that does not.** The old
+`assets/source/.gdignore` hid the whole tree from Godot, and it had to go so
+the clips could import; the moment it went, Godot imported every raw prop,
+the 337 MB Rust export and the Mushroom kit alongside them — a minute of
+importing and a scatter of `.import` files and extracted textures across
+the tree. `props/`, `Rust/` and `Mushroom/` each carry their own `.gdignore`
+now, and `export_presets.cfg` already excludes `assets/source/*` from
+the build, so the clips are imported by the editor for the library's sake
+and shipped by nothing. A new raw folder under `assets/source/` starts with
+a `.gdignore`; a new clip goes in `anims/` and nowhere else.
+
+**What the docs say now.** `docs/ARCHITECTURE.md` has a section for the
+character pipeline and its table names the import scripts where it named
+`build_bog.py`. `README.md`'s pipeline paragraph and tool tables say
+`--import` and `clip_check` where they said Blender and `rig_report`.
+`docs/HANDOFF.md` no longer lists Blender as a prerequisite. `docs/PLAN.md`
+has Phase 8, the rebuild as it landed, with one item open: the two clips only
+the user can fetch (a one-handed carry idle, D-099; the Magic pack's
+`Standing Run Left`, D-098). `docs/PLAN_COMBAT.md` is marked historical at
+the top, because every clip name and constant in it belonged to the old
+path. `docs/STATUS.md` says the rebuild is done and what is left.
+
+### Rejected
+
+- **Keeping `bog.glb` and `elder.glb` as a fallback.** 60 MB of a body that no
+  scene instances, with clips no animator reads, and a `.import` each that
+  costs every fresh clone a minute. Git history is the fallback.
+- **Leaving the raw props loose in `assets/source/`** with a `.gdignore` on
+  each. A `.gdignore` is a folder rule, and twelve of them next to the clips
+  is twelve places a new prop can forget one.
+- **Keeping `assets/source/.gdignore` and moving the clips out of
+  `assets/source/`** to some `art/clips/`. The brief names the folder, the
+  README in it is written for that path, and the raw folders are the odd
+  ones out, not the clips.

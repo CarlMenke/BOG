@@ -171,7 +171,7 @@ const SHIELD_DISTANCE := 2.1
 ## sentence was the derivation and 28 was its answer, written down. What D-065
 ## changed is which end is the constant.
 ##
-## It is the visible Bog — the 1.80 m rig `tools/build_bog.py` scales to — and
+## It is the visible Bog — the 1.80 m rig `art/bog/BOG.fbx` imports at (D-095) — and
 ## not `Bog.STAND_HEIGHT`'s 1.55 m collision capsule, because what a player
 ## aims at is the Bog they can see. Keeping the original figure also keeps the
 ## arithmetic checkable: `flat_band(SpearProjectile.SPEED, SpearProjectile.DROP)`

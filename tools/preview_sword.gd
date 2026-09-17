@@ -25,7 +25,7 @@ extends Node3D
 ## the fist that joins it, through a clip that is throwing both of them about. So
 ## the fit is solved rather than nudged.
 ##
-## **Why the sheet is here and not `preview_anim.tscn`.** That tool stands one
+## **Why the sheet is here and not `preview_bog.tscn`.** That tool stands one
 ## Bog per sampled moment in an evenly spaced row, which is exactly wrong for
 ## this clip: the two things worth looking at are the **rotation** (350° of it)
 ## and the **advance** (1.712 m of it), and an evenly spaced row hides the second
@@ -480,7 +480,7 @@ func _build_stage() -> void:
 	fill.light_color = Color(0.6, 0.75, 1.0)
 	add_child(fill)
 
-	# Orthographic, for `preview_anim.gd`'s reason: under perspective the end
+	# Orthographic, for `preview_bog.gd`'s reason: under perspective the end
 	# Bogs of a wide row are seen from a different side than the middle one, so
 	# the same pose looks like a different pose in every sample. It matters twice
 	# here, because the other axis is a distance being measured off the picture:

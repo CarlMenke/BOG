@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Write the `.import` file for every clip in assets/source_reorg/anims/ that does
+# Write the `.import` file for every clip in assets/source/anims/ that does
 # not have one yet, so a freshly fetched clip imports with the settings the
 # pipeline needs (D-095) instead of Godot's defaults, which would land it a
 # centimetre tall with its hip bob optimised away and no post-import script.
@@ -12,7 +12,7 @@
 
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ANIMS="assets/source_reorg/anims"
+ANIMS="assets/source/anims"
 SCRIPT="res://tools/import_clip.gd"
 written=0
 

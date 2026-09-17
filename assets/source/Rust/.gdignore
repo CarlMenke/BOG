@@ -1,0 +1,1 @@
+The raw Rust export, read by tools/prepare_map.py only; the game loads art/maps/rust/.

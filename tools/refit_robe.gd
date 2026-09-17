@@ -4,8 +4,8 @@ extends SceneTree
 ##
 ##   Godot --headless --path . --script tools/refit_robe.gd
 ##
-## Reads the robe geometry `tools/build_elder.py` fitted to this sculpt
-## (`art/generated/elder.glb`, D-037), scales it from the old body's height to
+## Reads the robe geometry the old Blender build (`tools/build_elder.py`,
+## D-037) fitted to this sculpt, scales it from the old body's height to
 ## the new one's, gives every vertex fresh weights against the **new**
 ## skeleton's rest pose by the same rule the Blender build used — the spine
 ## chain blended by height, a thigh share growing toward the hem and split
@@ -20,6 +20,9 @@ extends SceneTree
 ## auto-rig put its bones 8–10 cm from where the Gub's were (D-095, D-098) and
 ## weights assigned by the old joints' heights would sit a bone off.
 
+## **Both inputs were retired at D-101**, with the old pipeline; the output
+## below is committed, and to re-run this the two files are in git history at
+## commit 1045d3a (`art/generated/elder.glb`, `art/generated/bog.glb`).
 const OLD_ROBE := "res://art/generated/elder.glb"
 const OLD_MESH := "Elder"
 const OLD_BODY := "res://art/generated/bog.glb"

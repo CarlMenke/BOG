@@ -510,7 +510,7 @@ func _ready() -> void:
 	_build_carrier_marker()
 
 
-## The mesh `build_bog.py` calls "Bog", under the skeleton. Looked for by name
+## The mesh `tools/import_body.gd` names "Bog", under the skeleton. Looked for by name
 ## first, and failing that the first skinned mesh there, because this runs
 ## before the spear or a robe has been attached and at that moment the body is
 ## the only mesh the rig has.

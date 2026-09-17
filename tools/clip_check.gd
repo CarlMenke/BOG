@@ -14,7 +14,7 @@ extends SceneTree
 
 const BODY := "res://art/bog/BOG.fbx"
 const LIBRARY := "res://art/generated/bog_clips.res"
-const TABLE := "res://assets/source_reorg/clips.json"
+const TABLE := "res://assets/source/clips.json"
 const HEIGHT := 1.80
 const BONES := 49
 const HIPS := "mixamorig_Hips"
@@ -140,7 +140,7 @@ func _check_retarget(file: String, key: String, player: AnimationPlayer, skeleto
 	if key.is_empty():
 		_want("retarget sample %s is in the library" % file, false)
 		return
-	var own := (load("res://assets/source_reorg/anims/%s.fbx" % file) as PackedScene).instantiate()
+	var own := (load("res://assets/source/anims/%s.fbx" % file) as PackedScene).instantiate()
 	root.add_child(own)
 	var own_skeleton := own.find_child("Skeleton3D", true, false) as Skeleton3D
 	var own_player := own.find_child("AnimationPlayer", true, false) as AnimationPlayer

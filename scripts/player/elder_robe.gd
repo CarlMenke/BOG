@@ -3,7 +3,7 @@ extends Node
 ## The robe and hat a Bog wears while it is the Elder.
 ##
 ## This is the *gameplay* half of D-037, which built the asset and deliberately
-## stopped there. `art/generated/elder.glb` is a purple robe and a wizard hat
+## stopped there. `art/skins/elder/robe.tscn` (D-099) is a purple robe and a wizard hat
 ## with no animation data at all: one `MeshInstance3D`, one `Skin` that binds by
 ## bone **name**, and a copy of the Bog's skeleton to have been bound against.
 ## Wearing it is therefore not "spawn a second Bog" — it is re-parenting that
@@ -37,7 +37,7 @@ extends Node
 ## transform on this would be a transform with nothing under it.
 
 const MODEL := preload("res://art/skins/elder/robe.tscn")
-## The `MeshInstance3D` inside that scene. Named by `tools/build_elder.py`, and
+## The `MeshInstance3D` inside that scene. Named by `tools/refit_robe.gd`, and
 ## found by name rather than by index for the reason every other reach into an
 ## imported subtree in this project is: a re-import can renumber children.
 const MESH_NAME := "Elder"
@@ -67,7 +67,7 @@ static func don(bog: Bog) -> ElderRobe:
 	var wardrobe := MODEL.instantiate() as Node3D
 	var cloth := wardrobe.find_child(MESH_NAME, true, false) as MeshInstance3D
 	if cloth == null:
-		push_warning("ElderRobe: elder.glb has no MeshInstance3D called '%s'" % MESH_NAME)
+		push_warning("ElderRobe: the robe skin has no MeshInstance3D called '%s'" % MESH_NAME)
 		wardrobe.free()
 		return null
 

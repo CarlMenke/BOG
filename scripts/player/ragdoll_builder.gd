@@ -5,7 +5,7 @@ extends RefCounted
 ## The alternative is the editor's "Create physical skeleton", which writes ~13
 ## `PhysicalBone3D` nodes with hand-fitted capsules straight into a `.tscn`.
 ## That file cannot be reviewed in a diff, cannot carry a comment explaining why
-## a shin is 0.3 units wide, and silently goes stale the moment `Bog.glb` is
+## a shin is 0.3 units wide, and silently goes stale the moment `BOG.fbx` is
 ## re-imported with a different rest pose. Deriving it from the skeleton's own
 ## rest pose instead means it is always correct by construction.
 ##

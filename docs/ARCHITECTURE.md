@@ -405,20 +405,59 @@ tools/           dev tools and testbeds — none of this ships
 | `scripts/world/capture_base.gd` | a team's base drawn in its colour (**D-051**) |
 | `scripts/world/island_generator.gd` | terrain, and the height oracle |
 | `scripts/player/bog.gd` | a player character |
-| `scripts/player/bog_animator.gd` | the blend tree, built in code (**D-029**) |
+| `scripts/player/bog_animator.gd` | the blend tree, built in code over the clip library and its markers (**D-098**) |
 | `scripts/player/bog_combat.gd` | spear, shield, magnet — and the Elder's bolt in the spear's place (**D-038**, **D-040**) |
-| `scripts/player/ragdoll_builder.gd` | 13 physical bones, generated at runtime |
+| `scripts/player/ragdoll_builder.gd` | 13 physical bones, generated at runtime, their radii measured off the mesh (**D-099**) |
 | `scripts/items/spear_projectile.gd` | hand-integrated ballistics, swept for hits |
 | `scripts/items/pickup.gd` | what a death leaves on the ground (**D-032**) |
-| `scripts/player/elder_robe.gd` | the robe on a live Bog's own skeleton (**D-037**, **D-038**) |
+| `scripts/player/elder_robe.gd` | the robe skin on a live Bog's own skeleton (**D-037**, **D-038**, **D-099**) |
 | `scripts/items/lightning_bolt.gd` | the bolt: one `ImmediateMesh`, two lights, forty sparks |
 | `scripts/items/ward_flash.gd` | what a spear looks like when it fails to kill an Elder (**D-040**) |
 | `scripts/ui/elder_track.gd` | how much of the Elder is left, for its wearer only (**D-040**) |
-| `tools/build_bog.py` | the Bog's whole art pipeline: several source packs in, one `.glb` out |
+| `tools/import_clip.gd`, `tools/import_body.gd` | the character's whole art pipeline: Godot's importer plus a clip table (**D-095**) |
 
 `export_presets.cfg` is deliberately committed — it is the only record of what a
 shippable build excludes (`tools/`, `assets/`, `docs/`), and ignoring it would
 make "there is an export preset" a claim nobody could check out.
+
+---
+
+## The character: one body, one library, one table
+
+The BOG is `art/bog/BOG.fbx`, the sculpt as Mixamo auto-rigged it, imported by
+Godot itself at `root_scale = 180` (1.80 m, feet at 0). Its 68 clips are
+animation-only FBX files under `assets/source/anims/`, one per row of
+`assets/source/clips.json`, and that table is the whole rule table: per clip
+its role, whether it loops, which body line the import squares to the body's
+forward (`face`), and its events in seconds (`markers`). `tools/import_clip.gd`
+runs inside Godot's importer on every clip and applies the row — records the
+authored speed off the hips' travel, yaws the hips so the named line is
+square, locks the hips to the axis, sets the loop mode, writes the markers —
+then files the clip in `art/generated/bog_clips.res`, keyed by role.
+`tools/import_body.gd` puts that library on the body's own AnimationPlayer at
+import, so every scene and tool that instances the body has every clip. A
+re-import is the build; there is no Blender (**D-095**, **D-096**, **D-097**).
+
+`scripts/player/bog_animator.gd` reads nothing but that: every event is a
+marker (`BogAnimator.marker("Throw", "release")`), every rate is the game's
+speed over the clip's `authored_speed`. Three ground planes (plain, great
+sword, archer) and a crouch plane over the body-relative velocity, an air loop
+or an arc-scrubbed leap or dive, light and heavy landings, one-shots for the
+actions, upper-body layers for the carry, the pull, the loose, the drink, the
+cast and the throw (**D-098**). Bone names carry Mixamo's prefix everywhere:
+`mixamorig_Hips`, `mixamorig_RightHand`.
+
+Grips are solved by their own tools against the new hands — `preview_bow`,
+`preview_sword`, `preview_carry` — and the sheets are the judge; the ragdoll
+measures its capsules off the mesh when it is built; the Elder's robe is a
+skin, a mesh bound to the same skeleton by bone name (**D-099**). A skin is a
+folder under `art/skins/`, a recolour or a clothing mesh (**D-100**).
+
+Adding a clip is a row in `clips.json`, `python tools/mixamo_fetch.py` pasted
+into the Mixamo tab, `bash tools/clip_imports.sh`, and an import.
+`tools/clip_check.gd` is the gate for all of it; `tools/clip_measure.gd`,
+`tools/clip_events.gd` and `tools/preview_bog.tscn` are how a clip is looked
+at before a marker is placed.
 
 ---
 

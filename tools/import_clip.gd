@@ -1,7 +1,7 @@
 @tool
 extends EditorScenePostImport
 ## One Mixamo clip in, one game-ready Animation out. Runs inside Godot's own
-## importer on every `assets/source_reorg/anims/*.fbx` (set as `import_script/path`
+## importer on every `assets/source/anims/*.fbx` (set as `import_script/path`
 ## in each file's `.import`), so a re-import *is* the build: there is no Blender
 ## and no separate build step (D-095).
 ##
@@ -17,16 +17,16 @@ extends EditorScenePostImport
 ##   5. saves it to `art/generated/clips/<file>.res` and files it in the shared
 ##      library `art/generated/bog_clips.res` under its role.
 ##
-## The clip table, `assets/source_reorg/clips.json`, is the single source of
+## The clip table, `assets/source/clips.json`, is the single source of
 ## truth for what a file is: its role, whether it loops, how it faces, where
 ## its events are. A file the table does not know is imported but not shipped,
 ## and says so.
 ##
 ## Every clip was fetched on the BOG's own Mixamo rig, so its skeleton is the
 ## body's skeleton bone for bone and the tracks retarget by name with no map
-## (verified 2026-09-16, `assets/source_reorg/README.md`).
+## (verified 2026-09-16, `assets/source/README.md`).
 
-const TABLE := "res://assets/source_reorg/clips.json"
+const TABLE := "res://assets/source/clips.json"
 const CLIP_DIR := "res://art/generated/clips/"
 const LIBRARY := "res://art/generated/bog_clips.res"
 const HIPS := "mixamorig_Hips"

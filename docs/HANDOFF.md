@@ -23,8 +23,8 @@ uncommitted work anywhere. Before starting, confirm the toolchain this repo expe
 machine — the scripts find it themselves and fail loudly if it is absent:
 
 - **Godot 4.7** — located by `tools/find_godot.sh`, which every headless tool and the gate source.
-- **Blender** (5.2 headless) — located by `tools/find_blender.sh`. Only needed to rebuild the Bog or
-  Elder assets; the generated `.glb` files are committed, so most tasks do not touch it.
+- **Blender** — no longer needed: the BOG and its clips are imported by Godot itself since
+  **D-095**, and the Elder's robe was refit without it (**D-099**).
 - **Python 3** — for `tools/make_sfx.py` and the asset pipeline scripts.
 - **bash** — the gate and build scripts are shell scripts. On Windows use Git Bash.
 - `git config user.name` / `user.email` set, and push access to `CarlMenke/Gubs_Game`.
@@ -449,8 +449,8 @@ frame-perfect dive" gets hard.
 | static map pattern (`rust`, `safari`) | `scripts/world/static_map.gd`, `scripts/world/maps/` |
 | the gate | `tools/smoke_test.sh` |
 | headless test beds | `tools/combat_range.gd`, `tools/hud_range.gd`, `tools/match_rules.gd`, `tools/net_loopback.gd` |
-| toolchain finders | `tools/find_godot.sh`, `tools/find_blender.sh` |
-| build + host | `tools/build_bog.sh`, `.claude/skills/host/SKILL.md` |
+| toolchain finders | `tools/find_godot.sh` |
+| build + host | `"$GODOT" --import` (the clip build, D-095), `.claude/skills/host/SKILL.md` |
 
 ## APPENDIX — decisions this backlog touches
 

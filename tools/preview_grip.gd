@@ -148,7 +148,7 @@ func _build_stage(length: float, from: float, to: float, eye: Vector3) -> void:
 	fill.light_color = Color(0.6, 0.75, 1.0)
 	add_child(fill)
 
-	# Orthographic for the same reason `preview_anim.gd` is: under perspective
+	# Orthographic for the same reason `preview_bog.gd` is: under perspective
 	# the end Bogs of a 5 m row are seen from a different side than the middle
 	# one, so the same grip looks like a different grip in every sample.
 	var view := get_viewport().get_visible_rect().size

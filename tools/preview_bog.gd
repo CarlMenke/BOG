@@ -15,7 +15,7 @@ extends Node3D
 ## A trailing `skin=<name>` dresses every BOG in `art/skins/<name>/basecolor.png`
 ## (D-100).
 ##
-## This is `preview_anim.gd` for the rebuilt body: the body is
+## This is `preview_bog.gd` for the rebuilt body: the body is
 ## `art/bog/BOG.fbx` and the clips come from `art/generated/bog_clips.res`,
 ## swapped in for the body's own T-pose library the way the animator does it.
 
@@ -105,7 +105,7 @@ func _ready() -> void:
 	add_child(fill)
 
 	# Orthographic and level, so every sample is seen from the same angle and
-	# the floor is a line the feet either touch or do not (see preview_anim.gd).
+	# the floor is a line the feet either touch or do not (the rule `preview_anim.gd` had, before D-101 retired it).
 	var view := get_viewport().get_visible_rect().size
 	var aspect: float = view.x / maxf(view.y, 1.0)
 	var wide := (spacing * float(samples - 1) + FRAME_MARGIN) / aspect

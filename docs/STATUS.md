@@ -41,8 +41,8 @@ and a universal `build/macos/BOG.app` that boots clean. See the README.
 
 **The game is called BOG** (**D-081**). The GUB branding was swept out of every
 tracked file in one pass — 4,282 replacements across 137 files, plus twenty-four
-`git mv`s, so the character is `scripts/player/bog.gd`, the asset is
-`art/generated/bog.glb` and the build is `build/windows/BOG.exe`. Five things
+`git mv`s, so the character is `scripts/player/bog.gd`, the asset was
+`art/generated/bog.glb` (now `art/bog/BOG.fbx`, D-101) and the build is `build/windows/BOG.exe`. Five things
 keep the old spelling on purpose and the entry says why each: Godot `uid://`
 strings, the `assets/source/GUB_2/` pack folder, playit's `angry-gub.at.ply.gg`,
 the `CarlMenke/Gubs_Game` repo URL, and two sentences quoting the user.
@@ -84,15 +84,16 @@ of things nothing else is checking.
 
 ---
 
-## The animation rebuild — steps 1 to 6 of 7 landed
+## The animation rebuild — done (D-095..D-101)
 
 The character's animation pipeline is being rebuilt from scratch
-(`ANIMATION_REBUILD_PROMPT.md` is the brief; **D-095** to **D-098** are the
-records). **The game runs on the new body and the new animator** since D-098:
-`scenes/player/bog.tscn` instances `art/bog/BOG.fbx` and
-`scripts/player/bog_animator.gd` reads the library and its markers. The old
-path — `tools/build_bog.py`, `assets/source/`, `art/generated/bog.glb`,
-`elder.glb` — is unreferenced by the game and goes at step 7.
+(`ANIMATION_REBUILD_PROMPT.md` was the brief; **D-095** to **D-101** are the
+records; `docs/ARCHITECTURE.md` has the shape of it). **The game runs on the
+new body and the new animator**: `scenes/player/bog.tscn` instances
+`art/bog/BOG.fbx` and `scripts/player/bog_animator.gd` reads the library and
+its markers. The old path — the Blender builds, the Mixamo packs, `bog.glb`,
+`elder.glb` — is gone (D-101); `assets/source/` is the clips, `clips.json`
+and the raw props and map the other pipelines still read.
 
 **The gate is 135 of 135** since D-099: the grips are re-solved on the new
 hands by their own tools, the ragdoll measures its capsules off the mesh at
@@ -104,9 +105,9 @@ What exists now:
 - `art/bog/BOG.fbx` — the body as Mixamo rigged it, imported by Godot at
   `root_scale = 180` (1.80 m, feet at 0). Its texture `art/bog/BOG_0.png` is
   extracted on import and gitignored.
-- `assets/source_reorg/anims/*.fbx` — **68 clips, one per role** (D-096 chose
+- `assets/source/anims/*.fbx` — **68 clips, one per role** (D-096 chose
   them from 104), each with a `.import` that names `tools/import_clip.gd`.
-- `assets/source_reorg/clips.json` — **the rule table** (D-097): per clip
+- `assets/source/clips.json` — **the rule table** (D-097): per clip
   `loop`, `face` (`hips` / `chest` / `none`: which body line the import
   squares to the body's forward) and `markers` (its events in seconds). The
   import script applies all three: records the authored speed, yaws the hips
@@ -137,20 +138,12 @@ Skins are folders under `art/skins/` (D-100): the robe is the clothing
 example, `example/` the recolour (`tools/make_recolour.gd`,
 `Bog.wear_skin`), and `art/skins/README.md` says how to add the next one.
 
-**Next is step 7, retiring the old path:** delete `tools/build_bog.py`, `tools/build_elder.py`,
-`assets/source/`, `art/generated/bog.glb`, `elder.glb` and every script that
-only served them; move `assets/source_reorg/` to `assets/source/`; update
-`docs/ARCHITECTURE.md`, `docs/STATUS.md`, `docs/PLAN.md`.
-
-**Two things only the user can do**, each one row in `clips.json` plus the
-fetch: a one-handed carry idle that holds the fist away from the body, so
-the spear's trunk clearance is a number again (D-099); and the Magic pack's
-`Standing Run Left`, so the running strafes stop sliding at 1.12 (D-098).
-
-**One thing only the user can do:** fetch the Magic pack's `Standing Run
-Left` (D-071's lateral) as a new row, so the running strafes stop sliding at
-1.12 of body speed; D-098 says why and what the import needs (a `mirror_of`
-rule for the right-hand twin).
+**Two things only the user can do** (PLAN 8.8), each one row in
+`clips.json` plus the fetch: a one-handed carry idle that holds the fist away
+from the body, so the spear's trunk clearance is a number again (D-099); and
+the Magic pack's `Standing Run Left`, so the running strafes stop sliding at
+1.12 of body speed (D-098 says what the import needs: a `mirror_of` rule for
+the right-hand twin).
 
 Answered at the step 2 checkpoint by the user and built at step 4: **backing
 up is slower** (`Bog.BACK_SPEED_SCALE` 0.6); **the crouch is the deep squat**;
@@ -572,19 +565,17 @@ constant and 0.0 turns it off.
 - Ragdolls are local and cosmetic and deliberately **not replicated** (D-010).
 - **Game speeds and clip speeds are separate numbers, and the animator divides
   them.** `Bog.WALK_SPEED` / `RUN_SPEED` / `CROUCH_SPEED` are gameplay choices;
-  `AUTHORED_WALK` / `AUTHORED_RUN` / `AUTHORED_CROUCH_WALK` are what
-  `tools/build_bog.py` measured in the clips. Each locomotion node plays at
-  `game / authored` in its own custom timeline, which is what keeps the feet
-  planted. Change a game speed freely; only re-measure an authored one if the
-  clip itself changes (D-029).
-- **One clip in `bog.glb` has no file behind it.** `StrafeRight` is `StrafeLeft`
-  reflected in the rig's own sagittal plane, built by `build_bog.py`'s
-  `mirror_of` and measured, locked, aligned and exported like any other clip
-  (D-071). It exists because **Mixamo's aim-strafe families are handed** — every
-  right strafe in every pack is a −37 to −47 degree diagonal, while its left twin
-  can be a true lateral — so a right-hand strafe pole cannot be downloaded, only
-  mirrored. If you are ever tempted by the undeclared `StandingRunRight.fbx` in
-  `5_Locomotion/`, the gate's `mirror` check is what will stop you.
+  each clip's `authored_speed` is what `tools/import_clip.gd` measured off its
+  hips at import and stored as metadata on the clip. Each locomotion node
+  plays at `game / authored` in its own custom timeline, which is what keeps
+  the feet planted. Change a game speed freely; the authored one re-measures
+  itself on the next import (D-029, D-095).
+- **Mixamo's aim-strafe families are handed** — every right strafe in every
+  pack is a −37 to −47 degree diagonal, while its left twin can be a true
+  lateral (D-071). The rebuilt library has no mirrored clip yet, so the
+  running strafes are diagonal poles blended by the plane and slide at 1.12
+  of body speed; the fix is the Magic pack's `Standing Run Left` plus a
+  `mirror_of` rule in `clips.json` (D-098, PLAN 8.8).
 - **Nothing in the animation tree runs a clock it does not own.** Every node is
   either a looping cycle, a OneShot that restarts on fire, or scrubbed every
   frame — because an `AnimationNodeAnimation` sitting in a blend runs from tree

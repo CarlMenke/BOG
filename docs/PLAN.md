@@ -43,10 +43,11 @@ pieces fit together is `docs/ARCHITECTURE.md`.
 - [x] 2.1  Bog scene — CharacterBody3D, capsule, skinned mesh, skeleton
 - [x] 2.2  Third-person camera rig — spring arm, collision, shoulder offset, aim zoom
 - [x] 2.3  Movement — walk / run / sprint, jump, crouch, slide, air control, coyote time
-- [x] 2.4  AnimationTree — a blend tree built in code over the nine clips of
-           `art/generated/bog.glb`: speed-driven ground cycles, arc-scrubbed air
-           poses, one-shots for slide / land / roll / throw, and an upper-body
-           throw layer so throwing works while moving (rebuilt in **D-029**)
+- [x] 2.4  AnimationTree — a blend tree built in code over the clip library
+           `art/generated/bog_clips.res` and the markers on its clips: three
+           ground planes and a crouch plane, arc-scrubbed air poses, one-shots
+           for the actions, upper-body layers so throwing works while moving
+           (**D-029**, rebuilt on the new pipeline in **D-098**)
 - [x] 2.5  Nameplate — billboarded Label3D, team tint, distance fade, occlusion
 - [x] 2.6  Network sync — transform + animation state, interpolation, ownership
 - [x] 2.7  Ragdoll — 13 physical bones built at runtime, death impulse, corpse cleanup
@@ -110,3 +111,23 @@ pieces fit together is `docs/ARCHITECTURE.md`.
 - [x] 7.4  Final pass + tagged commit — both binaries build, the macOS one boots
            clean, `feat/complete-game` is merged to `main` and the release is
            tagged `v0.1.0`
+
+## Phase 8 — The animation rebuild (D-095..D-101)
+
+- [x] 8.1  Import layer — the body and every clip imported by Godot itself at one scale,
+           a post-import script that records speed, locks the hips and files the clip
+           in one shared library; `clip_check` in the gate (**D-095**)
+- [x] 8.2  Clip choice — one clip per role, chosen on posture, speed and family with
+           `clip_measure` and `preview_bog` (**D-096**)
+- [x] 8.3  Clip table and markers — `face` and `markers` per row; every event placed
+           from the clip's own kinematics and a sheet (**D-097**)
+- [x] 8.4  Animator — rebuilt on the library and markers, no clip time in the file;
+           the game on the new body (**D-098**)
+- [x] 8.5  Grips, aim, ragdoll, robe — solved on the new hands, capsules off the mesh,
+           the robe refit as a skin (**D-099**)
+- [x] 8.6  Skins — a folder each, recolour and clothing examples, a README (**D-100**)
+- [x] 8.7  Retire the old path — Blender builds, packs and GLBs gone; `assets/source/`
+           is the clips (**D-101**)
+- [ ] 8.8  Two clips only the user can fetch: a one-handed carry idle with the fist off
+           the body (D-099), and the Magic pack's `Standing Run Left` for a true lateral
+           strafe, with a `mirror_of` rule for its twin (D-098)

@@ -1,7 +1,7 @@
 extends Node3D
 ## Lines the generated meshes up under a neutral light so the art pipeline's
 ## results can be eyeballed: the three props and the three letter cards out of
-## `tools/decimate_assets.py`, and the Bog out of `tools/build_bog.py`.
+## `tools/decimate_assets.py`, and the BOG as Godot imports it (D-095).
 ## Development tool, not shipped.
 ##
 ## Everything here is normalised to about two metres, so what this answers for
@@ -10,7 +10,7 @@ extends Node3D
 ## world — `tools/combat_range.tscn cards` is where that is looked at.
 
 const MODELS := [
-	"res://art/generated/bog.glb",
+	"res://art/bog/BOG.fbx",
 	"res://art/generated/spear.glb",
 	"res://art/generated/magnet.glb",
 	"res://art/generated/shield.glb",
