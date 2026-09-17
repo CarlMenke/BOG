@@ -524,7 +524,15 @@ also "the great sword fits both fists" "blade PASS"
 # Blend2 does.
 #
 # Two floors, both of them D-065's: nothing may come within 0.15 m of the ground
-# or 0.06 m of the Bog's own **skinned trunk**, over twelve clips and twenty-four
+# or — the spear's alone, like `LEVEL_MAX` and `PALM_MAX` and for the same reason
+# — 0.06 m of the Bog's own **skinned trunk**. `SKIN_MIN` was zero for the whole
+# of D-099, because `BreathingIdle` rests the fist on the hip and a number that
+# reads 0.000 for all 288 candidates cannot tell a shaft along a belly from one
+# through it. The spear has its own carry pose now (`SpearCarry`, D-103), so the
+# floor is back at D-074's 0.06 and `carry PASS` means the shaft clears the trunk
+# by it as well as clearing the grass. The bow still hangs beside a thigh at
+# 0.004 m on a pose nothing has changed, so its column is printed and decides
+# nothing. Both floors hold over twelve clips and twenty-four
 # samples of each, with the carry loop walked across its own length underneath so
 # that a row is the worst of two cycles beating rather than one frame held
 # against another. The trunk is the real mesh — every head- and torso-weighted
@@ -547,12 +555,15 @@ check "every carried weapon clears the ground" "carry PASS" \
     res://tools/preview_carry.tscn "$GODOT_LOG_DIR/carry_measure.png" 4 measure
 also "every carried weapon clears the ground" "derived PASS"
 # And `card PASS`, which is about a **third** number the grip carries. The letter
-# card rides `CARD_ABOVE_FIST` along the shaft out of the spear hand, derived
+# card rides `CARD_ALONG_SHAFT` along the shaft out of the spear hand, derived
 # from `GRIP_ROTATION` rather than written down, precisely so re-aiming the grip
 # carries the card with it (D-035) — and D-070 re-aimed it by eighty degrees, so
-# the 0.22 m that used to point up the forearm now points across the body. D-035
+# the 0.22 m that used to point up the forearm now points across the body. It is
+# **negative** since D-103: the carry pose runs the shaft out through the
+# fingers, which point at the ground when the arm hangs, so the card slides
+# *down* the shaft at −0.22 instead of up it. D-035
 # measured the bottom of the letter at 0.23 m off the ground and wrote it into a
-# comment; it is 0.126 m now, it is a check, and the pose it is measured in is
+# comment; it is 0.158 m now, it is a check, and the pose it is measured in is
 # the one a Bog holding a letter is actually in — a hold disarms it, so the carry
 # layer is off for the whole of one.
 also "every carried weapon clears the ground" "card PASS"
@@ -765,8 +776,10 @@ also "team colours on the body" "team_tint: PASS"
 # this covers the half that is a row: the default for a row that never heard of
 # weapons, the request going through the host and coming back on the rebroadcast,
 # a bogus ordinal refused into a spear, the lock the moment Start is pressed, a
-# rematch keeping the pick, and the real lobby scene collapsing to the strip and
-# back. Its `ring` stage is the one that matters most and is the cheapest to
+# rematch keeping the pick, and the real lobby scene in the shape D-107 gave it:
+# the strip up beside the panels rather than behind a collapse button, the three
+# panels folding to their own headings on their own toggles, and the match config
+# gone entirely for a client instead of greyed out. Its `ring` stage is the one that matters most and is the cheapest to
 # lose: three **remote** Bogs in the backdrop, each holding only what its row
 # says, which is the lobby half of "show only the weapon you selected".
 #
@@ -935,8 +948,12 @@ check "ragdoll survives landing" "ragdoll_stability: PASS" \
 #
 # 95 ticks. It was 110, and before that 70, and it moves for the same reason
 # each time: the throw is clicked on tick 20 and the spear does not leave the
-# hand until THROW_RELEASE_TIME after that (D-025), which since D-063 is 0.50 s
-# = 30 ticks. So the spear appears around tick 50; it then flies 14 m at 42 m/s
+# hand until THROW_RELEASE_TIME after that (D-025), which is 0.500 s = 30 ticks.
+# Not the flat half second D-063 asked for: since D-104 the ask is the throw
+# clip's own `windup`-to-`release` window, and this clip's window happens to be
+# 0.500 s, so the rate is 1.0 and the number is the clip's rather than a target
+# imposed on it. Re-time those markers and this warmup moves with them.
+# So the spear appears around tick 50; it then flies 14 m at 42 m/s
 # (0.33 s, 20 ticks) and the kill lands around tick 70, leaving 25 ticks of
 # margin — the same margin the 110 had over the old release, retuned down with
 # it rather than left behind as slack. Worth saying out loud because a failure
@@ -960,7 +977,9 @@ check "magnet catches" "combat_range: magnet caught 1" \
 # 90 ticks, and the margin in it is now much larger than it was. The robe drops
 # on tick 20 and is claimed on 21, the cast follows immediately, and the bolt
 # leaves `lightning_delay` later — 0.2 s = 12 ticks since D-040, where it used
-# to be THROW_RELEASE_TIME's 42.5 and is now its 30 — so the kill lands around tick 34 and the
+# to be THROW_RELEASE_TIME's 42.5 and is now its 30, which is 0.500 s because
+# that is the throw clip's own authored `windup`-to-`release` window at rate 1.0
+# (D-104) and not a half second anybody picked — so the kill lands around tick 34 and the
 # verdict is printed 50 ticks after the cast. The hero shot of an actual bolt is
 # a separate, earlier frame, and it moved with the delay:
 #     ... --script tools/snapshot.gd -- res://tools/combat_range.tscn \
@@ -1046,8 +1065,14 @@ check "the ability tiles are one set" "bake_tiles: PASS" \
 # and keeps the value that comes out widest — the actual worst label, not a
 # typical one — then pushes all of them at once and measures what is left of
 # every track, under every win condition, because `_apply_visibility` hides rows
-# and a row that is not laid out has no width. 244 rows; `MIN_TRACK` is 180 px.
+# and a row that is not laid out has no width. 245 rows; `MIN_TRACK` is 180 px.
 # With the readout put back beside the slider it fails on 27 of them.
+#
+# The floor it actually reads is 448 px, up from 320, and where it is measured
+# moved with D-107: the host's Match panel is the one panel that stays open, and
+# it is now measured standing beside a *folded* roster rather than an expanded
+# one, so the stack's stretch ratio hands it more of the width than it used to
+# get.
 check "every slider can be dragged" "widths: PASS" \
     "$GODOT" --path "$GODOT_ROOT" --resolution 1600x900 --script tools/snapshot.gd -- \
     res://tools/ui_range.tscn "$GODOT_LOG_DIR/widths.png" 60 widths
