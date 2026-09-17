@@ -1,0 +1,946 @@
+{
+ "_about": "One row per clip to fetch from Mixamo on the BOG (tools/mixamo_fetch.py). `file` is the FBX name that lands in anims/, `role` is the game's name for the move; several rows per role are candidates to choose between in preview. A row with `mixamo_query` instead of `mixamo_id` fetches every search result as `<file>-<Name>`, or only those named in `mixamo_keep`. `in_place` is false everywhere on purpose: Mixamo's in-place export flattens the hip bob along with the travel, so travel is stripped at import instead, where it also yields the authored speed. `loop` is provisional until the animator is rebuilt.",
+ "fps": 30,
+ "clips": [
+  {
+   "file": "Idle-StandardIdle",
+   "role": "Idle",
+   "suite": "locomotion",
+   "mixamo_name": "Standard Idle",
+   "mixamo_id": "c9cccb71-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "Idle-BreathingIdle",
+   "role": "Idle",
+   "suite": "locomotion",
+   "mixamo_name": "Breathing Idle",
+   "mixamo_id": "c9c6d0d5-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "Idle-StandingIdle-1",
+   "role": "Idle",
+   "suite": "locomotion",
+   "mixamo_name": "Standing Idle",
+   "mixamo_id": "e8c2c8c3-6aec-46d8-a6ff-14bc248f7694",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "Idle-StandingIdle-2",
+   "role": "Idle",
+   "suite": "locomotion",
+   "mixamo_name": "Standing Idle",
+   "mixamo_id": "c9c99350-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "Idle-StandingIdle-3",
+   "role": "Idle",
+   "suite": "locomotion",
+   "mixamo_name": "Standing Idle",
+   "mixamo_id": "c9c831cf-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "IdleLook-StandingIdleLookingAround-1",
+   "role": "IdleLook",
+   "suite": "locomotion",
+   "mixamo_name": "Standing Idle Looking Around",
+   "mixamo_id": "edc148eb-b0a1-4a9f-80a1-20a72b60456b",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "IdleLook-StandingIdleLookingAround-2",
+   "role": "IdleLook",
+   "suite": "locomotion",
+   "mixamo_name": "Standing Idle Looking Around",
+   "mixamo_id": "2906468d-f1ee-4444-8c8a-76a95dcaea96",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "IdleLook-StandingIdleLookingAround-3",
+   "role": "IdleLook",
+   "suite": "locomotion",
+   "mixamo_name": "Standing Idle Looking Around",
+   "mixamo_id": "5bbf791d-5a18-460c-876c-a9b975f2448c",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "Walk-StandardWalk",
+   "role": "Walk",
+   "suite": "locomotion",
+   "mixamo_name": "Standard Walk",
+   "mixamo_id": "c9ccc2e9-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "Run-StandardRunning",
+   "role": "Run",
+   "suite": "locomotion",
+   "mixamo_name": "Standard Running",
+   "mixamo_id": "c9ccc5dd-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "Run-RunningForward-1",
+   "role": "Run",
+   "suite": "locomotion",
+   "mixamo_name": "Running Forward",
+   "mixamo_id": "c9ceee9c-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "WalkBack-WalkingBackwards-1",
+   "role": "WalkBack",
+   "suite": "locomotion",
+   "mixamo_name": "Walking Backwards",
+   "mixamo_id": "93b3f62c-9ecf-434c-ba7b-9f0753cd3a79",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "WalkBack-WalkingBackwards-2",
+   "role": "WalkBack",
+   "suite": "locomotion",
+   "mixamo_name": "Walking Backwards",
+   "mixamo_id": "c9cbef68-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "WalkBack-WalkingBackwards-3",
+   "role": "WalkBack",
+   "suite": "locomotion",
+   "mixamo_name": "Walking Backwards",
+   "mixamo_id": "c9cef0de-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "RunBack-RunningBackwards",
+   "role": "RunBack",
+   "suite": "locomotion",
+   "mixamo_name": "Running Backwards",
+   "mixamo_id": "c9ceedd8-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "StrafeWalkLeft-WalkingStrafeToTheLeft-1",
+   "role": "StrafeWalkLeft",
+   "suite": "locomotion",
+   "mixamo_name": "Walking Strafe To The Left",
+   "mixamo_id": "c9c9d9d6-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "StrafeWalkLeft-WalkingStrafeToTheLeft-2",
+   "role": "StrafeWalkLeft",
+   "suite": "locomotion",
+   "mixamo_name": "Walking Strafe To The Left",
+   "mixamo_id": "c9c9829c-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "StrafeWalkRight-WalkingStrafeToTheRight-1",
+   "role": "StrafeWalkRight",
+   "suite": "locomotion",
+   "mixamo_name": "Walking Strafe To The Right",
+   "mixamo_id": "c9c985b7-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "StrafeWalkRight-WalkingStrafeToTheRight-2",
+   "role": "StrafeWalkRight",
+   "suite": "locomotion",
+   "mixamo_name": "Walking Strafe To The Right",
+   "mixamo_id": "c9c9db9e-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "StrafeLeft-RunningStrafeToTheLeft-1",
+   "role": "StrafeLeft",
+   "suite": "locomotion",
+   "mixamo_name": "Running Strafe To The Left",
+   "mixamo_id": "c9c96c6d-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "StrafeLeft-RunningStrafeToTheLeft-2",
+   "role": "StrafeLeft",
+   "suite": "locomotion",
+   "mixamo_name": "Running Strafe To The Left",
+   "mixamo_id": "c9c97b90-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "StrafeRight-RunningStrafeToTheRight-1",
+   "role": "StrafeRight",
+   "suite": "locomotion",
+   "mixamo_name": "Running Strafe To The Right",
+   "mixamo_id": "c9c97c58-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "StrafeRight-RunningStrafeToTheRight-2",
+   "role": "StrafeRight",
+   "suite": "locomotion",
+   "mixamo_name": "Running Strafe To The Right",
+   "mixamo_id": "c9c96f9e-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "StrafeLeft-LeftMaleStrafe-1",
+   "role": "StrafeLeft",
+   "suite": "locomotion",
+   "mixamo_name": "Left Male Strafe",
+   "mixamo_id": "c9c80a75-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "StrafeLeft-LeftMaleStrafe-2",
+   "role": "StrafeLeft",
+   "suite": "locomotion",
+   "mixamo_name": "Left Male Strafe",
+   "mixamo_id": "c9c60126-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "StrafeRight-RightMaleStrafe-1",
+   "role": "StrafeRight",
+   "suite": "locomotion",
+   "mixamo_name": "Right Male Strafe",
+   "mixamo_id": "c9c80cb1-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "StrafeRight-RightMaleStrafe-2",
+   "role": "StrafeRight",
+   "suite": "locomotion",
+   "mixamo_name": "Right Male Strafe",
+   "mixamo_id": "c9c60226-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "CrouchIdle-CrouchIdle-1",
+   "role": "CrouchIdle",
+   "suite": "crouch",
+   "mixamo_name": "Crouch Idle",
+   "mixamo_id": "c284106c-698e-40df-acb0-f89e764e5ba0",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "CrouchIdle-CrouchIdle-2",
+   "role": "CrouchIdle",
+   "suite": "crouch",
+   "mixamo_name": "Crouch Idle",
+   "mixamo_id": "18b23688-f7fd-4653-9105-b2238f09c4c5",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "CrouchWalk-CrouchedWalk",
+   "role": "CrouchWalk",
+   "suite": "crouch",
+   "mixamo_name": "Crouched Walk",
+   "mixamo_id": "c9c640fa-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "CrouchWalkBack-WalkingBackwardsWhileCrouched-1",
+   "role": "CrouchWalkBack",
+   "suite": "crouch",
+   "mixamo_name": "Walking Backwards While Crouched",
+   "mixamo_id": "328e4430-480a-49c2-8086-ef5f1b5a1beb",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "CrouchWalkBack-WalkingBackwardsWhileCrouched-2",
+   "role": "CrouchWalkBack",
+   "suite": "crouch",
+   "mixamo_name": "Walking Backwards While Crouched",
+   "mixamo_id": "dbc327f5-1358-4c2a-8d00-4a377a9a7978",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "CrouchStrafeLeft-WalkingLeftWhileCrouched-1",
+   "role": "CrouchStrafeLeft",
+   "suite": "crouch",
+   "mixamo_name": "Walking Left While Crouched",
+   "mixamo_id": "14f7890c-4431-4944-95d0-f7c46a1c538b",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "CrouchStrafeLeft-WalkingLeftWhileCrouched-2",
+   "role": "CrouchStrafeLeft",
+   "suite": "crouch",
+   "mixamo_name": "Walking Left While Crouched",
+   "mixamo_id": "b4421182-22f7-4ec6-a13b-abfb900a6bfe",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "CrouchStrafeRight-WalkingRightWhileCrouched-1",
+   "role": "CrouchStrafeRight",
+   "suite": "crouch",
+   "mixamo_name": "Walking Right While Crouched",
+   "mixamo_id": "b6a59d7d-d02d-48e4-ac30-3edee0d2d9e6",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "CrouchStrafeRight-WalkingRightWhileCrouched-2",
+   "role": "CrouchStrafeRight",
+   "suite": "crouch",
+   "mixamo_name": "Walking Right While Crouched",
+   "mixamo_id": "7ae2d141-55c2-406e-b395-5e4f2bc2af23",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "CrouchDown-StandingToCrouchingTransition",
+   "role": "CrouchDown",
+   "suite": "crouch",
+   "mixamo_name": "Standing To Crouching Transition",
+   "mixamo_id": "c9c877e6-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "CrouchUp-CrouchToStandTransition",
+   "role": "CrouchUp",
+   "suite": "crouch",
+   "mixamo_name": "Crouch To Stand Transition",
+   "mixamo_id": "c9cc0a18-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "JumpStart-JumpUp",
+   "role": "JumpStart",
+   "suite": "air",
+   "mixamo_name": "Jump Up",
+   "mixamo_id": "c9c7fab0-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "JumpStart-JumpingUpFromActionIdleGameBlend",
+   "role": "JumpStart",
+   "suite": "air",
+   "mixamo_name": "Jumping Up From Action Idle Game Blend",
+   "mixamo_id": "c9c9d019-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "AirLoop-FallingInTheAirIdle",
+   "role": "AirLoop",
+   "suite": "air",
+   "mixamo_name": "Falling In The Air Idle",
+   "mixamo_id": "c9c797ea-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "AirLoop-MidAirFallingIdle",
+   "role": "AirLoop",
+   "suite": "air",
+   "mixamo_name": "Mid-Air Falling Idle",
+   "mixamo_id": "c9c991b1-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "Land-JumpingDownFromFallingIdleGameBlend",
+   "role": "Land",
+   "suite": "air",
+   "mixamo_name": "Jumping Down From Falling Idle Game Blend",
+   "mixamo_id": "c9c9d197-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "Land-LandFromFallAToStandingIdle-1",
+   "role": "Land",
+   "suite": "air",
+   "mixamo_name": "Land From Fall A To Standing Idle",
+   "mixamo_id": "785ad741-7f14-43d4-9948-3436973c2c76",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "Land-LandFromFallAToStandingIdle-2",
+   "role": "Land",
+   "suite": "air",
+   "mixamo_name": "Land From Fall A To Standing Idle",
+   "mixamo_id": "c9ceb621-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "LandHard-MidAirFallingToAHardLandingGameBlend",
+   "role": "LandHard",
+   "suite": "air",
+   "mixamo_name": "Mid-Air Falling To A Hard Landing Game Blend",
+   "mixamo_id": "c9c9d323-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "RunJump-JumpingWhileRunning",
+   "role": "RunJump",
+   "suite": "air",
+   "mixamo_name": "Jumping While Running",
+   "mixamo_id": "e2f04a83-de21-48be-8318-67dfa056c42c",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "RunJump-ForwardRunningJump",
+   "role": "RunJump",
+   "suite": "air",
+   "mixamo_name": "Forward Running Jump",
+   "mixamo_id": "c9ccebcf-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "Roll-MidAirFallingIntoARollGameBlend",
+   "role": "Roll",
+   "suite": "air",
+   "mixamo_name": "Mid-Air Falling Into A Roll Game Blend",
+   "mixamo_id": "c9c9d0d6-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "Roll-DiveRollFromStanding-1",
+   "role": "Roll",
+   "suite": "air",
+   "mixamo_name": "Dive Roll From Standing",
+   "mixamo_id": "c9c95f5e-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "Roll-DiveRollFromStanding-2",
+   "role": "Roll",
+   "suite": "air",
+   "mixamo_name": "Dive Roll From Standing",
+   "mixamo_id": "c9c9a122-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "Roll-SprintToForwardRollToSprinting",
+   "role": "Roll",
+   "suite": "air",
+   "mixamo_name": "Sprint To Forward Roll To Sprinting",
+   "mixamo_id": "c9cbf0c0-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "Roll-ActionMoveRunningAndRolling",
+   "role": "Roll",
+   "suite": "air",
+   "mixamo_name": "Action Move Running And Rolling",
+   "mixamo_id": "c9c81fce-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "Throw-ThrowingAnObjectFromAStandardPose",
+   "role": "Throw",
+   "suite": "throw",
+   "mixamo_name": "Throwing An Object From A Standard Pose",
+   "mixamo_id": "c9cb09fa-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "Throw-ThrowingAndObject",
+   "role": "Throw",
+   "suite": "throw",
+   "mixamo_name": "Throwing And Object",
+   "mixamo_id": "c9c835e6-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "ThrowRun-ThrowGrenadeWhileRunning",
+   "role": "ThrowRun",
+   "suite": "throw",
+   "mixamo_name": "Throw Grenade While Running",
+   "mixamo_id": "c9c89b1d-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "ThrowWalk-ThrowingAGrenadeWhileWalking",
+   "role": "ThrowWalk",
+   "suite": "throw",
+   "mixamo_name": "Throwing A Grenade While Walking",
+   "mixamo_id": "c9c889b1-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "BowEquip-EquippingBow",
+   "role": "BowEquip",
+   "suite": "bow",
+   "mixamo_name": "Equipping Bow",
+   "mixamo_id": "c9ceb097-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "BowUnequip-DisarmingBow",
+   "role": "BowUnequip",
+   "suite": "bow",
+   "mixamo_name": "Disarming Bow",
+   "mixamo_id": "c9cec14d-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "BowCarry-StandingIdleWithBow",
+   "role": "BowCarry",
+   "suite": "bow",
+   "mixamo_name": "Standing Idle With Bow",
+   "mixamo_id": "c9ceb236-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "BowAim-AimingIdleWithBow",
+   "role": "BowAim",
+   "suite": "bow",
+   "mixamo_name": "Aiming Idle With Bow",
+   "mixamo_id": "123cd592-6ad3-4ecc-9199-d4179124fa01",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "BowDraw-ChargingBowForPowershot",
+   "role": "BowDraw",
+   "suite": "bow",
+   "mixamo_name": "Charging Bow For Powershot",
+   "mixamo_id": "c9cebbb5-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "BowLoose-ShootingWithBowAndArrow",
+   "role": "BowLoose",
+   "suite": "bow",
+   "mixamo_name": "Shooting With Bow And Arrow",
+   "mixamo_id": "c9c76e97-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "BowLoose-StandingAimFireArrow",
+   "role": "BowLoose",
+   "suite": "bow",
+   "mixamo_name": "Standing Aim Fire Arrow",
+   "mixamo_id": "c9cebedc-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "BowReload-ReloadingBow",
+   "role": "BowReload",
+   "suite": "bow",
+   "mixamo_name": "Reloading Bow",
+   "mixamo_id": "c9ceacc6-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "BowAimWalk-WalkingForwardWhileAimingWithBow",
+   "role": "BowAimWalk",
+   "suite": "bow",
+   "mixamo_name": "Walking Forward While Aiming With Bow",
+   "mixamo_id": "c9cec780-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "BowAimWalkBack-WalkingBackwardsWhileAimingWithBow",
+   "role": "BowAimWalkBack",
+   "suite": "bow",
+   "mixamo_name": "Walking Backwards While Aiming With Bow",
+   "mixamo_id": "c9cec5f5-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "BowAimStrafeLeft-WalkingLeftWhileAimingWithBow",
+   "role": "BowAimStrafeLeft",
+   "suite": "bow",
+   "mixamo_name": "Walking Left While Aiming With Bow",
+   "mixamo_id": "c9cec90b-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "BowAimStrafeRight-WalkingRightWhileAimingWithBow",
+   "role": "BowAimStrafeRight",
+   "suite": "bow",
+   "mixamo_name": "Walking Right While Aiming With Bow",
+   "mixamo_id": "c9ceca90-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "Cast-CastingASpellWithOneHand",
+   "role": "Cast",
+   "suite": "magic",
+   "mixamo_name": "Casting A Spell With One Hand",
+   "mixamo_id": "c9c802f0-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "Cast-OneHandedCastingSpellFowards",
+   "role": "Cast",
+   "suite": "magic",
+   "mixamo_name": "One Handed Casting Spell Fowards",
+   "mixamo_id": "a3d120fd-c26a-46c7-a4a0-59c1c5d8157c",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "CastIdle-StandingIdleReadyToCastSpell",
+   "role": "CastIdle",
+   "suite": "magic",
+   "mixamo_name": "Standing Idle Ready To Cast Spell",
+   "mixamo_id": "b3bcc81a-5213-451e-bcec-294026c5984a",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "Heal-CastingAHealingSpellWithOneHand",
+   "role": "Heal",
+   "suite": "magic",
+   "mixamo_name": "Casting A Healing Spell With One Hand",
+   "mixamo_id": "c9c80212-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "SwordCarry-GreatSwordIdle",
+   "role": "SwordCarry",
+   "suite": "greatsword",
+   "mixamo_name": "Great Sword Idle",
+   "mixamo_id": "c9cc7140-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "SwordDraw-TransitionFromStandingToDrawingAGreatSword",
+   "role": "SwordDraw",
+   "suite": "greatsword",
+   "mixamo_name": "Transition From Standing To Drawing A Great Sword",
+   "mixamo_id": "c9cca50e-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "SwordSheathe-TransitionFromIdleToSheathingAGreatSword-1",
+   "role": "SwordSheathe",
+   "suite": "greatsword",
+   "mixamo_name": "Transition From Idle To Sheathing A Great Sword",
+   "mixamo_id": "c9ccbff5-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "SwordSheathe-TransitionFromIdleToSheathingAGreatSword-2",
+   "role": "SwordSheathe",
+   "suite": "greatsword",
+   "mixamo_name": "Transition From Idle To Sheathing A Great Sword",
+   "mixamo_id": "c9ccc0b3-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "SwordSpin-GreatSwordHighSpinAttackFromRun",
+   "role": "SwordSpin",
+   "suite": "greatsword",
+   "mixamo_name": "Great Sword High Spin Attack From Run",
+   "mixamo_id": "c9cc8d52-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "SwordJumpAttack-GreatSwordJumpAttackFromRun",
+   "role": "SwordJumpAttack",
+   "suite": "greatsword",
+   "mixamo_name": "Great Sword Jump Attack From Run",
+   "mixamo_id": "c9cc8bd6-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "SwordPowerSlash-GreatSwordPowerSlash",
+   "role": "SwordPowerSlash",
+   "suite": "greatsword",
+   "mixamo_name": "Great Sword Power Slash",
+   "mixamo_id": "c9cc7fdc-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "SwordDownSlash-GreatSwordDownwardSlash",
+   "role": "SwordDownSlash",
+   "suite": "greatsword",
+   "mixamo_name": "Great Sword Downward Slash",
+   "mixamo_id": "c9cc7d9c-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "SwordCombo-GreatSwordComboSlash",
+   "role": "SwordCombo",
+   "suite": "greatsword",
+   "mixamo_name": "Great Sword Combo Slash",
+   "mixamo_id": "c9cc7e5c-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "SwordWalk-GreatSwordWalk",
+   "role": "SwordWalk",
+   "suite": "greatsword",
+   "mixamo_name": "Great Sword Walk",
+   "mixamo_id": "c9cc7257-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "SwordRun-GreatSwordRun",
+   "role": "SwordRun",
+   "suite": "greatsword",
+   "mixamo_name": "Great Sword Run",
+   "mixamo_id": "c9cce2a9-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "SwordWalkBack-GreatSwordBackwardWalk",
+   "role": "SwordWalkBack",
+   "suite": "greatsword",
+   "mixamo_name": "Great Sword Backward Walk",
+   "mixamo_id": "c9cc73a7-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "SwordRunBack-GreatSwordBacwardRun",
+   "role": "SwordRunBack",
+   "suite": "greatsword",
+   "mixamo_name": "Great Sword Bacward Run",
+   "mixamo_id": "c9cc7906-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "SwordStrafeWalkLeft-GreatSwordStrafeLeftWalk",
+   "role": "SwordStrafeWalkLeft",
+   "suite": "greatsword",
+   "mixamo_name": "Great Sword Strafe Left Walk",
+   "mixamo_id": "c9cc747b-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "SwordStrafeWalkRight-GreatSwordStrafeRightWalk",
+   "role": "SwordStrafeWalkRight",
+   "suite": "greatsword",
+   "mixamo_name": "Great Sword Strafe Right Walk",
+   "mixamo_id": "c9cc753e-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "SwordStrafeLeft-GreatSwordStrafeLeftRun",
+   "role": "SwordStrafeLeft",
+   "suite": "greatsword",
+   "mixamo_name": "Great Sword Strafe Left Run",
+   "mixamo_id": "c9cc7a8d-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "SwordStrafeRight-GreatSwordStrafeRightRun",
+   "role": "SwordStrafeRight",
+   "suite": "greatsword",
+   "mixamo_name": "Great Sword Strafe Right Run",
+   "mixamo_id": "c9cc7b4d-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": true
+  },
+  {
+   "file": "Drink-MaleDrinking",
+   "role": "Drink",
+   "suite": "utility",
+   "mixamo_name": "Male Drinking",
+   "mixamo_id": "c9c63255-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "PickUp-PickingUpAnObject",
+   "role": "PickUp",
+   "suite": "utility",
+   "mixamo_name": "Picking Up An Object",
+   "mixamo_id": "c9c6d7aa-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "Hit-HitReaction",
+   "role": "Hit",
+   "suite": "utility",
+   "mixamo_name": "Hit Reaction",
+   "mixamo_id": "c9c947d0-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "HitBack-LargeHitReactionFromTheBack",
+   "role": "HitBack",
+   "suite": "utility",
+   "mixamo_name": "Large Hit Reaction From The Back",
+   "mixamo_id": "deb3ef18-8cf1-48ae-a8e5-5bd3b9e81a7d",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "HitLeft-LargeHitReactionFromTheLeft",
+   "role": "HitLeft",
+   "suite": "utility",
+   "mixamo_name": "Large Hit Reaction From The Left",
+   "mixamo_id": "8e0cf713-44d4-4a6e-af01-64e83af3fbb5",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "HitRight-LargeHitReactionFromTheRight",
+   "role": "HitRight",
+   "suite": "utility",
+   "mixamo_name": "Large Hit Reaction From The Right",
+   "mixamo_id": "9f1f301e-3b08-4403-ae42-7ebc34cee551",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "HitSmallFront-SmallHitReactionFromTheFront",
+   "role": "HitSmallFront",
+   "suite": "utility",
+   "mixamo_name": "Small Hit Reaction From The Front",
+   "mixamo_id": "3faceec0-f022-4e81-8da2-5b0e38a66087",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "HitSmallBack-SmallHitReactionFromTheBack",
+   "role": "HitSmallBack",
+   "suite": "utility",
+   "mixamo_name": "Small Hit Reaction From The Back",
+   "mixamo_id": "0b890d95-c50e-4ece-a663-56f1870cc4f4",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "HitSmallLeft-SmallHitReactionFromTheLeft",
+   "role": "HitSmallLeft",
+   "suite": "utility",
+   "mixamo_name": "Small Hit Reaction From The Left",
+   "mixamo_id": "63fd9933-26cb-40f9-b804-8f76768674dc",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "HitSmallRight-SmallHitReactionFromTheRight",
+   "role": "HitSmallRight",
+   "suite": "utility",
+   "mixamo_name": "Small Hit Reaction From The Right",
+   "mixamo_id": "b099a412-5194-4a60-850f-2306308fba1e",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "Death-DeathFromStandingIdle",
+   "role": "Death",
+   "suite": "utility",
+   "mixamo_name": "Death From Standing Idle",
+   "mixamo_id": "c9c899a0-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "Death-DyingFallingBackward-1",
+   "role": "Death",
+   "suite": "utility",
+   "mixamo_name": "Dying Falling Backward",
+   "mixamo_id": "c9cdb348-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "Death-DyingFallingBackward-2",
+   "role": "Death",
+   "suite": "utility",
+   "mixamo_name": "Dying Falling Backward",
+   "mixamo_id": "c9cdb40b-b96c-11e4-a802-0aaa78deedf9",
+   "in_place": false,
+   "loop": false
+  },
+  {
+   "file": "Slide",
+   "role": "Slide",
+   "suite": "air",
+   "mixamo_name": null,
+   "mixamo_id": null,
+   "mixamo_query": "running slide",
+   "in_place": false,
+   "loop": false,
+   "mixamo_keep": [
+    "Running To Slide And Back To Running"
+   ]
+  }
+ ]
+}
