@@ -53,6 +53,22 @@ func _initialize() -> void:
 	var aabb := mesh.mesh.get_aabb()
 	_want("body stands %.2f m tall (%.3f)" % [HEIGHT, aabb.size.y], absf(aabb.size.y - HEIGHT) < 0.02)
 	_want("body's feet are on the floor (base y %.3f)" % aabb.position.y, absf(aabb.position.y) < 0.02)
+	# The body's texture is extracted from the FBX on import and gitignored, and
+	# its `.import` must be gitignored with it: a checkout carrying the `.import`
+	# without the file makes the importer match its md5, skip the extraction and
+	# build the material with no albedo at all. Nothing downstream complains —
+	# the tint shader samples default white and the BOG is flat grey, which is
+	# why this is a check and not a warning in a log nobody reads.
+	#
+	# The cure is three passes, because the extraction cannot feed the same pass
+	# that runs it: `--import` writes art/bog/BOG_0.png out of the FBX, a second
+	# `--import` imports that PNG, and only then does deleting the body's cached
+	# scene make the third pass build the material on a texture that loads.
+	var surface := mesh.mesh.surface_get_material(0) as BaseMaterial3D
+	_want("body's material has its base-colour texture (delete art/bog/BOG_0.png"
+		+ " and art/bog/BOG_0.png.import, run --import twice, then delete"
+		+ " .godot/imported/BOG.fbx-* and run --import once more)",
+		surface != null and surface.albedo_texture != null)
 
 	var lib := load(LIBRARY) as AnimationLibrary
 	_want("library loads", lib != null)

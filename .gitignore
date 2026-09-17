@@ -80,5 +80,23 @@ out/
 
 # The BOG's base-colour texture is extracted from art/bog/BOG.fbx by the import
 # step, 12 MB of PNG regenerated every time the body is re-imported, so it is
-# kept out of the repository the same way the map textures are above.
+# kept out of the repository the same way the map textures are above. The
+# embedded image is a JPEG named BOG_basecolor.jpg inside the FBX; Godot writes
+# it out under the image's index as a PNG, which is why the name is BOG_0.png.
+#
+# The `.import` beside it is ignored *with* it, and that pairing is the whole
+# point (D-095's second trap): a texture's `.import` carries a
+# `generator_parameters/md5`, and on a checkout that has the `.import` without
+# the file the importer matches the md5, decides the extraction is up to date
+# and never runs it. The body then imports with `Image index '0' couldn't be
+# loaded`, its material gets no albedo texture, and the team-tint shader samples
+# default white — a flat grey BOG, with nothing in the log once the first import
+# has scrolled past. They are derived together and they are ignored together;
+# committing either one alone is the bug. `tools/clip_check.gd` fails loudly on
+# the symptom; the cure is to delete both, run the import twice (the extraction
+# cannot feed the pass that runs it, so the first pass writes the PNG and the
+# second imports it), then delete the body's cached scene
+# `.godot/imported/BOG.fbx-*` and import once more, which is the pass that
+# builds the material on a texture that loads.
 art/bog/BOG_0.png
+art/bog/BOG_0.png.import
