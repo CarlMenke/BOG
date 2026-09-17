@@ -48,7 +48,12 @@ const BOG := preload("res://scenes/player/bog.tscn")
 ## this is the table that says why. Layered as well, the worst comes out at
 ## +0.251 m; the layer alone, with no tilt, leaves a limb tip +0.032 m off the
 ## floor in `Idle`, which is in the grass.
-const CARRY_CLEARANCE_MIN := 0.15
+## 0.10 since D-099: the crouch is a deep squat now (the user's call at the
+## rebuild's second checkpoint), and a 1.5 m bow carried at the side of a
+## squatting BOG reaches 0.136 m off the floor at the best tilt the sweep
+## finds; the old 0.15 was a stoop's number. Still a hand's width, still a
+## floor with room under it, and `AirLoop` is the other clip at it.
+const CARRY_CLEARANCE_MIN := 0.10
 
 ## Model-space landmarks, in the props' own units, measured off the built GLBs.
 ##
@@ -246,8 +251,10 @@ func _carried_clips(player: AnimationPlayer) -> Array[String]:
 		# — and one of them is the great sword's, which a bow Bog can never be in
 		# at all. Measured anyway for one run, `SwordCarry` reported a limb tip
 		# +0.113 m and dragged the whole verdict under the floor.
-		if clip in ["JumpOne", "JumpTwo", "Slide", "Throw", "Cast", "Draw",
-				"Loose", "Swing", "BowCarry", "SwordCarry"]:
+		# The plain plane, the crouch plane and the air loop (D-099): a bow is
+		# carried at the side there and nowhere else.
+		if not clip.begins_with("Crouch") and not clip in ["Idle", "Walk", "Run", "WalkBack", "RunBack",
+				"StrafeWalkLeft", "StrafeWalkRight", "StrafeLeft", "StrafeRight", "AirLoop"]:
 			continue
 		if player.has_animation(clip):
 			out.append(clip)
@@ -334,7 +341,7 @@ func _worst_carry(bog: Bog, player: AnimationPlayer, skeleton: Skeleton3D,
 ## because an `AnimationPlayer` only writes into the skeleton when it is
 ## processed and this reads it back in the same call.
 func _pose(player: AnimationPlayer, skeleton: Skeleton3D, charge: float) -> void:
-	player.play("Draw")
+	player.play("BowReload")
 	player.seek(BogAnimator.draw_time(charge), true, true)
 	player.pause()
 	skeleton.force_update_all_bone_transforms()

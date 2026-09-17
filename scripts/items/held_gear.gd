@@ -182,7 +182,7 @@ const BOW_HAND_BONE := "mixamorig_LeftHand"
 ## across the palm toward the fingertips and +Z is the palm normal. The old grip
 ## was a small tilt off identity because the shaft ran along the forearm; this
 ## one is most of a right angle because it does not.
-const GRIP_ROTATION := Vector3(52.31, 0.00, 53.82)
+const GRIP_ROTATION := Vector3(-85.20, 180.00, -176.08)
 
 ## The point of the palm the shaft passes through, in hand-local metres — the
 ## first term of `GRIP_OFFSET`'s derivation above, named since D-070 because
@@ -227,7 +227,7 @@ const GRIP_ROTATION := Vector3(52.31, 0.00, 53.82)
 ## (0.117 m to 0.108 m of grass under it). `GRIP_ROTATION` is untouched and was
 ## never in question: the −60° bearing and the level shaft are the part the user
 ## says works.
-const GRIP_PALM := Vector3(-0.03, 0.06, -0.01)
+const GRIP_PALM := Vector3(-0.013, 0.159, 0.042)
 
 ## Where the butt of the shaft sits in the fist, in hand-local metres.
 ##
@@ -248,7 +248,7 @@ const GRIP_PALM := Vector3(-0.03, 0.06, -0.01)
 ## initialise one and half this file's readers want a constant. What closes the
 ## gap is `tools/preview_carry.tscn -- measure`, which recomputes it from the
 ## rotation on every run and fails the gate if the two have drifted apart.
-const GRIP_OFFSET := Vector3(0.5187, -0.1854, -0.3276)
+const GRIP_OFFSET := Vector3(0.0335, 0.2158, 0.7178)
 
 ## The two numbers the offset above was derived from, named so the letter card
 ## can be placed off the same measurement instead of guessed at again. The mesh
@@ -729,9 +729,9 @@ const SWORD_REAR_HAND := 0.980
 ## *separating* through the swing and cannot be translated away — moving the
 ## grip trades the swing's worst sample against the carry pose's, and D-073's
 ## `carried` is the half that says the second hand is on the weapon.
-const SWORD_SCALE := 1.2585
-const SWORD_GRIP_OFFSET := Vector3(0.6117, 0.4203, -0.7864)
-const SWORD_GRIP_ROTATION := Vector3(65.102, -180.000, -143.141)
+const SWORD_SCALE := 1.3160
+const SWORD_GRIP_OFFSET := Vector3(0.6891, 0.1287, -0.8284)
+const SWORD_GRIP_ROTATION := Vector3(88.002, 0.000, 38.875)
 
 
 ## **There is no carried-sword tilt any more, and that is D-070.**
@@ -966,9 +966,9 @@ func set_sword_grip(model_scale: float, offset: Vector3,
 ## The sword's tilt is deleted on exactly this test run the other way: its carry
 ## clip *was* authored around its prop, so its grip and its pose agree and a tilt
 ## would only pull the blade out of the hands. See `sword_transform`.
-const CARRY_TILT := Vector2(47.5, -25.0)
+const CARRY_TILT := Vector2(47.5, -40.0)
 
-const BOW_SCALE := 1.7383
+const BOW_SCALE := 1.5408
 
 ## Two centimetres out of the solve, along the hand's own +Y, and the only
 ## number on this page that is not what `preview_bow -- measure` printed
@@ -996,9 +996,9 @@ const BOW_SCALE := 1.7383
 ##
 ## So: re-run `preview_bow -- measure` when the window or the model moves,
 ## paste what it prints into the vector, and leave this lift on top of it.
-const BOW_TRUNK_LIFT := 0.0200
-const BOW_GRIP_OFFSET := Vector3(-0.1927, -0.1376 + BOW_TRUNK_LIFT, 0.0989)
-const BOW_GRIP_ROTATION := Vector3(10.162, 165.413, 19.573)
+const BOW_TRUNK_LIFT := 0.0
+const BOW_GRIP_OFFSET := Vector3(-0.2543, -0.1180 + BOW_TRUNK_LIFT, 0.1155)
+const BOW_GRIP_ROTATION := Vector3(0.212, 161.236, 10.605)
 
 ## Two facts about `art/generated/bow.glb`, in the model's own units, named here
 ## so the derivation above can be read without opening the GLB.
@@ -1022,9 +1022,9 @@ const NOCK_TRAVEL := 0.2847
 ## the rest when the string is at brace: it is the hand separation at full draw
 ## plus `ARROW_OVERHANG` of head past the riser. Shorter, and the head
 ## disappears inside the bow on the one frame everybody is looking at.
-const ARROW_SCALE := 0.8557
-const ARROW_GRIP_OFFSET := Vector3(-0.2024, 0.3853, -0.0069)
-const ARROW_GRIP_ROTATION := Vector3(-29.638, 107.416, 91.184)
+const ARROW_SCALE := 0.7970
+const ARROW_GRIP_OFFSET := Vector3(-0.1610, 0.3717, -0.0158)
+const ARROW_GRIP_ROTATION := Vector3(-25.219, 106.535, 91.403)
 const ARROW_OVERHANG := 0.20
 
 ## The name the string mesh takes in the GLB and the index of its one blend
@@ -1252,7 +1252,7 @@ const POTION_SCALE := 0.30
 ## axis is still inside the mitten — that threshold is half the mitten's own
 ## thickness — with 16 mm to spare. Further out is a bottle floating beside a
 ## hand, and the check would say so at 0.067.
-const POTION_PALM := Vector3(0.0089, 0.1741, 0.0317)
+const POTION_PALM := Vector3(0.0146, 0.1101, 0.0301)
 
 ## Which way the bottle stands in the fist.
 ##
@@ -1282,7 +1282,7 @@ const POTION_PALM := Vector3(0.0089, 0.1741, 0.0317)
 ## The roll about the bottle's own axis is unconstrained and is whatever the
 ## solve's seed produced, because the model is very nearly a surface of
 ## revolution. There is nothing for a roll to get wrong.
-const POTION_GRIP_ROTATION := Vector3(-71.859, 90.000, -7.883)
+const POTION_GRIP_ROTATION := Vector3(-69.52, 90.000, -9.85)
 
 ## Where the base of the bottle sits in the left fist, in hand-local metres.
 ##
@@ -1299,7 +1299,7 @@ const POTION_GRIP_ROTATION := Vector3(-71.859, 90.000, -7.883)
 ## `POTION_GRIP_FRACTION * POTION_HEIGHT * POTION_SCALE`, and moving the scale
 ## alone moves the offset. That is the sword's shape rather than the spear's,
 ## and it is why `potion_offset` takes both.
-const POTION_GRIP_OFFSET := Vector3(0.1925, 0.1140, 0.0584)
+const POTION_GRIP_OFFSET := Vector3(0.1946, 0.0429, 0.0635)
 
 
 ## Which way the bottle's neck points out of the fist, in hand-local space: the

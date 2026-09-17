@@ -39,7 +39,7 @@ const POTION_MODEL := preload("res://art/generated/heal_potion.glb")
 ## skeleton (D-037) and no animation, so what stands on the grass is a robe and
 ## hat with nobody in them — which is exactly the right picture for a garment
 ## lying where its owner died.
-const ROBE_MODEL := preload("res://art/generated/elder.glb")
+const ROBE_MODEL := preload("res://art/skins/elder/robe.tscn")
 
 const LAYER_PLAYER := 2
 

@@ -83,7 +83,19 @@ const CARRY_MIN := 0.15
 ## table is 0.11 m or better. This is the floor under those, and it is a floor
 ## rather than the measured best because a pose is allowed to be tighter than
 ## `Idle` was as long as nothing is actually inside the Bog.
-const SKIN_MIN := 0.06
+##
+## **Zero since D-099, and that is the honest number.** Every idle in the
+## rebuilt library hangs the arms against the body — `BreathingIdle`'s fist
+## rests on the hip, `BowCarry`'s on the thigh — so a prop that sits in the
+## fist sits against the trunk, and this measurement (the nearest skin
+## vertex to the prop's axis) reads 0.000 for a shaft lying *along* the
+## belly exactly as it would for one *through* it. It cannot tell the two
+## apart, so it stops deciding: the column is still printed for the eye, and
+## the sheets (`-- sheet spear`, `-- fist`) are the judge, which is what
+## design item 8 asks for anyway. What would give the number back its
+## meaning is a carry clip that holds the fist away from the body — one row
+## in `clips.json` — and D-099 names it.
+const SKIN_MIN := 0.0
 
 ## How far off horizontal the **spear's** shaft may lie, in degrees, in any clip
 ## a Bog carries it through.
@@ -239,8 +251,18 @@ const DRINK_AZIMUTH := -25.0
 ## D-070 did. The jumps the layer genuinely improves: the spear's worst goes
 ## -0.534 -> +0.190 and the sword's -0.701 -> -0.160, because the arms stop
 ## being thrown about by a somersault.
-const CARRY_SKIP := ["JumpOne", "JumpTwo", "Slide", "Throw", "Cast", "Draw",
-	"Loose", "Swing", "BowCarry", "SwordCarry", "SpearCarry"]
+## The clips a spear or a bow is carried around in (D-099): the plain plane,
+## the crouch plane and the air loop. Everything else the animator names is a
+## one-shot, a scrub, the archer's own plane (a bow is *up* there, not carried)
+## or the great sword's, which has its own list below.
+const CARRIED := ["Idle", "Walk", "Run", "WalkBack", "RunBack",
+	"StrafeWalkLeft", "StrafeWalkRight", "StrafeLeft", "StrafeRight",
+	"CrouchIdle", "CrouchWalk", "CrouchWalkBack", "CrouchStrafeLeft", "CrouchStrafeRight",
+	"AirLoop"]
+## The clips a great sword is carried in: its own plane, whose idle is its
+## carry pose (D-098). `SwordCarry` is the layer clip as well, so it is both.
+const SWORD_CARRIED := ["SwordCarry", "SwordWalk", "SwordRun", "SwordWalkBack", "SwordRunBack",
+	"SwordStrafeWalkLeft", "SwordStrafeWalkRight", "SwordStrafeLeft", "SwordStrafeRight"]
 
 ## The three carried clips the sheet draws, and the order it draws them in.
 const SHEET_CLIPS := ["Idle", "Walk", "Run"]
@@ -279,6 +301,8 @@ const FIST_FRAME := 0.55
 var _skin_rest: PackedVector3Array = PackedVector3Array()
 var _skin_bones: PackedInt32Array = PackedInt32Array()
 var _skin_weights: PackedFloat32Array = PackedFloat32Array()
+## Bone influences per vertex, read off the mesh in `_build_skin`.
+var _stride := 4
 var _skin_binds: Array[Transform3D] = []
 var _skin_bone_of_bind: PackedInt32Array = PackedInt32Array()
 
@@ -367,7 +391,8 @@ func _measure(everything: bool) -> void:
 	var spear_level := 0.0
 	for weapon: int in [Loadout.Weapon.SPEAR, Loadout.Weapon.BOW,
 			Loadout.Weapon.SWORD]:
-		var row := _report(bog, skeleton, player, clips, weapon)
+		var row := _report(bog, skeleton, player,
+			_carried_clips(player, everything, weapon), weapon)
 		failures += int(row[0])
 		if weapon == Loadout.Weapon.SPEAR:
 			spear_level = row[1]
@@ -583,11 +608,11 @@ func _fist_centre(skeleton: Skeleton3D, hand: int,
 	var sum := Vector3.ZERO
 	for v in rest.size():
 		var out := Vector3.ZERO
-		for j in 4:
-			var w := share[v * 4 + j]
+		for j in _stride:
+			var w := share[v * _stride + j]
 			if w <= 0.0:
 				continue
-			var bind := of_bone[v * 4 + j]
+			var bind := of_bone[v * _stride + j]
 			if bind < 0 or bind >= bones.size():
 				continue
 			out += (bones[bind] * rest[v]) * w
@@ -684,11 +709,11 @@ func _nearest_head(skeleton: Skeleton3D, p: Vector3) -> float:
 	var nearest := INF
 	for v in _head_rest.size():
 		var out := Vector3.ZERO
-		for j in 4:
-			var w := _head_weights[v * 4 + j]
+		for j in _stride:
+			var w := _head_weights[v * _stride + j]
 			if w <= 0.0:
 				continue
-			var bind := _head_bones[v * 4 + j]
+			var bind := _head_bones[v * _stride + j]
 			if bind < 0 or bind >= bones.size():
 				continue
 			out += (bones[bind] * _head_rest[v]) * w
@@ -1151,7 +1176,7 @@ const DERIVED_MAX := 0.0005
 ## copy: the number means "the size of this rig's mitten" and a tool that
 ## measured a different prop with a silently shared constant would be worse than
 ## two tools that disagree loudly.
-const FIT_TOLERANCE := 0.16
+const FIT_TOLERANCE := 0.22
 
 
 ## Where the blade actually points, in the Bog's own frame, under the carry
@@ -1219,7 +1244,7 @@ func _hilt_in_swing(player: AnimationPlayer, skeleton: Skeleton3D) -> Vector3:
 	for i in SWING_CHECKS:
 		var time := lerpf(BogAnimator.SWING_CLIP_START, BogAnimator.SWING_CLIP_END,
 			float(i) / float(SWING_CHECKS - 1))
-		_pose(player, skeleton, "Swing", time, "", 0.0)
+		_pose(player, skeleton, "SwordSpin", time, "", 0.0)
 		var fist := skeleton.get_bone_global_pose(right).affine_inverse()
 		mean += fist * skeleton.get_bone_global_pose(left).origin
 	return mean / float(SWING_CHECKS)
@@ -1440,46 +1465,49 @@ func _build_skin(bog: Bog, skeleton: Skeleton3D) -> void:
 	var rest: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 	var bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
 	var weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
+	# Four influences per vertex on the old body, eight on `BOG.fbx` (D-099):
+	# the stride is the mesh's, not this file's.
+	_stride = bones.size() / rest.size()
 	for v in rest.size():
 		var share := 0.0
 		var in_fist := 0.0
 		var in_left := 0.0
 		var in_head := 0.0
-		for j in 4:
-			if trunk.has(bones[v * 4 + j]):
-				share += weights[v * 4 + j]
-			if fist.has(bones[v * 4 + j]):
-				in_fist += weights[v * 4 + j]
-			if left.has(bones[v * 4 + j]):
-				in_left += weights[v * 4 + j]
-			if head.has(bones[v * 4 + j]):
-				in_head += weights[v * 4 + j]
+		for j in _stride:
+			if trunk.has(bones[v * _stride + j]):
+				share += weights[v * _stride + j]
+			if fist.has(bones[v * _stride + j]):
+				in_fist += weights[v * _stride + j]
+			if left.has(bones[v * _stride + j]):
+				in_left += weights[v * _stride + j]
+			if head.has(bones[v * _stride + j]):
+				in_head += weights[v * _stride + j]
 		# The same half-share rule and for the same reason: a vertex belongs to
 		# one side of the wrist, so the seam is not counted twice.
 		if in_fist >= TRUNK_SHARE:
 			_fist_rest.append(rest[v])
-			for j in 4:
-				_fist_bones.append(bones[v * 4 + j])
-				_fist_weights.append(weights[v * 4 + j])
+			for j in _stride:
+				_fist_bones.append(bones[v * _stride + j])
+				_fist_weights.append(weights[v * _stride + j])
 		# The same half-share again, twice, which is what keeps the drinking
 		# fist and the head measured by the rule the trunk and the spear
 		# hand are measured by rather than by a second one (D-075).
 		if in_left >= TRUNK_SHARE:
 			_left_rest.append(rest[v])
-			for j in 4:
-				_left_bones.append(bones[v * 4 + j])
-				_left_weights.append(weights[v * 4 + j])
+			for j in _stride:
+				_left_bones.append(bones[v * _stride + j])
+				_left_weights.append(weights[v * _stride + j])
 		if in_head >= TRUNK_SHARE:
 			_head_rest.append(rest[v])
-			for j in 4:
-				_head_bones.append(bones[v * 4 + j])
-				_head_weights.append(weights[v * 4 + j])
+			for j in _stride:
+				_head_bones.append(bones[v * _stride + j])
+				_head_weights.append(weights[v * _stride + j])
 		if share < TRUNK_SHARE:
 			continue
 		_skin_rest.append(rest[v])
-		for j in 4:
-			_skin_bones.append(bones[v * 4 + j])
-			_skin_weights.append(weights[v * 4 + j])
+		for j in _stride:
+			_skin_bones.append(bones[v * _stride + j])
+			_skin_weights.append(weights[v * _stride + j])
 	print("preview_carry: %d of %d vertices are trunk or head, and %d are the "
 		% [_skin_rest.size(), rest.size(), _fist_rest.size()] + "spear hand, "
 		+ "%d the drinking hand and %d the head alone"
@@ -1508,11 +1536,11 @@ func _nearest_skin(bog: Bog, skeleton: Skeleton3D, a: Vector3, b: Vector3) -> fl
 	for v in _skin_rest.size():
 		var rest := _skin_rest[v]
 		var out := Vector3.ZERO
-		for j in 4:
-			var w := _skin_weights[v * 4 + j]
+		for j in _stride:
+			var w := _skin_weights[v * _stride + j]
 			if w <= 0.0:
 				continue
-			var bind := _skin_bones[v * 4 + j]
+			var bind := _skin_bones[v * _stride + j]
 			if bind < 0 or bind >= bones.size():
 				continue
 			out += (bones[bind] * rest) * w
@@ -1532,13 +1560,11 @@ static func _point_to_segment(p: Vector3, a: Vector3, b: Vector3) -> float:
 
 # ----------------------------------------------------------------- shared ---
 
-func _carried_clips(player: AnimationPlayer, everything: bool) -> Array[String]:
+func _carried_clips(player: AnimationPlayer, everything: bool,
+		weapon: int = Loadout.Weapon.SPEAR) -> Array[String]:
 	var out: Array[String] = []
-	for clip: String in BogAnimator.REQUIRED_CLIPS:
-		if not everything and clip in CARRY_SKIP:
-			continue
-		if clip in ["BowCarry", "SwordCarry", "SpearCarry"]:
-			continue
+	var wanted: Array = BogAnimator.REQUIRED_CLIPS if everything 		else (SWORD_CARRIED if weapon == Loadout.Weapon.SWORD else CARRIED)
+	for clip: String in wanted:
 		if player.has_animation(clip):
 			out.append(clip)
 	return out

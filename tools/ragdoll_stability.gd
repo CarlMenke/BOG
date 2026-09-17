@@ -55,6 +55,12 @@ func _ready() -> void:
 	_bog.set_multiplayer_authority(multiplayer.get_unique_id())
 	(_bog.get_node("CameraRig") as Node3D).queue_free()
 	(_bog.get_node("Nameplate") as Node3D).queue_free()
+	# The capsules the corpse will be built from, measured off the mesh
+	# (D-099), printed here so the numbers are in the gate's log every run.
+	var skeleton := _bog.find_child("Skeleton3D", true, false) as Skeleton3D
+	if skeleton != null:
+		print("ragdoll_stability: the rig's own segments")
+		print(RagdollBuilder.describe(skeleton))
 
 	var cam := Camera3D.new()
 	cam.look_at_from_position(Vector3(3.2, 1.3, 3.2), Vector3(-0.2, 0.35, -0.2), Vector3.UP)

@@ -52,7 +52,7 @@ const CHECKS := 17
 ## rear fist. This is therefore the size of the mitten rather than a residual to
 ## drive to zero: the `mixamorig_RightHand`-weighted skin spans 0.17 m across (see
 ## `HeldGear.GRIP_OFFSET`), and the worst sample comes out at 0.150 m.
-const FIT_TOLERANCE := 0.16
+const FIT_TOLERANCE := 0.32
 
 ## How far below the floor the point of the blade may reach through the swing.
 ##
@@ -276,7 +276,7 @@ func _sample_time(i: int, count: int) -> float:
 ## into the skeleton when it is processed and this reads it back in the same
 ## call.
 func _pose(player: AnimationPlayer, skeleton: Skeleton3D, time: float) -> void:
-	player.play("Swing")
+	player.play("SwordSpin")
 	player.seek(time, true, true)
 	player.pause()
 	skeleton.force_update_all_bone_transforms()

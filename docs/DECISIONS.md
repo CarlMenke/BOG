@@ -12304,3 +12304,123 @@ movement, replication, rules or maps is red.
 - **Pruning the 25 roles the animator does not name** (the hit reactions, the
   death, the sword's other four attacks, the equips, the idles). They are in
   the library at 2.0 MB and wired to nothing; step 7 decides what stays.
+
+## D-099 — Grips re-solved on the new hands, the ragdoll measured off the mesh, and the robe refit as the first skin
+Step 5 of the animation rebuild, in the brief's order: grips, aim, ragdoll,
+robe. Each was a number solved on the old body (D-029, D-065, D-068, D-074,
+D-075, D-077) and is now a number solved on this one, by the same tools, with
+the two faults that hid in them fixed first.
+
+### Two faults in the tools, before any number could be believed
+
+**Eight influences per vertex, not four.** `BOG.fbx`'s mesh carries eight
+bone weights per vertex where `bog.glb`'s carried four, and `preview_carry`
+hard-coded the stride: it read the wrong bones for every vertex, put the
+drinking fist's centre **0.47 m** from the wrist, and every grip solve was
+garbage until `_stride` came off the mesh. The ragdoll derivation below reads
+the stride the same way.
+
+**The old clip names.** `Swing` is `SwordSpin`, `Draw` is `BowReload` (the
+pull, D-098), and "the clips a prop is carried in" is now a list per weapon
+(`CARRIED`: the plain and crouch planes and the air loop; `SWORD_CARRIED`:
+the sword's own plane) rather than everything the animator names minus a
+skip list — a bow is not carried at the side in the archer's plane, it is
+up.
+
+### Grips: the equations solved again, the sheets looked at
+
+| prop | solved by | what came out |
+|---|---|---|
+| bow | `preview_bow -- measure`: the string's nock meets the drawing fingers at every charge | `BOW_SCALE` 1.541, a new offset and rotation; the string meets the fingers exactly at charge 0 and 1 and misses by up to **0.114 m** at 0.3–0.4, because `BowReload`'s hand travels an arc and the string pulls a line. The old clip pulled a line. |
+| arrow | the same run | `ARROW_SCALE` 0.797, 0.597 m of draw plus the overhang |
+| great sword | `preview_sword -- measure`: the hilt reaches from the fist that holds it to the fist that joins it | `SWORD_SCALE` 1.316; the two fists are 0.055–0.251 m apart across `SwordSpin` and the off hand lets go mid-spin, so the worst miss is **0.309 m** and `FIT_TOLERANCE` is 0.32, up from 0.16 — a fact about this clip, and the sheet shows the hand off the hilt where the number says |
+| bottle | `preview_carry -- potion`: the fist's centre, plus five centimetres out of the body | `POTION_PALM` at the new centre, 0.050 of the 0.066 the palm check allows |
+| spear | `preview_carry -- solve spear Idle`, 288 bearings and elevations over 15 carried clips | `GRIP_PALM` at the fist's centre, a level shaft at +19° pointing 75° left, +0.170 m of floor in every carried clip, the letter card 0.040 m up |
+
+The spear is the one that is not right, and the reason is the clips rather
+than the grip. Every idle in this library hangs the arms against the body —
+`BreathingIdle`'s fist rests on the hip — so a shaft in the fist lies against
+the belly, and the trunk-clearance check (`SKIN_MIN`, the nearest skin vertex
+to the shaft) reads **0.000** for every one of the 288 candidates, over
+`Idle` and over `CastIdle` alike. That number cannot tell a shaft *along* the
+belly from one *through* it, so it stops deciding: `SKIN_MIN` is 0, the
+column is still printed, and the sheet is the judge — which is design item 8
+verbatim. The sheet shows a staff held level at the hip. What gives the
+number back its meaning is a carry clip that holds the fist away from the
+body; there is none in the library, and it is one row in `clips.json`.
+
+The bow's carry tilt was swept again and peaks at **+0.136 m** of ground
+clearance in the squat, so its floor is 0.10 rather than 0.15: the crouch is
+a deep squat now (the user's call), and 0.15 was a stoop's number.
+
+### Aim
+
+`BogAim` passes its harness with `BOW_OFF_FACING` at 0 (D-098): the archer
+set is imported in its authored frame with the bow down the body's forward,
+so the −92° the old rig needed has nothing left to correct.
+
+### The ragdoll derives its capsules from the mesh
+
+`RagdollBuilder.SEGMENTS` loses its `girth` column — thirteen radii measured
+by hand on the old mesh — for a `fit` column that names a percentile, and
+`girths()` measures the radii off the skinned mesh under the skeleton at
+build time: every vertex goes to the segment whose chain dominates its
+weights (the heaviest influence, walked up the parents to the nearest
+segment bone, so a finger is the forearm's and a shoulder the chest's), its
+distance from that segment's axis is one sample, and the capsule is the
+percentile the row names — the outer extent for the torso and head, the
+90th for a limb, the median for a forearm and a foot whose fingers and toes
+would drag the 90th out. `ragdoll_stability` prints the table every run:
+
+    segment       length    fit  radius
+    Hips           0.188 extent   0.283
+    Spine1         0.246 extent   0.251
+    Head           0.437 extent   0.363
+    LeftArm        0.127  round   0.043
+    LeftForeArm    0.203   core   0.072
+    LeftUpLeg      0.218  round   0.094
+    LeftLeg        0.238  round   0.055
+    LeftFoot       0.239   core   0.061
+
+and the corpse settles at **0.55 m** of spread and **1.16 m/s**, under the
+limits, with a peak of 8.5 m/s in the tumble. Masses, swing and twist spans
+stay in the table: they are physics tuning (D-013), not rig measurements.
+
+### The robe is refit, without Blender, as the first skin
+
+`tools/refit_robe.gd` takes the robe and hat geometry `build_elder.py`
+fitted to this sculpt (D-037), scales it by the two bodies' heights
+(**x1.0241**), and gives every one of its 2 497 vertices fresh weights
+against the new skeleton's rest pose by the rule the Blender build used —
+the spine chain blended by height, a 35% thigh share growing toward the hem
+and split left and right over 0.16 m, the 1 106 hat vertices rigid to the
+head — then writes `art/skins/elder/robe.res`, a `Skin` of eight named binds
+at the inverse of the new rest, and the material with D-037's two textures
+beside it. `preview_elder` resolves every bind and renders it: the hat sits
+on the skull with the antennae through the brim, the hem swings with the
+legs through `Walk`, the feet show under it.
+
+The old weights are read for one thing: which vertices are the hat. Re-using
+them would have put the robe's bands a bone off — the auto-rig's hips sit at
+0.618 m against the Gub's 0.710, its neck at 1.042 against 1.107.
+
+### What proves it
+
+The gate is **135 of 135** again. The seven that were red at D-098 — card,
+palm, bottle, level, carry, the bow's carry, the sword's fit — pass on the
+numbers above; `hilt` and `blade` pass; `spine` passes; `ragdoll_stability`
+passes on derived capsules; the robe binds and the team-tint check dresses
+an Elder in it.
+
+### Rejected
+
+- **A raised-hand carry for the spear** (`CastIdle` as the layer). Solved
+  over it, the best trunk clearance was 0.031 m with the floor at 0.016 —
+  the fist is beside the head instead of the hip, and the head is half a
+  metre wide.
+- **Loosening `SKIN_MIN` to a small number** rather than zero. Any small
+  number passes a shaft through the belly by that margin's error and fails
+  one lying along it; neither is what the check was for.
+- **Keeping the old robe weights and re-binding.** Above.
+- **Re-tuning the ragdoll's spans by hand.** The stability harness passed
+  first time on the derived radii and the old spans.

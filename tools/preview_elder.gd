@@ -36,8 +36,8 @@ extends Node3D
 ## `studio` is the third: a neutral grey room, for judging the cloth itself
 ## without a map's colour cast on it.
 
-const BOG := "res://art/generated/bog.glb"
-const ELDER := "res://art/generated/elder.glb"
+const BOG := "res://art/bog/BOG.fbx"
+const ELDER := "res://art/skins/elder/robe.tscn"
 const ELDER_MESH := "Elder"
 
 ## Whisperbloom, from `scripts/world/arena.gd` and `scripts/world/torch.gd`.

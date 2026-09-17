@@ -1,0 +1,36 @@
+[gd_scene format=3]
+
+[ext_resource type="ArrayMesh" path="res://art/skins/elder/robe.res" id="1_wj643"]
+
+[sub_resource type="Skin" id="Skin_wj643"]
+bind_count = 8
+bind/0/name = &"mixamorig_Hips"
+bind/0/bone = -1
+bind/0/pose = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0018440993, -0.6184403, 0.059727933)
+bind/1/name = &"mixamorig_Spine"
+bind/1/bone = -1
+bind/1/pose = Transform3D(1, 5.5653273e-16, 0, -5.4437293e-16, 0.9781508, -0.20789717, -1.1570158e-16, 0.20789717, 0.9781508, -0.0018440993, -0.70399916, -0.07014907)
+bind/2/name = &"mixamorig_Spine1"
+bind/2/bone = -1
+bind/2/pose = Transform3D(1, 5.560602e-16, 1.00426357e-19, -5.438899e-16, 0.9781508, -0.20789711, -1.1570155e-16, 0.20789711, 0.9781508, -0.0018440993, -0.8050955, -0.07014902)
+bind/3/name = &"mixamorig_Spine2"
+bind/3/bone = -1
+bind/3/pose = Transform3D(1, 5.560602e-16, 1.00426357e-19, -5.438899e-16, 0.9781508, -0.20789711, -1.1570155e-16, 0.20789711, 0.9781508, -0.0018440993, -0.9206343, -0.07014901)
+bind/4/name = &"mixamorig_Neck"
+bind/4/bone = -1
+bind/4/pose = Transform3D(1, 1.6543612e-23, -4.930381e-31, -8.768115e-23, 1, -2.9802326e-08, -2.6131021e-30, 2.9802326e-08, 1, -0.0018440993, -1.0422437, 0.14980353)
+bind/5/name = &"mixamorig_Head"
+bind/5/bone = -1
+bind/5/pose = Transform3D(1, 1.6543612e-23, -4.930381e-31, -8.768115e-23, 1, -2.9802326e-08, -2.6131021e-30, 2.9802326e-08, 1, -0.0018440993, -1.113476, 0.11249451)
+bind/6/name = &"mixamorig_LeftUpLeg"
+bind/6/bone = -1
+bind/6/pose = Transform3D(-0.9996895, -0.024913268, -0.00017999184, 0.024913916, -0.9996635, -0.0072223064, -1.45519135e-11, -0.0072245486, 0.99997395, 0.15965283, 0.5669778, 0.060124118)
+bind/7/name = &"mixamorig_RightUpLeg"
+bind/7/bone = -1
+bind/7/pose = Transform3D(-0.9996897, 0.02491241, 0.0002322039, -0.024913494, -0.99964625, -0.009317515, -4.3655753e-11, -0.009320409, 0.99995667, -0.15596232, 0.56693995, 0.061605312)
+
+[node name="ElderRobe" type="Node3D" unique_id=649359700]
+
+[node name="Elder" type="MeshInstance3D" parent="." unique_id=440450557]
+mesh = ExtResource("1_wj643")
+skin = SubResource("Skin_wj643")

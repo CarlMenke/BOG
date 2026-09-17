@@ -1,0 +1,15 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://art/skins/elder/elder_basecolor.png" id="1_ppvc1"]
+[ext_resource type="Texture2D" path="res://art/skins/elder/elder_emissive.png" id="2_vkuir"]
+
+[resource]
+resource_name = "elder_robe"
+cull_mode = 2
+albedo_texture = ExtResource("1_ppvc1")
+roughness = 0.82
+emission_enabled = true
+emission = Color(1, 1, 1, 1)
+emission_operator = 1
+emission_texture = ExtResource("2_vkuir")
+metadata/_gltf_primary_texture_coord = 0

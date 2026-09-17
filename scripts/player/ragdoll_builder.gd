@@ -23,13 +23,14 @@ extends RefCounted
 ##
 ##   tip     — the bone whose head marks the end of this one, giving length and
 ##             direction. Capsules are built along that line.
-##   girth   — capsule radius as a fraction of length. Values **above 1.0 are
-##             normal here**: the Bog is a pear-shaped blob whose pelvis and
-##             chest bones are only 18 and 24 cm long inside a body 50 cm wide
-##             and 75 cm deep, so those two capsules are wider than they are
-##             long. `CapsuleShape3D.height` counts the caps, so a segment whose
-##             radius exceeds half its length is simply a sphere — which is the
-##             right shape for this character's torso.
+##   fit     — which percentile of the skin's distance from the bone's axis
+##             the capsule radius is (`FIT_PERCENTILE`). **The radius itself is
+##             measured off the mesh at build time** (D-099): every vertex the
+##             skin hangs off this segment's chain of bones has its distance
+##             from the axis taken in the rest pose, and the capsule is that
+##             distribution's chosen percentile. A pelvis wider than it is
+##             long comes out as a sphere, which is the right shape for this
+##             character's torso; a re-rig re-derives the lot.
 ##   mass    — kilograms. The head and torso carry two thirds of it, which is
 ##             what makes the body flop rather than cartwheel.
 ##   swing   — cone half-angle, degrees: how far this bone may fold away from
@@ -46,14 +47,17 @@ extends RefCounted
 ## looks rubbery, which is the intended look anyway, whereas one that bends too
 ## little does not look stiff — it explodes.
 ##
-## The girths are measured, not guessed. Every skinned vertex was assigned to
-## the segment that dominates its weights and its distance from that segment's
-## axis recorded. For the **limbs** each radius sits between the median and the
-## 90th percentile of that distance — at the p90 where the limb really is round,
-## and down near the median for the hand and the foot, whose splayed fingers and
-## toes drag the p90 out to twice the median and would otherwise inflate a 9 cm
-## shin-and-ankle capsule to 18. For the **torso and head** the radius is fitted
-## to the mesh's own extent instead, for a reason worth knowing:
+## The girths were measured by hand once (D-029) and are measured by this file
+## now (D-099): every skinned vertex is assigned to the segment whose chain of
+## bones dominates its weights and its distance from that segment's axis
+## recorded, and the radius is the percentile `fit` names. What the hand
+## measurement found, and what the percentiles encode: for the **limbs** the
+## radius sits between the median and the 90th — at the p90 where the limb
+## really is round, and at the median for the hand and the foot, whose splayed
+## fingers and toes drag the p90 out to twice the median and would otherwise
+## inflate a 9 cm shin-and-ankle capsule to 18. For the **torso and head** the
+## radius is the mesh's own extent instead, for a reason worth knowing (the
+## table is the old body's; `ragdoll_stability` prints the new one every run):
 ##
 ##   segment              length   mesh radius p50/p90/max   capsule radius
 ##   Hips -> Spine1        0.183     0.214 / 0.337 / 0.357       0.330
@@ -143,25 +147,35 @@ extends RefCounted
 ## shoulders are driven rather than frozen — which is a change to this table's
 ## size, not to its numbers.
 const SEGMENTS: Array[Dictionary] = [
-	{"bone": "mixamorig_Hips",          "tip": "mixamorig_Spine1",        "girth": 1.80, "mass": 9.0, "swing": 45.0,  "twist": 30.0},
-	{"bone": "mixamorig_Spine1",        "tip": "mixamorig_Neck",          "girth": 1.26, "mass": 8.0, "swing": 45.0,  "twist": 35.0},
-	{"bone": "mixamorig_Head",          "tip": "mixamorig_HeadTop_End",   "girth": 0.87, "mass": 9.0, "swing": 35.0,  "twist": 25.0},
-	{"bone": "mixamorig_LeftArm",       "tip": "mixamorig_LeftForeArm",   "girth": 0.54, "mass": 1.2, "swing": 95.0,  "twist": 60.0},
-	{"bone": "mixamorig_LeftForeArm",   "tip": "mixamorig_LeftHand",      "girth": 0.31, "mass": 1.4, "swing": 105.0, "twist": 40.0},
-	{"bone": "mixamorig_RightArm",      "tip": "mixamorig_RightForeArm",  "girth": 0.54, "mass": 1.2, "swing": 95.0,  "twist": 60.0},
-	{"bone": "mixamorig_RightForeArm",  "tip": "mixamorig_RightHand",     "girth": 0.31, "mass": 1.4, "swing": 105.0, "twist": 40.0},
-	{"bone": "mixamorig_LeftUpLeg",     "tip": "mixamorig_LeftLeg",       "girth": 0.21, "mass": 1.6, "swing": 90.0,  "twist": 45.0},
-	{"bone": "mixamorig_LeftLeg",       "tip": "mixamorig_LeftFoot",      "girth": 0.19, "mass": 1.2, "swing": 105.0, "twist": 30.0},
-	{"bone": "mixamorig_LeftFoot",      "tip": "mixamorig_LeftToeBase",   "girth": 0.35, "mass": 1.1, "swing": 55.0,  "twist": 30.0},
-	{"bone": "mixamorig_RightUpLeg",    "tip": "mixamorig_RightLeg",      "girth": 0.21, "mass": 1.6, "swing": 90.0,  "twist": 45.0},
-	{"bone": "mixamorig_RightLeg",      "tip": "mixamorig_RightFoot",     "girth": 0.19, "mass": 1.2, "swing": 105.0, "twist": 30.0},
-	{"bone": "mixamorig_RightFoot",     "tip": "mixamorig_RightToeBase",  "girth": 0.35, "mass": 1.1, "swing": 55.0,  "twist": 30.0},
+	{"bone": "mixamorig_Hips",          "tip": "mixamorig_Spine1",        "fit": "extent", "mass": 9.0, "swing": 45.0,  "twist": 30.0},
+	{"bone": "mixamorig_Spine1",        "tip": "mixamorig_Neck",          "fit": "extent", "mass": 8.0, "swing": 45.0,  "twist": 35.0},
+	{"bone": "mixamorig_Head",          "tip": "mixamorig_HeadTop_End",   "fit": "extent", "mass": 9.0, "swing": 35.0,  "twist": 25.0},
+	{"bone": "mixamorig_LeftArm",       "tip": "mixamorig_LeftForeArm",   "fit": "round",  "mass": 1.2, "swing": 95.0,  "twist": 60.0},
+	{"bone": "mixamorig_LeftForeArm",   "tip": "mixamorig_LeftHand",      "fit": "core",   "mass": 1.4, "swing": 105.0, "twist": 40.0},
+	{"bone": "mixamorig_RightArm",      "tip": "mixamorig_RightForeArm",  "fit": "round",  "mass": 1.2, "swing": 95.0,  "twist": 60.0},
+	{"bone": "mixamorig_RightForeArm",  "tip": "mixamorig_RightHand",     "fit": "core",   "mass": 1.4, "swing": 105.0, "twist": 40.0},
+	{"bone": "mixamorig_LeftUpLeg",     "tip": "mixamorig_LeftLeg",       "fit": "round",  "mass": 1.6, "swing": 90.0,  "twist": 45.0},
+	{"bone": "mixamorig_LeftLeg",       "tip": "mixamorig_LeftFoot",      "fit": "round",  "mass": 1.2, "swing": 105.0, "twist": 30.0},
+	{"bone": "mixamorig_LeftFoot",      "tip": "mixamorig_LeftToeBase",   "fit": "core",   "mass": 1.1, "swing": 55.0,  "twist": 30.0},
+	{"bone": "mixamorig_RightUpLeg",    "tip": "mixamorig_RightLeg",      "fit": "round",  "mass": 1.6, "swing": 90.0,  "twist": 45.0},
+	{"bone": "mixamorig_RightLeg",      "tip": "mixamorig_RightFoot",     "fit": "round",  "mass": 1.2, "swing": 105.0, "twist": 30.0},
+	{"bone": "mixamorig_RightFoot",     "tip": "mixamorig_RightToeBase",  "fit": "core",   "mass": 1.1, "swing": 55.0,  "twist": 30.0},
 ]
+
+## Which percentile of a segment's skin distances its capsule radius is, by
+## `fit` (D-099): the torso and head at the mesh's outer extent, because three
+## overlapping blobs *are* the character and a sphere that hugs their average
+## vertex leaves the belly resting on nothing; a limb near its 90th, where it
+## really is round; a forearm and a foot at the median, because the splayed
+## fingers and toes hanging off them drag the 90th out to twice the median.
+const FIT_PERCENTILE := {"extent": 0.95, "round": 0.90, "core": 0.50}
 
 const LAYER_WORLD := 1
 const LAYER_RAGDOLL := 16
 
 const MIN_RADIUS := 0.035
+## Radius as a fraction of length when there is no mesh to measure.
+const FALLBACK_GIRTH := 0.3
 ## Sized to sit *above* the fitted torso bodies (the widest is the pelvis at
 ## 0.330), not under them: at 0.30 this clamp was quietly shaving the pelvis and
 ## the head down to a cluster of capsules smaller than the mesh they carry.
@@ -176,6 +190,7 @@ static func build(skeleton: Skeleton3D) -> PhysicalBoneSimulator3D:
 	simulator.name = "Ragdoll"
 	skeleton.add_child(simulator)
 
+	var radii := girths(skeleton)
 	for segment: Dictionary in SEGMENTS:
 		var bone: int = skeleton.find_bone(segment["bone"])
 		var tip: int = skeleton.find_bone(segment["tip"])
@@ -183,7 +198,8 @@ static func build(skeleton: Skeleton3D) -> PhysicalBoneSimulator3D:
 			push_warning("RagdollBuilder: rig has no %s -> %s"
 				% [segment["bone"], segment["tip"]])
 			continue
-		var physical := _make_bone(skeleton, bone, tip, segment)
+		var physical := _make_bone(skeleton, bone, tip, segment,
+			radii.get(segment["bone"], -1.0))
 		simulator.add_child(physical)
 		# Swept collision. A shin capsule is 9 cm across and a thrown corpse
 		# arrives at 9 m/s, which is 15 cm per physics tick — over three times
@@ -197,11 +213,13 @@ static func build(skeleton: Skeleton3D) -> PhysicalBoneSimulator3D:
 
 
 static func _make_bone(skeleton: Skeleton3D, bone: int, tip: int,
-		segment: Dictionary) -> PhysicalBone3D:
+		segment: Dictionary, girth: float) -> PhysicalBone3D:
 	var rest := skeleton.get_bone_global_rest(bone)
 	var axis := skeleton.get_bone_global_rest(tip).origin - rest.origin
 	var length := maxf(axis.length(), 0.02)
-	var radius := clampf(length * float(segment["girth"]), MIN_RADIUS, MAX_RADIUS)
+	# A rig with no skinned mesh under it (a bare skeleton in a tool) gets a
+	# stick figure rather than nothing.
+	var radius := clampf(girth if girth > 0.0 else length * FALLBACK_GIRTH, MIN_RADIUS, MAX_RADIUS)
 
 	var physical := PhysicalBone3D.new()
 	physical.name = "PB_%s" % segment["bone"]
@@ -266,6 +284,89 @@ static func _make_bone(skeleton: Skeleton3D, bone: int, tip: int,
 	physical.add_child(shape)
 
 	return physical
+
+
+## Every segment's capsule radius, measured off the skinned mesh under
+## `skeleton` in its rest pose (D-099): `{bone name: radius}`, empty if the
+## skeleton has no skinned mesh child.
+##
+## Each vertex goes to the segment whose chain dominates its weights — the
+## bone its heaviest influence names, walked up the parents to the nearest
+## segment bone, so a finger belongs to the forearm's capsule and a shoulder
+## to the chest's — and its distance from that segment's axis (bone head to
+## tip head) is one sample of the distribution the `fit` percentile is taken
+## from. Mesh space is skeleton space here: the body's mesh sits under its
+## skeleton at identity, and the rest pose is the bind pose.
+static func girths(skeleton: Skeleton3D) -> Dictionary:
+	var mesh_node: MeshInstance3D = null
+	for child in skeleton.get_children():
+		if child is MeshInstance3D and (child as MeshInstance3D).mesh != null \
+				and (child as MeshInstance3D).skin != null:
+			mesh_node = child
+			break
+	if mesh_node == null:
+		return {}
+	var segment_of_bone := {}
+	for i in SEGMENTS.size():
+		segment_of_bone[skeleton.find_bone(SEGMENTS[i]["bone"])] = i
+	var skin := mesh_node.skin
+	var bone_of_bind: PackedInt32Array = []
+	for i in skin.get_bind_count():
+		var bone := skin.get_bind_bone(i)
+		bone_of_bind.append(bone if bone >= 0 else skeleton.find_bone(skin.get_bind_name(i)))
+	var arrays := mesh_node.mesh.surface_get_arrays(0)
+	var rest: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
+	var weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
+	var stride: int = bones.size() / maxi(rest.size(), 1)
+	var samples := {}
+	for v in rest.size():
+		var heaviest := -1
+		var heaviest_weight := 0.0
+		for j in stride:
+			if weights[v * stride + j] > heaviest_weight:
+				heaviest_weight = weights[v * stride + j]
+				heaviest = bone_of_bind[bones[v * stride + j]]
+		var owner := heaviest
+		while owner >= 0 and not segment_of_bone.has(owner):
+			owner = skeleton.get_bone_parent(owner)
+		if owner < 0:
+			continue
+		var segment: Dictionary = SEGMENTS[segment_of_bone[owner]]
+		var head := skeleton.get_bone_global_rest(owner).origin
+		var tip := skeleton.get_bone_global_rest(skeleton.find_bone(segment["tip"])).origin
+		var axis := (tip - head).normalized()
+		var off := rest[v] - head
+		var distance := (off - axis * off.dot(axis)).length()
+		if not samples.has(segment["bone"]):
+			samples[segment["bone"]] = PackedFloat32Array()
+		samples[segment["bone"]].append(distance)
+	var out := {}
+	for segment: Dictionary in SEGMENTS:
+		if not samples.has(segment["bone"]):
+			continue
+		var sorted: PackedFloat32Array = samples[segment["bone"]]
+		sorted.sort()
+		var at := int(floor(float(FIT_PERCENTILE[segment["fit"]]) * float(sorted.size() - 1)))
+		out[segment["bone"]] = sorted[clampi(at, 0, sorted.size() - 1)]
+	return out
+
+
+## The derived table as text, for the harness that prints it.
+static func describe(skeleton: Skeleton3D) -> String:
+	var radii := girths(skeleton)
+	var lines := ["  %-14s %7s %6s %7s" % ["segment", "length", "fit", "radius"]]
+	for segment: Dictionary in SEGMENTS:
+		var bone: int = skeleton.find_bone(segment["bone"])
+		var tip: int = skeleton.find_bone(segment["tip"])
+		if bone < 0 or tip < 0:
+			continue
+		var length := skeleton.get_bone_global_rest(tip).origin.distance_to(
+			skeleton.get_bone_global_rest(bone).origin)
+		var girth: float = radii.get(segment["bone"], -1.0)
+		lines.append("  %-14s %7.3f %6s %7.3f" % [String(segment["bone"]).trim_prefix("mixamorig_"),
+			length, segment["fit"], clampf(girth if girth > 0.0 else length * FALLBACK_GIRTH, MIN_RADIUS, MAX_RADIUS)])
+	return "\n".join(lines)
 
 
 ## Orthonormal basis whose +Y runs along `up`.

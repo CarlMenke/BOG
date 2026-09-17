@@ -36,7 +36,7 @@ extends Node
 ## builds lives under the skeleton and is positioned entirely by the rig, and a
 ## transform on this would be a transform with nothing under it.
 
-const MODEL := preload("res://art/generated/elder.glb")
+const MODEL := preload("res://art/skins/elder/robe.tscn")
 ## The `MeshInstance3D` inside that scene. Named by `tools/build_elder.py`, and
 ## found by name rather than by index for the reason every other reach into an
 ## imported subtree in this project is: a re-import can renumber children.

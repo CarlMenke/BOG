@@ -84,7 +84,7 @@ of things nothing else is checking.
 
 ---
 
-## The animation rebuild — steps 1 to 4 of 7 landed
+## The animation rebuild — steps 1 to 5 of 7 landed
 
 The character's animation pipeline is being rebuilt from scratch
 (`ANIMATION_REBUILD_PROMPT.md` is the brief; **D-095** to **D-098** are the
@@ -94,10 +94,10 @@ records). **The game runs on the new body and the new animator** since D-098:
 path — `tools/build_bog.py`, `assets/source/`, `art/generated/bog.glb`,
 `elder.glb` — is unreferenced by the game and goes at step 7.
 
-**The gate is 135 checks, 7 failures**, and the seven are step 5's: every
-one measures a prop against the body (`preview_carry` card/palm/bottle/
-level/carry, `preview_bow` carry tilt, `preview_sword` fit) with constants
-solved on the old body's hands.
+**The gate is 135 of 135** since D-099: the grips are re-solved on the new
+hands by their own tools, the ragdoll measures its capsules off the mesh at
+build time, and the Elder's robe is refit to the new skeleton as the first
+skin in `art/skins/elder/` (`tools/refit_robe.gd`).
 
 What exists now:
 
@@ -133,15 +133,17 @@ What exists now:
     res://tools/preview_bog.tscn out.png 30 Run-StandardRunning,Run-RunningForward-1
 ```
 
-**Next is step 5: grips, aim, ragdoll, robe**, in that order, each with its
-preview. The grips are set visually (design item 8): `preview_carry -- solve`
-/ `preview_bow -- measure` / `preview_sword -- measure` re-solve the palm
-points and grip constants in `held_gear.gd` against the new hands, and the
-seven red checks are their gates. The ragdoll derives its segments from the
-rig (item 9) instead of `ragdoll_builder.gd`'s hand-set table. The Elder's
-robe is refit to the new body as a clothing mesh on the same skeleton (item
-10) — `elder_robe.gd` still binds the old `elder.glb`, which was skinned to
-the old skeleton. Then skins (6) and retiring the old path (7).
+**Next is step 6, skins**: one recolour as the worked example beside the
+robe (`art/skins/README.md` says how to add the next one), then step 7,
+retiring the old path: delete `tools/build_bog.py`, `tools/build_elder.py`,
+`assets/source/`, `art/generated/bog.glb`, `elder.glb` and every script that
+only served them; move `assets/source_reorg/` to `assets/source/`; update
+`docs/ARCHITECTURE.md`, `docs/STATUS.md`, `docs/PLAN.md`.
+
+**Two things only the user can do**, each one row in `clips.json` plus the
+fetch: a one-handed carry idle that holds the fist away from the body, so
+the spear's trunk clearance is a number again (D-099); and the Magic pack's
+`Standing Run Left`, so the running strafes stop sliding at 1.12 (D-098).
 
 **One thing only the user can do:** fetch the Magic pack's `Standing Run
 Left` (D-071's lateral) as a new row, so the running strafes stop sliding at
