@@ -97,3 +97,8 @@ art/maps/*/*
 
 # Preview and range-tool renders
 out/
+
+# The BOG's base-colour texture is extracted from art/bog/BOG.fbx by the import
+# step, 12 MB of PNG regenerated every time the body is re-imported, so it is
+# kept out of the repository the same way the map textures are above.
+art/bog/BOG_0.png

@@ -4,7 +4,7 @@ Resume point for BOG. Read this first, then `docs/ARCHITECTURE.md` (how it fits
 together), `docs/PLAN.md` (the full task list, with checkboxes) and
 `docs/DECISIONS.md` (why things are the way they are).
 
-Last updated: 2026-09-15.
+Last updated: 2026-09-16.
 
 ---
 
@@ -22,11 +22,11 @@ island and out to a results screen, and two automated checks now walk that path:
 one in a single process, one across two processes over a real socket.
 
 ```
-bash tools/smoke_test.sh        # 134 checks, ~6 minutes, finds Godot by itself
+bash tools/smoke_test.sh        # 135 checks, ~6 minutes, finds Godot by itself
 bash tools/net_test.sh          # two processes, one socket; ~45 s, run by hand
 ```
 
-`smoke_test.sh` is the gate and it passes, 134 of 134. `net_test.sh` is kept out
+`smoke_test.sh` is the gate and it passes, 135 of 135. `net_test.sh` is kept out
 of it to keep the gate fast; run it by hand after touching networking, the lobby
 or the results screen. It passes all twelve stages (200 + 34 assertions), ten of
 which end in a rematch, with the engine quiet in both processes — the error it
@@ -81,6 +81,45 @@ does not.
 
 **If you add a harness, ask what it is supplying by hand.** That list is the list
 of things nothing else is checking.
+
+---
+
+## The animation rebuild — step 1 of 7 landed
+
+The character's animation pipeline is being rebuilt from scratch
+(`ANIMATION_REBUILD_PROMPT.md` is the brief; **D-095** is the first step's
+record). The old path — `tools/build_bog.py`, `assets/source/`,
+`art/generated/bog.glb` — **still runs the game** and stays until the new one
+does. Nothing in `scenes/` or `scripts/player/` references the new body yet.
+
+What exists now:
+
+- `art/bog/BOG.fbx` — the body as Mixamo rigged it, imported by Godot at
+  `root_scale = 180` (1.80 m, feet at 0). Its texture `art/bog/BOG_0.png` is
+  extracted on import and gitignored.
+- `assets/source_reorg/anims/*.fbx` — 104 clips, each with a `.import` that
+  names `tools/import_clip.gd`, the post-import script that records the
+  authored speed, locks the hips, sets the loop mode and files the clip in
+  `art/generated/bog_clips.res` (one `.res` per clip under
+  `art/generated/clips/`). Keys are roles where a role has one file
+  (`Walk`, `Slide`), file names where it still has candidates
+  (`Run-StandardRunning`, `Run-RunningForward-1`).
+- `tools/clip_check.gd` — in the gate. `tools/preview_bog.tscn` — the picture,
+  one row per clip key, several keys stack.
+
+```
+"$GODOT" --headless --path . --import                       # the build, ~10 s
+"$GODOT" --headless --path . --script tools/clip_check.gd   # the gate check
+"$GODOT" --path . --resolution 1600x1400 --script tools/snapshot.gd -- \
+    res://tools/preview_bog.tscn out.png 30 Run-StandardRunning,Run-RunningForward-1
+```
+
+**Next is step 2, clip choice**: for every role with more than one candidate,
+render them as rows of `preview_bog` and pick, keeping one family for
+locomotion, jumps and crouch; delete the losers and their rows; record the
+choice. Then the rule table and markers (3), the animator (4), grips, aim,
+ragdoll and robe (5), skins (6), and retiring the old path (7). Do not start a
+later step before the earlier one is green.
 
 ---
 
@@ -375,6 +414,8 @@ Three tiers, because three different kinds of claim need three different proofs
 | `tools/preview_map.tscn` | Rust, Kopje Crossing, Lantern Wharf, Halcyon Wake and Twin Quarry: renders one, and checks every spawn pad with the physics. **In the gate** for all five |
 | `tools/island_report.tscn` | Whisperbloom Hollow as numbers: footprint, slope, every scatter layer's placed count, tree heights, spawn spacing and the capture bases (D-055). **In the gate** on four seeds |
 | `tools/parkour_report.tscn` | every platform on a built map has its rock, fits a Gub, and is reachable from the ground (D-042); on Lantern Wharf also that no jump reaches a tower or wall top, no sightline runs past 25 m (26 m from a roof), and no pad sees the other base's pads (D-056); on Halcyon Wake every deck reachable, the mast out of reach, sightlines under 21 m on the main deck and 38 m from a landing, and nothing but the void over every edge of the deck (D-057); on Twin Quarry that each team's bench is reachable from the pit floor by its two haul ramps and by nothing else, that no jump reaches a 10.2 m column top or the rim, and that no sightline runs past 30 m on the floor or 43 m from a landing (D-082). **In the gate** for all four |
+| `tools/clip_check.gd` | the rebuilt character's import layer (D-095): the body 1.80 m tall with its feet on the floor and 49 bones, every row of `clips.json` in the shared library, every track of every clip on a body bone with the hips locked to the axis, the loop mode from the table, and four clips from four suites posing the body within 0.12 mm of where their own skeleton poses it. **In the gate**, headless, about ten seconds |
+| `tools/preview_bog.tscn` | the rebuilt body playing clips from the library, six BOGs across a clip, one row per clip key — the sheet the clip choice is made from |
 | `tools/preview_*.tscn` | it *looks* right. Needs a person, always will |
 
 **`playthrough` is the one that catches integration.** Every other harness looks

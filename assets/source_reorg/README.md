@@ -1,19 +1,40 @@
-# source_reorg — the BOG's new source of truth
+# source_reorg — the BOG's clips, and the table that says what they are
 
-Raw source for the rebuilt character pipeline. Nothing in here is loaded by the
-game; `.gdignore` keeps Godot out. The old `assets/source/` stays until the new
-pipeline ships, then goes.
+Raw source for the rebuilt character pipeline (D-095). Godot imports every file
+in here — that is the pipeline — but the game never loads a clip scene: what it
+loads is the products the import writes to `art/generated/`. The body itself is
+`art/bog/BOG.fbx`, because that is the one raw file the game instances and
+`assets/` is excluded from exported builds.
 
 ```
-BOG.fbx          the body: the BOG sculpt as Mixamo auto-rigged it, downloaded once
-                 as a T-pose with skin. 49 mixamorig bones, one mesh, one 4096² texture.
 clips.json       the clip table: every animation the game wants, with its Mixamo id,
                  the file name it lands under, whether it is fetched in place, and
                  whether it loops. Several rows per role are candidates; the
                  preview pass picks one and the rest are deleted.
 anims/           one animation-only .fbx per row of clips.json, fetched by
-                 tools/mixamo_fetch.py. Never carries a mesh.
+                 tools/mixamo_fetch.py, each with the .import that
+                 tools/clip_imports.sh writes. Never carries a mesh.
+anims/VERIFIED.md   per-clip length, hips travel and bob, as measured on the
+                 first import (at root_scale 100; the pipeline runs at 180).
 ```
+
+The body, `art/bog/BOG.fbx`, is the sculpt as Mixamo auto-rigged it, downloaded
+once as a T-pose with skin: 49 `mixamorig` bones, one mesh, one 4096² texture.
+
+## What the import does
+
+Every clip's `.import` names `tools/import_clip.gd` as its post-import script.
+For each clip it records the hips' travel (and so the authored speed) as
+metadata, locks the hips to the vertical axis so the physics body does the
+moving, sets the loop mode from `clips.json`, saves the clip to
+`art/generated/clips/<file>.res` and files it in the shared library
+`art/generated/bog_clips.res` — keyed by role once a role has one file, by file
+name while it still has candidates.
+
+    "$GODOT" --headless --path . --import                  # the build, ~10 s
+    "$GODOT" --headless --path . --script tools/clip_check.gd   # the gate check
+    "$GODOT" --path . --resolution 1600x700 --script tools/snapshot.gd -- \
+        res://tools/preview_bog.tscn out.png 30 Walk        # the picture
 
 ## Fetching the clips
 
@@ -33,24 +54,27 @@ before, so re-pasting after a table change fetches just the changed rows.
 
 ## Adding a clip later
 
-Add a row to `clips.json` (the Mixamo id is in the page URL on mixamo.com, or
-give a `mixamo_query` and every search result comes down), run the fetch, move
-the file. That is the whole procedure.
+1. Add a row to `clips.json` (the Mixamo id is in the page URL on mixamo.com,
+   or give a `mixamo_query` and every search result comes down as
+   `<file>-<Name>`).
+2. `python tools/mixamo_fetch.py`, paste, move the file into `anims/`.
+3. `bash tools/clip_imports.sh` writes its `.import`.
+4. `"$GODOT" --headless --path . --import` builds it into the library.
 
-## Godot import facts (verified in a scratch project, 2026-09-16)
+## Godot import facts (verified in a scratch project, 2026-09-16, and again here)
 
 - Godot 4.7 reads `BOG.fbx` directly: 49 bones named `mixamorig_*` (the colon
   becomes an underscore), one skinned mesh of 15 872 vertices, the embedded
   texture, and one `mixamo_com` animation that is the T-pose.
 - Every animation-only clip imports with the identical 49-bone list, and a clip
-  played on the body's skeleton lands every bone within 0.1 mm of where it
+  played on the body's skeleton lands every bone within 0.12 mm of where it
   lands on the clip's own skeleton. Retargeting by bone name is exact; no
   bone map is needed for the BOG itself.
 - The files are in Mixamo's centimetre scale: at the default `root_scale` the
   body is 1 cm tall and the importer's animation optimizer collapses every hip
-  position track to a single key, killing the bob. `nodes/root_scale = 100`
-  makes the body 1.00 unit tall with all keys intact; 180 would make it 1.80 m.
-  Verified with `animation/remove_immutable_tracks = false`.
+  position track to a single key, killing the bob. `nodes/root_scale = 180`
+  makes the body 1.80 m tall with all keys intact, with
+  `animation/remove_immutable_tracks = false`.
 - Five catalogue ids exported as a single frame (Walking, two Running Forward,
   Sliding, Holding Bow); they were dropped from the table and the slide is
   fetched by search instead.

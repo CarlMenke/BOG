@@ -117,6 +117,14 @@ echo "  ok"
 echo
 
 echo "headless checks"
+# The rebuilt character's import layer (D-095): the body at 1.80 m with its 49
+# bones, every row of the clip table in the shared library, every clip's tracks
+# landing on the body's bones with the hips locked in place, and a clip from
+# each suite posing the body exactly where its own skeleton poses it. The
+# products it reads are written by tools/import_clip.gd during the import pass
+# above, so a broken .import setting shows up here first.
+check "clip library" "clip_check: PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" --script tools/clip_check.gd
 check "invite codes" "invite_codes: PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/invite_codes.tscn
 check "match rules" "match_rules: PASS" \

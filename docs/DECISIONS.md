@@ -11746,3 +11746,192 @@ team I am not on draws nothing. 87 checks became 92.
 - **Showing every steal to everybody.** A vault you have no stake in is noise.
 - **Looking the robbed team up on the client.** It is host-only state, and the
   bug would only appear with two machines in the room.
+
+## D-095 — The character pipeline is Godot's own importer: the body is one FBX, the clips are one library, and a re-import is the build
+The first step of the animation rebuild (`ANIMATION_REBUILD_PROMPT.md`). The
+agreed design was signed off before this entry; what this records is the
+measurements and the choices *inside* it — the scale, where the files live, what
+the import script does and does not do, and the four traps the step found.
+
+### What replaced what
+
+`tools/build_bog.py` (3300 lines of Blender) merged packs into one
+`art/generated/bog.glb`. Nothing of the sort runs now. Godot 4.7 reads the
+Mixamo FBX files itself (`fbx/importer=0`, ufbx), and the whole pipeline is
+three files:
+
+| file | what it is |
+|---|---|
+| `art/bog/BOG.fbx` | the body, as Mixamo auto-rigged the sculpt: 49 `mixamorig_*` bones, one mesh of 19 549 triangles, one 4096² texture |
+| `assets/source_reorg/anims/*.fbx` + `clips.json` | 104 animation-only clips on that rig, and the table that says what each is |
+| `tools/import_clip.gd` | 130 lines, run by Godot's importer on every clip |
+
+The import script is an `EditorScenePostImport`, named in each clip's `.import`.
+For the one clip it is handed it records the hips' travel as metadata, locks the
+hips to the vertical axis, sets the loop mode from the table, saves the
+`Animation` to `art/generated/clips/<file>.res` and files it in the shared
+`AnimationLibrary` at `art/generated/bog_clips.res`. **A re-import is the
+build**: all 104 clips import in **9 seconds**, and `tools/clip_check.gd` (in
+the gate) then proves the library resolves on the body.
+
+`build_bog.py:246` argued against a library because `REQUIRED_CLIPS` would
+become "a question spanning several files rather than one check against one
+AnimationPlayer". The answer is that the table is the one file: `clip_check`
+requires a library entry for every row of `clips.json` and a body bone for every
+track of every entry, and the animator (step 4) will check the library the way
+it checked the player.
+
+### The scale is 180, and the height is 1.80 m
+
+The files are in Mixamo's centimetre scale; at the default `root_scale` the body
+is a centimetre tall and the importer's optimiser collapses every hips position
+track to one key (verified before this step, `assets/source_reorg/README.md`).
+`nodes/root_scale = 180` on the body and on every clip: the body imports **1.799
+m** tall with its feet at **y = 0.000**, and the hips sit 0.618 m up at rest.
+
+1.80 m rather than the sculpt's own 1.757 m (D-077) because every gameplay
+constant is sized for it — the 1.55 m capsule, the 1.33 m eye height, the
+nameplate at 1.8, the camera boom — and because 1.80 is what the Gub was (D-029),
+so nothing downstream has to move. The same scale on the clips is not optional:
+the retarget is exact only while body and clip agree on it.
+
+**Retargeting is the identity, measured.** `clip_check` plays four clips, one
+from each suite, on the body and on the clip's own imported skeleton at five
+moments each and compares all 49 bones relative to the hips:
+
+    Walk-StandardWalk                 worst 0.00012 m
+    SwordCombo-GreatSwordComboSlash   worst 0.00012 m
+    Roll-DiveRollFromStanding-1       worst 0.00012 m
+    BowDraw-ChargingBowForPowershot   worst 0.00012 m
+
+0.12 mm at 1.80 m, at a finger tip, which is float precision. No bone map, no
+`SkeletonProfile`, no rest-pose fix-up. That was the whole reason for
+re-rigging on Mixamo instead of transferring weights (D-077's rejected route,
+now taken).
+
+### Where the files live, and the rule that had to bend
+
+The prompt asked for two things that cannot both hold under native import:
+"`assets/` is `.gdignore`d" and "the FBX files are imported by Godot directly".
+A file Godot ignores is a file Godot does not import. So:
+
+- **`assets/source_reorg/.gdignore` is gone.** Godot imports the clip FBX files
+  *for their products only*: the game never instances a clip scene, and
+  `export_presets.cfg` still excludes `assets/source/*` from every build.
+- **The body moved to `art/bog/BOG.fbx`.** It is the one raw file the game
+  instances, and under `assets/source/` it would be excluded from the exported
+  game by the same filter. `art/` is what the game loads; that half of the rule
+  stands. Its texture is extracted beside it as `art/bog/BOG_0.png` (12 MB,
+  regenerated on every re-import, gitignored the way the map textures are) and
+  gets its own `.import` and VRAM compression, which embedding it would not.
+- **The products are committed.** 104 clips as `.res` are **7.7 MB** in all
+  against the 2.7 MB `bog.glb` they replace, and after the clip choice they will
+  be under half that. Regenerated on import and gitignored would also work — it
+  is what the map textures do — but a fresh checkout that has to import before
+  a scene will load is a state this project has been bitten by, and the products
+  are what the game loads.
+
+### The import settings, and why each is not the default
+
+| setting | value | default | why |
+|---|---|---|---|
+| `nodes/root_scale` | 180 | 1 | above |
+| `animation/remove_immutable_tracks` | false | true | a clip with a still finger would lose that finger's tracks, and a blend between a clip that has them and one that does not leaves the bone wherever the other clip put it. Every clip carries all 147 tracks |
+| `animation/trimming` | false | **true for FBX** | Mixamo keys start at frame 0, so it changes nothing today and would silently move every event marker the day a clip arrives with a lead-in |
+| `animation/fps` | 30 | 30 | the source rate; keys stay one to one with Mixamo's |
+| `fbx/embedded_image_handling` | extract | extract | kept, and named because the alternative is a 64 MB uncompressed texture inside the scene |
+| `import_script/path` | `tools/import_clip.gd` | — | clips only; the body has no script |
+
+`tools/clip_imports.sh` writes exactly this `.import` for any clip that lacks
+one, so adding a clip is the row, the fetch and that script.
+
+### What the script records, and the one thing it does not
+
+Per clip, as metadata on the `Animation` (which `ResourceSaver` keeps): `role`,
+`travel` (first hips key to last, on the ground plane), `authored_speed`
+(travel over length), `hips_bob` (the vertical range) and `start_offset` (where
+the hips started before the lock). The speeds that matter for the animator,
+the way `bog.gd`'s `AUTHORED_*` constants will be replaced:
+
+    clip                                    length    m/s     was (bog.glb)
+    Walk-StandardWalk                        1.167   1.103    Walk 1.079
+    Run-StandardRunning                      0.733   3.115    Run 4.314
+    Run-RunningForward-1                     0.800   1.927
+    CrouchWalk-CrouchedWalk                  1.033   1.005    CrouchWalk 1.273
+    RunBack-RunningBackwards                 0.767   1.496    RunBack 2.278
+    WalkBack-WalkingBackwards-1/2/3        1.2-1.3   0.854 / 0.799 / 0.629    WalkBack 0.871
+    StrafeLeft-RunningStrafeToTheLeft-1/2    0.667   3.188 / 2.550    StrafeLeft 2.580
+    SwordRun-GreatSwordRun                   0.600   3.080
+    BowAimWalk                               1.200   0.816
+
+Worth flagging for steps 2 and 4 rather than deciding here: the fastest run
+candidate is authored at 3.1 m/s against a 5.4 m/s game run, so it would play at
+1.73x where the old `Run` played at 1.25x. Whether that reads is a preview
+question.
+
+**The hips are locked to the axis, not to the first key.** `start_offset`
+records what was thrown away; over the 104 clips the largest is a few
+centimetres. A clip authored a hand's width off centre would otherwise play a
+hand's width off the capsule, and D-029's crouch idle was synthesised "so its
+hips sit at the origin" for the same reason.
+
+**No facing alignment.** `build_bog.py` measured every clip's facing off the hip
+line and turned it onto the rest pose (corrections up to 51° on the Gub's packs,
+D-029; a second reference line for strafes, D-066). Every clip here was fetched
+on one rig from one account with the same settings, and the previews face the
+camera. If a clip turns out to face off-axis it is a `clips.json` field and a
+few lines in the script, and the previews in step 2 are where it would show.
+
+### Four traps, so the next person does not find them again
+
+1. **`ResourceSaver.save()` does not give a resource its path.** The first
+   library was fine by luck; the second import pruned every entry, because the
+   pruning compared paths and every one was empty. `take_over_path()` after the
+   save is what makes the library reference the file instead of swallowing a
+   copy, and it is also what keeps the library at 14 KB.
+2. **Moving a texture's `.import` without the texture loses the texture.** The
+   body re-imported with `Image index '0' couldn't be loaded` and no material,
+   silently, because the importer found the `.import` and assumed the file. The
+   fix is to delete both and let the extraction run again.
+3. **`Skeleton3D.get_bone_global_pose()` is a cache that fills on the first
+   frame in the tree**, and a `SceneTree` script's `_initialize` runs before
+   there is one: every sample compared the same stale pose and four clips
+   "disagreed" by up to 1.1 m at a finger. `clip_check` walks the parent chain
+   by hand from `get_bone_pose()`.
+4. **`seek(0.0, true)` straight after `play()` applies nothing**, on either
+   player, so two unchanged poses agree for no reason. The samples are taken
+   strictly inside the clip.
+
+### What proves it
+
+`clip_check`, one new check in the gate (134 → 135), headless, about ten
+seconds: the body's height and floor, the bone count, one mesh, every table row
+in the library, every track of every clip on a body bone, the hips locked to
+within 1e-5 on every key, the loop mode from the table, and the four-clip
+retarget above. Run against the code without the things it checks (D-015): with
+`root_scale` at 100 on the body alone it fails the height at 1.000 m and the
+four retargets at 0.194 m (the head, no longer where the clip's head is); with
+the hips lock removed it fails all 104 clips on drift — even an idle sways a few
+millimetres, and the slide drifts 4.7 m.
+
+`tools/preview_bog.tscn` is the picture: one row per clip key, six BOGs across
+the clip, and several keys stack as rows — which is what step 2 will choose
+from. `out/step1_walk.png` and `out/step1_runs.png` are the first two.
+
+### Rejected
+
+- **Loading FBX at runtime through `FBXDocument`** to keep `assets/` ignored.
+  It hands back the raw centimetre scene with no root-scale baking, so the
+  scaling, the optimiser and the save would all have to be written again — a
+  build step by another name.
+- **Saving the body out of a post-import script as `art/generated/bog.scn`** to
+  keep the body under `art/generated/`. It duplicates the import cache, embeds
+  the mesh, and still has to copy the texture somewhere exportable.
+- **Embedding the texture** (`fbx/embedded_image_handling = 3`). 64 MB
+  uncompressed in the scene and in VRAM.
+- **Keying the library by file name for good.** The animator has to ask for
+  `Run`, not for whichever file won; the key is the role as soon as a role has
+  one file, and the file while it still has candidates.
+- **Locking the hips to their first key.** Above.
+- **A project-wide importer default** for the clip settings. It would put
+  `root_scale = 180` on every map and prop in the project.
