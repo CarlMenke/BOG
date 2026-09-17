@@ -36,7 +36,7 @@ const LIBRARY := "res://art/generated/bog_clips.res"
 ## picture of what the player is about to look like rather than of a T-pose.
 const CLIP := "Idle"
 
-## The tile the lobby draws (`Lobby.SKIN_THUMB` is 64, so 128 is a tile at 2x
+## The tile the lobby draws (`Lobby.SKIN_THUMB` is 36, so 128 is a tile at over 3x
 ## and a thumbnail that survives a bigger one later).
 const OUT_SIZE := 128
 
