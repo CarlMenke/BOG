@@ -363,7 +363,8 @@ func _ready() -> void:
 	if mode == "solve":
 		_solve(args[4] if args.size() > 4 else "spear",
 			args[5] if args.size() > 5 else "",
-			args[6] if args.size() > 6 else "")
+			args[6] if args.size() > 6 else "",
+			args[7] if args.size() > 7 else "")
 		get_tree().quit()
 		return
 	if mode == "sweep":
@@ -382,6 +383,9 @@ func _ready() -> void:
 	if mode == "elevations":
 		_elevations(args[4] if args.size() > 4 else "spear",
 			args[5] if args.size() > 5 else "side")
+		return
+	if mode == "candidates":
+		_candidates(args.slice(4))
 		return
 	_sheet(args[4] if args.size() > 4 else "spear",
 		args[5] if args.size() > 5 else "",
@@ -1323,7 +1327,7 @@ const SWORD_ELEVATIONS := [0.0, 20.0, 40.0, 60.0, 80.0]
 ## every bearing is solved and then **scored against the real skinned trunk**,
 ## which is D-065's own method and the reason its table is believable.
 func _solve(weapon_name: String, carry_override: String = "",
-		elevations_override: String = "") -> void:
+		elevations_override: String = "", bearings_override: String = "") -> void:
 	var weapon := Loadout.sanitize(Loadout.from_name(weapon_name))
 	# The great sword takes its own band (`SWORD_ELEVATIONS` says why), and any
 	# weapon takes a comma-separated one from the command line — which is how
@@ -1335,6 +1339,17 @@ func _solve(weapon_name: String, carry_override: String = "",
 		elevations = []
 		for part: String in elevations_override.split(","):
 			elevations.append(float(part))
+	# And the bearings, the same way, because the 15 deg grid is a scan and the
+	# band a decision is finally taken in is narrower than one step of it. The
+	# spear's re-pick needed 5 deg between -25 and +25 to find the lowest
+	# elevation that clears at a forward bearing.
+	var bearings: Array[float] = []
+	if bearings_override.is_empty():
+		for b in SOLVE_BEARINGS:
+			bearings.append(360.0 * float(b) / float(SOLVE_BEARINGS) - 180.0)
+	else:
+		for part: String in bearings_override.split(","):
+			bearings.append(float(part))
 	var bog := _bare_bog()
 	var skeleton := bog.find_child("Skeleton3D", true, false) as Skeleton3D
 	var player := bog.find_child("AnimationPlayer", true, false) as AnimationPlayer
@@ -1351,8 +1366,7 @@ func _solve(weapon_name: String, carry_override: String = "",
 		% ["elev", "brng", "GRIP_ROTATION", "floor", "trunk", "Idle", "flattest"]
 		+ "  2nd fist")
 	for elevation: float in elevations:
-		for b in SOLVE_BEARINGS:
-			var bearing := 360.0 * float(b) / float(SOLVE_BEARINGS) - 180.0
+		for bearing: float in bearings:
 			var grip := _grip_for(bog, skeleton, player, carry, elevation,
 				bearing, weapon)
 			var worst := INF
@@ -1654,6 +1668,84 @@ func _sheet(weapon_name: String, carry_override: String = "",
 	_build_stage(eye)
 
 
+## Three candidate spear grips, from the front and from the side, over the three
+## clips a carried shaft is seen in most.
+##
+##   Godot --path . --resolution 2400x1200 --script tools/snapshot.gd -- ##       res://tools/preview_carry.tscn out/candidates.png 25 candidates ##       16.35,0,40.11 16.51,0,33.73 16.01,0,27.54
+##
+## **The picture the numbers cannot take.** `-- solve` scores a bearing on three
+## clearances and `-- measure` asserts them, and a grip can pass all three and
+## still read as a stick held beside the head rather than a javelin about to be
+## thrown — which is what happened to the first re-solve over `SpearCarry`, and
+## is why this mode exists. The two questions it is built to answer are the two
+## a single camera cannot: **from the front, does the shaft cross the head?**
+## and **from the side, is the tip ahead of the head?**
+##
+## Both in one frame, and the trick is the lift rather than a second row behind
+## the first. The camera is orthographic and dead in front, so a band placed
+## further away renders exactly on top of the near one (`_sheet`'s own comment
+## found this the hard way at an oblique angle); the side band is raised into the
+## air instead and yawed a right angle, and `_sheet_centre` keeps both in shot.
+## Feet off the floor is a lie this sheet can afford, because every clearance
+## that is measured against the floor is measured in `-- measure` and not here.
+func _candidates(args: Array) -> void:
+	var tunes: Array[Vector3] = []
+	for arg: String in args:
+		var parts := arg.split(",")
+		if parts.size() == 3:
+			tunes.append(Vector3(float(parts[0]), float(parts[1]), float(parts[2])))
+	if tunes.is_empty():
+		tunes.append(HeldGear.GRIP_ROTATION)
+	var weapon := Loadout.Weapon.SPEAR
+	var carry := Loadout.carry_clip(weapon)
+	var clips: Array[String] = [carry, "Walk", "Run"]
+	var columns := tunes.size() * clips.size()
+	_sheet_width = float(columns) * CANDIDATE_SPREAD
+	_sheet_centre = CANDIDATE_LIFT * 0.5
+
+	for band in 2:
+		for i in columns:
+			var tune: Vector3 = tunes[i / clips.size()]
+			var clip: String = clips[i % clips.size()]
+			var bog := _bare_bog()
+			var skeleton := bog.find_child("Skeleton3D", true, false) as Skeleton3D
+			var player := bog.find_child("AnimationPlayer", true, false) as AnimationPlayer
+			bog.position = Vector3(
+				(float(i) - float(columns - 1) * 0.5) * CANDIDATE_SPREAD,
+				CANDIDATE_LIFT if band == 1 else 0.0, 0.0)
+			# The side band is the same Bog turned a right angle, so its own
+			# forward runs across the screen and "is the tip ahead of the head"
+			# is a question about left and right rather than about depth.
+			if band == 1:
+				bog.rotate_y(deg_to_rad(90.0))
+			bog.weapon = weapon
+			_show(bog, weapon)
+			var at := _worst_moment(bog, skeleton, player, clip, carry, weapon, tune)
+			_pose(player, skeleton, clip, at[0], carry, at[1])
+			bog.held_gear.set_grip(HeldGear.grip_offset(tune), tune)
+
+			var stamp := Label3D.new()
+			stamp.text = "%s  %s
+%.2f, %.2f, %.2f" 				% ["side" if band == 1 else "front", clip, tune.x, tune.y, tune.z]
+			stamp.font_size = 40
+			stamp.pixel_size = 0.0016
+			stamp.position = Vector3(0.0, 2.10, 0.0)
+			stamp.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+			bog.add_child(stamp)
+
+	# Dead in front, and barely above the horizon: a head silhouette is only a
+	# silhouette from eye level, and the whole front row is a silhouette test.
+	_build_stage(Vector3(0.0, 0.06, -1.0).normalized())
+
+
+## How far apart the candidate sheet stands its bodies, and how far it lifts the
+## side band. A Bog is 1.80 m and a shaft 1.24 m, so 1.9 m of spacing keeps a
+## shaft out of its neighbour and clears a raised tip. Tighter than `_sheet`'s
+## 1.7 because nine bodies in a 16:9 frame is the whole budget, and a shaft that
+## overlaps its neighbour costs less here than a head too small to read.
+const CANDIDATE_SPREAD := 1.2
+const CANDIDATE_LIFT := 2.2
+
 ## The fist, close enough to see whether the shaft is in it (D-074).
 ##
 ## **The one judgement on this page that is not a number's to make.** The user
@@ -1839,6 +1931,12 @@ func _elevations(weapon_name: String, view: String = "side") -> void:
 ## `SHEET_CLIPS`; the elevation row does not, so it says.
 var _sheet_width: float = 0.0
 var _sheet_columns: int = 0
+## How far up the frame's centre sits, for the one sheet that has two bands of
+## Bogs rather than one row (`_candidates`). The camera is orthographic and dead
+## in front, so a second row *behind* the first would render on top of it; the
+## second band is lifted into the air instead and this is what keeps both in
+## shot.
+var _sheet_centre: float = 0.0
 
 
 ## The moment in `clip` at which this weapon hangs lowest, as
@@ -1920,7 +2018,7 @@ func _build_stage(eye: Vector3, up: Vector3 = Vector3.UP) -> void:
 	camera.keep_aspect = Camera3D.KEEP_WIDTH
 	camera.size = maxf(FRAME_MIN, width + FRAME_MARGIN)
 	add_child(camera)
-	var centre := Vector3(0.0, (FRAME_LOW + FRAME_HIGH) * 0.5, 0.0)
+	var centre := Vector3(0.0, (FRAME_LOW + FRAME_HIGH) * 0.5 + _sheet_centre, 0.0)
 	camera.look_at_from_position(centre + eye * 14.0, centre, up)
 
 	# The floor, because every number in the tables above is a height above it

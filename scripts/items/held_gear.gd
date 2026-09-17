@@ -120,38 +120,55 @@ const BOW_HAND_BONE := "mixamorig_LeftHand"
 ## elevation of 25 deg or more, which is the pose talking: out of a fist held
 ## beside the head, a shaft aimed level lies along the jaw.
 ##
-## **+40 deg of elevation at -60 deg of bearing is taken.** Forward is 0 and
-## positive is to the Bog's right, so -60 is the same bearing D-072 found, and
-## for the reason it gave: 0.68 m of butt has to go somewhere, and aimed
-## forward-left it trails back past the right shoulder into open air, which is
-## the one direction out of that fist that is not occupied by the Bog.
+## **The first pick off that sweep was +40 deg at -60 deg, on margin alone, and
+## it was wrong.** It clears everything by more than anything else does — 0.226 m
+## of ground, 0.128 m of trunk, never past 20 deg of swing, x1.50 of the tightest
+## floor — and on the sheet it is a stick held beside the head: the shaft crosses
+## the face in every carried frame and the tip points back over the left
+## shoulder, because -60 deg is two thirds of a right angle away from where the
+## Bog is looking. Three clearances cannot see that. **The eye had to choose
+## too**, and what it chose is a bearing that leads.
 ##
-## It is taken on **margin rather than on any one column**, which is this grip's
-## own history being learnt from: D-066 and D-071 each took 9 mm off it in a
-## clip change that nobody re-ran, and D-072 rejected its own nearest-to-forward
-## candidate for exactly that reason. So the pick is the candidate whose *worst*
-## fraction of any of the three floors is the largest — 1.50 times, against 1.45
-## for the flattest and 1.10 for the one furthest from the trunk:
+## So the band was re-swept where a javelin is actually carried: bearings within
+## 25 deg of straight forward at 5 deg steps, elevations from 20 to 50 at 5 deg
+## steps, 77 candidates (`-- solve spear SpearCarry <elevations> <bearings>` —
+## the bearing override exists for this). **21 clear all three floors, and the
+## lowest elevation that clears any forward bearing is +35 deg.**
 ##
-##   grip                     worst end   nearest trunk   furthest off level   worst margin
-##   +40 deg at -60        **+0.226 m**    **0.128 m**         **20 deg**       **x1.50**
-##   +35 deg at -75            +0.288 m        0.087 m             18 deg           x1.45
-##   +45 deg at -15            +0.165 m        0.177 m             22 deg           x1.10
+## The three that the choice was between, rendered from the front and from the
+## side over `SpearCarry`, `Walk` and `Run` in
+## `tools/preview_carry.tscn -- candidates` — which is the mode this re-pick had
+## to grow, because no camera in this file could answer both of its questions at
+## once:
 ##
-## The shaft stands 20 deg up out of the fist at rest rather than level, and that
-## is the pose rather than a compromise: the fist is beside the head, so a shaft
-## through it either leads up over the shoulder or lies along the jaw. It is also
-## the flattest this grip has ever been across the whole set — D-072's reached
-## 22-25 deg in `Run` and the two crouches.
+##   grip                worst end   trunk   off level   margin   front      side
+##   +45 at  +5       **+0.193 m** **0.110** **24 deg** **x1.25** clear   tip leads
+##   +40 at +10           +0.174 m   0.092     21 deg     x1.16   clear   tip leads
+##   +35 at +15           +0.163 m   0.073     23 deg     x1.09   **crosses the face**
+##
+## **+45 deg of elevation at +5 deg of bearing is taken**: the best margin of the
+## ones that pass both looks. The lowest elevation that clears is the one that
+## fails, and it fails for the reason it was attractive — a shaft near level at
+## head height is a shaft across the head, seen from in front. Ten degrees of
+## elevation is what lifts it clear, and +5 deg of bearing is as near straight
+## forward as this sweep has a row for, so the tip points where the Bog is
+## looking and the butt trails back past the right shoulder into open air, which
+## is the one direction out of that fist that is not occupied by the Bog.
+##
+## The shaft stands 24 deg up out of the fist at rest and reaches 24 deg off
+## horizontal at worst across the whole set, which is the same number twice and
+## not a coincidence: with the tip forward, the swing this grip shows over the
+## carried clips is the pelvis pitching under it rather than the shaft moving.
 ##
 ## **The number this grip is measured against decides again.** D-099 wrote that
 ## what would give `SKIN_MIN` its meaning back was "a carry clip that holds the
 ## fist away from the body — one row in `clips.json`". That row exists, the
-## threshold is 0.06 again, and 0.128 m is the first trunk clearance this grip
+## threshold is 0.06 again, and 0.110 m is the first trunk clearance this grip
 ## has had that is a measurement rather than a zero.
 ##
 ## `tools/preview_carry.tscn -- measure` prints the whole table and is in the
-## gate; `-- solve spear SpearCarry` is the sweep the bearing came from.
+## gate; `-- solve spear SpearCarry` is the sweep the bearing came from and
+## `-- candidates` is the sheet that settled it.
 ##
 ## The axes are worth restating, because the numbers moved a long way again:
 ## `mixamorig_RightHand`'s local +Y runs up the arm and out through the fingers,
@@ -159,7 +176,7 @@ const BOW_HAND_BONE := "mixamorig_LeftHand"
 ## grip ran the shaft almost along -Z, across the palm; this one runs it mostly
 ## along **+Y**, out through the fingers, which is what a fist cocked beside the
 ## head does with a spear — and it is why `CARD_ALONG_SHAFT` had to change sign.
-const GRIP_ROTATION := Vector3(38.13, 0.00, -14.15)
+const GRIP_ROTATION := Vector3(16.01, 0.00, 27.54)
 
 ## The point of the palm the shaft passes through, in hand-local metres — the
 ## first term of `GRIP_OFFSET`'s derivation above, named since D-070 because
@@ -190,9 +207,9 @@ const GRIP_ROTATION := Vector3(38.13, 0.00, -14.15)
 ## not an omission.** This is a point in the *hand's own frame* and the carry
 ## clip owns the whole hand chain (`preview_carry.FIST_BONES` says why), so a new
 ## carry pose moves the hand through the world without moving anything inside it:
-## the fist's centre reads `(-0.000, 0.126, 0.060)` under `SpearCarry` against
+## the fist's centre reads `(0.016, 0.166, 0.022)` under `SpearCarry` against
 ## the `(0.002, 0.062, 0.029)` D-074 measured on the old body, which is the two
-## bodies differing and not the two poses. The re-solved shaft passes **0.038 m**
+## bodies differing and not the two poses. The re-solved shaft passes **0.034 m**
 ## from that centre against the 0.066 `PALM_MAX` allows, better than the 0.050 m
 ## D-074 bought, because the new `GRIP_ROTATION` runs the shaft out through the
 ## fingers rather than across the palm. Nothing here needed to be paid.
@@ -217,7 +234,7 @@ const GRIP_PALM := Vector3(-0.013, 0.159, 0.042)
 ## initialise one and half this file's readers want a constant. What closes the
 ## gap is `tools/preview_carry.tscn -- measure`, which recomputes it from the
 ## rotation on every run and fails the gate if the two have drifted apart.
-const GRIP_OFFSET := Vector3(-0.1792, -0.3595, -0.3650)
+const GRIP_OFFSET := Vector3(0.3013, -0.4204, -0.1242)
 
 ## The two numbers the offset above was derived from, named so the letter card
 ## can be placed off the same measurement instead of guessed at again. The mesh
@@ -253,8 +270,9 @@ const GRIP_FRACTION := 0.55
 ## still 14 mm short, because a deep squat with the arm down puts that fist
 ## 0.20 m off the grass. So the card slides the other way, down the shaft toward
 ## the butt, which is up in the world in exactly the poses that were burying it:
-## the lowest centre is **0.389 m** and the bottom of the letter stays 17.9 cm
-## up, against the 4.0 cm D-072's grip left it.
+## the lowest centre is **0.368 m** and the bottom of the letter stays 15.8 cm
+## up, against the 4.0 cm D-072's grip left it. The magnitude did not have to
+## move again when the bearing was re-picked; only the sign was ever the issue.
 ##
 ## D-035 wrote 0.44 m and 23 cm into this comment and both are gone; D-070 and
 ## D-072 each moved the grip under it without anybody noticing. The magnitude has
