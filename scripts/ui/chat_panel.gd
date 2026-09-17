@@ -82,7 +82,7 @@ func _apply_reveal() -> void:
 	# full-height glass box with a line edit at the top of it — which is the
 	# thing this mode exists to stop. Shrinking to the input is the other half
 	# of hiding the log, so the two are written on adjacent lines.
-	size_flags_vertical = Control.SIZE_FILL if open else Control.SIZE_SHRINK_BEGIN
+	size_flags_vertical = Control.SIZE_FILL if open else Control.SIZE_SHRINK_END
 
 
 ## Escape puts the caret down; it does not leave the lobby.
@@ -147,15 +147,19 @@ func _on_submitted(text: String) -> void:
 	_close_after_send()
 
 
-## Sending is the end of a typing session in both modes, and it is the same end:
-## the in-match input puts itself away, and the lobby's puts the caret down,
-## which folds the log away behind it. Anyone with more to say presses the key
-## or clicks the box again, exactly as they did the first time.
+## Sending ends a typing session in a match and does not in the lobby, and the
+## difference is which half of the panel is the one that came and went.
+##
+## In a match the log is the thing that is always there and the input arrived
+## with the chat key, so sending puts the input away and hands the keyboard back
+## to the Bog. In the lobby it is the other way round: the input is what is
+## always there and the *log* arrived with the caret -- so closing on send would
+## fold the log away over the top of the line that had just been sent, and the
+## one person certain to want to watch it land is the person who wrote it. The
+## caret stays. Escape and a click elsewhere are what put it down.
 func _close_after_send() -> void:
 	if compact:
 		set_input_visible(false)
-	elif reveal_on_focus:
-		_input.release_focus()
 
 
 ## In-match, the input box appears when the player presses the chat key and

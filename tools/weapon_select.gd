@@ -290,12 +290,18 @@ func _run_lobby() -> void:
 	_check("and folds it back", roster_list.visible, false)
 	_check("shrinking to its heading rather than leaving an empty box",
 		players.size_flags_horizontal, int(Control.SIZE_SHRINK_BEGIN))
+	# Downward, which is what the stack being anchored to the footer is for: a
+	# folded panel drops to the bottom of the box so the Bogs above it are whole.
+	_check("and dropping to the foot of the stack rather than sitting on a waist",
+		players.size_flags_vertical, int(Control.SIZE_SHRINK_END))
 
 	settings.fold_requested.emit()
 	await get_tree().process_frame
 	_check("the config folds too", config_rows.visible, false)
 	_check("to its heading", settings.size_flags_horizontal,
 		int(Control.SIZE_SHRINK_BEGIN))
+	_check("at the foot of the stack", settings.size_flags_vertical,
+		int(Control.SIZE_SHRINK_END))
 	settings.fold_requested.emit()
 	await get_tree().process_frame
 	_check("and comes back", config_rows.visible, true)
@@ -314,11 +320,20 @@ func _run_lobby() -> void:
 	_check("and the heading with it", chat_heading.visible, true)
 	_check("and the panel is allowed to be tall for it",
 		chat.size_flags_vertical, int(Control.SIZE_FILL))
+	# **Sending does not put the caret down**, unlike the in-match panel, because
+	# the log is the half that arrived with the caret here and folding it on send
+	# would hide the line that was just sent from the person who wrote it.
+	chat_input.text = "who has the sword"
+	chat_input.text_submitted.emit("who has the sword")
+	await get_tree().process_frame
+	_check("sending keeps the caret in the box", chat_input.has_focus(), true)
+	_check("so the log is still up to be read", chat_log.visible, true)
+	_check("and the box is empty for the next line", chat_input.text, "")
 	chat_input.release_focus()
 	await get_tree().process_frame
 	_check("putting the caret down folds it away", chat_log.visible, false)
-	_check("and the panel shrinks back to the box",
-		chat.size_flags_vertical, int(Control.SIZE_SHRINK_BEGIN))
+	_check("and the panel shrinks back to the box, at the foot of the stack",
+		chat.size_flags_vertical, int(Control.SIZE_SHRINK_END))
 
 	# Which one is lit has to be read off the roster, not off whatever was
 	# pressed last: the lobby renders what came back from the host and nothing

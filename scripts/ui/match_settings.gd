@@ -701,15 +701,20 @@ func _say(text: String) -> void:
 ## forbids: a roster broadcast landing mid-fold would redraw one and not the
 ## other.
 ##
-## Folding takes the panel's share of the stack away with it. Left on
+## Folding takes the panel's share of the stack away with it, and drops what is
+## left to the bottom of the stack's box, where the other headings are. Left on
 ## `SIZE_EXPAND_FILL` a folded panel is a full-height glass box with three words
-## at the top of it, which is worse than the panel it replaced.
+## at the top of it, which is worse than the panel it replaced; left on
+## `SHRINK_BEGIN` it is a bar across the middle of the glade with nothing under
+## it.
 func set_folded(folded: bool) -> void:
 	_summary.visible = not folded
 	_scroll.visible = not folded
 	_fold_button.text = "▸" if folded else "▾"
-	size_flags_horizontal = Control.SIZE_SHRINK_BEGIN if folded 		else Control.SIZE_EXPAND_FILL
-	size_flags_vertical = Control.SIZE_SHRINK_BEGIN if folded else Control.SIZE_FILL
+	size_flags_horizontal = Control.SIZE_SHRINK_BEGIN if folded \
+		else Control.SIZE_EXPAND_FILL
+	size_flags_vertical = Control.SIZE_SHRINK_END if folded \
+		else Control.SIZE_FILL
 
 
 # --------------------------------------------------------------- refreshing ---

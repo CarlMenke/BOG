@@ -42,9 +42,16 @@ const SHOW_EMPTY_SLOTS := true
 ## How tall the prop is on a weapon button.
 ##
 ## 84 under D-069, when the strip had the whole screen because the panels had
-## been folded away to make room for it. It has to share now: the strip lives in
-## the band between the ring's chins and the top of the panels, and this number
-## is what decides whether it does that or sits on the Bogs' faces.
+## been folded away to make room for it. It has to share now, and what it shares
+## with is the sky: the strip lives in the 92 px band between the header and the
+## topmost nameplate of an eight-Bog ring, and this number is what decides
+## whether it fits there.
+##
+## **Above the Bogs, and above means above.** The first try put it in the wider
+## band between the ring's feet and the panels, which cut four Bogs off at the
+## chest and covered the very weapons in their hands -- the thing the ring is on
+## screen to show, and the reason the pick is worth making. Over their heads
+## there is nothing but sky and the empty middle of the header bar.
 ##
 ## The prop moved from **above** the name to **beside** it, which is what bought
 ## the picture back. D-076 put it above because that was free when the strip
@@ -472,10 +479,18 @@ func _refresh_surface() -> void:
 ## the difference between a heading and a heading floating in a full-height
 ## sheet of glass: the stack is an `HBoxContainer` handing out the width by
 ## stretch ratio, so a folded panel has to stop asking for a share of it.
+##
+## **It shrinks downward.** The stack's box grows up from the footer now, and a
+## folded panel sits at the bottom of it, so folding everything leaves a line of
+## headings along the foot of the screen with whole Bogs standing above it --
+## rather than a bar across their waists with an empty glade underneath, which
+## is what `SHRINK_BEGIN` gave and is the one thing a client saw.
 static func _fold(panel: Control, body: Control, open: bool) -> void:
 	body.visible = open
-	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL if open 		else Control.SIZE_SHRINK_BEGIN
-	panel.size_flags_vertical = Control.SIZE_FILL if open else Control.SIZE_SHRINK_BEGIN
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL if open \
+		else Control.SIZE_SHRINK_BEGIN
+	panel.size_flags_vertical = Control.SIZE_FILL if open \
+		else Control.SIZE_SHRINK_END
 
 
 ## The two toggles. Both do the same two things, and the second is the point:

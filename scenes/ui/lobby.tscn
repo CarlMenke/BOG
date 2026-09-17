@@ -140,15 +140,16 @@ text = "Copy"
 [node name="PanelStack" type="HBoxContainer" parent="UI/Root"]
 unique_name_in_owner = true
 layout_mode = 1
-anchors_preset = 15
+anchors_preset = 12
+anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = 56.0
-offset_top = 404.0
+offset_top = -496.0
 offset_right = -56.0
 offset_bottom = -96.0
 grow_horizontal = 2
-grow_vertical = 2
+grow_vertical = 0
 theme_override_constants/separation = 18
 
 [node name="Players" type="PanelContainer" parent="UI/Root/PanelStack"]
@@ -209,7 +210,7 @@ size_flags_stretch_ratio = 1.3
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-size_flags_vertical = 0
+size_flags_vertical = 8
 reveal_on_focus = true
 
 [node name="WeaponRow" type="VBoxContainer" parent="UI/Root"]
@@ -218,11 +219,11 @@ layout_mode = 1
 anchors_preset = 10
 anchor_right = 1.0
 offset_left = 56.0
-offset_top = 278.0
+offset_top = 44.0
 offset_right = -56.0
-offset_bottom = 400.0
+offset_bottom = 144.0
 grow_horizontal = 2
-theme_override_constants/separation = 6
+theme_override_constants/separation = 4
 alignment = 2
 
 [node name="WeaponPicker" type="HBoxContainer" parent="UI/Root/WeaponRow"]
