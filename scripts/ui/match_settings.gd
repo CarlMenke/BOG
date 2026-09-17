@@ -16,6 +16,10 @@ extends PanelContainer
 ## settings panel generates its own: a dozen rows of label-control-readout is a
 ## dozen chances to forget a theme variation.
 
+## Pressed when the host wants this panel out of the way. The lobby owns the
+## answer; this only asks (see `set_folded`).
+signal fold_requested
+
 ## Rows that only make sense under some configurations. Hiding them beats
 ## disabling them: a greyed-out "Friendly fire" in a free-for-all invites the
 ## question of what it would do, and there is no good answer.
@@ -26,11 +30,19 @@ const TEAM_ONLY := ["team_count", "random_teams", "friendly_fire"]
 @onready var _host_only_hint: Label = %HostOnlyHint
 ## Opens the capture sheet (D-076). In the heading rather than at the foot of
 ## the rows, because the rows scroll and a button that is below the fold at every
-## window size the game ships at is a button nobody finds. **Not host-only**: a
-## client can read this panel and therefore has something to capture, and
-## "write down what we played on" is a thing a player wants at least as often as
-## a host does. Only `APPLY`, on a saved row, is host-only.
+## window size the game ships at is a button nobody finds. **Not host-only**,
+## and it stays that way even though the whole panel is now hidden from clients
+## in the lobby: this scene is instanced elsewhere, and the day a client is
+## given a read-only view of the config again, the thing they most want from it
+## is to write down what they played on. Only `APPLY`, on a saved row, is
+## host-only.
 @onready var _capture_button: Button = %CaptureButton
+## Asks the lobby to fold this panel down to its heading. **Asks**: the boolean
+## lives in `lobby.gd` and comes back through `set_folded` below, because that
+## file's single `_refresh` is the only thing allowed to write `visible` on a
+## panel in the stack (D-069).
+@onready var _fold_button: Button = %FoldButton
+@onready var _scroll: ScrollContainer = %Scroll
 
 ## Built in code, so it cannot be reached through `%` — nodes added at runtime
 ## have no owner to register a unique name with.
@@ -62,6 +74,7 @@ var _applying: bool = false
 func _ready() -> void:
 	_build()
 	_capture_button.pressed.connect(open_capture)
+	_fold_button.pressed.connect(fold_requested.emit)
 	Net.config_changed.connect(refresh)
 	Net.roster_changed.connect(refresh)
 	refresh()
@@ -677,6 +690,26 @@ func _on_sheet_save() -> void:
 func _say(text: String) -> void:
 	if _sheet_status != null:
 		_sheet_status.text = text
+
+
+## Show the panel, or show only its heading.
+##
+## **Pure application — this panel keeps no folded state of its own.** The
+## lobby holds the boolean and calls this from its one `_refresh`, and the
+## button above only emits a request. A panel that folded itself on its own
+## button press would be exactly the second update path `lobby.gd`'s header
+## forbids: a roster broadcast landing mid-fold would redraw one and not the
+## other.
+##
+## Folding takes the panel's share of the stack away with it. Left on
+## `SIZE_EXPAND_FILL` a folded panel is a full-height glass box with three words
+## at the top of it, which is worse than the panel it replaced.
+func set_folded(folded: bool) -> void:
+	_summary.visible = not folded
+	_scroll.visible = not folded
+	_fold_button.text = "▸" if folded else "▾"
+	size_flags_horizontal = Control.SIZE_SHRINK_BEGIN if folded 		else Control.SIZE_EXPAND_FILL
+	size_flags_vertical = Control.SIZE_SHRINK_BEGIN if folded else Control.SIZE_FILL
 
 
 # --------------------------------------------------------------- refreshing ---

@@ -98,13 +98,6 @@ size_flags_vertical = 4
 theme_type_variation = &"HeadLabel"
 text = "LOBBY"
 
-[node name="CollapseButton" type="Button" parent="UI/Root/Header"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_vertical = 4
-theme_type_variation = &"GhostButton"
-text = "WEAPON   ▾"
-
 [node name="Spacer" type="Control" parent="UI/Root/Header"]
 layout_mode = 2
 size_flags_horizontal = 3
@@ -159,6 +152,7 @@ grow_vertical = 2
 theme_override_constants/separation = 18
 
 [node name="Players" type="PanelContainer" parent="UI/Root/PanelStack"]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 theme_type_variation = &"CardPanel"
@@ -186,7 +180,15 @@ size_flags_vertical = 4
 theme_type_variation = &"AccentLabel"
 text = "1 / 8"
 
+[node name="PlayersFold" type="Button" parent="UI/Root/PanelStack/Players/Body/Heading"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+theme_type_variation = &"GhostButton"
+text = "▸"
+
 [node name="Scroll" type="ScrollContainer" parent="UI/Root/PanelStack/Players/Body"]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 horizontal_scroll_mode = 0
@@ -198,6 +200,7 @@ size_flags_horizontal = 3
 theme_override_constants/separation = 3
 
 [node name="MatchSettings" parent="UI/Root/PanelStack" instance=ExtResource("4_settings")]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 1.3
@@ -206,34 +209,27 @@ size_flags_stretch_ratio = 1.3
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
+size_flags_vertical = 0
+reveal_on_focus = true
 
 [node name="WeaponRow" type="VBoxContainer" parent="UI/Root"]
 unique_name_in_owner = true
 layout_mode = 1
-anchors_preset = 12
-anchor_top = 1.0
+anchors_preset = 10
 anchor_right = 1.0
-anchor_bottom = 1.0
 offset_left = 56.0
-offset_top = -300.0
+offset_top = 278.0
 offset_right = -56.0
-offset_bottom = -110.0
+offset_bottom = 400.0
 grow_horizontal = 2
-grow_vertical = 0
-theme_override_constants/separation = 10
+theme_override_constants/separation = 6
 alignment = 2
-
-[node name="Caption" type="Label" parent="UI/Root/WeaponRow"]
-layout_mode = 2
-theme_type_variation = &"SectionLabel"
-horizontal_alignment = 1
-text = "YOUR WEAPON"
 
 [node name="WeaponPicker" type="HBoxContainer" parent="UI/Root/WeaponRow"]
 unique_name_in_owner = true
 layout_mode = 2
 alignment = 1
-theme_override_constants/separation = 12
+theme_override_constants/separation = 10
 
 [node name="WeaponBlurb" type="Label" parent="UI/Root/WeaponRow"]
 unique_name_in_owner = true

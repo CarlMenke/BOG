@@ -13,25 +13,59 @@ extends Node3D
 ## renders what came back. That is why `_refresh` is safe to call from every
 ## signal that could possibly have changed anything.
 ##
-## **Two surfaces, one refresh** (D-069). The panel stack collapses to reveal the
-## glade behind it with a weapon strip under the ring, because choosing a weapon
-## and reading a lobby are two different things to be looking at — the user's own
-## *"menu select should be different then the weapon select"*. The collapse is a
-## **view state that `_refresh` reads**, not a second update path: `_picking` is
-## one boolean, `_refresh_surface` is one of the five calls `_refresh` already
-## makes, and nothing anywhere else touches `visible` on either surface. The
-## alternative is what the comment over `_refresh` has always said it is.
+## **Independent panels, one refresh.** D-069 made the screen two surfaces that
+## swapped: the header folded the whole panel stack away to show the weapon
+## strip. It does not any more. The strip is always on, over the ring, and each
+## of the three panels folds on its own — the config is the host's and starts
+## open, the roster starts folded to its count, and chat is a line of input
+## until somebody puts the caret in it.
+##
+## What D-069 decided and this keeps is the **mechanism**: a fold is a *view
+## state that `_refresh` reads*, never a second update path. There are two
+## booleans now instead of one, `_refresh_surface` is still one of the calls
+## `_refresh` already makes, and it is still the only thing in this file that
+## writes `visible` on anything in the stack. A roster change arriving while a
+## panel is folded redraws the fold and the roster together and cannot leave one
+## behind. The alternative is what the comment over `_refresh` has always said
+## it is.
+##
+## The one fold this file does *not* own is the chat's, and the reason is worth
+## stating: that panel's state is **where the caret is**, which the engine is
+## already authoritative about. A boolean here mirroring it would be a copy that
+## is wrong the first time focus moves by a route this file did not predict.
 
 ## Rows for players who have not arrived yet. Showing the empty seats is how a
 ## host knows at a glance whether they still have room, without doing arithmetic
 ## against a number in the settings panel.
 const SHOW_EMPTY_SLOTS := true
 
-## How tall the prop is on a weapon button. Bigger than the HUD's 62 px tile
-## because this is the surface a player is *choosing* on and the panels are
-## folded away to make room for it (D-069); the picture is the point here and
-## the caption under it is the label.
-const WEAPON_ICON := 84
+## How tall the prop is on a weapon button.
+##
+## 84 under D-069, when the strip had the whole screen because the panels had
+## been folded away to make room for it. It has to share now: the strip lives in
+## the band between the ring's chins and the top of the panels, and this number
+## is what decides whether it does that or sits on the Bogs' faces.
+##
+## The prop moved from **above** the name to **beside** it, which is what bought
+## the picture back. D-076 put it above because that was free when the strip
+## owned the screen; stacked, an icon costs its own height plus the caption's,
+## and getting the row under 120 px that way meant a 32 px prop — a picture too
+## small to be the thing a player is choosing from, which is the one thing D-076
+## asked of it. Side by side the row is as tall as the icon and no taller, so
+## 56 px of prop fits in a band that 32 px did not.
+##
+## The `YOUR WEAPON` caption over the strip went with the same squeeze and is
+## not missed. It was a dim grey line laid across whichever Bog was standing
+## behind the middle of the ring, to say what three props, three names and one
+## amber-lit button already say — which is exactly the "professionalise means
+## add" move D-076 spent a page arguing against.
+const WEAPON_ICON := 56
+
+## The glyph on a fold toggle. Down means "this is open and pressing me shuts
+## it"; right means the opposite. One pair, on all three toggles, because three
+## panels that fold differently is three things to learn.
+const FOLD_OPEN := "▾"
+const FOLD_SHUT := "▸"
 
 @onready var _backdrop: BogBackdrop = %Backdrop
 @onready var _player_list: VBoxContainer = %PlayerList
@@ -47,7 +81,10 @@ const WEAPON_ICON := 84
 @onready var _gate_hint: Label = %GateHint
 @onready var _leave_button: Button = %LeaveButton
 @onready var _panel_stack: Control = %PanelStack
-@onready var _collapse_button: Button = %CollapseButton
+@onready var _players_panel: Control = %Players
+@onready var _players_scroll: Control = %Scroll
+@onready var _players_fold: Button = %PlayersFold
+@onready var _settings: MatchSettingsPanel = %MatchSettings
 @onready var _weapon_row: Control = %WeaponRow
 @onready var _weapon_picker: HBoxContainer = %WeaponPicker
 @onready var _weapon_blurb: Label = %WeaponBlurb
@@ -57,9 +94,16 @@ const WEAPON_ICON := 84
 ## the diff has to be taken here or not at all.
 var _known_peers: Array = []
 var _copy_reset: SceneTreeTimer = null
-## Which surface is showing: the panels, or the glade with the weapon strip in
-## front of it (D-069). Read by `_refresh_surface` and written by one button.
-var _picking: bool = false
+## Which panels are unfolded. Read by `_refresh_surface`, written by the two
+## toggles, and by nothing else.
+##
+## The roster starts **folded**, because the heading already answers the
+## question it is usually asked — "is everyone here yet" is `7 / 8`, and the
+## count keeps counting while the list is away. The config starts **open**,
+## because the host opened this lobby in order to set it. A default that hid
+## both would be a screen that opens with nothing on it.
+var _players_open: bool = false
+var _config_open: bool = true
 ## Set while `_rebuild_weapon_picker` is writing the strip's buttons, so the
 ## focus and toggle signals that causes are not read back as picks. The match
 ## settings panel keeps an `_applying` flag for exactly this reason and this is
@@ -80,7 +124,8 @@ func _ready() -> void:
 		return
 
 	_leave_button.pressed.connect(_on_leave)
-	_collapse_button.pressed.connect(_on_collapse)
+	_players_fold.pressed.connect(_on_players_fold)
+	_settings.fold_requested.connect(_on_config_fold)
 	_copy_button.pressed.connect(_on_copy)
 	_ready_button.toggled.connect(_on_ready_toggled)
 	_start_button.pressed.connect(_on_start)
@@ -109,14 +154,15 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not event.is_action_pressed("pause"):
 		return
 	get_viewport().set_input_as_handled()
-	# Escape backs out one surface at a time (D-069). With the picker open it
-	# closes the picker; from the menu it leaves the lobby. The alternative — one
-	# key that always leaves — makes the collapse a place you can fall out of the
-	# session from, and the collapsed lobby is where a player is *least* sure
-	# which screen they are on.
-	if _picking:
-		_on_collapse()
-		return
+	# One key, one meaning: leave. D-069 gave Escape a "back out of the picker"
+	# branch because the picker was a surface you could be lost on — the panels
+	# were gone and it was not obvious which screen you were looking at. There is
+	# no such surface now; the strip and the panels are on screen together, and a
+	# fold leaves its own heading behind. Nothing is left to back out of.
+	#
+	# The one place Escape still means something else is inside the chat box, and
+	# `ChatPanel` takes it there, on the focused control, before it ever reaches
+	# this handler.
 	_on_leave()
 
 
@@ -302,6 +348,12 @@ func _rebuild_team_picker() -> void:
 
 ## One button per weapon, built exactly the way the team picker above is —
 ## because it is the same kind of control and it must behave like one (D-069).
+##
+## **Always on screen**, over the ring, between the Bogs' feet and the top of
+## the panels. D-069 hid it behind a header toggle that swapped it for the whole
+## panel stack; a weapon you have to go and find is a weapon most players never
+## change, and the ring right above the strip is the thing that makes the pick
+## worth making.
 ## Untinted, unlike that one: a team button wears its team colour because the
 ## colour *is* the answer, and a weapon has no colour to be.
 ##
@@ -330,9 +382,8 @@ func _rebuild_weapon_picker() -> void:
 	# bother with and this one has to. `queue_free` alone lands at the end of the
 	# frame, so until then `get_children()` still returns the old buttons — and
 	# unlike the player list and the team picker, this strip is read back
-	# immediately: by the focus hand-off below and by `_on_collapse`. Without the
-	# detach, the second collapse of a session grabs focus on a button that is
-	# already on its way out.
+	# immediately, by the focus hand-off below. Without the detach, a rebuild
+	# hands the caret to a button that is already on its way out.
 	var had_focus := false
 	for child in _weapon_picker.get_children():
 		had_focus = had_focus or child.has_focus()
@@ -350,11 +401,10 @@ func _rebuild_weapon_picker() -> void:
 		# are one picture rather than two descriptions of it. Three words on three
 		# identical grey buttons is a list; three props is a choice.
 		button.icon = AbilitySlot.art_for_weapon(weapon)
-		button.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
-		button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		button.add_theme_constant_override("icon_max_width", WEAPON_ICON)
-		button.add_theme_constant_override("h_separation", 0)
-		button.custom_minimum_size = Vector2(168, WEAPON_ICON + 52)
+		button.add_theme_constant_override("h_separation", 10)
+		button.custom_minimum_size = Vector2(196, WEAPON_ICON + 16)
 		button.toggle_mode = true
 		button.button_pressed = weapon == mine
 		# The pick is fixed once the host presses Start, alongside the map and
@@ -381,8 +431,8 @@ func _rebuild_weapon_picker() -> void:
 
 ## Put the caret on the weapon that is currently picked.
 ##
-## Only ever called with `_writing_picker` set or from `_on_collapse`, because
-## `grab_focus` emits `focus_entered` and that signal is also a pick.
+## Only ever called with `_writing_picker` set, because `grab_focus` emits
+## `focus_entered` and that signal is also a pick.
 func _focus_pick() -> void:
 	for child in _weapon_picker.get_children():
 		var button := child as Button
@@ -391,34 +441,53 @@ func _focus_pick() -> void:
 			return
 
 
-## Show the panels, or show the glade and the strip (D-069).
+## Lay out the stack: who is folded, and what a client is not shown at all.
 ##
-## The whole of the collapse, and it is three lines because the two surfaces are
-## two nodes and the state is one boolean. Called only from `_refresh`, so a
-## roster change that arrives while the picker is open redraws the picker and the
-## surface together and cannot leave one of them behind.
+## The only place in this file that writes `visible` on anything in the stack,
+## which is the whole of what D-069 decided about this screen and the only part
+## of that entry this revision keeps intact. Called from `_refresh`, so a roster
+## change arriving mid-fold redraws both.
+##
+## The strip is not in here: it is always on.
 func _refresh_surface() -> void:
-	_panel_stack.visible = not _picking
-	_weapon_row.visible = _picking
-	_collapse_button.text = "MENU   ▴" if _picking else "WEAPON   ▾"
+	_fold(_players_panel, _players_scroll, _players_open)
+	_players_fold.text = FOLD_OPEN if _players_open else FOLD_SHUT
 
-
-func _on_collapse() -> void:
-	_picking = not _picking
-	_refresh()
-	if not _picking:
-		return
-	# Put the caret where the eye is. Every other screen in the game that opens a
-	# surface grabs focus on the thing you are most likely to press (the menu on
-	# HOST, the pause menu on RESUME, the results screen on REMATCH), and without
-	# it an arrow key in the collapsed lobby would move focus inside panels that
-	# are no longer on screen.
+	# **Hidden from a client, not greyed out.** Editing has been host-gated since
+	# this panel was written, so a client's copy was forty rows of dials that did
+	# nothing, taking the widest column of the lobby to say "the host decides" —
+	# which is a sentence, not a panel. The host still sees it, and still sees it
+	# open, because setting it up is what they came here to do.
 	#
-	# Guarded, because `grab_focus` emits `focus_entered` and this file reads that
-	# as a pick: opening the picker must not ask for the weapon you already have.
-	_writing_picker = true
-	_focus_pick()
-	_writing_picker = false
+	# What it costs is the client's read of the config, and that is a real loss:
+	# `summary()` said in one line what match this was going to be. The gate hint
+	# and the chat are where that has to come from until something puts it back.
+	_settings.visible = Net.is_host
+	_settings.set_folded(not _config_open)
+
+
+## Fold one panel down to its heading, or let it back out.
+##
+## Taking the size flags with the fold is the half that is easy to forget and is
+## the difference between a heading and a heading floating in a full-height
+## sheet of glass: the stack is an `HBoxContainer` handing out the width by
+## stretch ratio, so a folded panel has to stop asking for a share of it.
+static func _fold(panel: Control, body: Control, open: bool) -> void:
+	body.visible = open
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL if open 		else Control.SIZE_SHRINK_BEGIN
+	panel.size_flags_vertical = Control.SIZE_FILL if open else Control.SIZE_SHRINK_BEGIN
+
+
+## The two toggles. Both do the same two things, and the second is the point:
+## flip the boolean, then let the one refresh draw the consequence.
+func _on_players_fold() -> void:
+	_players_open = not _players_open
+	_refresh()
+
+
+func _on_config_fold() -> void:
+	_config_open = not _config_open
+	_refresh()
 
 
 ## Ask for a weapon, unless this is the rebuild talking to itself or the answer

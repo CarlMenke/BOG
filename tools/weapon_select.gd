@@ -23,8 +23,11 @@ extends Node
 ##   lock   — a pick is free while people are joining and fixed the moment the
 ##            host presses Start; a rematch keeps it; coming back to the lobby
 ##            makes it free again.
-##   lobby  — the real scene: the panels collapse to the strip and back, the
-##            strip's buttons pick, and they go dead while a match is running.
+##   lobby  — the real scene: the strip is on beside the panels rather than
+##            instead of them, the three panels fold to their own headings on
+##            their own toggles and open at the defaults the lobby ships with,
+##            the config is not shown to a client at all, the strip's buttons
+##            pick, and they go dead while a match is running.
 ##   ring   — `BogBackdrop.set_roster` puts three different weapons in three
 ##            **remote** Bogs' hands, which is the lobby half of "your character
 ##            should only show the weapon you have selected".
@@ -212,7 +215,7 @@ func _run_lock() -> void:
 
 
 func _run_lobby() -> void:
-	_scenario("the panels collapse and the strip picks")
+	_scenario("the strip is always on and the panels fold on their own")
 	var before := _failures
 	_begin()
 	Net.set_weapon(Loadout.Weapon.SPEAR)
@@ -224,26 +227,98 @@ func _run_lobby() -> void:
 	var stack := lobby.get_node_or_null("%PanelStack") as Control
 	var row := lobby.get_node_or_null("%WeaponRow") as Control
 	var picker := lobby.get_node_or_null("%WeaponPicker") as HBoxContainer
-	var collapse := lobby.get_node_or_null("%CollapseButton") as Button
+	var players := lobby.get_node_or_null("%Players") as Control
+	var roster_list := lobby.get_node_or_null("%Scroll") as Control
+	var players_fold := lobby.get_node_or_null("%PlayersFold") as Button
+	var count := lobby.get_node_or_null("%PlayerCount") as Label
+	var settings := lobby.get_node_or_null("%MatchSettings") as MatchSettingsPanel
+	var chat := lobby.get_node_or_null("%Chat") as ChatPanel
 	_check("the lobby has a panel stack", stack != null, true)
 	_check("a weapon row", row != null, true)
 	_check("a strip", picker != null, true)
-	_check("and a button to swap between them", collapse != null, true)
-	if stack == null or row == null or picker == null or collapse == null:
-		print("weapon_select: lobby FAIL — the scene is missing controls")
+	_check("a roster panel that folds", players_fold != null, true)
+	_check("a match panel", settings != null, true)
+	_check("and a chat panel", chat != null, true)
+	if stack == null or row == null or picker == null or players == null \
+			or roster_list == null or players_fold == null or count == null \
+			or settings == null or chat == null:
+		print("weapon_select: lobby FAIL - the scene is missing controls")
 		_failures += 1
 		lobby.queue_free()
 		return
 
-	_check("the menu is what opens", stack.visible, true)
-	_check("with the strip put away", row.visible, false)
+	# **The header no longer swaps one for the other**, which D-069's did. Both
+	# are on at once, and that is the thing most likely to be undone by accident:
+	# a strip behind a toggle is a weapon most players never change.
+	_check("the panels are up", stack.visible, true)
+	_check("and so is the strip, at the same time", row.visible, true)
+	_check("with nothing left to swap between",
+		lobby.get_node_or_null("%CollapseButton"), null)
+	_check("one button per weapon", picker.get_child_count(), Loadout.all().size())
 
-	collapse.pressed.emit()
+	# The defaults, which are the answer to "what is on this screen the moment it
+	# opens".
+	var config_rows := settings.get_node("%Scroll") as Control
+	_check("the roster opens folded", roster_list.visible, false)
+	_check("but its count is on show", count.visible, true)
+	_check("and says who is here", count.text,
+		"%d / %d" % [Net.player_count(), Net.config.max_players])
+	_check("the config opens open", settings.visible, true)
+	_check("with its rows out", config_rows.visible, true)
+
+	# The count keeps counting while the list is away, which is the only reason
+	# folding the roster by default is allowed to be the default: `_refresh`
+	# rebuilds the list whether or not anybody can see it.
+	Net.players[953] = {"name": "Late", "team": 0, "ready": true,
+		"weapon": Loadout.DEFAULT}
+	Net.roster_changed.emit()
 	await get_tree().process_frame
-	_check("collapsing folds the panels away", stack.visible, false)
-	_check("and reveals the strip", row.visible, true)
-	_check("with one button per weapon", picker.get_child_count(),
-		Loadout.all().size())
+	_check("a join moves the count with the list folded", count.text,
+		"%d / %d" % [Net.player_count(), Net.config.max_players])
+	_check("and the list is still folded", roster_list.visible, false)
+
+	# Both toggles, through the real controls. A fold is a boolean the one
+	# `_refresh` reads, so pressing the button is what proves the button is wired
+	# to the boolean.
+	players_fold.pressed.emit()
+	await get_tree().process_frame
+	_check("the toggle opens the roster", roster_list.visible, true)
+	_check("and it claims a share of the stack again",
+		players.size_flags_horizontal, int(Control.SIZE_EXPAND_FILL))
+	players_fold.pressed.emit()
+	await get_tree().process_frame
+	_check("and folds it back", roster_list.visible, false)
+	_check("shrinking to its heading rather than leaving an empty box",
+		players.size_flags_horizontal, int(Control.SIZE_SHRINK_BEGIN))
+
+	settings.fold_requested.emit()
+	await get_tree().process_frame
+	_check("the config folds too", config_rows.visible, false)
+	_check("to its heading", settings.size_flags_horizontal,
+		int(Control.SIZE_SHRINK_BEGIN))
+	settings.fold_requested.emit()
+	await get_tree().process_frame
+	_check("and comes back", config_rows.visible, true)
+
+	# Chat is the one panel whose open state is not a boolean in `lobby.gd`: it
+	# is the caret, which the engine already owns.
+	var chat_log := chat.get_node("%Log") as Control
+	var chat_heading := chat.get_node("%Heading") as Control
+	var chat_input := chat.get_node("%Input") as LineEdit
+	_check("chat opens as an input box and nothing else", chat_log.visible, false)
+	_check("with its heading away too", chat_heading.visible, false)
+	_check("and the box itself on show", chat_input.visible, true)
+	chat_input.grab_focus()
+	await get_tree().process_frame
+	_check("the caret brings the log up", chat_log.visible, true)
+	_check("and the heading with it", chat_heading.visible, true)
+	_check("and the panel is allowed to be tall for it",
+		chat.size_flags_vertical, int(Control.SIZE_FILL))
+	chat_input.release_focus()
+	await get_tree().process_frame
+	_check("putting the caret down folds it away", chat_log.visible, false)
+	_check("and the panel shrinks back to the box",
+		chat.size_flags_vertical, int(Control.SIZE_SHRINK_BEGIN))
 
 	# Which one is lit has to be read off the roster, not off whatever was
 	# pressed last: the lobby renders what came back from the host and nothing
@@ -271,7 +346,7 @@ func _run_lobby() -> void:
 		Net.player_weapon(1), Loadout.Weapon.BOW)
 	# **And the caret survives the rebuild the pick just caused.** Every roster
 	# change frees and rebuilds these three buttons, including the one this
-	# player's own pick produced — so without the hand-off in
+	# player's own pick produced - so without the hand-off in
 	# `_rebuild_weapon_picker`, choosing a weapon with the arrow keys would be the
 	# last thing the arrow keys ever did.
 	_check("and the caret stays on the strip",
@@ -281,7 +356,7 @@ func _run_lobby() -> void:
 
 	# The strip goes dead rather than lying about what it can do, once a match is
 	# running. `match_running` is set by hand here and not by pressing Start,
-	# because pressing Start is also what walks this scene into the arena — the
+	# because pressing Start is also what walks this scene into the arena - the
 	# lobby would be gone before there was a strip to look at. What is set is
 	# exactly what `_begin_match` sets and nothing else.
 	Net.match_running = true
@@ -297,27 +372,43 @@ func _run_lobby() -> void:
 	_check("and back in the lobby they are live again",
 		(picker.get_child(0) as Button).disabled, false)
 
-	collapse.pressed.emit()
-	await get_tree().process_frame
-	_check("restoring brings the panels back", stack.visible, true)
-	_check("and puts the strip away", row.visible, false)
-
-	# Escape backs out one surface at a time rather than straight out of the
-	# session. Driven through the real handler with the real action, because what
-	# is being checked is a branch inside it.
-	var escape := InputEventAction.new()
-	escape.action = "pause"
-	escape.pressed = true
-	collapse.pressed.emit()
-	await get_tree().process_frame
-	_check("the picker is open again", row.visible, true)
-	lobby._unhandled_input(escape)
-	await get_tree().process_frame
-	_check("escape closes the picker", row.visible, false)
-	_check("and leaves the menu standing", stack.visible, true)
-	_check("without ending the session", Net.in_session, true)
+	# Escape has one meaning again. D-069 gave it a branch that closed the picker
+	# surface first; there is no such surface, so there is no branch, and the
+	# boolean it read is gone. Not driven with a real event here, because
+	# `_on_leave` ends the session this harness is still standing in - what is
+	# checked is that the state the branch hung off no longer exists.
+	_check("escape has nothing left to back out of",
+		lobby.get("_picking"), null)
 
 	lobby.queue_free()
+	await get_tree().process_frame
+
+	# And the client's view of the same screen. Editing the config has been
+	# host-gated since the panel was written, so a client's copy was forty dead
+	# dials taking the widest column on the screen; it is not shown at all now.
+	# The strip and the roster count are - a client picks a weapon and counts the
+	# room exactly as the host does.
+	Net.is_host = false
+	Net.roster_changed.emit()
+	var client := LOBBY_SCENE.instantiate()
+	add_child(client)
+	await get_tree().process_frame
+	var client_settings := client.get_node_or_null("%MatchSettings") as Control
+	var client_row := client.get_node_or_null("%WeaponRow") as Control
+	var client_count := client.get_node_or_null("%PlayerCount") as Label
+	var client_list := client.get_node_or_null("%Scroll") as Control
+	if client_settings == null or client_row == null or client_count == null \
+			or client_list == null:
+		print("weapon_select: lobby FAIL - the client scene is missing controls")
+		_failures += 1
+	else:
+		_check("a client is not shown the config at all",
+			client_settings.visible, false)
+		_check("but still gets the weapon strip", client_row.visible, true)
+		_check("and still gets the roster count", client_count.visible, true)
+		_check("folded, exactly as the host's is", client_list.visible, false)
+	client.queue_free()
+	Net.is_host = true
 	await get_tree().process_frame
 	print("weapon_select: lobby %s" % ("PASS" if _failures == before else "FAIL"))
 
