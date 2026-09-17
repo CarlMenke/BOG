@@ -5,7 +5,7 @@ work was committed and pushed. This document is the brief for whoever picks it u
 `main` so it is reachable from any clone; it names no local paths and depends on nothing that is
 not in this repository.*
 
-You are picking up Gubs_Game after four parallel agent sessions were interrupted. Everything they
+You are picking up BOG after four parallel agent sessions were interrupted. Everything they
 did is committed and pushed. Nothing is lost, and nothing you need is on the machine those sessions
 ran on. You have two jobs, in this order: land the in-flight work (Phase 0), then work a backlog of
 the user's playtest notes (Phase 2), planning before you start it (Phase 1).
@@ -13,8 +13,8 @@ the user's playtest notes (Phase 2), planning before you start it (Phase 1).
 ## Getting set up
 
 ```
-git clone https://github.com/CarlMenke/Gubs_Game.git
-cd Gubs_Game
+git clone https://github.com/CarlMenke/BOG.git
+cd BOG
 git fetch --all
 ```
 
@@ -27,7 +27,7 @@ machine — the scripts find it themselves and fail loudly if it is absent:
   **D-095**, and the Elder's robe was refit without it (**D-099**).
 - **Python 3** — for `tools/make_sfx.py` and the asset pipeline scripts.
 - **bash** — the gate and build scripts are shell scripts. On Windows use Git Bash.
-- `git config user.name` / `user.email` set, and push access to `CarlMenke/Gubs_Game`.
+- `git config user.name` / `user.email` set, and push access to `CarlMenke/BOG`.
 
 **Not in this repository, and not needed:** the `out/` render folders (gitignored — no screenshots
 or renders are in git on any branch) and, on the original machine only, a `refs/backup/preflight`

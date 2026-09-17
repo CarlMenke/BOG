@@ -10356,7 +10356,9 @@ alongside the uids.
 called that and `git remote -v` agrees. The sweep turned five clone lines in
 `README.md`, `docs/HANDOFF.md` and `docs/STATUS.md` into a URL that 404s; they
 were put back by hand. Renaming the repo is a GitHub operation and a separate
-decision.
+decision. **Done 2026-09-17:** the GitHub repo was renamed to
+`CarlMenke/BOG`, `origin` repointed, the working directory renamed to
+`REPOS/BOG`, and the clone lines updated to match.
 
 **Two sentences the user wrote.** `docs/HANDOFF.md` quotes them verbatim —
 *"For teams, the gubs change color to the hue"* and *"for gub game in team, the

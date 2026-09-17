@@ -51,8 +51,8 @@ build, not .NET. Nothing else: the decimated meshes and the sound effects are
 committed, so a fresh clone runs without Python.
 
 ```bash
-git clone https://github.com/CarlMenke/Gubs_Game
-cd Gubs_Game
+git clone https://github.com/CarlMenke/BOG
+cd BOG
 godot --path .            # or open project.godot in the editor
 ```
 

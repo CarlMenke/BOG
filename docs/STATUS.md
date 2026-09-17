@@ -45,7 +45,8 @@ tracked file in one pass — 4,282 replacements across 137 files, plus twenty-fo
 `art/generated/bog.glb` (now `art/bog/BOG.fbx`, D-101) and the build is `build/windows/BOG.exe`. Five things
 keep the old spelling on purpose and the entry says why each: Godot `uid://`
 strings, the `assets/source/GUB_2/` pack folder, playit's `angry-gub.at.ply.gg`,
-the `CarlMenke/Gubs_Game` repo URL, and two sentences quoting the user.
+and two sentences quoting the user. (The `CarlMenke/Gubs_Game` repo URL was on
+this list until 2026-09-17, when the repo and folder were renamed to `BOG`.)
 
 The whole of it is merged to `main` and tagged **`v0.1.0`**, so Phase 7 is closed
 out. The one networking feature that was outstanding — hosting across the
@@ -603,12 +604,12 @@ Two tags mark the ends of that work:
 | `pre-merge-baseline` | the last commit before the two feature branches landed — use it to see what each side looked like on its own |
 | `v0.1.0` | the release: both binaries built, `smoke_test.sh` 10/10 |
 
-The repo is **https://github.com/CarlMenke/Gubs_Game** (public), owned by
+The repo is **https://github.com/CarlMenke/BOG** (public), owned by
 CarlMenke, with JulianC775 as a collaborator, so plain `git push` works. If it
 ever 403s, check that first:
 
 ```bash
-gh api repos/CarlMenke/Gubs_Game --jq '.permissions'
+gh api repos/CarlMenke/BOG --jq '.permissions'
 ```
 
 Start the next piece of work on a branch off `main`.
