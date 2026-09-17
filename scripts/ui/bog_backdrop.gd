@@ -216,9 +216,20 @@ func _apply_slot(index: int) -> void:
 	# hand itself is `BogCombat`'s — this only says which weapon the Bog has, and
 	# `_refresh_weapon` below is what asks the combat node to redraw from it.
 	_equip(bog, Loadout.sanitize(entry.get("weapon", Loadout.DEFAULT)))
-	# Every roster change comes through here, so a team switched in the lobby
-	# repaints the Bog standing in the ring as well as its plate (D-046).
-	bog.set_team_tint(team)
+	# The body, on the same call and for the same reason: every roster change
+	# comes through here, so a skin picked in the strip is on the ring's Bogs on
+	# the next refresh — and in Teams that is *everyone on the picker's team*
+	# changing at once, which is exactly what the ring is on screen to show.
+	bog.wear_skin(Skins.texture_of(Skins.sanitize(entry.get("skin", Skins.DEFAULT))))
+	# **A skin and a team recolour are two answers to one question**, so a Bog
+	# that has been dressed is not also repainted: in Teams the skin *is* the
+	# team's identity on the body, and the plate below keeps the team's colour to
+	# say the same thing in the UI's own voice.
+	#
+	# An entry with no `skin` key at all is a caller from before the picker
+	# existed — the menu's hero Bog, `tools/team_tint.gd`'s lobby check — and
+	# those still get D-046's recolour, which is why that check is untouched.
+	bog.set_team_tint(MatchConfig.TEAM_NONE if entry.has("skin") else team)
 	var plate := bog.get_node_or_null("Nameplate") as Nameplate
 	if plate != null:
 		plate.set_display_name(bog.display_name)

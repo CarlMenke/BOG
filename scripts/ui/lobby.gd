@@ -66,7 +66,57 @@ const SHOW_EMPTY_SLOTS := true
 ## behind the middle of the ring, to say what three props, three names and one
 ## amber-lit button already say — which is exactly the "professionalise means
 ## add" move D-076 spent a page arguing against.
+##
+## **The band the strip sits in now starts at 10, not 44**, and the 56 survived
+## that. The skin strip needs 40 px under the blurb and the ring's nameplates
+## come down to 170 (see `SKIN_TILE`), which left 149 px for a weapon block that
+## is 105 — so the whole stack moved up rather than the prop getting smaller.
+## Shrinking it was the other way to find the room and it is the one D-076
+## argued out of the project: a 32 px prop is a picture too small to be the thing
+## a player is choosing from.
 const WEAPON_ICON := 56
+
+## A skin swatch, and the face inside it.
+##
+## **The size is set by what is behind the strip, not by what is in it.** The
+## ring is what the lobby is on screen for, and a picker standing in front of the
+## faces it is choosing between is the wrong way round — so the row takes the sky
+## between the weapon blurb and the top of the ring, and nothing below it.
+##
+## Measured, through the backdrop's own camera, in base-viewport rows, by
+## `tools/weapon_select.gd` on every run:
+##
+##   ring     highest nameplate    highest head
+##   eight          170.2              182.6
+##   five           169.5              183.8
+##
+## The row ends at **159**, which clears the lower of those by 10.5 px. It is a
+## tight band and it is tight in both directions: the weapon block above it is
+## 105 px of button and blurb, so the whole top band — weapons, blurb, skins —
+## runs 10 to 159 and there is nowhere for a fourth thing to go. That is why the
+## weapon strip moved up from 44: not taste, arithmetic. Anything that grows the
+## weapon prop, the blurb or a swatch comes out of the 10.5.
+##
+## **The first cut was a 84x92 tile with the skin's name under it**, in a band at
+## 150-272, and it stood in front of the ring: in an eight-Bog lobby it covered
+## every plate and crowded the heads, which is the thing D-069 moved the weapon
+## strip above the Bogs to avoid. What went was the per-tile name. The caption
+## beside the strip says it instead, for whichever swatch the pointer or the
+## caret is on — one name, where the eye already is, instead of fourteen laid
+## across the Bogs' faces.
+##
+## `SKIN_TILE` is the swatch's *minimum*; the theme's button margins make it 44
+## wide in practice, so fourteen of them 4 apart come to 668 px in the 1488
+## between the margins, and **the strip does not scroll and must not have to.** A
+## horizontally scrolling strip was the fallback if they would not fit, and it
+## would have put some of the fourteen behind a gesture on the one screen where
+## "what can I be?" is the whole question being asked.
+##
+## The face is inset 2 px so that the button's own stylebox shows all round it,
+## which is where "lit", "hovered" and "the caret is here" come from without this
+## file drawing any of them.
+const SKIN_TILE := Vector2(40, 40)
+const SKIN_THUMB := 36
 
 ## The glyph on a fold toggle. Down means "this is open and pressing me shuts
 ## it"; right means the opposite. One pair, on all three toggles, because three
@@ -95,6 +145,9 @@ const FOLD_SHUT := "▸"
 @onready var _weapon_row: Control = %WeaponRow
 @onready var _weapon_picker: HBoxContainer = %WeaponPicker
 @onready var _weapon_blurb: Label = %WeaponBlurb
+@onready var _skin_row: Control = %SkinRow
+@onready var _skin_picker: HBoxContainer = %SkinPicker
+@onready var _skin_caption: Label = %SkinCaption
 
 ## The roster as it was on the previous refresh, so joins and leaves can be
 ## announced in chat. `Net` broadcasts the whole roster rather than a diff, so
@@ -117,6 +170,14 @@ var _config_open: bool = true
 ## the same trap: `grab_focus` on the button for the weapon you already have
 ## emits `focus_entered`, which would ask for it again on every single refresh.
 var _writing_picker: bool = false
+## Which skin the caption is naming because the pointer or the caret is on its
+## swatch, or -1 for "nobody is pointing at anything, say what is being worn".
+##
+## A *view* state, like the two folds above it, and read by exactly one function
+## (`_write_skin_caption`). It is not routed through `_refresh` for the one
+## reason a fold is: refreshing rebuilds the strip, and rebuilding the strip
+## frees the swatch the pointer is sitting on.
+var _named_skin: int = -1
 
 
 func _ready() -> void:
@@ -183,6 +244,7 @@ func _refresh() -> void:
 	_rebuild_player_list()
 	_rebuild_team_picker()
 	_rebuild_weapon_picker()
+	_rebuild_skin_picker()
 	_refresh_invite()
 	_refresh_actions()
 	_refresh_surface()
@@ -201,6 +263,12 @@ func _backdrop_entries() -> Array:
 			# the weapon went into the roster row rather than into a local
 			# variable somewhere (D-069).
 			"weapon": Net.player_weapon(peer_id),
+			# And the body, from the same place and for the same reason — with
+			# the one difference that in Teams "the same place" is the *team's*
+			# entry rather than this row's, which is `Net.skin_for`'s whole job.
+			# The ring is where a team finds out what it looks like: one member
+			# presses a tile and four Bogs change together.
+			"skin": Net.skin_for(peer_id),
 		})
 	return entries
 
@@ -446,6 +514,221 @@ func _focus_pick() -> void:
 		if button != null and button.button_pressed and not button.disabled:
 			button.grab_focus()
 			return
+
+
+# -------------------------------------------------------------------- skins ---
+
+## One swatch per skin on one short line under the weapon blurb, rebuilt from the
+## roster the way everything else on this screen is.
+##
+## **One line, above the ring, and nothing below it.** The lobby is a room full
+## of real Bogs and the strip is a picker *for* them; a picker standing in front
+## of the faces it is choosing between is the wrong way round. So the row is a
+## caption and fourteen small swatches, 40 px tall in total, ending 10.5 px above
+## the highest thing an eight-Bog ring puts on screen (`SKIN_TILE` has the
+## measurements, and `tools/weapon_select.gd` takes them again on every run).
+##
+## **The names moved into the caption.** Fourteen names under fourteen swatches
+## is fourteen lines of type laid across the Bogs; one name, beside the strip,
+## where the eye already is, is the same information in the place it is being
+## asked for. So the caption reads `YOUR SKIN · TOAD`, and follows the pointer or
+## the caret onto whatever swatch it is over — which is how a name is discovered
+## without printing all fourteen at once.
+##
+## **Which question the strip is asking depends on the mode**, and the caption is
+## also where that is said. In free-for-all a swatch changes *your* body and is a
+## weapon pick in every respect. In Teams it changes *your team's* body —
+## everyone on it, at once, and any member of the team may press it — because a
+## skin is what a team looks like across the island and that is not a thing one
+## player owns. The roster reads the same either way: `Net.skin_for` is the one
+## function that knows, and the ring behind the strip shows the answer.
+##
+## **A skin another team holds is a disabled swatch with that team's colour on
+## its rim.** Two teams in one body is the single thing this feature exists to
+## prevent, and the host refuses the request — but a strip that let you press it
+## and then quietly did nothing would make the host look broken. So the rule is
+## drawn where it is about to be enforced, in the colour of the team enforcing
+## it, which also answers "who has the toad, then?" without a second control.
+##
+## **Pressing picks; focus does not**, which is the one place this strip parts
+## company with the weapon strip above it (D-069: "the Bog swaps weapons live as
+## you move through it"). Two reasons, and both are about what a pick costs. A
+## weapon is three buttons and your own hands; a skin is fourteen swatches, so
+## arrowing from one end to the other would be fourteen requests and fourteen
+## whole-roster broadcasts. And in Teams it is not your body being changed — the
+## arrow keys would repaint four teammates fourteen times on the way past. What
+## the caret *does* do is name the swatch it lands on, in the caption, so a
+## keyboard reads the strip exactly as a pointer does.
+func _rebuild_skin_picker() -> void:
+	_writing_picker = true
+	# Detached as well as freed, for `_rebuild_weapon_picker`'s reason: the focus
+	# hand-off below reads the children back immediately, and `queue_free` alone
+	# leaves the old swatches in `get_children()` until the end of the frame.
+	var had_focus := false
+	for child in _skin_picker.get_children():
+		had_focus = had_focus or (child as Control).has_focus()
+		_skin_picker.remove_child(child)
+		child.queue_free()
+	# Whatever the pointer was over is being freed with it.
+	_named_skin = -1
+
+	var teams := Net.teams_decided()
+	var my_team := Net.player_team(Net.local_id())
+	var mine := Net.skin_for(Net.local_id())
+	var locked := Net.match_running
+	for skin: int in Skins.all():
+		# Which team is standing on this skin, if it is not mine. `-1` is "free".
+		var held_by := -1
+		if teams:
+			for team in Net.config.team_count:
+				if team != my_team and Net.team_skin(team) == skin:
+					held_by = team
+					break
+		_skin_picker.add_child(_skin_swatch(skin, skin == mine, held_by, locked))
+
+	_write_skin_caption()
+	if had_focus:
+		_focus_skin()
+	_writing_picker = false
+
+
+## The line beside the strip: whose body this row changes, and which one is being
+## looked at.
+##
+## Its own function because it is written from two places that are not each
+## other — the rebuild above, and the pointer or the caret moving across the
+## swatches. A hover must not rebuild the strip (it would free the swatch the
+## pointer is on, mid-hover), and a rebuild must not forget what is being
+## pointed at. Nothing else in here writes this label.
+func _write_skin_caption() -> void:
+	var teams := Net.teams_decided()
+	var my_team := Net.player_team(Net.local_id())
+	# The swatch under the pointer or the caret, or failing that the body that is
+	# actually being worn — so the line is never blank and never a guess.
+	var shown := _named_skin if _named_skin >= 0 else Net.skin_for(Net.local_id())
+	var whose := "YOUR SKIN"
+	if Net.match_running:
+		whose = "LOCKED"
+	elif teams:
+		whose = "TEAM %d'S SKIN" % (my_team + 1)
+	_skin_caption.text = "%s · %s" % [whose, Skins.label(shown).to_upper()]
+
+	# In that team's own colour — the same colour as their stripe in the roster
+	# and their nameplates in the match, so "Team 2" here and "Team 2" out there
+	# are one thing.
+	if teams and not Net.match_running:
+		_skin_caption.add_theme_color_override("font_color",
+			UIPalette.team_colour(my_team))
+	else:
+		_skin_caption.remove_theme_color_override("font_color")
+
+	# The sentence that used to be a second line on the strip. It is a rule about
+	# who may press these, which is exactly what a tooltip on the thing that says
+	# whose they are is for — and it costs the ring nothing.
+	if Net.match_running:
+		_skin_caption.tooltip_text = \
+			"Locked from the start of the match until everyone is back in the lobby."
+	elif teams:
+		_skin_caption.tooltip_text = "Anyone on the team can change it."
+	else:
+		_skin_caption.tooltip_text = "Your own body. In Teams the skin is the team's."
+
+
+## One swatch: a 40 px face in a 44 px toggle button.
+##
+## The picture is a child rather than the button's `icon` so that the 2 px all
+## round is the button's *own* stylebox showing through — which is where "lit",
+## "hovered" and "the caret is here" come from without this file drawing any of
+## them. It takes no mouse input, so the button underneath is still the whole
+## swatch as far as a click, the caret and the theme are concerned.
+func _skin_swatch(skin: int, chosen: bool, held_by: int, locked: bool) -> Button:
+	var swatch := Button.new()
+	swatch.toggle_mode = true
+	swatch.button_pressed = chosen
+	swatch.custom_minimum_size = SKIN_TILE
+	swatch.disabled = locked or held_by >= 0
+	swatch.tooltip_text = "Team %d has this one" % (held_by + 1) if held_by >= 0 \
+		else Skins.label(skin)
+	swatch.pressed.connect(_on_skin_chosen.bind(skin))
+	# Naming, not picking. `focus_entered` is deliberately *not* a request here
+	# (see the header); all either of these does is move the name in the caption.
+	swatch.mouse_entered.connect(_on_skin_named.bind(skin))
+	swatch.focus_entered.connect(_on_skin_named.bind(skin))
+	swatch.mouse_exited.connect(_on_skin_unnamed.bind(skin))
+	swatch.focus_exited.connect(_on_skin_unnamed.bind(skin))
+
+	# The rim, inside the button's own frame: this one says "somebody else's",
+	# and the button's states say "yours" and "the caret is here".
+	var frame := PanelContainer.new()
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
+	if held_by >= 0:
+		var border := StyleBoxFlat.new()
+		border.bg_color = Color(0, 0, 0, 0)
+		border.set_border_width_all(2)
+		border.border_color = UIPalette.team_colour(held_by)
+		border.set_corner_radius_all(UIPalette.RADIUS)
+		frame.add_theme_stylebox_override("panel", border)
+	swatch.add_child(frame)
+
+	var picture := TextureRect.new()
+	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	picture.texture = Skins.thumb_of(skin)
+	picture.custom_minimum_size = Vector2(SKIN_THUMB, SKIN_THUMB)
+	picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	# Godot dims a disabled button's own text and nothing else, so a swatch made
+	# of child controls would sit there at full brightness looking pressable. The
+	# picture is dimmed by hand, which is also the difference between "taken" and
+	# "locked": a held skin is dim behind a coloured rim, a locked one is just dim.
+	if swatch.disabled:
+		picture.modulate = Color(1, 1, 1, 0.42)
+	frame.add_child(picture)
+	return swatch
+
+
+## The pointer or the caret arrived on a swatch: say its name in the caption.
+func _on_skin_named(skin: int) -> void:
+	if _named_skin == skin:
+		return
+	_named_skin = skin
+	_write_skin_caption()
+
+
+## ...and left it. Guarded on which swatch, because the pointer leaving one and
+## entering the next arrives in that order and would otherwise blank the line
+## every time it crossed a gap.
+func _on_skin_unnamed(skin: int) -> void:
+	if _named_skin != skin:
+		return
+	_named_skin = -1
+	_write_skin_caption()
+
+
+## Put the caret on the skin that is currently worn. `_focus_pick`'s twin, and
+## safe for the same reason — except that here `grab_focus` is not also a pick,
+## so this one is only about not dropping the caret through a rebuild.
+func _focus_skin() -> void:
+	for child in _skin_picker.get_children():
+		var button := child as Button
+		if button != null and button.button_pressed and not button.disabled:
+			button.grab_focus()
+			return
+
+
+## Ask for a skin — for yourself in free-for-all, for your team in Teams.
+##
+## `_on_weapon_chosen`'s two guards, plus nothing: the "you already have it"
+## guard is what keeps a rebuild's own `button_pressed` writes off the wire, and
+## a swatch another team holds is disabled rather than checked here, because the
+## authority on that is the host and this screen only ever renders what came back
+## from it.
+func _on_skin_chosen(skin: int) -> void:
+	if _writing_picker or Net.match_running:
+		return
+	if skin == Net.skin_for(Net.local_id()):
+		return
+	Net.set_skin(skin)
 
 
 ## Lay out the stack: who is folded, and what a client is not shown at all.

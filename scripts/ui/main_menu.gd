@@ -103,9 +103,16 @@ func _commit_name() -> void:
 
 ## The Bog on screen wears the name in the box, live. It is the clearest
 ## possible answer to "is this field the name other people will see?"
+##
+## And the **skin this machine last picked for itself**: `Settings.chosen_skin`
+## is the free-for-all pick, which is the only one that is this player's to keep
+## — a team's skin belongs to the lobby it was chosen in. Nothing on this screen
+## can change it; the picker is in the lobby, and this is where you find out what
+## you are still wearing.
 func _push_name_to_backdrop() -> void:
 	var shown := Net.sanitize_name(_name_edit.text)
-	_backdrop.set_roster([{"name": shown, "team": MatchConfig.TEAM_NONE}])
+	_backdrop.set_roster([{"name": shown, "team": MatchConfig.TEAM_NONE,
+		"skin": Settings.chosen_skin()}])
 
 
 # -------------------------------------------------------------------- actions ---

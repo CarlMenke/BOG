@@ -27,7 +27,13 @@ extends Node
 ##            instead of them, the three panels fold to their own headings on
 ##            their own toggles and open at the defaults the lobby ships with,
 ##            the config is not shown to a client at all, the strip's buttons
-##            pick, and they go dead while a match is running.
+##            pick, and they go dead while a match is running. **And the skin
+##            strip under it**, which is the same feature with a second owner:
+##            a pick round-trips through the roster in free-for-all, a pick in
+##            Teams moves the *team's* body and every member of the team wears
+##            it, a skin another team holds is a disabled tile and a refused
+##            request, and the Bog standing in the ring is wearing whatever the
+##            strip says.
 ##   ring   — `BogBackdrop.set_roster` puts three different weapons in three
 ##            **remote** Bogs' hands, which is the lobby half of "your character
 ##            should only show the weapon you have selected".
@@ -37,6 +43,12 @@ const LOBBY_SCENE := preload("res://scenes/ui/lobby.tscn")
 ## Stand-in peers, clear of ENet's range, of the combat range's 900s and of the
 ## backdrop's 8100s.
 const PEERS := [1, 951, 952]
+
+## How much sky the skin strip has to leave between its own bottom edge and the
+## highest thing in the ring, in base-viewport pixels. The ring is what the
+## lobby is for looking at; a strip that overlaps it is a picker standing in
+## front of the thing it is picking for.
+const RING_CLEARANCE := 8.0
 
 var _failures: int = 0
 var _checks: int = 0
@@ -50,11 +62,15 @@ var _checks: int = 0
 ## put this back would quietly change the weapon the next real game starts
 ## with. `tools/ui_range.gd` makes the same point about a public address.
 var _saved_weapon: int = Loadout.DEFAULT
+## And the skin, for the same reason: `Net.set_skin` writes a free-for-all pick
+## through to `Settings["skin"]` exactly as `set_weapon` writes the weapon.
+var _saved_skin: int = Skins.DEFAULT
 
 
 func _ready() -> void:
 	print("weapon_select: starting")
 	_saved_weapon = Settings.chosen_weapon()
+	_saved_skin = Settings.chosen_skin()
 	# A harness that cannot reach the thing it is testing must not print PASS.
 	# See `match_rules.gd`, which learned this the hard way.
 	if Net == null or MatchState == null:
@@ -69,6 +85,7 @@ func _ready() -> void:
 	print("weapon_select: %d checks, %d failures" % [_checks, _failures])
 	print("weapon_select: %s" % ("PASS" if _failures == 0 else "FAIL"))
 	Settings.set_value("weapon", _saved_weapon)
+	Settings.set_value("skin", _saved_skin)
 	Net.leave_lobby(Net.Leave.LOCAL_REQUEST, "", false)
 	for i in 3:
 		await get_tree().process_frame
@@ -369,6 +386,192 @@ func _run_lobby() -> void:
 	_check("on the weapon that is picked",
 		(picker.get_child(Loadout.Weapon.SWORD) as Button).has_focus(), false)
 
+	# ------------------------------------------------------------ the skins ---
+	#
+	# The strip under the weapon strip, and the half of this feature the weapon
+	# never had: a second owner. In free-for-all a skin is a roster key and reads
+	# exactly like a weapon. In Teams it belongs to the **team** - any member may
+	# change it, everyone on it wears it, and no two teams may have the same one.
+	var skin_row := lobby.get_node_or_null("%SkinRow") as Control
+	var skins := lobby.get_node_or_null("%SkinPicker") as HBoxContainer
+	var caption := lobby.get_node_or_null("%SkinCaption") as Label
+	var ring := lobby.get_node_or_null("%Backdrop") as BogBackdrop
+	_check("the lobby has a skin row", skin_row != null, true)
+	_check("a skin strip", skins != null, true)
+	_check("a caption beside it", caption != null, true)
+	if skin_row == null or skins == null or caption == null or ring == null:
+		print("weapon_select: lobby FAIL - the scene has no skin strip")
+		_failures += 1
+		lobby.queue_free()
+		return
+	_check("the strip is on beside the weapon strip, not instead of it",
+		skin_row.visible and row.visible, true)
+	_check("one swatch per pickable skin", skins.get_child_count(), Skins.NAMES.size())
+	_check("fourteen of them", Skins.NAMES.size(), 14)
+	# The two folders under `art/skins/` that are not a pick: the worked example
+	# and the Elder's robe. A list that grew one of those by accident would put a
+	# garment on a strip of bodies.
+	_check("and the worked example is not one of them",
+		Skins.NAMES.has("example"), false)
+	_check("nor is the Elder's robe", Skins.NAMES.has("elder"), false)
+	_check("the plain body is the first and the default",
+		Skins.NAMES[Skins.DEFAULT], "bog")
+
+	# Free-for-all: the round trip, through the real tile, into the roster row
+	# and back out onto the strip.
+	_check("the plain body is the one lit",
+		_skin_tile(skins, Skins.DEFAULT).button_pressed, true)
+	_check("and the caption says whose it is and which it is",
+		caption.text, "YOUR SKIN · BOG")
+	var muck := Skins.NAMES.find("muck")
+	_skin_tile(skins, muck).pressed.emit()
+	await get_tree().process_frame
+	_check("pressing a tile asks for that skin", Net.player_skin(1), muck)
+	_check("and it is the body that player is wearing", Net.skin_for(1), muck)
+	_check("the strip comes back showing it",
+		_skin_tile(skins, muck).button_pressed, true)
+	_check("with only one lit",
+		_skin_tile(skins, Skins.DEFAULT).button_pressed, false)
+	_check("and nobody else's body moved", Net.skin_for(951), Skins.DEFAULT)
+	# **The ring is wearing it**, which is the whole reason a skin is a roster
+	# key and not a local variable: eight Bogs' picks, not one. A second frame,
+	# for `_run_ring`'s reason.
+	await get_tree().process_frame
+	var ring_bogs: Array = ring.get("_bogs")
+	_check("the backdrop stood Bogs up", ring_bogs.size() >= 2, true)
+	if ring_bogs.size() >= 2:
+		_check("the ring's own Bog wears the pick",
+			_worn(ring_bogs[0]), Skins.texture_of(muck))
+		_check("and the Bog beside it does not",
+			_worn(ring_bogs[1]) == Skins.texture_of(muck), false)
+
+	# Teams. The same strip, a different owner.
+	var teamed := Net.config.duplicate_config()
+	teamed.mode = MatchConfig.Mode.TEAMS
+	teamed.team_count = 2
+	Net.update_config(teamed)
+	Net.players[1]["team"] = 0
+	Net.players[951]["team"] = 1
+	Net.players[952]["team"] = 0
+	Net.roster_changed.emit()
+	await get_tree().process_frame
+	_check("in Teams the team column means a body", Net.teams_decided(), true)
+	_check("team 1 starts on the plain body", Net.team_skin(0), Skins.DEFAULT)
+	_check("team 2 on the next skin along", Net.team_skin(1), 1)
+	_check("so two teams never start alike",
+		Net.team_skin(0) == Net.team_skin(1), false)
+	_check("the caption says whose skin the row changes",
+		caption.text.begins_with("TEAM 1'S SKIN"), true)
+	_check("and it names the team's body, not the player's own pick",
+		caption.text, "TEAM 1'S SKIN · BOG")
+	_check("with the rule about who may press it in a tooltip, not a second line",
+		caption.tooltip_text, "Anyone on the team can change it.")
+	_check("the lit tile is the team's, not the player's",
+		_skin_tile(skins, Net.team_skin(0)).button_pressed, true)
+	_check("and the player's own free-for-all pick is not lit",
+		_skin_tile(skins, muck).button_pressed, false)
+	# **The other team's skin is a disabled tile**, which is where the rule is
+	# drawn before it is ever enforced.
+	_check("a skin the other team holds is a disabled swatch",
+		_skin_tile(skins, 1).disabled, true)
+	_check("while a free one is not", _skin_tile(skins, muck).disabled, false)
+
+	var slag := Skins.NAMES.find("slag")
+	_skin_tile(skins, slag).pressed.emit()
+	await get_tree().process_frame
+	_check("a pick in Teams moves the team's body", Net.team_skin(0), slag)
+	_check("and leaves the player's own row alone", Net.player_skin(1), muck)
+	_check("the one who pressed it is wearing it", Net.skin_for(1), slag)
+	_check("and so is a teammate who did not", Net.skin_for(952), slag)
+	_check("while the other team is not", Net.skin_for(951), 1)
+
+	# **The host refuses a skin another team holds**, whatever the strip did or
+	# did not let anybody press. Driven through `_request_skin`, the door a
+	# client's packet actually arrives at.
+	Net._request_skin(1)
+	_check("a request for the other team's skin is refused",
+		Net.team_skin(0), slag)
+	_check("and the other team still has it", Net.team_skin(1), 1)
+	_check("no two teams ever share one", _skins_are_unique(), true)
+
+	# A team switch is a change of clothes, with nothing sent: the body comes
+	# from the team, so joining a team is putting on its shirt.
+	Net.set_team(1)
+	await get_tree().process_frame
+	_check("switching team switches body", Net.skin_for(1), 1)
+	_check("and the swatch the old team holds is now the disabled one",
+		_skin_tile(skins, slag).disabled, true)
+	_check("with the new team's lit", _skin_tile(skins, 1).button_pressed, true)
+	_check("the caption follows", caption.text.begins_with("TEAM 2'S SKIN"), true)
+
+	# Home again, so the checks after this read the screen they expect.
+	var ffa := Net.config.duplicate_config()
+	ffa.mode = MatchConfig.Mode.FREE_FOR_ALL
+	Net.update_config(ffa)
+	Net.roster_changed.emit()
+	await get_tree().process_frame
+	_check("back in free-for-all the player's own pick is theirs again",
+		Net.skin_for(1), muck)
+	_check("and the caption is back to yours", caption.text, "YOUR SKIN · MUCK")
+
+	# **The names live in the caption now**, because fourteen of them under
+	# fourteen swatches was fourteen lines of type across the Bogs' faces. So a
+	# swatch has no label of its own, and pointing at one — or arrowing onto it —
+	# is how its name is read. Naming is not picking: the roster must not move.
+	for swatch: Node in skins.get_children():
+		_check("a swatch carries no name of its own",
+			(swatch as Button).text, "")
+	_skin_tile(skins, Skins.NAMES.find("void")).mouse_entered.emit()
+	_check("pointing at a swatch names it", caption.text, "YOUR SKIN · VOID")
+	_check("and changes nothing", Net.skin_for(1), muck)
+	_skin_tile(skins, Skins.NAMES.find("void")).mouse_exited.emit()
+	_check("leaving it says what is being worn again",
+		caption.text, "YOUR SKIN · MUCK")
+	# The caret does the same, which is the whole of the keyboard's access to a
+	# name now that the swatches have none.
+	_skin_tile(skins, Skins.NAMES.find("gilt")).focus_entered.emit()
+	_check("the caret names a swatch too", caption.text, "YOUR SKIN · GILT")
+	_check("and still does not pick it", Net.skin_for(1), muck)
+	_skin_tile(skins, Skins.NAMES.find("gilt")).focus_exited.emit()
+
+	# **The strip must not stand in front of the ring.** The row is laid out in
+	# the scene at fixed offsets and the ring is laid out in 3D, so the two only
+	# meet on screen and nothing but a measurement can say whether they collide.
+	# `_ring_ceiling` projects the backdrop's own Bogs through the backdrop's own
+	# camera; the row's bottom edge has to clear the lower of the two tops with
+	# room to spare, in the fullest ring the lobby can hold.
+	var was_roster := Net.players.duplicate(true)
+	for extra in 8:
+		var peer := 960 + extra
+		if Net.players.size() >= 8:
+			break
+		Net.players[peer] = {"name": "Ring%d" % extra, "team": 0, "ready": true,
+			"weapon": Loadout.DEFAULT, "skin": Skins.DEFAULT}
+	Net.roster_changed.emit()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var ceiling := _ring_ceiling(ring)
+	var row_bottom := skin_row.position.y + skin_row.size.y
+	print("  ring of %d: plate top %.1f, head top %.1f, skin row ends %.1f"
+		% [int(ceiling["bogs"]), ceiling["plate"], ceiling["head"], row_bottom])
+	_check("the strip clears the fullest ring's heads and plates",
+		row_bottom + RING_CLEARANCE <= minf(ceiling["plate"], ceiling["head"]), true)
+
+	while Net.players.size() > 5:
+		Net.players.erase(Net.peer_ids().back())
+	Net.roster_changed.emit()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var ceiling5 := _ring_ceiling(ring)
+	print("  ring of %d: plate top %.1f, head top %.1f, skin row ends %.1f"
+		% [int(ceiling5["bogs"]), ceiling5["plate"], ceiling5["head"], row_bottom])
+	_check("and a smaller ring's, which stands nearer the camera",
+		row_bottom + RING_CLEARANCE <= minf(ceiling5["plate"], ceiling5["head"]), true)
+
+	Net.players = was_roster
+	Net.roster_changed.emit()
+	await get_tree().process_frame
+
 	# The strip goes dead rather than lying about what it can do, once a match is
 	# running. `match_running` is set by hand here and not by pressing Start,
 	# because pressing Start is also what walks this scene into the arena - the
@@ -379,6 +582,12 @@ func _run_lobby() -> void:
 	await get_tree().process_frame
 	_check("a running match disables every button",
 		(picker.get_child(0) as Button).disabled, true)
+	_check("and every skin swatch with them",
+		_skin_tile(skins, Skins.DEFAULT).disabled, true)
+	_check("with the caption saying so", caption.text.begins_with("LOCKED"), true)
+	_skin_tile(skins, Skins.NAMES.find("void")).pressed.emit()
+	_check("a swatch pressed after Start does nothing", Net.player_skin(1),
+		Skins.NAMES.find("muck"))
 	(picker.get_child(Loadout.Weapon.SPEAR) as Button).pressed.emit()
 	_check("and a press does nothing", Net.player_weapon(1), Loadout.Weapon.BOW)
 	Net.match_running = false
@@ -386,6 +595,7 @@ func _run_lobby() -> void:
 	await get_tree().process_frame
 	_check("and back in the lobby they are live again",
 		(picker.get_child(0) as Button).disabled, false)
+	_check("the swatches too", _skin_tile(skins, Skins.DEFAULT).disabled, false)
 
 	# Escape has one meaning again. D-069 gave it a branch that closed the picker
 	# surface first; there is no such surface, so there is no branch, and the
@@ -410,6 +620,7 @@ func _run_lobby() -> void:
 	await get_tree().process_frame
 	var client_settings := client.get_node_or_null("%MatchSettings") as Control
 	var client_row := client.get_node_or_null("%WeaponRow") as Control
+	var client_skins := client.get_node_or_null("%SkinRow") as Control
 	var client_count := client.get_node_or_null("%PlayerCount") as Label
 	var client_list := client.get_node_or_null("%Scroll") as Control
 	if client_settings == null or client_row == null or client_count == null \
@@ -420,6 +631,8 @@ func _run_lobby() -> void:
 		_check("a client is not shown the config at all",
 			client_settings.visible, false)
 		_check("but still gets the weapon strip", client_row.visible, true)
+		_check("and the skin strip with it",
+			client_skins != null and client_skins.visible, true)
 		_check("and still gets the roster count", client_count.visible, true)
 		_check("folded, exactly as the host's is", client_list.visible, false)
 	client.queue_free()
@@ -539,3 +752,130 @@ func _carry_pose(bog: Bog) -> String:
 		if state == "w%d" % i:
 			return Loadout.CARRY_CLIPS[i]
 	return "<%s>" % state
+
+
+## One swatch off the skin strip. The strip is built in `Skins.all()` order, so
+## a skin index is a child index -- which is also what makes "only one is lit" a
+## thing this file can ask.
+func _skin_tile(strip: HBoxContainer, skin: int) -> Button:
+	return strip.get_child(skin) as Button
+
+
+## The texture a Bog's body is actually drawn with, read off the material the
+## renderer will use rather than off whatever was handed to `wear_skin` -- the
+## rule `tools/team_tint.gd` reads a tint by, and for its reason: what is
+## asserted has to be what ends up on the screen.
+func _worn(bog: Bog) -> Variant:
+	if bog == null or bog.body_mesh == null:
+		return "<no body>"
+	var material := bog.body_mesh.get_active_material(0) as BaseMaterial3D
+	if material == null:
+		return "<not a standard material>"
+	return material.albedo_texture
+
+
+## Whether every team is in a different body. The invariant the whole Teams half
+## rests on, asked of the array rather than of the path that maintains it.
+func _skins_are_unique() -> bool:
+	var seen := {}
+	for team in Net.config.team_count:
+		var skin := Net.team_skin(team)
+		if seen.has(skin):
+			return false
+		seen[skin] = true
+	return true
+
+
+## Where the ring's ceiling is, in base-viewport pixels: the top edge of the
+## highest nameplate and the top of the highest head, projected through the
+## backdrop's own camera.
+##
+## Projected rather than guessed. The strip is laid out in the scene at fixed
+## offsets and the ring is laid out in 3D at a distance that depends on how many
+## Bogs are in it, so the only place the two are comparable is the screen, and
+## the only honest way to compare them is to ask the camera.
+func _ring_ceiling(ring: BogBackdrop) -> Dictionary:
+	var camera := ring.get("_camera") as Camera3D
+	var bogs: Array = ring.get("_bogs")
+	var plate_top := INF
+	var head_top := INF
+	var counted := 0
+	for bog: Bog in bogs:
+		if not bog.visible:
+			continue
+		counted += 1
+		if bog.body_mesh != null:
+			head_top = minf(head_top, _screen_top(camera, bog.body_mesh))
+		var plate := bog.get_node_or_null("Nameplate")
+		if plate == null:
+			continue
+		for node: Node in plate.find_children("", "Label3D", true, false):
+			plate_top = minf(plate_top, _label_top(camera, node as Label3D))
+	return {"plate": plate_top, "head": head_top, "bogs": counted}
+
+
+## The top edge of a nameplate, in base-viewport rows.
+##
+## **Not `get_aabb()`.** A billboarded `Label3D` reports a *cube* — every axis
+## the length of the text's diagonal, so that culling is right from any angle —
+## which for a long name puts its "top" 18 cm above where any ink is and would
+## have this check measuring a box nobody can see. The text's own world height
+## is `font_size * pixel_size` (`Nameplate`'s header says as much: about 0.21 m),
+## centred on the node, with the outline standing off it. That is the edge a
+## player sees, so that is the edge the strip has to clear.
+func _label_top(camera: Camera3D, label: Label3D) -> float:
+	if camera == null or label == null:
+		return INF
+	var half := (label.font_size * 0.5 + label.outline_size) * label.pixel_size
+	return _project(camera, label.global_position + Vector3.UP * half).y
+
+
+## The topmost row of the **base viewport** this instance covers: every corner
+## of its world-space box through the camera, smallest y wins (screen y grows
+## downward).
+##
+## The projection is built here rather than taken from
+## `Camera3D.unproject_position`, and that is not fussiness. `unproject_position`
+## answers in the pixels of the window the harness happens to have, and a
+## headless run has a **1600x1600** one — so the honest-looking call returns a
+## number in a viewport that does not exist and that nothing in the scene is
+## laid out against. The row's offsets are in base-viewport units, so the ring
+## has to be measured in them too, whatever window is open.
+func _screen_top(camera: Camera3D, what: VisualInstance3D) -> float:
+	if camera == null or what == null:
+		return INF
+	var box := what.get_aabb()
+	var to_world := what.global_transform
+	var top := INF
+	for corner in 8:
+		top = minf(top, _project(camera, to_world * box.get_endpoint(corner)).y)
+	return top
+
+
+## The viewport every `Control` offset in this project is written in.
+func _base_viewport() -> Vector2:
+	return Vector2(
+		float(ProjectSettings.get_setting("display/window/size/viewport_width", 1600)),
+		float(ProjectSettings.get_setting("display/window/size/viewport_height", 900)))
+
+
+## One world point in base-viewport pixels.
+##
+## The projection is built here rather than taken from
+## `Camera3D.unproject_position`, and that is not fussiness. `unproject_position`
+## answers in the pixels of the window the harness happens to have, and a
+## headless run has a **1600x1600** one -- so the honest-looking call returns a
+## number in a viewport that does not exist and that nothing in the scene is
+## laid out against. Every `Control` offset in this project is written in base
+## viewport units, so the ring has to be measured in them too, whatever window
+## is open.
+func _project(camera: Camera3D, point: Vector3) -> Vector2:
+	var base := _base_viewport()
+	var projection := Projection.create_perspective(camera.fov, base.x / base.y,
+		camera.near, camera.far, camera.keep_aspect == Camera3D.KEEP_WIDTH)
+	var view := camera.global_transform.affine_inverse() * point
+	var clip := projection * Vector4(view.x, view.y, view.z, 1.0)
+	if clip.w <= 0.0:
+		return Vector2(INF, INF)  # behind the lens; it is on nobody's screen
+	return Vector2((clip.x / clip.w * 0.5 + 0.5) * base.x,
+		(0.5 - clip.y / clip.w * 0.5) * base.y)

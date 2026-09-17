@@ -17,6 +17,11 @@ const DEFAULTS := {
 	# for when it next joins somewhere, and the roster the host keeps is the
 	# only authority on what it actually got.
 	"weapon": 0,
+	# The skin last picked in a **free-for-all** lobby, as a `Skins` index.
+	# The weapon's neighbour and for the weapon's reason. Free-for-all only:
+	# a skin picked in Teams belongs to the team rather than to the player, so
+	# carrying it to the next lobby would be carrying somebody else's shirt.
+	"skin": 0,
 	# network — the playit.gg tunnel address this machine hands out when it
 	# hosts, as `host:port`. Blank means "use whatever interface I am on", which
 	# is the LAN/Tailscale behaviour and the right default for everyone who is
@@ -85,6 +90,14 @@ func sanitized_player_name() -> String:
 ## rather than as an index into nothing.
 func chosen_weapon() -> int:
 	return Loadout.sanitize(get_value("weapon"))
+
+
+## The free-for-all skin this machine last picked, as a `Skins` index.
+## `chosen_weapon`'s twin, sanitized here for the same reason: a `settings.cfg`
+## written by a build with more skins in it comes back as the plain body rather
+## than as an index into nothing.
+func chosen_skin() -> int:
+	return Skins.sanitize(get_value("skin"))
 
 
 func load_from_disk() -> void:

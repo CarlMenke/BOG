@@ -51,3 +51,52 @@ things: geometry that fits the sculpt, weights against `art/bog/BOG.fbx`'s
 rest pose, and a `Skin` with binds named after the bones. A mesh that arrives
 already skinned to a Mixamo rig (its bones are `mixamorig:*`, the colon
 becomes an underscore on import) binds without any of that.
+
+## Which skins a player can pick
+
+Not all of them, and the list is not this directory. `scripts/game/skins.gd`
+(`Skins.NAMES`) is the pickable set, in the order the lobby's strip shows it:
+
+    bog  bogina  boo  clank  crag  gilt  glub  gum
+    muck  rime  roar  slag  toad  void
+
+Fourteen: the thirteen recolours plus **`bog`, the plain body**, which is a
+skin called "no texture at all" and is the default. `art/skins/bog/` is a folder
+like the rest and holds a README and a thumb and nothing else;
+`Skins.texture_of` answers `null` for it, which is `Bog.wear_skin`'s own word
+for "put the imported texture back".
+
+The two folders that are **not** pickable are not oversights:
+
+- `example/` is D-100's worked example of *how a recolour is made*, not a skin
+  anyone wears.
+- `elder/` is a garment, and it is worn by being the Elder (D-038). A robe is
+  not a body, and the picker is a strip of bodies.
+
+`NAMES` is **appended to, never reordered**: the index is what travels on the
+wire, sits in a roster row and sits in `Net.team_skins`, so moving a name would
+silently put one player — or one whole team — in somebody else's body.
+
+## Every skin has a thumb
+
+    art/skins/<name>/thumb.png    128², head and shoulders, over `Idle`
+
+The tile the lobby's picker draws. Rendered, never painted, and reproducible:
+
+    "$GODOT" --path . --resolution 512x512 --script tools/skin_thumbs.gd
+    "$GODOT" --path . --resolution 512x512 --script tools/skin_thumbs.gd -- muck
+    "$GODOT" --headless --path . --import          # then let Godot see them
+
+`tools/skin_thumbs.gd` stands one BOG in `Idle`, asks the skeleton where
+`mixamorig_Head` is, puts an orthographic camera in front of it with a fixed
+extent in metres and photographs the body once per skin — so the crop is the
+camera rather than a rectangle somebody dragged, every tile is framed
+identically by construction, and a re-rig re-aims it instead of going stale.
+Not a step in `tools/extract_skins.py`: that is Python and Pillow and never
+opens Godot, and a thumb is a *render* through the game's own importer,
+material and lights. Run `extract_skins.py` when a download changes, and this
+when the picker's look does.
+
+**A new skin is four things**: the folder, its `basecolor.png`, its `thumb.png`,
+and its name appended to `Skins.NAMES`. Miss the last and nothing can pick it;
+miss the thumb and its tile is an empty square.

@@ -589,7 +589,16 @@ func wear_skin(texture: Texture2D) -> void:
 	if _tint_material != null:
 		_tint_material.set_shader_parameter("albedo_texture",
 			texture if texture != null else (body_mesh.mesh.surface_get_material(0) as BaseMaterial3D).albedo_texture)
-	if body_mesh.get_surface_override_material(0) != _tint_material:
+	# Put the skin on unless the body is currently drawn *through the tint*, in
+	# which case the parameter written above is already the whole of the change.
+	#
+	# The `_tint_material != null` half is load-bearing and was missing until
+	# this call had a caller (D-100 shipped `wear_skin` with nobody using it):
+	# on a Bog that has never been tinted both sides of the comparison are
+	# `null`, the guard read "the override is the tint material", and the first
+	# skin a lobby ever put on a body was silently dropped.
+	if _tint_material == null \
+			or body_mesh.get_surface_override_material(0) != _tint_material:
 		body_mesh.set_surface_override_material(0, _skin_material)
 
 

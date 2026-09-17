@@ -53,7 +53,7 @@ theme = ExtResource("3_theme")
 layout_mode = 1
 anchors_preset = 10
 anchor_right = 1.0
-offset_bottom = 150.0
+offset_bottom = 186.0
 grow_horizontal = 2
 mouse_filter = 2
 texture = SubResource("GradientTexture2D_top")
@@ -219,9 +219,9 @@ layout_mode = 1
 anchors_preset = 10
 anchor_right = 1.0
 offset_left = 56.0
-offset_top = 44.0
+offset_top = 10.0
 offset_right = -56.0
-offset_bottom = 144.0
+offset_bottom = 115.0
 grow_horizontal = 2
 theme_override_constants/separation = 4
 alignment = 2
@@ -238,6 +238,33 @@ layout_mode = 2
 theme_type_variation = &"SmallLabel"
 horizontal_alignment = 1
 text = ""
+
+[node name="SkinRow" type="HBoxContainer" parent="UI/Root"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = 56.0
+offset_top = 119.0
+offset_right = -56.0
+offset_bottom = 159.0
+grow_horizontal = 2
+alignment = 1
+theme_override_constants/separation = 14
+
+[node name="SkinCaption" type="Label" parent="UI/Root/SkinRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+theme_type_variation = &"SectionLabel"
+vertical_alignment = 1
+text = ""
+
+[node name="SkinPicker" type="HBoxContainer" parent="UI/Root/SkinRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+theme_override_constants/separation = 4
 
 [node name="Footer" type="HBoxContainer" parent="UI/Root"]
 layout_mode = 1
