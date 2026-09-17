@@ -7,7 +7,7 @@ extends Node
 ##
 ##   * the ENet peer and its lifecycle,
 ##   * the roster — who is here, what they are called, which team they are on,
-##     and which weapon they picked,
+##     which weapon they picked and which body they are wearing,
 ##   * lobby chat.
 ##
 ## Match rules, scoring and spawning live in `MatchState`. Keeping them apart
@@ -50,15 +50,44 @@ signal return_to_lobby_requested()
 ## The host wants the same match again, same roster, same settings.
 signal rematch_requested()
 
-## peer_id -> {name: String, team: int, ready: bool, weapon: int}
+## peer_id -> {name: String, team: int, ready: bool, weapon: int, skin: int}
 ##
 ## `weapon` is a `Loadout.Weapon` ordinal and is one more key here rather than a
 ## channel of its own (D-069). It has exactly `team`'s lifecycle — seeded by
 ## `_make_player`, changed by a request the host validates, carried on every
 ## rebroadcast, kept across a rematch and forgotten when the peer goes — which is
 ## the whole of why it needed no new plumbing.
+##
+## `skin` is the same key again, and it is **the free-for-all pick**: the body
+## this player wears when they are only answerable for their own. In Teams the
+## body comes from `team_skins` below instead, because there the skin belongs to
+## the team; this row keeps whatever the player last chose for themselves and
+## nothing reads it while Teams is on. `skin_for(peer_id)` is the one function
+## that knows which of the two is the answer, and every dresser calls it.
 var players: Dictionary = {}
 var config: MatchConfig = MatchConfig.new()
+
+## team index -> `Skins` index. Host-authoritative, rebroadcast whole beside the
+## roster and never diffed, exactly as `players` is (D-004).
+##
+## **Team state, not player state, so it is not a roster key.** Everyone on a
+## team wears the team's skin and any member of the team may change it, so there
+## is no one row it could sit on; a team that empties still holds its skin, the
+## way the lobby holds its teams across a match (D-048); and `_deal_random_teams`
+## shuffles *peers between teams*, so a skin living on a row would follow a
+## player onto a team that already had one and two teams would come out of Start
+## in the same body. An array indexed by team is the shape of the thing.
+##
+## **No two entries are ever equal.** That is the rule the whole feature rests
+## on — a skin is a team's identity in Teams, and an identity two teams share is
+## not one — and it is enforced in exactly one place, `_request_skin`, with
+## `_seed_team_skins` responsible for never *starting* from a collision.
+##
+## Short or empty is legal and means "not told yet": `team_skin` answers out of
+## `Skins.default_for_team` past the end, so a client that has the roster but
+## not yet a deal for a team the host has just created still draws something
+## sane rather than an index error.
+var team_skins: Array[int] = []
 
 var is_host: bool = false
 var in_session: bool = false
@@ -125,7 +154,8 @@ func host_lobby(port: int = DEFAULT_PORT) -> bool:
 	_resolve_public_address()
 
 	players = {1: _make_player(Settings.sanitized_player_name(), 0,
-		Settings.chosen_weapon())}
+		Settings.chosen_weapon(), Settings.chosen_skin())}
+	_seed_team_skins()
 	roster_changed.emit()
 	joined_lobby.emit()
 	return true
@@ -152,7 +182,8 @@ func start_offline() -> void:
 	config = MatchConfig.new()
 
 	players = {1: _make_player(Settings.sanitized_player_name(), 0,
-		Settings.chosen_weapon())}
+		Settings.chosen_weapon(), Settings.chosen_skin())}
+	_seed_team_skins()
 	roster_changed.emit()
 	joined_lobby.emit()
 
@@ -206,6 +237,10 @@ func leave_lobby(reason: Leave = Leave.LOCAL_REQUEST, message: String = "",
 	match_running = false
 	_clear_public_address()
 	players.clear()
+	# The teams' bodies go with the lobby they belonged to. A lobby's skins are
+	# the lobby's, like its teams: the *player's* own pick is the one thing that
+	# survives, and it survives in `Settings` rather than here.
+	team_skins.clear()
 	roster_changed.emit()
 	if announce and was_in_session:
 		left_lobby.emit(reason, message)
@@ -244,6 +279,58 @@ func player_team(peer_id: int) -> int:
 func player_weapon(peer_id: int) -> int:
 	var info: Dictionary = players.get(peer_id, {})
 	return Loadout.sanitize(info.get("weapon", Loadout.DEFAULT))
+
+
+## The skin this player picked **for themselves**, as a `Skins` index.
+##
+## `player_weapon`'s shape exactly, defaulted `get` and all, and for its reasons:
+## a roster row written by a harness that predates this has no `skin` key and
+## must read as the plain body, and so must a row that arrived carrying nonsense.
+##
+## This is not "which body is this Bog wearing" — in Teams that is the team's,
+## not this row's. Ask `skin_for`.
+func player_skin(peer_id: int) -> int:
+	var info: Dictionary = players.get(peer_id, {})
+	return Skins.sanitize(info.get("skin", Skins.DEFAULT))
+
+
+## The skin `team` wears, as a `Skins` index.
+##
+## Total, on purpose: a team past the end of what the host has broadcast — a
+## client holding a roster but not yet a `team_skins` for a team the host has
+## just created — gets the default that team would have been seeded with, which
+## is the same answer it is about to be told. `TEAM_NONE` is the plain body.
+func team_skin(team: int) -> int:
+	if team < 0:
+		return Skins.DEFAULT
+	if team < team_skins.size():
+		return Skins.sanitize(team_skins[team])
+	return Skins.default_for_team(team)
+
+
+## Whether the team column means a body right now.
+##
+## In the lobby under random teams it does not: whatever the rows hold is
+## overwritten at Start (D-048), so dressing the ring out of it would show a
+## line-up nobody is going to play in — those Bogs wear their own free-for-all
+## skins instead and the picker says "Your skin", exactly as the team row says
+## "Random" in place of its buttons. By the time the match is running the deal
+## has happened and the teams are real, which is what `match_running` adds.
+func teams_decided() -> bool:
+	if config.mode != MatchConfig.Mode.TEAMS:
+		return false
+	return match_running or not config.random_teams
+
+
+## Which body this player is wearing, whoever chose it. **The one call every
+## dresser makes** — `BogBackdrop._apply_slot`, `MatchState._create_bog` and the
+## lobby's own strip all ask this rather than deciding for themselves, so the
+## ring, the arena and the lit tile cannot disagree about what a player looks
+## like.
+func skin_for(peer_id: int) -> int:
+	if teams_decided():
+		return team_skin(player_team(peer_id))
+	return player_skin(peer_id)
 
 
 func is_ready(peer_id: int) -> bool:
@@ -285,9 +372,38 @@ func can_start_match() -> bool:
 
 
 func _make_player(display_name: String, team: int,
-		weapon: int = Loadout.DEFAULT) -> Dictionary:
+		weapon: int = Loadout.DEFAULT, skin: int = Skins.DEFAULT) -> Dictionary:
 	return {"name": display_name, "team": team, "ready": false,
-		"weapon": Loadout.sanitize(weapon)}
+		"weapon": Loadout.sanitize(weapon), "skin": Skins.sanitize(skin)}
+
+
+## Host only. Give every team a skin, and **no two teams the same one**.
+##
+## Called wherever the set of teams can change — opening a session, and any
+## config change that moves `team_count` — rather than lazily on read, because
+## the array is a thing the host broadcasts and a lazy seed would mean the host
+## and a client that read at different moments disagreeing about a default.
+##
+## What a team already has is kept. A team that has nothing yet takes
+## `Skins.default_for_team`, so team 0 is the plain body, team 1 is the first
+## name in the list and so on — teams differ at once, which is the whole point
+## of a default here. A collision (two teams already holding one, which only a
+## roster from an older build could produce) is broken by walking the list for a
+## free name; the walk is bounded by the list's own length so it cannot spin
+## when there are somehow more teams than skins.
+func _seed_team_skins() -> void:
+	var seeded: Array[int] = []
+	var taken := {}
+	for team in maxi(1, config.team_count):
+		var want := Skins.sanitize(team_skins[team]) if team < team_skins.size() \
+			else Skins.default_for_team(team)
+		for _tries in Skins.NAMES.size():
+			if not taken.has(want):
+				break
+			want = (want + 1) % Skins.NAMES.size()
+		taken[want] = true
+		seeded.append(want)
+	team_skins = seeded
 
 
 ## Put the next joiner on whichever team is smallest, so lobbies self-balance.
@@ -403,12 +519,13 @@ func _announce_departure(peer_id: int) -> void:
 
 func _on_connected_to_server() -> void:
 	_cancel_connect_timer()
-	# The weapon rides in with the name rather than following it as a second
-	# request, so a rejoining player is never on the roster as a spear for a
-	# round trip (D-069). Both are *asked for* and neither is believed: the host
-	# uniquifies the one and sanitizes the other.
+	# The weapon and the free-for-all skin ride in with the name rather than
+	# following it as two more requests, so a rejoining player is never on the
+	# roster as a plain spear-carrier for a round trip (D-069). All three are
+	# *asked for* and none is believed: the host uniquifies the first and
+	# sanitizes the other two.
 	_request_join.rpc_id(1, Settings.sanitized_player_name(),
-		Settings.chosen_weapon())
+		Settings.chosen_weapon(), Settings.chosen_skin())
 
 
 func _on_connection_failed() -> void:
@@ -436,12 +553,20 @@ func _cancel_connect_timer() -> void:
 
 # --------------------------------------------------------------- transfer ---
 
+## The roster, the config and the team skins, whole, in one reliable call.
+##
+## `team_skins` rides along rather than getting a broadcast of its own for the
+## reason D-069 gives about the weapon and D-048 about the deal: one packet
+## cannot arrive out of order with itself, so every peer has a team's body at
+## exactly the moment it has that team's members. A trailing default keeps the
+## signature tolerant of a caller that has none to send.
 func _broadcast_roster() -> void:
-	_sync_roster.rpc(players, config.to_dict())
+	_sync_roster.rpc(players, config.to_dict(), team_skins)
 
 
 @rpc("any_peer", "call_remote", "reliable")
-func _request_join(desired_name: String, weapon: int = Loadout.DEFAULT) -> void:
+func _request_join(desired_name: String, weapon: int = Loadout.DEFAULT,
+		skin: int = Skins.DEFAULT) -> void:
 	if not is_host:
 		return
 	var peer_id := multiplayer.get_remote_sender_id()
@@ -449,16 +574,24 @@ func _request_join(desired_name: String, weapon: int = Loadout.DEFAULT) -> void:
 		_reject.rpc_id(peer_id, Leave.LOBBY_FULL, "This lobby is full.")
 		return
 	var clean := _unique_name(sanitize_name(desired_name), peer_id)
-	players[peer_id] = _make_player(clean, _smallest_team(), weapon)
+	players[peer_id] = _make_player(clean, _smallest_team(), weapon, skin)
 	_broadcast_roster()
 	roster_changed.emit()
 
 
 @rpc("authority", "call_remote", "reliable")
-func _sync_roster(roster: Dictionary, config_data: Dictionary) -> void:
+func _sync_roster(roster: Dictionary, config_data: Dictionary,
+		skins: Array = []) -> void:
 	var was_empty := players.is_empty()
 	players = roster
 	config.apply_dict(config_data)
+	# Sanitized on the way in, the same as every other thing the host says:
+	# `team_skins` is typed `Array[int]` and what lands here is a bare `Array`
+	# off the wire, so this is also the assignment that makes the type true.
+	var clean: Array[int] = []
+	for value: Variant in skins:
+		clean.append(Skins.sanitize(value))
+	team_skins = clean
 	roster_changed.emit()
 	config_changed.emit()
 	if was_empty and players.has(local_id()):
@@ -578,6 +711,71 @@ func _request_weapon(weapon: int) -> void:
 	roster_changed.emit()
 
 
+## Ask the host for a skin.
+##
+## `set_weapon`'s twin, with one difference that is the whole feature: **what
+## the request changes depends on the mode.** In free-for-all it is your own
+## row, the way a weapon is. In Teams it is your *team's* entry in `team_skins`,
+## because everyone on the team wears it and any member of the team may change
+## it — so the same button on the same strip is "dress me" in one mode and
+## "dress us" in the other, which is what the caption under the strip is there
+## to say out loud.
+##
+## Only the free-for-all pick is written through to `Settings`. A team's skin is
+## the team's, and bringing it to the next lobby would be bringing somebody
+## else's shirt.
+func set_skin(skin: int) -> void:
+	if not teams_decided():
+		Settings.set_value("skin", Skins.sanitize(skin))
+	if not in_session:
+		return
+	if is_host:
+		_request_skin(skin)
+	else:
+		_request_skin.rpc_id(1, skin)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_skin(skin: int) -> void:
+	if not is_host:
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	if peer_id == 0:
+		peer_id = 1
+	if not players.has(peer_id):
+		return
+	# Locked at Start, exactly as the weapon is and for exactly its reason
+	# (D-069): the body a player walks into the arena wearing must be the body
+	# they were looking at when they readied up.
+	if match_running:
+		return
+	var want := Skins.sanitize(skin)
+	if not teams_decided():
+		players[peer_id]["skin"] = want
+		_broadcast_roster()
+		roster_changed.emit()
+		return
+
+	# **Two teams can never wear the same skin**, and this is the one place that
+	# is true. The picker already draws a skin another team holds as a disabled
+	# tile with that team's colour on its rim, so in the ordinary case nobody
+	# ever sends this; what arrives here is a client on a stale roster — it
+	# pressed a tile in the half-second before somebody else's pick landed — or
+	# one that is lying. Both get the same answer, which is silence and no
+	# broadcast: the roster they already have is still true, and their strip
+	# redraws with the tile disabled on the next change.
+	var team := player_team(peer_id)
+	if team < 0 or team >= config.team_count:
+		return
+	_seed_team_skins()
+	for other in team_skins.size():
+		if other != team and team_skins[other] == want:
+			return
+	team_skins[team] = want
+	_broadcast_roster()
+	roster_changed.emit()
+
+
 func set_name_local(new_name: String) -> void:
 	Settings.set_value("player_name", new_name)
 	if not in_session:
@@ -613,6 +811,12 @@ func update_config(new_config: MatchConfig) -> void:
 			var team: int = players[peer_id].get("team", 0)
 			if team < 0 or team >= config.team_count:
 				players[peer_id]["team"] = _smallest_team()
+	# ...and it can create one that has never had a body. Seeded here rather
+	# than on read so that the host decides the default and everybody is told
+	# it, and after the team fix-up above so a team about to receive a stranded
+	# player already has something to wear. A team that keeps its number keeps
+	# its skin across the change.
+	_seed_team_skins()
 	_broadcast_roster()
 	roster_changed.emit()
 	config_changed.emit()
