@@ -1,8 +1,16 @@
 class_name ChatPanel
 extends PanelContainer
-## Lobby and in-match chat (PLAN 6.7). One scene, used in both places, because
-## the only thing that differs between them is whether the input box is always
-## there or only while you are typing.
+## Lobby and in-match chat (PLAN 6.7). One scene, used in three places' worth of
+## shapes, because the only thing that differs between them is **which half is
+## put away when nobody is talking**:
+##
+##   plain           — heading, log and input, all of it, all the time.
+##   `compact`       — in a match: the log is the overlay and the input appears
+##                     when you press the chat key (the HUD drives it).
+##   `reveal_on_focus` — in the lobby: the input is the whole panel and the
+##                     heading and log appear while the caret is in it.
+##
+## The two flags are opposite halves of one idea and are never both set.
 ##
 ## The log is a single `RichTextLabel` rather than a list of `Label` nodes. It
 ## gets wrapping, scrollback, per-name colour and "stay pinned to the bottom
@@ -20,8 +28,20 @@ signal submitted(text: String)
 const MAX_LINES := 120
 
 ## In-match, chat is a quiet overlay that only takes the keyboard while you are
-## actually typing. In the lobby it is a panel with a permanent input box.
+## actually typing.
 @export var compact: bool = false
+
+## In the lobby, the panel is **a line of input until somebody means to use
+## it**: the heading and the log appear when the caret arrives and go away when
+## it leaves. A lobby is read at a glance and a chat log nobody has written in
+## is a tall empty box in the third of the screen the ring is standing in.
+##
+## The state is the **caret**, not a boolean this file keeps beside it. Focus is
+## something the engine is already authoritative about — a click elsewhere, a
+## Tab, a `release_focus` from anywhere — and a second copy of it here would be
+## a copy that is wrong the first time somebody focuses the input by a route
+## this file did not think of.
+@export var reveal_on_focus: bool = false
 
 @onready var _log: RichTextLabel = %Log
 @onready var _input: LineEdit = %Input
@@ -39,8 +59,43 @@ func _ready() -> void:
 		_heading.visible = false
 		theme_type_variation = &"HudPanel"
 		set_input_visible(false)
+	elif reveal_on_focus:
+		_input.focus_entered.connect(_apply_reveal)
+		_input.focus_exited.connect(_apply_reveal)
+		_input.gui_input.connect(_on_input_gui_input)
+		_apply_reveal()
 	_hint.text = "%s to chat" % SettingsPanel.primary_key("chat")
 	_update_compact_skin()
+
+
+## Show or put away everything that is not the input box, from the one fact that
+## decides it. Called on both focus signals and once on load, and it is the only
+## place in this file that writes `visible` on the heading or the log.
+func _apply_reveal() -> void:
+	if not reveal_on_focus:
+		return
+	var open := _input.has_focus()
+	_heading.visible = open
+	_log.visible = open
+	# The log is the only child carrying `SIZE_EXPAND_FILL`, so it is the only
+	# reason this panel is ever tall. Hidden, a panel left on `SIZE_FILL` is a
+	# full-height glass box with a line edit at the top of it — which is the
+	# thing this mode exists to stop. Shrinking to the input is the other half
+	# of hiding the log, so the two are written on adjacent lines.
+	size_flags_vertical = Control.SIZE_FILL if open else Control.SIZE_SHRINK_END
+
+
+## Escape puts the caret down; it does not leave the lobby.
+##
+## Taken on the `LineEdit` rather than in the lobby's `_unhandled_input`,
+## because that is where the event is: a focused control sees a key press first,
+## and if this did not accept it the lobby's own Escape handler would read
+## somebody abandoning a half-typed message as somebody leaving the session.
+func _on_input_gui_input(event: InputEvent) -> void:
+	if not event.is_action_pressed("pause"):
+		return
+	_input.accept_event()
+	_input.release_focus()
 
 
 # ------------------------------------------------------------------ writing ---
@@ -86,10 +141,23 @@ func _on_submitted(text: String) -> void:
 	var clean := text.strip_edges()
 	_input.clear()
 	if clean.is_empty():
-		if compact:
-			set_input_visible(false)
+		_close_after_send()
 		return
 	submitted.emit(clean)
+	_close_after_send()
+
+
+## Sending ends a typing session in a match and does not in the lobby, and the
+## difference is which half of the panel is the one that came and went.
+##
+## In a match the log is the thing that is always there and the input arrived
+## with the chat key, so sending puts the input away and hands the keyboard back
+## to the Bog. In the lobby it is the other way round: the input is what is
+## always there and the *log* arrived with the caret -- so closing on send would
+## fold the log away over the top of the line that had just been sent, and the
+## one person certain to want to watch it land is the person who wrote it. The
+## caret stays. Escape and a click elsewhere are what put it down.
+func _close_after_send() -> void:
 	if compact:
 		set_input_visible(false)
 

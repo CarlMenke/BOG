@@ -14,7 +14,7 @@ extends Node
 ##
 ## Modes: menu, menu_join, menu_notice, settings, settings_network,
 ##        lobby, lobby_full, lobby_teams, lobby_client, lobby_map, lobby_capture,
-##        lobby_weapons, lobby_feel, widths, capture_config.
+##        lobby_weapons, lobby_chat, lobby_feel, widths, capture_config.
 ##
 ## `widths` and `capture_config` print a verdict and are in the gate (D-076).
 ## Everything else is a photograph.
@@ -67,9 +67,15 @@ func _ready() -> void:
 		"lobby_map", "lobby_capture":
 			_open_lobby(3, _mode == "lobby_capture", true)
 		"lobby_weapons":
-			# Three Bogs, three weapons, and the panels folded away so the ring
-			# and the strip are what the shot is of (D-069).
+			# Three Bogs and three weapons, so the strip and the ring above it
+			# carry one of each. Nothing is folded away for it any more — the
+			# strip is on in every lobby shot now, and this mode is what makes
+			# sure all three of its buttons are represented in the ring.
 			_open_lobby(2, false, true)
+		"lobby_chat":
+			# The one panel whose open state is not a stored boolean: the chat
+			# unfolds while the caret is in its input box.
+			_open_lobby(4, false, true)
 		"lobby_feel", "widths", "capture_config":
 			_open_lobby(3, false, true)
 		_:
@@ -161,26 +167,23 @@ func _open_lobby(extra: int, teams: bool, as_host: bool) -> void:
 	elif _mode == "lobby_capture":
 		await _show_capture_rules(lobby)
 	elif _mode == "lobby_weapons":
-		await _collapse_to_weapons(lobby)
+		await _dress_weapons()
+	elif _mode == "lobby_chat":
+		await _open_chat(lobby)
 	elif _mode == "lobby_feel" or _mode == "widths":
 		await _worst_labels(lobby)
 	elif _mode == "capture_config":
 		await _capture_config(lobby)
 
 
-## The collapsed lobby: panels folded away, the ring in the open, the strip under
-## it (D-069).
+## All three weapons at once, in the strip and in the ring above it.
 ##
-## The real button, pressed, rather than reaching in and setting `_picking`. The
-## collapse is one boolean and one refresh, so a tool that set the boolean would
-## prove nothing the boolean could not prove about itself — pressing the button
-## is what proves the button is wired to the boolean.
-func _collapse_to_weapons(lobby: Node) -> void:
-	var button := lobby.get_node_or_null("%CollapseButton") as Button
-	if button == null:
-		push_warning("ui_range: the lobby has no collapse button")
-		return
-	button.pressed.emit()
+## This used to press the header's collapse button and photograph the picker
+## surface D-069 made. There is no such surface: the strip is always on, so what
+## is left of the mode is the part that was always doing the work — making sure
+## the three buttons and the three pairs of hands behind them are not all
+## carrying the same thing.
+func _dress_weapons() -> void:
 	# The local player takes the third weapon, so the shot carries all three at
 	# once: the two stand-ins have a bow and a sword between them.
 	#
@@ -191,6 +194,24 @@ func _collapse_to_weapons(lobby: Node) -> void:
 	# weapon the next real game starts with.
 	Net.players[1]["weapon"] = Loadout.Weapon.SPEAR
 	Net.roster_changed.emit()
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+
+## The chat panel with the caret in it, which is the only way it is ever more
+## than a line of input.
+##
+## Focus, not a flag: `ChatPanel` reads `has_focus()` rather than keeping a
+## boolean, so a tool that set a boolean would be photographing a state the
+## shipping panel cannot be in.
+func _open_chat(lobby: Node) -> void:
+	var chat := lobby.get_node_or_null("%Chat") as ChatPanel
+	var input := chat.find_child("Input", true, false) as LineEdit if chat else null
+	if input == null:
+		push_warning("ui_range: the lobby chat has no input box")
+		return
+	input.grab_focus()
+	input.text = "who has the sword"
 	await get_tree().process_frame
 	await get_tree().process_frame
 
