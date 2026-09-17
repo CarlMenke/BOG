@@ -68,6 +68,23 @@ const SHOW_EMPTY_SLOTS := true
 ## add" move D-076 spent a page arguing against.
 const WEAPON_ICON := 56
 
+## The thumbnail on a skin tile, and the tile it sits in.
+##
+## Fourteen tiles have to fit the 1488 px between the margins at the base
+## viewport, which is 106 px each including the 6 px between them. 84 leaves
+## room and keeps the strip narrower than the ring behind it rather than
+## running out to both edges of the screen; 64 of thumbnail inside it is the
+## largest head that leaves a line for the name underneath in a 122 px band.
+##
+## Measured, not chosen: at 84 the fourteen tiles come to 1176 px of a possible
+## 1488, so **the strip does not scroll and must not have to**. A horizontally
+## scrolling strip was the fallback if they would not fit, and it would have put
+## some of the fourteen behind a gesture on the one screen where "what can I be?"
+## is the whole question being asked. A wider tile, or a great many more skins,
+## brings that fallback back.
+const SKIN_TILE := Vector2(84, 92)
+const SKIN_THUMB := 64
+
 ## The glyph on a fold toggle. Down means "this is open and pressing me shuts
 ## it"; right means the opposite. One pair, on all three toggles, because three
 ## panels that fold differently is three things to learn.
@@ -95,6 +112,9 @@ const FOLD_SHUT := "▸"
 @onready var _weapon_row: Control = %WeaponRow
 @onready var _weapon_picker: HBoxContainer = %WeaponPicker
 @onready var _weapon_blurb: Label = %WeaponBlurb
+@onready var _skin_row: Control = %SkinRow
+@onready var _skin_picker: HBoxContainer = %SkinPicker
+@onready var _skin_caption: Label = %SkinCaption
 
 ## The roster as it was on the previous refresh, so joins and leaves can be
 ## announced in chat. `Net` broadcasts the whole roster rather than a diff, so
@@ -183,6 +203,7 @@ func _refresh() -> void:
 	_rebuild_player_list()
 	_rebuild_team_picker()
 	_rebuild_weapon_picker()
+	_rebuild_skin_picker()
 	_refresh_invite()
 	_refresh_actions()
 	_refresh_surface()
@@ -201,6 +222,12 @@ func _backdrop_entries() -> Array:
 			# the weapon went into the roster row rather than into a local
 			# variable somewhere (D-069).
 			"weapon": Net.player_weapon(peer_id),
+			# And the body, from the same place and for the same reason — with
+			# the one difference that in Teams "the same place" is the *team's*
+			# entry rather than this row's, which is `Net.skin_for`'s whole job.
+			# The ring is where a team finds out what it looks like: one member
+			# presses a tile and four Bogs change together.
+			"skin": Net.skin_for(peer_id),
 		})
 	return entries
 
@@ -446,6 +473,171 @@ func _focus_pick() -> void:
 		if button != null and button.button_pressed and not button.disabled:
 			button.grab_focus()
 			return
+
+
+# -------------------------------------------------------------------- skins ---
+
+## One tile per skin, under the weapon strip, rebuilt from the roster the way
+## everything else on this screen is.
+##
+## **Which question the strip is asking depends on the mode**, and the caption
+## under it is there to say which. In free-for-all a tile changes *your* body and
+## is a weapon pick in every respect. In Teams it changes *your team's* body —
+## everyone on it, at once, and any member of the team may press it — because a
+## skin is what a team looks like across the island and that is not a thing one
+## player owns. The roster reads the same either way: `Net.skin_for` is the one
+## function that knows, and the ring behind the strip shows the answer.
+##
+## **A skin another team holds is a disabled tile with that team's colour on its
+## rim.** Two teams in one body is the single thing this feature exists to
+## prevent, and the host refuses the request — but a strip that let you press it
+## and then quietly did nothing would make the host look broken. So the rule is
+## drawn where it is about to be enforced, in the colour of the team enforcing
+## it, which also answers "who has the toad, then?" without a second control.
+##
+## **Pressing picks; focus does not**, which is the one place this strip parts
+## company with the weapon strip above it (D-069: "the Bog swaps weapons live as
+## you move through it"). Two reasons, and both are about what a pick costs. A
+## weapon is three buttons and your own hands; a skin is fourteen tiles, so
+## arrowing from one end to the other would be fourteen requests and fourteen
+## whole-roster broadcasts. And in Teams it is not your body being changed — the
+## arrow keys would repaint four teammates fourteen times on the way past. The
+## caret still reaches every tile and `ui_accept` still presses it, so nothing is
+## out of a keyboard's reach; it just has to be meant.
+func _rebuild_skin_picker() -> void:
+	_writing_picker = true
+	# Detached as well as freed, for `_rebuild_weapon_picker`'s reason: the focus
+	# hand-off below reads the children back immediately, and `queue_free` alone
+	# leaves the old tiles in `get_children()` until the end of the frame.
+	var had_focus := false
+	for child in _skin_picker.get_children():
+		had_focus = had_focus or (child as Control).has_focus()
+		_skin_picker.remove_child(child)
+		child.queue_free()
+
+	var teams := Net.teams_decided()
+	var my_team := Net.player_team(Net.local_id())
+	var mine := Net.skin_for(Net.local_id())
+	var locked := Net.match_running
+	for skin: int in Skins.all():
+		# Which team is standing on this skin, if it is not mine. `-1` is "free".
+		var held_by := -1
+		if teams:
+			for team in Net.config.team_count:
+				if team != my_team and Net.team_skin(team) == skin:
+					held_by = team
+					break
+		_skin_picker.add_child(_skin_tile(skin, skin == mine, held_by, locked))
+
+	if locked:
+		_skin_caption.text = "The skin is locked once the match starts."
+		_skin_caption.remove_theme_color_override("font_color")
+	elif teams:
+		# Whose body this row is changing, said in that team's own colour — the
+		# same colour as their stripe in the roster and their nameplates in the
+		# match, so "Team 2" here and "Team 2" out there are one thing.
+		_skin_caption.text = "TEAM %d'S SKIN — anyone on the team can change it" \
+			% (my_team + 1)
+		_skin_caption.add_theme_color_override("font_color",
+			UIPalette.team_colour(my_team))
+	else:
+		_skin_caption.text = "YOUR SKIN"
+		_skin_caption.remove_theme_color_override("font_color")
+
+	if had_focus:
+		_focus_skin()
+	_writing_picker = false
+
+
+## One tile: a thumbnail with its name under it, in a toggle button.
+##
+## The picture and the label are children rather than the button's own `icon`
+## and `text`, because a 64 px thumbnail stacked over an 11 px caption inside an
+## 84 px square is a layout, and `Button` gives one alignment for the pair. The
+## children take no mouse input at all, so the button underneath is still the
+## whole tile as far as a click, the caret and the theme are concerned.
+func _skin_tile(skin: int, chosen: bool, held_by: int, locked: bool) -> Button:
+	var tile := Button.new()
+	tile.toggle_mode = true
+	tile.button_pressed = chosen
+	tile.custom_minimum_size = SKIN_TILE
+	tile.disabled = locked or held_by >= 0
+	tile.tooltip_text = "Team %d has this one" % (held_by + 1) if held_by >= 0 \
+		else Skins.label(skin)
+	tile.pressed.connect(_on_skin_chosen.bind(skin))
+
+	var box := VBoxContainer.new()
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.set_anchors_preset(Control.PRESET_FULL_RECT)
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 2)
+	tile.add_child(box)
+
+	# The rim. A frame round the thumbnail rather than round the whole tile, so
+	# it cannot be confused with the button's own focus and pressed states — this
+	# says "somebody else's", and those say "yours" and "the caret is here".
+	var frame := PanelContainer.new()
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	if held_by >= 0:
+		var border := StyleBoxFlat.new()
+		border.bg_color = Color(0, 0, 0, 0)
+		border.set_border_width_all(2)
+		border.border_color = UIPalette.team_colour(held_by)
+		border.set_corner_radius_all(UIPalette.RADIUS)
+		frame.add_theme_stylebox_override("panel", border)
+	box.add_child(frame)
+
+	var picture := TextureRect.new()
+	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	picture.texture = Skins.thumb_of(skin)
+	picture.custom_minimum_size = Vector2(SKIN_THUMB, SKIN_THUMB)
+	picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	# Godot dims a disabled button's own text and nothing else, so a tile made of
+	# child controls would sit there at full brightness looking pressable. The
+	# picture is dimmed by hand, which is also the difference between "taken" and
+	# "locked": a held skin is dim behind a coloured rim, a locked one is just dim.
+	if tile.disabled:
+		picture.modulate = Color(1, 1, 1, 0.42)
+	frame.add_child(picture)
+
+	var caption := Label.new()
+	caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	caption.theme_type_variation = "TinyLabel"
+	caption.text = Skins.label(skin)
+	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	caption.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	if held_by >= 0:
+		caption.add_theme_color_override("font_color", UIPalette.team_colour(held_by))
+	box.add_child(caption)
+	return tile
+
+
+## Put the caret on the skin that is currently worn. `_focus_pick`'s twin, and
+## safe for the same reason — except that here `grab_focus` is not also a pick,
+## so this one is only about not dropping the caret through a rebuild.
+func _focus_skin() -> void:
+	for child in _skin_picker.get_children():
+		var button := child as Button
+		if button != null and button.button_pressed and not button.disabled:
+			button.grab_focus()
+			return
+
+
+## Ask for a skin — for yourself in free-for-all, for your team in Teams.
+##
+## `_on_weapon_chosen`'s two guards, plus nothing: the "you already have it"
+## guard is what keeps a rebuild's own `button_pressed` writes off the wire, and
+## a tile another team holds is disabled rather than checked here, because the
+## authority on that is the host and this screen only ever renders what came back
+## from it.
+func _on_skin_chosen(skin: int) -> void:
+	if _writing_picker or Net.match_running:
+		return
+	if skin == Net.skin_for(Net.local_id()):
+		return
+	Net.set_skin(skin)
 
 
 ## Lay out the stack: who is folded, and what a client is not shown at all.
