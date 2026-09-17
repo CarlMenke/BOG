@@ -55,6 +55,12 @@ assets/source/_rejected/
 # path — Downloads included — whenever the map is re-exported.
 assets/source/Rust/rust.glb
 
+# The Tripo retexture downloads the thirteen team skins are extracted from
+# (D-108): one .glb per skin, each a whole copy of the body, and the committed
+# thing is `art/skins/<name>/basecolor.png` that `tools/extract_skins.py` pulls
+# out of it. `assets/source/skins/README.md` says so.
+assets/source/skins/*/*.glb
+
 # ...and the other half of the same problem, at the other end of the pipeline.
 # `gltf/embedded_image_handling` is set to Extract, which is the right setting —
 # it gets each of the map's 51 textures its own `.import` and its own VRAM

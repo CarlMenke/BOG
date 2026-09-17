@@ -21,6 +21,18 @@ material (`resources/shaders/bog_team_tint.gdshader`) and the base colour
 texture is one of its inputs. `art/skins/example/` is the worked example
 (D-100): the body's own texture, re-hued, dropped in place.
 
+A recolour can also arrive from outside. Send the sculpt through Tripo with a
+retexture prompt that asks for the structure to stay put and what comes back
+is the same mesh in the same UV layout wearing a different paint job — a
+recolour by another route. `python tools/extract_skins.py` is the step between
+the download and the skin: it reads the `.glb` in
+`assets/source/skins/<NAME>/`, pulls the base-colour image out of the
+container, downsamples it to 2048² and writes `art/skins/<name>/basecolor.png`
+(D-108). The thirteen team skins are exactly that — `bogina`, `boo`, `clank`,
+`crag`, `gilt`, `glub`, `gum`, `muck`, `rime`, `roar`, `slag`, `toad` and
+`void` — so re-running the script rebuilds all thirteen, and the downloads are
+untracked source rather than anything the game loads.
+
 ## A clothing mesh
 
 A mesh bound to the body's skeleton **by bone name**, with its own `Skin`

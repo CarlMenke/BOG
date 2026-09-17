@@ -128,6 +128,10 @@ pieces fit together is `docs/ARCHITECTURE.md`.
 - [x] 8.6  Skins — a folder each, recolour and clothing examples, a README (**D-100**)
 - [x] 8.7  Retire the old path — Blender builds, packs and GLBs gone; `assets/source/`
            is the clips (**D-101**)
-- [ ] 8.8  Two clips only the user can fetch: a one-handed carry idle with the fist off
-           the body (D-099), and the Magic pack's `Standing Run Left` for a true lateral
-           strafe, with a `mirror_of` rule for its twin (D-098)
+- [ ] 8.8  Two clips only the user can fetch. The one-handed carry idle with the fist off
+           the body (D-099) is **done**: it is `SpearCarry`, the spear's grip is
+           re-solved over it and its trunk clearance is a measurement again (**D-103**).
+           Still open: the Magic pack's `Standing Run Left` for a true lateral strafe,
+           with a `mirror_of` rule for its twin (D-098)
+- [ ] 8.9  Skins — a picker on a lobby roster row, so a player can wear one of the
+           thirteen team skins (**D-108**); in progress

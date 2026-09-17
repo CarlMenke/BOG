@@ -18,6 +18,9 @@ anims/           one animation-only .fbx per row of clips.json, fetched by
                  tools/clip_imports.sh writes. Never carries a mesh.
 anims/VERIFIED.md   per-clip length, hips travel and bob, as measured on the
                  first import (at root_scale 100; the pipeline runs at 180).
+props/ Rust/ Mushroom/ skins/   the raw folders the other pipelines read, each behind
+                 its own .gdignore (D-101); skins/ holds the Tripo retexture .glb
+                 downloads that tools/extract_skins.py turns into art/skins/ (D-108).
 ```
 
 The body, `art/bog/BOG.fbx`, is the sculpt as Mixamo auto-rigged it, downloaded

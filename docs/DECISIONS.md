@@ -12531,3 +12531,418 @@ path. `docs/STATUS.md` says the rebuild is done and what is left.
   `assets/source/`** to some `art/clips/`. The brief names the folder, the
   README in it is written for that path, and the raw folders are the odd
   ones out, not the clips.
+
+## D-102 — The body's texture and its `.import` are one pair, and the gate says so
+A checkout got a grey BOG. `art/bog/BOG_0.png` is extracted from
+`art/bog/BOG.fbx` on import — the embedded image is `BOG_basecolor.jpg` and
+Godot writes it out under the image's index, which is where the name comes
+from — and it is gitignored as 12 MB of derived file. Its companion
+`.import` was committed. A texture's `.import` carries a
+`generator_parameters/md5`, so on any tree that has the `.import` without the
+file the importer matches the md5, decides the extraction is already done and
+never runs it; the body then imports with `Image index '0' couldn't be
+loaded`, its material gets no albedo at all, and `bog_team_tint.gdshader`
+samples default white. A flat grey BOG, with nothing in the log once the
+first import has scrolled past — **D-095's second trap, shipped**. In a fresh
+worktree the effect is worse than grey: `BOG.fbx` fails to load outright and
+takes `bog.tscn`, `bog_ragdoll.gd` and `match_state.gd` down with it, so
+`preview_bog` renders an empty frame.
+
+They are derived together and they are ignored together; committing either
+one alone is the bug, so the `.import` leaves the index and joins the PNG in
+`.gitignore`. `tools/clip_check.gd` now fails if the body mesh's surface 0
+has a null `albedo_texture`, because every other check in this project passed
+on a grey BOG. The cure is **three passes** and the message says so: the
+extraction cannot feed the pass that runs it, so `--import` writes the PNG, a
+second `--import` imports it, and only then does deleting
+`.godot/imported/BOG.fbx-*` let a third pass build the material on a texture
+that loads.
+
+### Rejected
+
+- **Embedding the image** (64 MB uncompressed, D-095).
+- **Committing the PNG** (12 MB of derived file).
+
+## D-103 — The spear's carry is a pose built for the prop, and the bearing is the eye's to pick
+D-072 put the spear's carry on the Bog's own `Idle` because it was the only
+raised fist on disk, and D-099 wrote down what that cost: `BreathingIdle`
+rests the fist on the hip, so a shaft in it lies along the belly, and
+`preview_carry.SKIN_MIN` — the nearest skin vertex to the shaft — read
+**0.000** for all 288 candidates. It cannot tell a shaft *along* a belly from
+one *through* it, so it was set to 0 and stopped deciding, and D-099 said in
+writing what would give it meaning back: a carry clip that holds the fist
+away from the body, one row in `clips.json`.
+
+That row is `SpearCarry`, a one-handed ready idle with the fist up beside the
+head, and `Loadout.CARRY_CLIPS[0]` points at it. It is the same Mixamo motion
+as `CastIdle` — "Standing Idle Ready To Cast Spell", which the user fetched
+again by hand as the spear idle and which measures frame for frame identical,
+so the row carries `CastIdle`'s own id rather than being a `mixamo_by_hand`
+one — and it is the variant D-099 solved over and rejected at 0.031 m of
+trunk. It clears now because the grip was re-solved *under* it rather than
+inherited from a different pose. `SKIN_MIN` is D-074's **0.06** again, for
+the spear only, like `LEVEL_MAX` and `PALM_MAX` and for the same reason: the
+spear is the weapon whose shaft passes the body. The bow still hangs beside a
+thigh at 0.004 m on a pose nothing has changed, so its column is printed and
+decides nothing.
+
+**The grip was picked twice, and the first pick is the part worth
+recording.** The 192-candidate sweep over the new pose — 24 bearings by eight
+elevations — leaves sixteen grips clearing all three floors, every one of
+them at 25° of elevation or more, which is the pose talking: out of a fist
+beside the head, a shaft aimed level lies along the jaw. The best of them on
+margin is **+40° at −60°**: 0.226 m of ground, 0.128 m of trunk, never past
+20° of swing, ×1.50 of the tightest floor, better on every column than
+anything else in the sweep. On the sheet it is a stick held beside the head.
+−60° is two thirds of a right angle from where the Bog is looking, so the
+shaft crosses the face in every carried frame and the tip points back over
+the left shoulder. Three clearances cannot see that, and the clearances are
+the only things the solve scores. **A grip has a fourth requirement that is
+not a number, and it is the one the user asked for in D-072 — *"holding it up
+with one hand ready to throw"*.**
+
+So the band was re-swept where a javelin is actually carried: bearings within
+25° of straight forward at 5° steps, elevations 20 to 50 at 5° steps, **77
+candidates**, of which 21 clear all three floors and the lowest elevation
+that clears any forward bearing is +35°. Then the picture the numbers cannot
+take. `preview_carry -- candidates` renders three grips from the front and
+from the side over `SpearCarry`, `Walk` and `Run`, and asks the two questions
+no single camera in this file could: **does the shaft cross the head
+silhouette, and is the tip ahead of it.** Both in one frame, by lifting the
+side band into the air and yawing it a right angle rather than standing it
+behind the first — the camera is orthographic and dead in front, so a band
+further away renders exactly on top of the near one, which is the trap
+`_sheet`'s own comment found the hard way at an oblique angle. Feet off the
+floor is a lie this sheet can afford, because every clearance measured
+against the floor is measured in `-- measure` and not here.
+
+| grip | worst end | trunk | off level | margin | front | side |
+|---|---|---|---|---|---|---|
+| **+45° at +5°** | **+0.193 m** | **0.110 m** | **24°** | **×1.25** | clear | tip leads |
+| +40° at +10° | +0.174 m | 0.092 m | 21° | ×1.16 | clear | tip leads |
+| +35° at +15° | +0.163 m | 0.073 m | 23° | ×1.09 | crosses the face | tip leads |
+
+**+45° of elevation at +5° of bearing is taken**, the best margin of the two
+that pass both looks. The lowest elevation that clears is the one that fails,
+and it fails for the reason it was attractive: a shaft near level at head
+height is a shaft across the head, seen from in front. Ten degrees of
+elevation is what lifts it clear, and +5° of bearing points the tip where the
+Bog is looking while the butt trails back past the right shoulder into open
+air, which is the one direction out of that fist not occupied by the Bog. The
+shaft stands 24° up out of the fist at rest and reaches 24° off horizontal at
+worst over the whole set — the same number twice, and not a coincidence: with
+the tip forward, the swing this grip shows across the carried clips is the
+pelvis pitching under it rather than the shaft moving.
+
+`GRIP_ROTATION = (16.01, 0.00, 27.54)`, `GRIP_OFFSET = (0.3013, −0.4204,
+−0.1242)` derived. `GRIP_PALM` is untouched by either pick and that is a
+result: it is a point in the hand's own frame and the carry clip owns the
+whole hand chain, so a new pose moves the hand without moving anything inside
+it; the shaft passes **0.034 m** from the fist's centre against 0.066
+allowed. `CARD_ABOVE_FIST` becomes `CARD_ALONG_SHAFT` at **−0.22**: the card
+rides the shaft and is measured with the carry layer off because a letter
+disarms (D-035), and both new grips run the shaft out through the fingers,
+which point at the ground when the arm hangs. At +0.22 the card's lowest
+centre was 0.012 m with 0.198 m of letter underground; even at 0.00, in the
+fist itself, it was 14 mm short. Sliding it down-shaft puts the bottom of the
+letter **15.8 cm** up. The magnitude has survived three grips and only the
+sign has ever changed, which is a fact about the card and not about any of
+them.
+
+### Rejected
+
+- **+40° at −60°**, above — the margin leader, and a stick beside the head.
+- **The lowest elevation that clears** (+35° at +15°), which is the one the
+  "as near level as the pose allows" rule points at and which the front view
+  rules out.
+- **Loosening `SKIN_MIN` for the bow** so one threshold could serve all
+  three. The bow's 0.004 m is a bow resting against a leg, measured by a
+  number that could never tell that from a bow inside one, on a pose nothing
+  in this step changed.
+
+## D-104 — The spear's throw is its own clip, and it plays at the speed it was authored
+`Throw` was "Throwing An Object From A Standard Pose", a 2.20 s clip squeezed
+into 0.50 s of wind-up by a rate of 1.73. It is now a one-arm overhead throw
+fetched for the spear, `Throw-SpearThrowObject`, which replaces that row and
+that file — one clip per role (D-096).
+
+**The rate rule changes with it, and that is the decision: the throw plays at
+its authored speed so the wind-up reads.** `BogAnimator.THROW_RELEASE_TARGET`
+was a flat half second (D-063) and is now the clip's own `windup`-to-`release`
+window, capped by `THROW_RELEASE_MAX` at **0.9 s** — so `THROW_RATE` comes
+out at exactly 1.0 for any clip that winds up inside the cap, and only a
+slower one is hurried. This clip's window is **0.500 s**, which lands the
+release on D-063's half second arrived at from the clip rather than imposed
+on it.
+
+The markers come from `clip_events`' kinematics and four six-frame sheets
+(D-097). `windup` is **0.300**, the frame the arm turns and starts back and
+up. `release` is **0.800**, and deliberately not the raw clip's
+furthest-ahead-of-the-hips frame at 0.700: the throw is an upper-body layer
+and the composed arm is not the clip's arm, because the mask drops 20° of hip
+pitch. At 0.700 the composed hand is 0.042 m in front of the hips; at 0.800
+it is 0.219 m — 91 % of its furthest.
+
+`combat_range`'s `release` check changed with it, in its own tool. It
+asserted that the shaft appears within three ticks of the frame the composed
+arm is furthest forward; this clip has no such frame, because the throw's
+extension reaches 0.219 m and the follow-through — whose hip pitch the mask
+also drops, so the arm hangs in front of an upright pelvis — reaches 0.240 m
+twelve ticks later, thirteen millimetres apart with the carry loop breathing
+±0.02 m underneath. The argmax is noise and reads 12 whatever the marker
+says. A tick index cannot survive a plateau, so the check asks the
+**distance**: `RELEASE_REACH`, 85 % of the furthest reach, must have happened
+when the shaft leaves. It reads 91 % as shipped and 23 % with the release put
+back on 0.700, which is the fault it is there for.
+
+Also recorded, because it cost an afternoon: a Mixamo FBX does not carry its
+animation's name — every exported take is called `mixamo.com` and the
+file-name field holds the exporter's temp path — so a row fetched from the
+site by hand is marked `mixamo_by_hand` and `mixamo_fetch.py` skips it by
+name instead of searching for "undefined".
+
+## D-105 — The emote is a full-body looping state on Y, with one flag and one refresh path
+`Twerk` (Mixamo "Dancing Twerk", **15.2 s**, looping, no travel) is a `Blend2`
+over the top of the animator's tree, cross-faded in and out over
+`PLANE_XFADE` — the same 0.15 s a weapon plane takes, and the same kind of
+move, a whole body changing what it is doing with both feet on the ground.
+Not an upper-body one-shot: dancing is the whole body, the held weapon stays
+where it is, and a `OneShot` that is never allowed to finish is exactly the
+clock D-026 exists to keep out of that graph.
+
+The state is one bool, `Bog.emoting`, on the body because the two things it
+changes are written there — whether this Bog walks (`_read_input` empties the
+movement while it dances), and whether it is still dancing after a hit
+(`set_health` is the one line in the game that knows a hit landed on anybody,
+and it runs on every peer). `BogCombat` owns the decisions: `can_emote()` for
+when it may start, and `refresh_emote()` once a frame for every way it ends
+that is not a keypress or a movement input. `refresh_emote` asks
+`can_emote()` again rather than carrying a second list — the alternative was
+a stop in each of the eight functions that can end one (the throw, the swing,
+the draw, the cast, the drink, the pick-up, the jump, the death), which is
+eight places to forget, and D-025's lesson about the wind-up's cancels is
+that a list of them belongs in one function. Everything that may not start an
+emote may not let one continue, and the two lists cannot drift because they
+are one list.
+
+The wire is the throw wind-up's, beside it and for its reason (D-024): a
+start and a stop are two events the animator cross-fades between, so they are
+relayed as events rather than sampled off a `sync_` field, where a late
+packet would land inside the fade and a dropped one would leave a peer
+dancing forever. The ask is the owner's alone, and every other copy treats
+its own flag as a prediction.
+
+**Y**, physical keycode 89, beside chat's T — and it is a toggle, the only key
+in that poll that is, because the player decides when the dance is over and
+the obvious way to say so is the key that started it.
+
+## D-106 — The menu's Bog stands across the fire, and the lens got long
+The menu's subject was a silhouette. He stood between the camera and the
+flame, with the fire behind him as a rim light — a handsome shot of a shape
+and a poor shot of a character. The fire is the only warm source in the
+glade, so everything that makes him *him* — his face, his front, the weapon
+in his hand — was on the dark side of him.
+
+He now stands **1.65 m** on the far side of the fire and turns back across
+it, ten degrees off the lens so the pose is three-quarter rather than a
+mugshot. The same light that used to outline him now lands on him. Hero
+transform: yaw **197°**, position **(−0.37, 0.0, −1.61)**.
+
+**The lens is the part that is not obvious.** Putting him behind the fire
+makes the fire the *near* object, and a wide lens draws the near object
+large: at the old 42° from 4.5 m the flame was the subject and the Bog was
+the thing behind it, a black spiked star across his chest. The eye goes back
+to 6.7 m and the lens closes to 24°, which brings the fire's distance and his
+within ten per cent of each other and puts the flame at his feet, reading as
+a campfire someone built. It flattens him, and for a hero shot that is a gift
+rather than a cost. Final: eye **(3.60, 2.15, 5.70)**, look **(−1.01, 0.87,
+−1.20)**, fov **24**.
+
+**HERO gained a `clear_radius` and it is new for a real reason.** RING has
+always needed one — the first version planted boulders at three metres and
+the lobby became six Bogs behind a rock. HERO never did, because the hero
+stood in the clear wedge in front of the camera that the scatter is forbidden
+to draw from. He does not any more: he stands inside the scatter's own arc,
+so at the old 1.1 m a fern could be planted in him. **2.6 m.** RING is
+untouched; this is the menu's framing only.
+
+### Rejected
+
+Four renders decided it, not arithmetic: staying wide and close (the fire
+dominates and the logs read as a paper aeroplane); raising the camera to look
+down into the pit (the fire tidies up, but the light comes off his face and a
+rock rises behind his head); and moving him sideways so the fire clears his
+feet (it stops reading as "across the fire from you", which was the whole
+request).
+
+## D-107 — Three panels that fold on their own, and a weapon strip that is always there
+**What D-069 said.** The lobby is two surfaces, one refresh: the header's
+collapse button swaps the whole panel stack for the weapon strip, "because
+reading a lobby and choosing a weapon are two different things to be looking
+at" — the user's own *"menu select should be different then the weapon
+select"*. The collapse is a view state `_refresh` reads, `_picking` is one
+boolean, and nothing else in the file touches `visible` on either surface.
+
+**What changes.** The swap. Two of those three things were right and the
+middle one was not. A weapon behind a toggle is a weapon most players never
+change — and the ring of Bogs standing directly above the strip, which is the
+thing that makes the pick worth making because it shows you eight people's
+picks and not one, was on the far side of a swap from the strip. The two
+things are not alternatives; they are the same glance.
+
+So the strip is always on, and the stack stops collapsing as a unit. Each
+panel folds to its own heading, on its own toggle, with its own default:
+
+- **Bogs** — folded. The heading already answers the question this panel is
+  usually asked: "is everyone here yet" is `7 / 8`. `_rebuild_player_list`
+  runs behind the fold, so the count is live whether or not anyone can see
+  the list.
+- **Match** — host-only, open. Editing has been host-gated since the panel
+  was written, so a client's copy was forty dead dials taking the widest
+  column on the screen to say "the host decides", which is a sentence and not
+  a panel. The host sees it open because setting it up is what they came here
+  to do.
+- **Chat** — an input box until the caret is in it, then the heading and log.
+
+A client therefore sees: the strip, a `Bogs 3 / 8` bar, and a line to type
+in. The glade is the rest of the screen.
+
+**Above the Bogs, and above means above.** The strip went first into the wide
+band between the ring's feet and the top of the panels, which is the roomy
+place to put it and the wrong one: it cut four of eight Bogs off at the chest
+and laid its blurb across a fifth, and what it covered was the weapons in
+their hands — the one thing the ring is on screen to show, and the entire
+reason a pick made here is worth making. Over their heads there is nothing
+but sky and the empty middle of the header bar. The row sits at **y 44–144**,
+which clears every nameplate in an eight-Bog ring and, more to the point, the
+higher ones an *odd*-numbered ring produces: five Bogs puts one squarely at
+the back of the arc, and that Bog's plate is the real ceiling. The prop moved
+from above its name to beside it — 92 px of band does not hold a stacked
+56 px picture, and stacking it under 120 px meant a 32 px prop, which is a
+picture too small to choose from and the one thing D-076 asked of those tiles
+— so `WEAPON_ICON` went **84 → 56** and the buttons to **196 × 72**. The
+`YOUR WEAPON` caption went with it and is not missed: it was a dim grey line
+laid across whichever Bog stood behind the middle of the ring, saying what
+three props, three names and one amber-lit button already say — the
+"professionalise means add" move D-076 spent a page arguing against.
+
+**What is kept, and it is the part that matters.** The mechanism. A fold is a
+view state the single `_refresh` reads, never a second update path. Two
+booleans instead of one, `_refresh_surface` is still one of the calls
+`_refresh` already makes, and it is still the only thing in `lobby.gd` that
+writes `visible` on anything in the stack. A roster change arriving mid-fold
+redraws both. `MatchSettingsPanel.set_folded` is stateless application and
+its button only *asks*, through `fold_requested`; a panel that folded itself
+on its own press would be exactly the path the rule forbids.
+
+**Sizing, because a fold that forgets it is worse than no fold.** The stack
+is an `HBoxContainer` handing out width by stretch ratio, so a folded panel
+takes `SHRINK_END` on both axes and stops asking for a share. Left on
+`EXPAND_FILL` it is three words floating at the top of a full-height sheet of
+glass. The chat's is the same move for the same reason: its log is the only
+child with the vertical expand flag, so hiding the log and shrinking the
+panel are written on adjacent lines. **And a fold shrinks downward, because
+the stack hangs from the footer.** The stack used to start at y 404 and
+folded panels shrank to the top of it, which meant the fold bought space and
+then stood in the middle of it: a client with everything folded got a bar
+across the Bogs' waists with an empty glade underneath. The box is now
+anchored to the bottom — same inset, same 400 px maximum, so the host's open
+Match panel reaches exactly the top edge it always did — and folded panels
+take `SHRINK_END`. Fold everything and what is left is a line of headings
+along the foot of the screen with whole Bogs standing above it, feet
+included. That is the shape a client sees, and a client is the person who
+folds the most.
+
+**Chat is the deliberate exception to the boolean.** Its state is *where the
+caret is*, which the engine already owns, and a copy of it in `lobby.gd`
+would be wrong the first time focus moved by a route this file did not
+predict. Escape is taken on the `LineEdit`'s `gui_input` so abandoning a
+message is not read as leaving the session. **Sending does not put the caret
+down, and that is not an inconsistency with the in-match panel — it is the
+same rule applied to swapped halves.** In a match the log is what is always
+on screen and the input arrived with the chat key, so sending puts the input
+away and hands the keyboard back to the Bog. In the lobby the input is what
+is always there and the *log* arrived with the caret — so closing on send
+would fold the log away over the top of the line that had just been sent, and
+the one person certain to want to watch it land is the person who wrote it.
+Escape and a click elsewhere are what put it down. The HUD's compact path is
+untouched.
+
+**Escape got its one meaning back.** D-069 gave it a branch that closed the
+picker first, because the picker was a surface you could be lost on. There is
+no such surface; a fold leaves its own heading behind.
+
+The harnesses follow. `weapon_select`'s `lobby` stage asserts the new shape —
+strip and panels up together, no collapse button, the fold defaults, the
+count live behind a fold, both toggles dropping to `SHRINK_END`, the chat's
+three states and a submit that keeps the caret, and a second lobby instanced
+as a client with the config gone — 114 checks. `ui_range`'s `lobby_weapons`
+is repurposed: there is no surface to collapse to, so what is left is the
+part that was doing the work, dealing all three weapons into the shot.
+`lobby_chat` is new. `widths` still measures the expanded host panel, at
+**245 rows**, and now has more room than it did: narrowest track **448 px**,
+up from 320. Gate 135 of 135.
+
+### Rejected
+
+- **`FoldableContainer`**, which 4.7 ships and nothing here uses. It keeps
+  its own `folded` and toggles its own children — a second source of truth
+  for the one thing this screen's rule is about — and it brings its own title
+  bar, unthemed, to three headings that already carry a live count, a CAPTURE
+  button and a host hint.
+- **Leaving the client's config on screen and greyed out**, which is the
+  state being removed.
+- **Mirroring the chat's open state into a third boolean in `lobby.gd`.**
+- **The strip between the ring's feet and the panels**, the first placement;
+  see above.
+
+## D-108 — Thirteen skins, from Tripo retextures of the same mesh
+The roster needs BOGs that are told apart at a glance. The sculpt has been
+round Tripo thirteen times with a retexture prompt each time — **BOGINA,
+BOO, CLANK, CRAG, GILT, GLUB, GUM, MUCK, RIME, ROAR, SLAG, TOAD, VOID** —
+each prompt asking for the structure to stay where it was. Each download is
+therefore the same mesh wearing a different paint job, which makes each one a
+recolour in exactly the sense D-100 already settled: a texture in the body's
+UV layout, worn through `Bog.wear_skin`, one folder under `art/skins/`. No
+new mechanism; thirteen more of a thing that already works.
+
+**The skins are derived, not hand-carried.** `tools/extract_skins.py` is the
+one step between the download and the skin: it parses the `.glb` container
+itself (12-byte header, JSON chunk, BIN chunk — there is no `pygltflib` in
+this environment), follows the material's
+`pbrMetallicRoughness.baseColorTexture` to its image, downsamples Tripo's
+4096² JPEG to the 2048² the example skin settled on, and writes
+`art/skins/<name>/basecolor.png`. Running it again rebuilds all thirteen. It
+deliberately does **not** read the `.jpg` files Godot had extracted beside
+the downloads: those are whatever the importer wrote at the time, and a skin
+should come from the thing that was downloaded.
+
+**The render is the proof, not the vertex count.** Every download reports one
+primitive of **15 872** vertices — the body's own count from D-095 — which is
+a good sign and settles nothing, because a re-export can renumber vertices
+and keep the UVs, or keep the count and move them. What settles it is
+`preview_bog.tscn ... skin=<name>` over `Idle` against `example` as the
+known-good: a correct skin shows the eyes as eyes and the markings where the
+sculpt puts them, and a wrong layout smears. All thirteen are clean, and
+`build/review/skins_all.png` is the record.
+
+`assets/source/skins/.gdignore` keeps Godot out of the downloads, the way
+`Rust/`, `props/` and `Mushroom/` already do (D-101) — importing thirteen
+more copies of a mesh the project already has as `art/bog/BOG.fbx` costs
+build time and buys nothing. The downloads themselves stay untracked,
+gitignored as `assets/source/skins/*/*.glb`; the skins stand on their own
+without them. The thirteen PNGs weigh **79 MB**, the price of the size
+`example` set.
+
+How a team wears one is the next entry (D-109).
+
+### Rejected
+
+- **Extracting from the `.jpg` files Godot left beside the `.glb`s.** They
+  were already there and it would have saved the script. They are the
+  importer's output, not the download, and half the folders did not have one.
+- **Keeping Tripo's 4096².** 79 MB of PNG is already heavy; 4096² would be
+  four times that, and D-100 already decided a recolour does not need the
+  body's full size.
+- **Trusting the 15 872 vertex match as the verification.** It is evidence
+  and it is not proof; the render is cheap and answers the actual question.
