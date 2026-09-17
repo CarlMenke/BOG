@@ -1,5 +1,5 @@
 {
- "_about": "One row per clip to fetch from Mixamo on the BOG (tools/mixamo_fetch.py). `file` is the FBX name that lands in anims/, `role` is the game's name for the move; one row per role (D-096 chose each from the candidates fetched and deleted the rest). A row with `mixamo_query` instead of `mixamo_id` fetches every search result as `<file>-<Name>`, or only those named in `mixamo_keep`. A row marked `mixamo_by_hand` was downloaded from the site by hand and has no id to re-fetch by, because Mixamo names every exported take `mixamo.com` and the animation's own name is nowhere in the .fbx; `mixamo_fetch.py` skips it and says so. `in_place` is false everywhere on purpose: Mixamo's in-place export flattens the hip bob along with the travel, so travel is stripped at import instead, where it also yields the authored speed. `loop` is provisional until the animator is rebuilt. `face` is how the import turns the clip onto the body's forward: `hips` squares the hip line to the rest pose, `chest` squares the shoulder line (the strafes, D-066), `none` trusts Mixamo's world frame (the archer set aims down it; a slide and a dive travel down it). `markers` are the clip's events in seconds, written onto the Animation as markers for the animator to read (D-097).",
+ "_about": "One row per clip to fetch from Mixamo on the BOG (tools/mixamo_fetch.py). `file` is the FBX name that lands in anims/, `role` is the game's name for the move; one row per role (D-096 chose each from the candidates fetched and deleted the rest). A row with `mixamo_query` instead of `mixamo_id` fetches every search result as `<file>-<Name>`, or only those named in `mixamo_keep`. A row marked `mixamo_by_hand` was downloaded from the site by hand and has no id to re-fetch by, because Mixamo names every exported take `mixamo.com` and the animation's own name is nowhere in the .fbx; `mixamo_fetch.py` skips it and says so. `in_place` is false everywhere on purpose: Mixamo's in-place export flattens the hip bob along with the travel, so travel is stripped at import instead, where it also yields the authored speed. `loop` is provisional until the animator is rebuilt. `face` is how the import turns the clip onto the body's forward: `hips` squares the hip line to the rest pose, `chest` squares the shoulder line (the strafes, D-066), `none` trusts Mixamo's world frame (the archer set aims down it; a slide and a dive travel down it). `untwist` squares the top of the body over its own hips at import, by turning `Spine1` and `Neck` back about the body's vertical: it is for a clip that plays as an **upper-body layer** over a square base, where the layer copies the spine chain's own twist onto whatever the legs are doing and `face` cannot reach it, because `face` turns the hips and the chest together. The two carry idles carry it; the archer's own plane does not, because there the turned stance *is* the pose, and nor does the draw layer, whose base is that turned plane. `markers` are the clip's events in seconds, written onto the Animation as markers for the animator to read (D-097).",
  "fps": 30,
  "clips": [
   {
@@ -321,6 +321,7 @@
    "in_place": false,
    "loop": true,
    "face": "hips",
+   "untwist": true,
    "markers": {}
   },
   {
@@ -398,6 +399,7 @@
    "in_place": false,
    "loop": true,
    "face": "none",
+   "untwist": true,
    "markers": {}
   },
   {

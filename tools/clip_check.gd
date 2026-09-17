@@ -7,8 +7,10 @@ extends SceneTree
 ## Checks, and fails loudly on, the things a re-import can silently break:
 ## the body's height and floor, the bone count, every clip table row having a
 ## clip in the library, every clip's tracks resolving on the body's skeleton,
-## the hips locked to the axis, the loop mode matching the table, and one clip
-## per suite landing every bone on the body where its own skeleton puts it.
+## the hips locked to the axis, the loop mode matching the table, a squared line
+## measuring square, an untwisted clip's chest and head measuring square over its
+## own hips, and one clip per suite landing every bone on the body where its own
+## skeleton puts it.
 ## Prints the library as a table on the way, which is where the authored speeds
 ## the animator will divide by are read from.
 
@@ -22,6 +24,11 @@ const HIPS := "mixamorig_Hips"
 const RETARGET_SAMPLE := ["Walk-StandardWalk", "SwordCombo-GreatSwordComboSlash",
 	"Roll-DiveRollFromStanding-2", "BowDraw-ChargingBowForPowershot"]
 const RETARGET_TOLERANCE := 0.0005
+## How square an `untwist` row has to measure after import. Three degrees rather
+## than the facing check's one, because the correction is a constant about the
+## body's vertical and the clip's own spine pitches and rolls a little under it
+## — and because three degrees is a tenth of what the rule takes away.
+const UNTWIST_TOLERANCE := 3.0
 const ImportClip := preload("res://tools/import_clip.gd")
 ## The events the animator and the combat code read (D-097); a re-import that
 ## loses one fails here rather than in a match.
@@ -111,6 +118,16 @@ func _initialize() -> void:
 		if ImportClip.LINES.has(face):
 			var yaw := ImportClip._line_yaw(anim, skeleton, ImportClip._tracks_by_bone(anim), ImportClip.LINES[face])
 			_want("%s: %s line squared to the body (%.2f°)" % [key, face, yaw], absf(yaw) < 1.0)
+		# A clip that plays as an upper-body layer has to be square *over its own
+		# hips*, which is a different claim from `face`'s and the one the layer
+		# actually carries: `face` turns the whole body and cancels out of this.
+		# Both joints, because squaring the shoulders leaves the head where it was.
+		if row.get("untwist", false):
+			var twist := ImportClip._twist_yaw(anim, skeleton, ImportClip._tracks_by_bone(anim))
+			_want("%s: chest is square over its own hips (%.2f°)" % [key, twist.x],
+				absf(twist.x) < UNTWIST_TOLERANCE)
+			_want("%s: head is square over its own chest (%.2f°)" % [key, twist.y],
+				absf(twist.y) < UNTWIST_TOLERANCE)
 		for marker in row.get("markers", {}):
 			_want("%s: marker '%s' is on the clip" % [key, marker], anim.has_marker(marker))
 		for marker in anim.get_marker_names():

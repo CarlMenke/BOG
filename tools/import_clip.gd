@@ -11,6 +11,10 @@ extends EditorScenePostImport
 ##   2. turns the clip onto the body's forward the way its table row says
 ##      (`face`: square the hip line, square the chest line, or leave the
 ##      authored frame alone), by yawing the hips' keys (D-097);
+##   2a. squares the top of the body over its own hips when the row says
+##      `untwist`, by counter-rotating `Spine1` and `Neck` about the body's
+##      vertical -- the part of a stance the `face` yaw cannot reach, and the
+##      only part of it an upper-body layer copies;
 ##   3. locks the hips to the skeleton's vertical axis, so the clip plays in
 ##      place and the physics body does the moving;
 ##   4. sets the loop mode and writes the event markers from the clip table;
@@ -36,6 +40,17 @@ const LINES := {
 	"chest": ["mixamorig_LeftShoulder", "mixamorig_RightShoulder"],
 }
 const FACING_SAMPLES := 12
+## The two joints `untwist` turns, and what each of them carries. The layered
+## chain is `Spine1` to `Spine2` to `Neck` to `Head`, plus the arms off
+## `Spine2`, and it bends at two places that can turn independently: the chest
+## (the shoulder line, and the arms with it) and the head on top of it. One
+## correction cannot square both -- an archer idle is square at the shoulders
+## and looking sixty degrees off -- so `untwist` is two, the chest's at the
+## first bone of the chain and the head's at the first bone above the
+## shoulders.
+const UNTWIST_CHEST := "mixamorig_Spine1"
+const UNTWIST_HEAD := "mixamorig_Neck"
+const HEAD := "mixamorig_Head"
 
 
 func _post_import(scene: Node) -> Object:
@@ -82,6 +97,23 @@ func _post_import(scene: Node) -> Object:
 			anim.track_set_key_value(rot, k, fix * (anim.track_get_key_value(rot, k) as Quaternion))
 		travel = fix * travel
 
+	# The twist. `face` turns the hips and everything above them together, so it
+	# cannot change how far the chest and the head are turned off the *hips* --
+	# that lives in the spine chain's own local rotations, which is exactly what
+	# an upper-body layer copies and nothing of what it leaves behind. A carry
+	# clip authored side-on therefore lands its turned chest and its looking-away
+	# head on top of every base pose the legs are in. Squaring it here means the
+	# clip owns its posture and neither the animator nor the aim code has to.
+	#
+	# Only for a layer that sits over a *square* base: the carry layer does (the
+	# plain plane faces the crosshair), the draw layer over the archer's plane
+	# does not, and untwisting that one would point the head out sideways.
+	var twist := Vector2.ZERO
+	if row.get("untwist", false):
+		twist = _twist_yaw(anim, skeleton, tracks)
+		_untwist(anim, skeleton, tracks, UNTWIST_CHEST, twist.x, file)
+		_untwist(anim, skeleton, tracks, UNTWIST_HEAD, twist.y, file)
+
 	var low := INF
 	var high := -INF
 	for k in keys:
@@ -107,6 +139,7 @@ func _post_import(scene: Node) -> Object:
 	anim.set_meta("bearing", rad_to_deg(Vector3.FORWARD.signed_angle_to(-travel, Vector3.UP)) if travel.length() > 0.05 else 0.0)
 	anim.set_meta("hips_bob", high - low)
 	anim.set_meta("facing_fix", fix_deg)
+	anim.set_meta("untwist", twist)
 	anim.set_meta("start_offset", Vector3(first.x, 0.0, first.z))
 
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(CLIP_DIR))
@@ -119,8 +152,9 @@ func _post_import(scene: Node) -> Object:
 	# is what makes the library reference the file rather than swallow a copy.
 	anim.take_over_path(clip_path)
 	_file_in_library(file, table, anim)
-	print("import_clip: %-52s %6.3f s  %.3f m/s  bob %.3f  face %+6.1f°  %d markers  %s" % [
+	print("import_clip: %-52s %6.3f s  %.3f m/s  bob %.3f  face %+6.1f°  twist %+5.1f/%+5.1f°  %d markers  %s" % [
 		file, anim.length, anim.get_meta("authored_speed"), high - low, fix_deg,
+		twist.x, twist.y,
 		anim.get_marker_names().size(), "loop" if anim.loop_mode != Animation.LOOP_NONE else "once"])
 	return scene
 
@@ -140,10 +174,81 @@ static func _line_yaw(anim: Animation, skeleton: Skeleton3D, tracks: Dictionary,
 	return rad_to_deg(rest_line.signed_angle_to(_flat(mean), Vector3.UP))
 
 
+## How far the chest is turned off the hips, and the head off the chest, as the
+## mean over the clip in degrees, + to the BOG's left: `(chest, head)`. Both are
+## zero in the rest pose, so the pair is what `untwist` has to take away.
+##
+## A plain mean of two subtracted yaws rather than a mean of vectors, because the
+## quantity is a difference of angles and not an angle; every clip this is asked
+## of sits well inside a right angle of square, where the two are the same
+## number.
+static func _twist_yaw(anim: Animation, skeleton: Skeleton3D, tracks: Dictionary) -> Vector2:
+	var hip := [skeleton.find_bone(LINES.hips[0]), skeleton.find_bone(LINES.hips[1])]
+	var chest := [skeleton.find_bone(LINES.chest[0]), skeleton.find_bone(LINES.chest[1])]
+	var head := skeleton.find_bone(HEAD)
+	var rest := _world(anim, skeleton, tracks, -1.0)
+	var rest_hip := _flat(rest[hip[0]].origin - rest[hip[1]].origin)
+	var rest_chest := _flat(rest[chest[0]].origin - rest[chest[1]].origin)
+	var rest_head: Basis = rest[head].basis
+	var sum := Vector2.ZERO
+	for i in FACING_SAMPLES:
+		var w := _world(anim, skeleton, tracks, anim.length * (float(i) + 0.5) / FACING_SAMPLES)
+		var hip_yaw := rad_to_deg(rest_hip.signed_angle_to(_flat(w[hip[0]].origin - w[hip[1]].origin), Vector3.UP))
+		var chest_yaw := rad_to_deg(rest_chest.signed_angle_to(_flat(w[chest[0]].origin - w[chest[1]].origin), Vector3.UP))
+		# The head has no second bone that is not straight above it, so its turn is
+		# read off its own basis rather than off a pair of points.
+		var turn: Basis = w[head].basis * rest_head.inverse()
+		var head_yaw := rad_to_deg(Vector3.RIGHT.signed_angle_to(_flat(turn * Vector3.RIGHT), Vector3.UP))
+		sum += Vector2(chest_yaw - hip_yaw, head_yaw - chest_yaw)
+	return sum / FACING_SAMPLES
+
+
+## Turn one bone of the spine chain `degrees` back about the body's vertical, on
+## every key it has, the way the facing yaw turns the hips.
+##
+## A bone's keys are in its **parent's** frame, so a constant `Q` applied to them
+## turns the bone in the world by `P * Q * P^-1` — a rotation about `P * axis`.
+## For that to be the world's up, the axis has to be the world's up seen from the
+## parent, and the parent to use is the one the clip actually holds: the mean
+## over the clip of `P^-1 * up`. The rest pose's own was tried first and left 7
+## and 9 degrees on the two carry idles, because a standing Bog leans its spine
+## about ten degrees forward and a turn about a leaning axis is not a yaw.
+##
+## Two consequences worth naming. The hips' own yaw drops out — `P^-1 * up` is
+## unchanged by any rotation of `P` about up — so a clip left side-on by
+## `face: none` takes the same constant as a squared one, and the chest's
+## correction does not disturb the head's axis either, which is why these two
+## are one pass and not a solve.
+static func _untwist(anim: Animation, skeleton: Skeleton3D, tracks: Dictionary,
+		bone: String, degrees: float, file: String) -> void:
+	if not tracks.has(bone) or tracks[bone].rot < 0:
+		push_error("import_clip: %s has no %s rotation track to untwist" % [file, bone])
+		return
+	var parent := skeleton.get_bone_parent(skeleton.find_bone(bone))
+	var axis := Vector3.ZERO
+	for i in FACING_SAMPLES:
+		var w := _world(anim, skeleton, tracks, anim.length * (float(i) + 0.5) / FACING_SAMPLES)
+		axis += (w[parent].basis as Basis).inverse() * Vector3.UP
+	axis = axis.normalized()
+	var fix := Quaternion(axis, deg_to_rad(-degrees))
+	var rot: int = tracks[bone].rot
+	for k in anim.track_get_key_count(rot):
+		anim.track_set_key_value(rot, k, fix * (anim.track_get_key_value(rot, k) as Quaternion))
+
+
 ## Every bone's position at time `t`, or in the rest pose when `t` is negative.
 static func _positions(anim: Animation, skeleton: Skeleton3D, tracks: Dictionary, t: float) -> Array[Vector3]:
-	var world: Array[Transform3D] = []
 	var out: Array[Vector3] = []
+	for w in _world(anim, skeleton, tracks, t):
+		out.append(w.origin)
+	return out
+
+
+## Every bone's world transform at time `t`, or in the rest pose when `t` is
+## negative. Forward kinematics from the tracks themselves: nothing is in a scene
+## tree during an import, so the skeleton's own global-pose cache is cold.
+static func _world(anim: Animation, skeleton: Skeleton3D, tracks: Dictionary, t: float) -> Array[Transform3D]:
+	var world: Array[Transform3D] = []
 	for b in skeleton.get_bone_count():
 		var local := skeleton.get_bone_rest(b)
 		var name := skeleton.get_bone_name(b)
@@ -154,8 +259,7 @@ static func _positions(anim: Animation, skeleton: Skeleton3D, tracks: Dictionary
 				local.basis = Basis(anim.rotation_track_interpolate(tracks[name].rot, t))
 		var parent := skeleton.get_bone_parent(b)
 		world.append(local if parent < 0 else world[parent] * local)
-		out.append(world[b].origin)
-	return out
+	return world
 
 
 static func _tracks_by_bone(anim: Animation) -> Dictionary:
