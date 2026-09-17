@@ -176,7 +176,39 @@ const BOW_HAND_BONE := "mixamorig_LeftHand"
 ## grip ran the shaft almost along -Z, across the palm; this one runs it mostly
 ## along **+Y**, out through the fingers, which is what a fist cocked beside the
 ## head does with a spear — and it is why `CARD_ALONG_SHAFT` had to change sign.
-const GRIP_ROTATION := Vector3(16.01, 0.00, 27.54)
+##
+## **Re-derived when the carry clip was squared, and the aim above is what
+## survived.** `SpearCarry` now carries `untwist` in the clip table: the layer
+## used to copy the clip's own chest-and-head turn onto every base pose, so a
+## carried Bog stood square at the hips and looked 51 deg to its left. Squaring it
+## turned the head back into the shaft's path and took the trunk clearance of the
+## grip above from 0.128 m to **0.053 m** — under the floor, and the gate said so.
+## Nothing about *where the shaft should point* changed; what changed is the hand
+## it is pointed out of, by the 3.2 deg the chest came back.
+##
+## So the same band was swept again, the same three floors, and the same sheet
+## asked the same two questions (`build/review/spear_regrip_candidates.png`):
+##
+##   grip                worst end   trunk   off level   margin   front      side
+##   +45 at   0       **+0.186 m** **0.069** **23 deg** **x1.15** clear   tip leads
+##   +45 at  +5           +0.195 m   0.060     24 deg     x1.00   clear   tip leads
+##   +40 at   0           +0.152 m   0.063     24 deg     x1.01   clear   tip leads
+##
+## All three pass both looks now — a square head is a *narrower* silhouette from
+## the front than a turned one, so nothing crosses the face — which leaves the
+## margin to decide, and **+45 deg of elevation at 0 deg of bearing is taken**.
+## The elevation is the one above, unmoved: the lowest that clears is +40 again
+## and it clears by one percent. The bearing goes from +5 to 0 for the reason
+## +5 was chosen in the first place — *the tip points where the Bog is looking* —
+## which was +5 deg round from forward while the head was turned and is dead
+## forward now that it is not.
+##
+## Rejected: **+45 at -5 deg**, which measures marginally better still (x1.20)
+## and is the best forward bearing in the band. Five degrees the other side of
+## the centre line is not a difference the eye can see on the sheet, and between
+## two numbers that close the one worth having is the one that can be said in a
+## sentence: the tip is on the Bog's own centre line.
+const GRIP_ROTATION := Vector3(20.79, 0.00, 22.98)
 
 ## The point of the palm the shaft passes through, in hand-local metres — the
 ## first term of `GRIP_OFFSET`'s derivation above, named since D-070 because
@@ -234,7 +266,7 @@ const GRIP_PALM := Vector3(-0.013, 0.159, 0.042)
 ## initialise one and half this file's readers want a constant. What closes the
 ## gap is `tools/preview_carry.tscn -- measure`, which recomputes it from the
 ## rotation on every run and fails the gate if the two have drifted apart.
-const GRIP_OFFSET := Vector3(0.3013, -0.4204, -0.1242)
+const GRIP_OFFSET := Vector3(0.2524, -0.4261, -0.1801)
 
 ## The two numbers the offset above was derived from, named so the letter card
 ## can be placed off the same measurement instead of guessed at again. The mesh
@@ -957,7 +989,32 @@ func set_sword_grip(model_scale: float, offset: Vector3,
 ## The sword's tilt is deleted on exactly this test run the other way: its carry
 ## clip *was* authored around its prop, so its grip and its pose agree and a tilt
 ## would only pull the blade out of the hands. See `sword_transform`.
-const CARRY_TILT := Vector2(47.5, -40.0)
+##
+## **Re-swept when `BowCarry` was squared, and the Z angle moved six degrees.**
+## The carry clip carries `untwist` now, so the layer no longer turns the chest
+## and head 58 deg to the Bog's left over whatever the legs are doing; the bow
+## arm came round with the chest and the composed worst went from +0.153 m to
+## **+0.127 m**, under `preview_carry.CARRY_MIN`. Three millimetres was all the
+## margin that number ever had.
+##
+## `-- sweep bow "" 6` walks both axes again **with the layer on**, which is the
+## composition the gate judges, and it is monotone there rather than peaked:
+## every degree of extra tilt lifts the tip. So the pick is the other table's.
+## `preview_bow -- measure` sweeps the same two angles with the layer **off**,
+## where the peak is, and it is still at (47.5, -40); moving off it costs
+## clearance there. The two tables together leave a band, and -34 is in it:
+##
+##     axis          tilt      layered (min 0.15)   unlayered (min 0.10)
+##     Z            -40.0            +0.127               +0.136
+##     Z          **-34.0**        **+0.173**           **+0.121**
+##     Z            -28.0            +0.223               ~+0.10
+##     Y            +58.0            +0.190               +0.092  <- fails
+##
+## The Y axis cannot do it: ten degrees there buys the layered table what it
+## needs and takes the unlayered one under its own floor. Six degrees on Z buys
+## more and costs 15 mm of a number that has 36 mm to give. The bow's Idle
+## elevation moves one degree, -44 to -45, which is the look holding still.
+const CARRY_TILT := Vector2(47.5, -34.0)
 
 const BOW_SCALE := 1.5408
 
