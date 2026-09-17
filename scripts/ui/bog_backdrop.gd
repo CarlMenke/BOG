@@ -260,14 +260,21 @@ func _slot_transform(index: int, count: int) -> Transform3D:
 		# the lighting: it is the only warm source in the glade, so whichever
 		# side of it he stands on is the side that gets a face. He used to stand
 		# in front of it and be a silhouette with a rim on it — handsome, and a
-		# menu whose subject you could not actually see. Turned ten degrees off
+		# menu whose subject you could not actually see. Turned four degrees off
 		# the camera, into the frame, so the pose reads as three-quarter rather
 		# than as a mugshot.
+		#
+		# Four, and not the eleven and a half it used to be. From this spot the
+		# lens is at `yaw_towards(FRAMING[HERO].eye - here)` = 208.5 degrees, and
+		# the old 197 was far enough off it to read as a Bog looking past you
+		# rather than at you — at 24 degrees of field of view there is very
+		# little frame left for him to be looking *into*. Four is still a
+		# three-quarter, and it is his eyeline that carries it now.
 		#
 		# 1.65 m out, which is as close to the flame as the pose survives: nearer
 		# and the fire is lighting his shins and blowing out his belly, further
 		# and he walks out of the only light there is.
-		return Transform3D(Basis(Vector3.UP, deg_to_rad(197.0)), Vector3(-0.37, 0.0, -1.61))
+		return Transform3D(Basis(Vector3.UP, deg_to_rad(204.5)), Vector3(-0.37, 0.0, -1.61))
 
 	# Fill the far arc, centred on the back of the ring. One Bog is at the
 	# middle of the arc, two straddle it, and so on outward.
@@ -275,17 +282,28 @@ func _slot_transform(index: int, count: int) -> Transform3D:
 	var step := arc / float(count - 1)
 	var angle := PI + (float(index) - float(count - 1) * 0.5) * step
 	var spot := Vector3(sin(angle) * ring_radius, 0.0, cos(angle) * ring_radius)
-	# Everyone faces the fire, then turns a little toward the camera so the
-	# ring reads as a group of faces rather than a circle of shoulders.
+	# Everyone faces the *camera*, then turns a little back toward the fire, so
+	# the ring reads as a group of faces rather than a circle of shoulders.
 	#
-	# A little, now, and not the 22 degrees it used to be. That number was
-	# chosen against an idle pose that stood square; the new Idle is a boxer's
-	# guard with the head already carried forward and down, so at the ends of
-	# the arc — where `sin(angle)` is largest and the Bog is most side-on to
-	# begin with — 22 degrees turned the last two Bogs far enough that the
-	# camera got the top of the head instead of the face. 10 degrees is still
-	# enough to break the circle-of-shoulders reading.
-	var yaw := Bog.yaw_towards(-spot) + deg_to_rad(sin(angle) * -10.0)
+	# It used to be the other way round — face the fire, then turn a few degrees
+	# toward the lens — and that arithmetic never reached the ends of the arc.
+	# A Bog stood 75 degrees round the circle is already 52 degrees off the
+	# camera merely by facing the flame, so ten degrees of correction left him
+	# side-on and the lobby was a row of profiles with one face in the middle.
+	# Starting from the camera instead puts every face at the lens *by
+	# construction*, whatever the arc width or the roster count, and the turn
+	# back toward the fire is then a small deliberate amount rather than the
+	# remainder of a much larger error.
+	#
+	# Scaled by `sin(angle)`, so the Bog at the middle of the arc stays square to
+	# the camera and only the ones at the ends turn inward — which is all the
+	# "standing around a fire" reading needs. 12 degrees is as far as the new
+	# Idle will carry it: that pose is a boxer's guard with the head already
+	# carried forward and down, so a Bog turned much further than this gives the
+	# camera the top of his head instead of his face.
+	var eye: Vector3 = FRAMING[Formation.RING]["eye"]
+	var to_camera := Vector3(eye.x - spot.x, 0.0, eye.z - spot.z)
+	var yaw := Bog.yaw_towards(to_camera) + deg_to_rad(sin(angle) * -12.0)
 	return Transform3D(Basis(Vector3.UP, yaw), spot)
 
 
