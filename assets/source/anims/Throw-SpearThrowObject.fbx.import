@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://ddix6o0p6dbgt"
-path="res://.godot/imported/Throw-ThrowingAnObjectFromAStandardPose.fbx-bc17e0bb06588fd5b9012f565fadb14a.scn"
+uid="uid://bncms86ykm5xd"
+path="res://.godot/imported/Throw-SpearThrowObject.fbx-ec5d94c87ab15e93ea82063418f042c8.scn"
 
 [deps]
 
-source_file="res://assets/source/anims/Throw-ThrowingAnObjectFromAStandardPose.fbx"
-dest_files=["res://.godot/imported/Throw-ThrowingAnObjectFromAStandardPose.fbx-bc17e0bb06588fd5b9012f565fadb14a.scn"]
+source_file="res://assets/source/anims/Throw-SpearThrowObject.fbx"
+dest_files=["res://.godot/imported/Throw-SpearThrowObject.fbx-ec5d94c87ab15e93ea82063418f042c8.scn"]
 
 [params]
 

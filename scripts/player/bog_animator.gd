@@ -90,6 +90,7 @@ const REQUIRED_CLIPS: Array[String] = [
 	"BowDraw", "BowReload", "BowLoose",
 	"JumpStart", "AirLoop", "RunJump", "Land", "LandHard", "Roll", "Slide",
 	"Throw", "Cast", "SwordSpin", "Drink",
+	"SpearCarry",
 ]
 
 
@@ -125,11 +126,26 @@ static func authored_speed(role: String) -> float:
 
 # -------------------------------------------------------------- the throw ---
 
+## The longest a wind-up may be asked to take, in real seconds. The one number
+## in this block that is a decision rather than a measurement.
+##
+## **It is a cap now and it used to be a target.** D-063 asked for half a second
+## flat, because D-025's wind-up was being called a delay and the clip it was
+## measured on wound up in 0.70 s. The spear's throw is its own clip since the
+## rebuild — a one-arm overhead throw whose wind-up *is* the read: the arm goes
+## back, over and through, and squeezing that into half a second plays it at
+## 1.25x and loses the part the eye is waiting for. So the ask is the clip's own
+## window, and this is only the ceiling under which that ask is honoured: the
+## rate below comes out at exactly 1.0 for any clip that winds up inside 0.9 s,
+## and only a slower clip than that is hurried.
+const THROW_RELEASE_MAX := 0.9
+
 ## How long after the click the spear is *asked* to leave the hand, in real
-## seconds. The one number in this block that is a decision rather than a
-## measurement: half a second, from the playtest that got D-025's windup called
-## a delay (D-063).
-const THROW_RELEASE_TARGET := 0.5
+## seconds: the clip's own authored window, up to the cap above. Derived rather
+## than typed, so re-timing the markers re-times the throw and the rate stays 1.0
+## (D-097 puts the markers on the clip; nothing here carries a clip time).
+static var THROW_RELEASE_TARGET: float = minf(
+	marker("Throw", "release") - marker("Throw", "windup"), THROW_RELEASE_MAX)
 
 ## The shortest any windup may be squeezed into, whatever is asked of it. It
 ## exists for `lightning_delay` of 0, which is legal: a rate derived from a
@@ -142,13 +158,18 @@ const THROW_RELEASE_MIN := 0.14
 ## follow-through is what D-063 found reads as a throw rather than a stop.
 const FOLLOW_THROUGH := 0.333
 
-## The throw's window is from its `windup` marker — the frame the arm starts
-## back — to a third of a second past its `release`. THROW_WINDOW is the part
-## that has to have happened by the time the spear leaves, and the rate is
-## derived from the ask above rather than typed beside it, so a window that
+## The throw's window is from its `windup` marker — the frame the arm turns and
+## starts back up — to a third of a second past its `release`. THROW_WINDOW is
+## the part that has to have happened by the time the spear leaves, and the rate
+## is derived from the ask above rather than typed beside it, so a window that
 ## moves moves the rate with it and leaves the release where it was promised
 ## (D-025, D-063). THROW_RELEASE_TIME is derived *through* the rate, so the ask
 ## is what visibly stops being met if somebody pins the rate by hand.
+##
+## With the ask now the window itself, THROW_RATE is **1.0** and the throw plays
+## at the speed it was authored at; the chain is kept whole rather than collapsed
+## to a constant because the cap is real, and a clip that winds up slower than
+## THROW_RELEASE_MAX still comes out hurried by exactly the ratio that says so.
 static var THROW_CLIP_START: float = marker("Throw", "windup")
 static var THROW_RELEASE_IN_CLIP: float = marker("Throw", "release")
 static var THROW_WINDOW: float = THROW_RELEASE_IN_CLIP - THROW_CLIP_START

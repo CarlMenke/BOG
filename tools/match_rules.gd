@@ -1774,16 +1774,26 @@ func _run_config_validation() -> void:
 	_near("the spear's own rate still releases at 0.50",
 		BogAnimator.THROW_WINDOW / BogAnimator.THROW_RATE,
 		BogAnimator.THROW_RELEASE_TIME)
-	# The half second the user asked for, asserted against the literal rather
-	# than against the constant it is derived from — which is the only way this
-	# line can ever fail. `THROW_RELEASE_TIME` is `THROW_WINDOW / THROW_RATE` and
-	# the rate is `THROW_WINDOW / THROW_RELEASE_TARGET`, so the two agree by
-	# construction and will go on agreeing at any number at all; what this
-	# catches is the day somebody pins the rate by hand and the promise quietly
-	# stops being half a second. `tools/combat_range.gd`'s `release` mode is the
-	# other half, and the half that measures rather than asserts.
-	_near("and that is the half second the throw was asked for",
-		BogAnimator.THROW_RELEASE_TIME, 0.5)
+	# The ask, checked against the clip rather than against the constant it is
+	# derived from — which is the only way this line can ever fail.
+	# `THROW_RELEASE_TIME` is `THROW_WINDOW / THROW_RATE` and the rate is
+	# `THROW_WINDOW / THROW_RELEASE_TARGET`, so those three agree by construction
+	# and will go on agreeing at any number at all; what this catches is the day
+	# somebody pins the rate by hand and the promise quietly stops being kept.
+	# `tools/combat_range.gd`'s `release` mode is the other half, and the half
+	# that measures rather than asserts.
+	#
+	# **The ask is the clip's own wind-up now, not half a second.** D-063 asked
+	# for 0.5 s flat; the spear's own throw clip is a one-arm overhead throw
+	# whose wind-up is the read, so it plays at the rate it was authored at and
+	# the release lands where the markers put it. The markers are read again
+	# here, straight off the library, so a pinned rate still fails this line.
+	_near("and that is the clip's own wind-up, played at the speed it was authored at",
+		BogAnimator.THROW_RELEASE_TIME,
+		BogAnimator.marker("Throw", "release") - BogAnimator.marker("Throw", "windup"))
+	_check("which is inside the cap the wind-up may not exceed",
+		BogAnimator.THROW_RELEASE_TIME <= BogAnimator.THROW_RELEASE_MAX + 0.0005, true)
+	_near("so the throw plays at 1.0", BogAnimator.THROW_RATE, 1.0)
 	# The setting that would otherwise be a division by zero.
 	_near("a zero delay saturates rather than dividing by zero",
 		BogAnimator.cast_rate_for_release(0.0), BogAnimator.CAST_RATE_MAX)

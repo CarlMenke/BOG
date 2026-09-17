@@ -51,6 +51,7 @@ travel / length for a cycle); `bob` is the hips' vertical range.
 | RunBack-RunningBackwards | 0.767 | 0.637 | 0.029 |
 | RunJump-ForwardRunningJump | 1.000 | 1.637 | 0.432 |
 | Slide-RunningToSlideAndBackToRunning | 1.533 | 2.624 | 0.242 |
+| SpearCarry-StandingIdleReadyToCastSpell | 1.867 | 0.000 | 0.019 |
 | StrafeLeft-RunningStrafeToTheLeft-2 | 0.667 | 0.945 | 0.015 |
 | StrafeRight-RunningStrafeToTheRight-1 | 0.667 | 0.945 | 0.016 |
 | StrafeWalkLeft-WalkingStrafeToTheLeft-2 | 0.933 | 0.713 | 0.033 |
@@ -71,7 +72,7 @@ travel / length for a cycle); `bob` is the hips' vertical range.
 | SwordStrafeWalkRight-GreatSwordStrafeRightWalk | 1.167 | 0.581 | 0.016 |
 | SwordWalk-GreatSwordWalk | 1.367 | 0.593 | 0.024 |
 | SwordWalkBack-GreatSwordBackwardWalk | 1.300 | 0.523 | 0.024 |
-| Throw-ThrowingAnObjectFromAStandardPose | 2.200 | 0.000 | 0.020 |
+| Throw-SpearThrowObject | 2.300 | 0.007 | 0.080 |
 | ThrowRun-ThrowGrenadeWhileRunning | 2.933 | 3.721 | 0.017 |
 | ThrowWalk-ThrowingAGrenadeWhileWalking | 2.767 | 1.071 | 0.021 |
 | Walk-StandardWalk | 1.167 | 0.715 | 0.032 |

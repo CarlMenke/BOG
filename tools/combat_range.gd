@@ -365,9 +365,10 @@ const BLAST_ELDER_SPOT := Vector3(-4.0, 0.1, -1.0)
 
 ## How long after the click a spear's verdict is taken, in physics ticks. Same
 ## arithmetic as the bolt's above and one more term: the click starts the
-## windup, the shaft leaves `BogAnimator.THROW_RELEASE_TIME` (0.50 s since
-## D-063, 30 ticks) later, and then it has fourteen metres to cross at 42 m/s —
-## twenty ticks. Ninety-five is that plus a margin, and it is left where it was
+## windup, the shaft leaves `BogAnimator.THROW_RELEASE_TIME` (0.40 s, the throw
+## clip's own wind-up played at the speed it was authored at, 24 ticks) later,
+## and then it has fourteen metres to cross at 42 m/s — twenty ticks.
+## Ninety-five is that plus a margin, and it is left where it was
 ## when the release was 0.71 s rather than retuned down with it, for the reason
 ## `LIGHTNING_VERDICT_DELAY` above is: the margin matters more here than it
 ## looks, because the whole point of `cover` is a throw that is *supposed* to
@@ -428,8 +429,8 @@ const COVER_OFFSET := 0.5
 ##
 ## Twelve rather than one because the failure it guards is a race between two
 ## clocks, and a race lost by a millisecond passes a single trial by luck. At
-## the 0.15 s recharge this mode sets, a cycle is the 0.50 s windup plus that —
-## 39 ticks — so twelve of them is about 470 ticks, which is what the smoke
+## the 0.15 s recharge this mode sets, a cycle is the 0.40 s windup plus that —
+## 33 ticks — so twelve of them is about 400 ticks, inside what the smoke
 ## gate's warmup count is sized for. It was 630 while the windup was 0.71 s.
 const RECHARGE_CYCLES := 12
 
@@ -470,7 +471,31 @@ const RELEASE_SETTLE := 12
 ## What this cannot absorb is the fault it is here for. Putting the release back
 ## where the old clip's was, or anywhere else a plausible mistake would put it,
 ## is four ticks or more.
+##
+## **It is printed now rather than asserted on**, and `RELEASE_REACH` below is
+## what the verdict hangs on instead. The spear's throw clip since the rebuild is
+## a one-arm overhead throw, and its composed arm does not have a single frame
+## that is furthest forward: the throw's own extension reaches 0.219 m and the
+## follow-through, whose hip pitch the mask drops so the arm hangs in front of an
+## upright pelvis rather than under a bent one, reaches 0.240 m twelve ticks
+## later. Thirteen millimetres apart, with the carry loop breathing +/-0.02 m
+## underneath, so which of the two is the maximum is noise and `apart` reads 12
+## whatever the marker says. A tick index cannot survive a plateau. The reach
+## itself can.
 const RELEASE_AGREEMENT := 3
+
+## How much of the arm's furthest forward reach has to have happened by the time
+## the shaft appears, as a fraction of it.
+##
+## This is the same sentence `RELEASE_AGREEMENT` was written to say — the spear
+## leaves when the arm does — asked of the distance instead of the frame number,
+## because the distance is what the eye reads and it does not care which side of
+## a flat plateau the argmax fell on. Measured at **0.91** on the clip as shipped.
+## 0.85 is the floor under that, and it is nowhere near slack: the release put
+## back on the clip's own furthest-ahead-of-the-hips frame, which is where the
+## kinematics alone would put it, reads **0.23** (0.060 m of 0.255), and
+## anywhere inside the cocked wind-up reads negative.
+const RELEASE_REACH := 0.85
 
 ## `cast`'s patience, settle and agreement, in physics ticks — the same three
 ## numbers as `release`'s and none of them the same value, because the thing
@@ -606,7 +631,7 @@ const COVER_LIFETIME := 120.0
 ## next door can prove the teardown is correct once something calls it, and only
 ## this can prove that something does.
 ##
-## Three seconds is long enough for the first spear's full 0.50 s windup and
+## Three seconds is long enough for the first spear's full 0.40 s windup and
 ## 0.33 s of flight to land inside the window with room either side, and short
 ## enough that the run is over in about six. It had the same room to spare when
 ## the windup was 0.71 s, which is why the number did not move with it (D-063).
@@ -1168,6 +1193,7 @@ var _release_clicked_ms: int = 0
 var _release_spear_at: int = 0
 var _release_spear_ms: int = 0
 var _release_fist_full: bool = true
+var _release_reach_at_spear: float = -INF
 var _release_reach_at: int = 0
 var _release_reach: float = -INF
 ## Looked up once. `find_child` on every tick of a mode that is about
@@ -1742,11 +1768,12 @@ func _physics_process(_delta: float) -> void:
 	# `BogCombat.try_throw_spear` only starts the windup, and the spear leaves
 	# the hand THROW_RELEASE_TIME later — so a mode that waits for a spear has
 	# to allow the windup before the projectile even exists, and its whole
-	# flight after that. Since D-063 that is 0.50 s, which at 60 ticks a second
-	# is 30 ticks: frame 20 + 30 = tick 50 before the spear is in the air, then
+	# flight after that. It is the throw clip's own wind-up now, played at the
+	# speed it was authored at — 0.40 s, which at 60 ticks a second is 24 ticks:
+	# frame 20 + 24 = tick 44 before the spear is in the air, then
 	# 14 m at 42 m/s (0.33 s, 20 ticks) to the dummy, so the kill lands around
-	# tick 70. The warmup counts in `tools/smoke_test.sh` are sized for that —
-	# 95 for the kill, down from the 110 the 0.71 s release needed, and the
+	# tick 64. The warmup counts in `tools/smoke_test.sh` are sized for that —
+	# 95 for the kill, which had room for the 0.50 s release before it, and the
 	# magnet's 132 is untouched because the magnet leaves on the click.
 	if _frames < 20 or _acted:
 		return
@@ -4471,11 +4498,14 @@ func _report_release() -> void:
 			% [got * 1000.0, want * 1000.0])
 	if _release_fist_full:
 		failures.append("the fist still had something in it when the shaft appeared")
-	if apart > RELEASE_AGREEMENT:
-		failures.append("the arm was furthest forward %d ticks from the throw" % apart)
+	var through := _release_reach_at_spear / _release_reach if _release_reach > 0.0 else 0.0
+	if through < RELEASE_REACH:
+		failures.append("the arm was only %.0f%% of the way out when the shaft left (%.3f m of %.3f)"
+			% [through * 100.0, _release_reach_at_spear, _release_reach])
 	if failures.is_empty():
-		print("combat_range: shaft at %.0f ms after the click (asked for %.0f), fist empty on the same tick, arm furthest forward (%.3f m) %d tick(s) away — release PASS"
-			% [got * 1000.0, want * 1000.0, _release_reach, apart])
+		print("combat_range: shaft at %.0f ms after the click (asked for %.0f), fist empty on the same tick, arm %.0f%% of the way out (%.3f m of %.3f, peak %d tick(s) away) — release PASS"
+			% [got * 1000.0, want * 1000.0, through * 100.0, _release_reach_at_spear,
+				_release_reach, apart])
 		return
 	print("combat_range: release FAIL — %s" % "; ".join(failures))
 
@@ -4626,6 +4656,7 @@ func _watch_spawned(node: Node) -> void:
 		var thrower := MatchState.bogs.get(1) as Bog
 		_release_spear_at = _frames
 		_release_spear_ms = Time.get_ticks_msec()
+		_release_reach_at_spear = _hand_reach(thrower) if thrower != null else -INF
 		_release_fist_full = (thrower != null and thrower.held_gear != null
 			and thrower.held_gear.is_carried())
 	if spear == null or not _trace:
