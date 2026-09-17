@@ -104,51 +104,52 @@ static func all() -> Array[int]:
 ## it is a lookup rather than a `match`. `BogAnimator` asks it once a frame and
 ## hands the answer to a `Transition` node; nothing else asks it at all.
 ##
-## **The spear's row is the Bog's own `Idle`, and it is the one entry here that
-## is not a weapon clip at all** (D-072). The user, shown the spear standing in
-## `SwordCarry`: *"This spear is only thrown so 2 hands doesnt make sense. I like
-## the original one because it looks like hes holding it up with one hand ready
-## to throw."*
-##
-## That is a statement about the **weapon**, and it is the thing D-070 had no way
-## to score. D-070 put three candidate poses to `-- solve` and took the one that
-## laid 1.24 m of shaft flattest:
+## **The spear's row is `SpearCarry`, and it is the row this table has been
+## waiting for.** The history is worth keeping because the reasoning is what
+## finally bought the clip. D-070 put three candidate poses to `-- solve` and
+## took the one that laid 1.24 m of shaft flattest:
 ##
 ##   pose over which the grip was solved   flattest   floor    trunk
 ##   Idle, the Bog's own boxer's guard       12 deg    0.45 m   0.09 m
 ##   BowCarry, a longbow at rest             55 deg    0.12 m   0.25 m
 ##   SwordCarry, a great sword at rest      **5 deg**  0.33 m   0.15 m
 ##
-## `SwordCarry` won because it is the only genuine **two-handed** pose in the
-## project — both fists together in front at waist height, 0.22 m apart — which
-## puts the shaft across the body where no amount of hip pitch can tilt it. Every
-## word of that is still true and it was still the wrong answer: a thrown spear
-## is held in **one** hand, and port arms is the stance of somebody carrying a
-## pole rather than somebody about to throw. The flattest pose and the right pose
-## were not the same pose, and no number in that table could have said so.
+## `SwordCarry` won because it was the only genuine **two-handed** pose in the
+## project, and it was still the wrong answer. The user, shown it: *"This spear
+## is only thrown so 2 hands doesnt make sense. I like the original one because
+## it looks like hes holding it up with one hand ready to throw."* The flattest
+## pose and the right pose were not the same pose, and no number in that table
+## could have said so. D-072 moved the row to the Bog's own `Idle` instead —
+## the one entry here that was not a weapon clip at all — and re-solved the grip
+## underneath it.
 ##
-## So the spear goes back on `Idle` — the hunched guard this game has always had,
-## right fist up beside the head — **with the grip re-solved underneath it**, so
-## that the shaft out of that raised fist lies level and leads forward instead of
-## standing up. `HeldGear.GRIP_ROTATION` carries the derivation and the bearing.
+## `Idle` was the best pose on disk and it was never the pose. Every idle in the
+## library hangs the arms against the body: `BreathingIdle`'s fist rests on the
+## hip, so a shaft in that fist lies along the belly, and D-099's trunk-clearance
+## check read **0.000** for all 288 grip candidates over it — not because the
+## shaft was inside the Bog but because the measurement cannot tell a shaft along
+## the belly from one through it. D-099 disarmed `preview_carry.SKIN_MIN` and
+## said in writing what would give the number back its meaning: *a carry clip
+## that holds the fist away from the body; there is none in the library, and it
+## is one row in `clips.json`.*
 ##
-## **Pointing `carry` at `Idle` is not the same as pointing it at nothing**, and
-## the difference is the whole reason this row is a clip name rather than `""`.
-## The layer still holds `UPPER_BODY_BONES` in one pose across the whole
-## locomotion plane, which is what gives the grip a single hand orientation to be
-## solved against — and a Bog standing still is in exactly the clip it would have
-## been in anyway, so the idle the user asked for is the idle they get, in the
-## ring and in a match. Taking the layer away was measured and is a different
-## animal: the shaft swings 64 deg across the set, ploughs the grass in six of
-## the twelve clips and passes 0.002 m from the chest in `StrafeRight` — and it
-## crashes `BogAnimator._build_graph`, which cannot build an
-## `AnimationNodeAnimation` out of an empty clip name.
+## That is `SpearCarry` (PLAN 8.8, the first of the two clips only the user could
+## fetch): a one-handed ready idle, the fist up beside the head, cocked. The
+## shaft now leaves a fist that is out in the air, `SKIN_MIN` is a threshold
+## again rather than zero, and the grip is solved over this clip instead of over
+## a stance that happened to be lying around. A spear Bog and a sword Bog stand
+## differently, which is the read `HeldGear`'s header wanted all along, and the
+## spear Bog now stands like somebody about to throw.
 ##
-## A spear Bog and a sword Bog now stand differently, which is the read
-## `HeldGear`'s header wanted all along. **A spear idle of its own is no longer
-## waiting on anybody**: what a download would buy is a pose built around the
-## prop, and the pose the user asked for is the one already on disk.
-const CARRY_CLIPS := ["Idle", "BowCarry", "SwordCarry"]
+## **Pointing `carry` at a clip is not the same as pointing it at nothing**, and
+## it is why this row is a clip name rather than `""`. The layer holds
+## `UPPER_BODY_BONES` in one pose across the whole locomotion plane, which is
+## what gives the grip a single hand orientation to be solved against. Taking
+## the layer away was measured and is a different animal: the shaft swings 64 deg
+## across the set, ploughs the grass in six of the twelve clips and passes 0.002
+## m from the chest in `StrafeRight` — and it crashes `BogAnimator._build_graph`,
+## which cannot build an `AnimationNodeAnimation` out of an empty clip name.
+const CARRY_CLIPS := ["SpearCarry", "BowCarry", "SwordCarry"]
 
 
 ## The carry clip for `weapon`, or "" for one with none.

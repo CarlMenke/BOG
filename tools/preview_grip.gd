@@ -8,11 +8,16 @@ extends Node3D
 ## The two optional vectors override the grip so values can be swept from the
 ## command line instead of edited and re-imported one at a time. `from`/`to`
 ## narrow the sheet to a window of the clip in seconds, which is how the throw
-## release (1.567 s of a 2.83 s clip, D-063) gets more than one sample on it.
-## The window `bog_animator.gd` actually plays is 1.067-1.900, and the grip
-## numbers below were re-checked across it when the clip changed:
+## release gets more than one sample on it.
 ##
-##     ... res://tools/preview_grip.tscn out/grip.png 25 Throw ##         -0.206,-0.582,0.097 -12,0,-15 1.067 1.90
+## **Ask the clip where its window is rather than typing it here.** This header
+## carried "1.567 s of a 2.83 s clip" and "1.067-1.900" through two clip changes
+## and both were wrong by the time anybody read them again. The throw's window is
+## `BogAnimator.THROW_CLIP_START` to `THROW_CLIP_END`, which are its `windup` and
+## `release` markers plus the follow-through (D-097), so:
+##
+##     "$GODOT" --headless --path . --script tools/clip_events.gd -- Throw
+##     ... res://tools/preview_grip.tscn out/grip.png 25 Throw ##         -0.206,-0.582,0.097 -12,0,-15 <windup> <release + 0.333>
 
 const BOG := preload("res://scenes/player/bog.tscn")
 

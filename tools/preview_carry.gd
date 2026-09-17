@@ -84,18 +84,28 @@ const CARRY_MIN := 0.15
 ## rather than the measured best because a pose is allowed to be tighter than
 ## `Idle` was as long as nothing is actually inside the Bog.
 ##
-## **Zero since D-099, and that is the honest number.** Every idle in the
-## rebuilt library hangs the arms against the body — `BreathingIdle`'s fist
-## rests on the hip, `BowCarry`'s on the thigh — so a prop that sits in the
-## fist sits against the trunk, and this measurement (the nearest skin
-## vertex to the prop's axis) reads 0.000 for a shaft lying *along* the
-## belly exactly as it would for one *through* it. It cannot tell the two
-## apart, so it stops deciding: the column is still printed for the eye, and
-## the sheets (`-- sheet spear`, `-- fist`) are the judge, which is what
-## design item 8 asks for anyway. What would give the number back its
-## meaning is a carry clip that holds the fist away from the body — one row
-## in `clips.json` — and D-099 names it.
-const SKIN_MIN := 0.0
+## **It was zero between D-099 and the spear's own carry clip, and it decides
+## again now.** D-099 disarmed it and said so in writing: every idle in the
+## rebuilt library hung the arms against the body — `BreathingIdle`'s fist rests
+## on the hip — so a prop in that fist sat against the trunk, and this
+## measurement (the nearest skin vertex to the prop's axis) read 0.000 for a
+## shaft lying *along* the belly exactly as it would for one *through* it. It
+## could not tell the two apart, so it stopped deciding and the sheets were the
+## judge. What D-099 said would give it back its meaning was "a carry clip that
+## holds the fist away from the body — one row in `clips.json`", and that row is
+## `SpearCarry`: the fist is up beside the head and the shaft leaves it in open
+## air. So the threshold is D-074's own 0.06 again, and the spear's grip is
+## solved against it rather than beside it.
+##
+## **The spear only, like `LEVEL_MAX` and `PALM_MAX`**, and for the same reason
+## rather than a new one: the spear is the weapon whose shaft passes the body,
+## and it is the only one that got a carry pose built around the prop. The bow
+## still hangs off a fist beside the thigh and reads 0.004 m to the nearest skin
+## vertex in every clip, which is a bow resting against a leg and not a bow
+## inside one — the same measurement that could not tell the two apart before,
+## on a pose nothing has changed. Its column is printed and decides nothing.
+## `hilt`'s `carried` already asks the great sword the harder version of this.
+const SKIN_MIN := 0.06
 
 ## How far off horizontal the **spear's** shaft may lie, in degrees, in any clip
 ## a Bog carries it through.
@@ -442,8 +452,8 @@ func _measure(everything: bool) -> void:
 		failures += 1
 
 	if failures == 0:
-		print("preview_carry: every weapon clears %+.2f m of floor and %+.2f m "
-			% [CARRY_MIN, SKIN_MIN] + "of trunk in every carried clip — carry PASS")
+		print("preview_carry: every weapon clears %+.2f m of floor in every carried "
+			% CARRY_MIN + "clip, and the spear %+.2f m of trunk — carry PASS" % SKIN_MIN)
 	else:
 		print("preview_carry: carry FAIL — %d rows are out" % failures)
 
@@ -468,6 +478,7 @@ func _report(bog: Bog, skeleton: Skeleton3D, player: AnimationPlayer,
 	print("  %-16s %22s %22s %s"
 		% ["", "no carry layer", "as shipped", "nearest trunk"])
 	var failures := 0
+	var skin_floor := SKIN_MIN if weapon == Loadout.Weapon.SPEAR else 0.0
 	var worst_off := INF
 	var worst_on := INF
 	var skin := INF
@@ -481,7 +492,7 @@ func _report(bog: Bog, skeleton: Skeleton3D, player: AnimationPlayer,
 		level = maxf(level, absf(on[1]))
 		var line := "  %-16s %+9.3f m %+7.0f deg %+9.3f m %+7.0f deg     %.3f m" \
 			% [clip, off[0], off[1], on[0], on[1], on[2]]
-		if on[0] < CARRY_MIN or on[2] < SKIN_MIN:
+		if on[0] < CARRY_MIN or on[2] < skin_floor:
 			line += "  <-- out"
 			failures += 1
 		print(line)
@@ -498,7 +509,7 @@ func _report(bog: Bog, skeleton: Skeleton3D, player: AnimationPlayer,
 ## letter hold disarms a Bog — `has_spear()` says so and has since D-035 — so
 ## there is no weapon for a carry pose to be the pose of, `BogAnimator._armed()`
 ## answers no, and the arms go back to whatever the locomotion plane is doing.
-## The card then sits `CARD_ABOVE_FIST` along the *virtual* shaft out of that
+## The card then sits `CARD_ALONG_SHAFT` along the *virtual* shaft out of that
 ## hand, which after D-070 points across the body where it used to point up the
 ## forearm.
 ##
