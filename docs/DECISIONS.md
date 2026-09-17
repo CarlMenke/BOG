@@ -12132,7 +12132,7 @@ counterpart here and the charge scrub cannot scrub a still pose.
 
 Per clip: record the travel; yaw the hips' keys by the `face` rule; lock the
 hips to the axis; set the loop mode; write the markers (refusing one outside
-the clip); save; file in the library. 190 lines with its comments, and the
+the clip); save; file in the library. 223 lines with its comments, and the
 facing needs a forward-kinematics pass over the tracks because nothing is in a
 scene tree during import — the same `_positions` that `clip_check`,
 `clip_measure` and `clip_events` reuse.
