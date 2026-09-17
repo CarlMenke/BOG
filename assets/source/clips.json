@@ -911,6 +911,17 @@
    }
   },
   {
+   "file": "Twerk-DancingTwerk",
+   "role": "Twerk",
+   "suite": "utility",
+   "mixamo_name": "Dancing Twerk",
+   "mixamo_by_hand": true,
+   "in_place": false,
+   "loop": true,
+   "face": "hips",
+   "markers": {}
+  },
+  {
    "file": "Slide",
    "role": "Slide",
    "suite": "air",

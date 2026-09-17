@@ -359,6 +359,21 @@ var held_gear: HeldGear
 ## only and published from `_publish` like every other owner-authored value.
 ## -1 while nothing is being drawn.
 var draw: float = -1.0
+## True while this Bog is playing the emote.
+##
+## **Written by `BogCombat` on every peer**, from the relay rather than from a
+## `sync_` field, which is the one thing about this flag worth arguing. A start
+## and a stop are two *events* the animator cross-fades between; a bool sampled
+## by the synchroniser would arrive somewhere inside the fade on a machine whose
+## packet was late, and a peer that dropped the packet carrying `false` would
+## dance forever. The throw's wind-up is relayed for the same reason and by the
+## same road (D-024), and this rides beside it.
+##
+## Read by the animator, by `_read_input` below and by nothing else. It lives on
+## the body rather than in the combat node because the two things it changes —
+## whether this Bog walks, and whether it is still dancing after a hit — are both
+## written here.
+var emoting: bool = false
 ## The robe, while this Bog is the Elder (D-038), and null the rest of the time
 ## — which is almost always. Built on demand rather than in `_ready` like the
 ## spear, because seven of every eight Bogs in a match will never wear one and a
@@ -730,8 +745,41 @@ func _read_input() -> void:
 		"move_forward", "move_back")
 	wants_sprint = Input.is_action_pressed("sprint")
 	wants_crouch = Input.is_action_pressed("crouch")
-	if Input.is_action_just_pressed("jump"):
+	var jumping := Input.is_action_just_pressed("jump")
+	# **The half of the emote's stop list that is made of movement**, and it is
+	# here because this is where movement is read: walking, jumping or crouching
+	# ends the dance, and until one of them does, the dance is what the Bog is
+	# doing instead of walking. Everything else that ends it — a hit, a death, an
+	# action, a letter, leaving the ground — is in `BogCombat.refresh_emote`,
+	# which runs every frame beside this one and is the only writer of the flag.
+	#
+	# Zeroing the input rather than gating `move_and_slide` keeps this to the one
+	# place: the friction, the facing and the animator all read the same emptied
+	# input the rest of the body already reads while the cursor is free, a few
+	# lines above.
+	if emoting:
+		var combat := _combat()
+		if combat != null and (input_direction != Vector2.ZERO or wants_crouch or jumping):
+			combat.stop_emote()
+		else:
+			input_direction = Vector2.ZERO
+			wants_sprint = false
+			wants_crouch = false
+			return
+	if jumping:
 		request_jump()
+
+
+## This Bog's own combat node, which owns the emote's state and its relay.
+##
+## The dependency runs the other way everywhere else in the project —
+## `BogCombat` holds a `Bog`, and six other files reach the combat node with
+## `bog.get_node("Combat")` — and it runs this way here for one reason: the
+## emote is ended by things the *body* is the only reader of. Resolved on demand
+## rather than cached in `_ready` so that a Bog built without a combat node (the
+## lobby backdrop, some of the harnesses) is a null and not a crash.
+func _combat() -> BogCombat:
+	return get_node_or_null("Combat") as BogCombat
 
 
 # ------------------------------------------------------------------ motion ---
@@ -849,6 +897,12 @@ func is_grounded() -> bool:
 ## written this way rather than as something the animator asks `BogCombat` for.
 ## `BogCombat` on a remote Bog belongs to the host and has no idea what that
 ## player is holding down; this field does, on every machine (D-065).
+## True while this Bog is playing the emote, on every machine. The animator's
+## one question about it.
+func is_emoting() -> bool:
+	return emoting
+
+
 func is_drawing() -> bool:
 	return (draw if is_local() else sync_draw) >= 0.0
 
@@ -1457,6 +1511,14 @@ func grant_invulnerability(seconds: float) -> void:
 ## from the one the host is about to kill it on. Clamped rather than trusted:
 ## on every machine but the host's this value arrived over a wire.
 func set_health(value: float) -> void:
+	# Taking a hit ends the emote, and this is the one line in the game that
+	# knows a hit landed on anybody: `MatchState._do_damage` runs on every peer
+	# and comes through here, so the dancer stops on the machine it is being
+	# watched from as well as on its own. A heal is not a hit, hence the drop.
+	if value < health and emoting:
+		var combat := _combat()
+		if combat != null:
+			combat.stop_emote()
 	health = clampf(value, 0.0, MAX_HEALTH)
 	if nameplate != null and is_instance_valid(nameplate):
 		nameplate.set_health(health, MAX_HEALTH)

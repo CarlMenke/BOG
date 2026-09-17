@@ -504,6 +504,7 @@ func _process(_delta: float) -> void:
 	_tick_channel()
 	_tick_hand()
 	_tick_charge()
+	refresh_emote()
 	if not _bog.is_local() or not _bog.alive:
 		_stow_aim_marker()
 		return
@@ -550,6 +551,12 @@ func _process(_delta: float) -> void:
 		try_throw_magnet()
 	if Input.is_action_just_pressed("drink_potion"):
 		try_drink_potion()
+	# The emote is the one key here that is a toggle rather than a trigger, for
+	# the reason it is a loop rather than a one-shot: the player decides when it
+	# is over, and the most obvious way to say so is the key that started it.
+	# Every other way out of it is in `refresh_emote` and in `Bog._read_input`.
+	if Input.is_action_just_pressed("emote"):
+		toggle_emote()
 
 
 func spear_cooldown() -> float:
@@ -1221,6 +1228,123 @@ func _play_windup() -> void:
 		animator.play_cast(windup_rate())
 	else:
 		animator.play_throw(windup_rate())
+
+
+# ------------------------------------------------------------------ emote ---
+
+## True while this Bog is dancing. The state itself is `Bog.emoting`, because
+## the body is where the two things it changes are written; this node owns the
+## *decisions* about it — when it may start, every way it ends, and the relay
+## that puts the same answer on the other seven machines.
+func is_emoting() -> bool:
+	return _bog != null and _bog.emoting
+
+
+## May this Bog start dancing? Alive, on the ground, empty-handed of letters and
+## not already mid-action — which is `is_busy()` plus the two that are not
+## windups, a draw held down and a hold. Deliberately **not** gated on a
+## cooldown or on the weapon: an emote costs nothing and every Bog has one.
+func can_emote() -> bool:
+	return _bog != null and _bog.alive and _bog.is_on_floor() 		and not is_busy() and not _bog.is_drawing() and not is_holding_letter() 		and not _bog.is_crouching() and not _bog.is_spinning()
+
+
+## The key. A toggle, and the only caller of the two below that a player has.
+func toggle_emote() -> void:
+	if is_emoting():
+		stop_emote()
+	elif can_emote():
+		start_emote()
+
+
+## Start dancing here and ask for it to be started everywhere. Same shape as the
+## throw's wind-up and for the same reason (D-024): a client cannot address the
+## other peers itself, so it plays its own copy now and the host relays.
+func start_emote() -> void:
+	if _bog == null or is_emoting():
+		return
+	_bog.emoting = true
+	_relay_emote(true)
+
+
+## Stop dancing, everywhere. **The one exit**, called by the key, by
+## `refresh_emote` below and by the two places in `Bog` that see a reason the
+## body knows about first — a movement input and a hit. It is safe to call on a
+## Bog that is not dancing, which is what lets all of those be unconditional.
+func stop_emote() -> void:
+	if _bog == null or not _bog.emoting:
+		return
+	_bog.emoting = false
+	_relay_emote(false)
+
+
+## Tell the other seven, **from the owner only**.
+##
+## The two above are called on every peer, not just the dancer's: a hit ends an
+## emote and `Bog.set_health` runs everywhere, so every copy of a Bog that just
+## took one clears its own flag on the same frame. That is a prediction and it
+## is welcome — it is the same answer the relay is about to carry. What must not
+## happen is eight machines all asking the host to broadcast it: a client would
+## be refused (`_request_emote` checks the sender owns the Bog) and the host
+## would be speaking for a player it is not, so the ask is the owner's alone and
+## everybody else waits for `_do_emote` to confirm what it already guessed.
+func _relay_emote(on: bool) -> void:
+	if not _bog.is_local():
+		return
+	if Net.is_host:
+		_host_emote(on)
+	else:
+		_request_emote.rpc_id(1, on)
+
+
+## Every way an emote ends that is not a keypress and not something `Bog` sees
+## first, asked once a frame on the owning client.
+##
+## **One refresh path and no flags.** The alternative was a `stop_emote()` in
+## each of the eight functions that can end it — the throw, the swing, the draw,
+## the cast, the drink, the pick-up, the jump and the death — which is eight
+## places to forget, and D-025's whole lesson about the wind-up's cancels is
+## that a list of them belongs in one function. So this asks `can_emote()` again:
+## everything that may not *start* an emote may not let one continue either, and
+## the two lists cannot drift apart because they are one list.
+func refresh_emote() -> void:
+	if _bog == null or not _bog.emoting:
+		return
+	# The owner decides and the relay carries it. A remote copy that stopped
+	# itself on its own idea of `is_busy()` would stop on a frame nobody else
+	# stopped on, which is the desync the relay exists to avoid.
+	if not _bog.is_local():
+		return
+	if not can_emote():
+		stop_emote()
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_emote(on: bool) -> void:
+	if not Net.is_host or multiplayer.get_remote_sender_id() != _bog.peer_id:
+		return
+	_host_emote(on)
+
+
+## Deliberately not gated on anything but life, exactly as the throw's wind-up
+## relay is not gated on the host's cooldown: this is cosmetic, the owner has
+## already decided, and a host that second-guessed it would show seven people a
+## Bog that is not doing what its player is looking at.
+func _host_emote(on: bool) -> void:
+	if _bog == null or not _bog.alive:
+		return
+	_do_emote.rpc(on)
+	_do_emote(on)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _do_emote(on: bool) -> void:
+	# The dancer already set its own flag on the keypress. Setting it again when
+	# the host's relay lands would restart nothing — it is a bool — but it would
+	# also undo a stop the player made half a round trip in, so the owner is
+	# skipped here the way it is skipped in `_do_throw_windup`.
+	if _bog == null or _bog.is_local():
+		return
+	_bog.emoting = on
 
 
 @rpc("any_peer", "call_remote", "reliable")

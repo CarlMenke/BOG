@@ -49,7 +49,8 @@ extends AnimationTree
 ##     cast       OneShot        Cast from `windup` past `release`, upper body, at the dial's rate
 ##     throw      OneShot        Throw from `windup` past `release`, upper body, at THROW_RATE
 ##     swing      OneShot        SwordSpin, **full body**
-##     output   <- swing
+##     emote      Blend2         swing / Twerk, **full body**, by how emoting
+##     output   <- emote
 ##
 ## Three planes and a switch where there was one plane and a carry layer: the
 ## great sword set and the archer set each have their own walks, runs and
@@ -90,7 +91,7 @@ const REQUIRED_CLIPS: Array[String] = [
 	"BowDraw", "BowReload", "BowLoose",
 	"JumpStart", "AirLoop", "RunJump", "Land", "LandHard", "Roll", "Slide",
 	"Throw", "Cast", "SwordSpin", "Drink",
-	"SpearCarry",
+	"SpearCarry", "Twerk",
 ]
 
 
@@ -328,6 +329,14 @@ const DRAW_BLEND_SPEED := 12.0
 ## charge, long enough that the feet do not scissor.
 const PLANE_XFADE := 0.15
 
+## How fast the emote comes in and goes out, in blend per second — the plane
+## cross-fade, read as a rate, because it is the same kind of move: a whole body
+## changing what it is doing, with both feet on the ground, and no event inside
+## either pose that has to land on a frame. A OneShot would have been the wrong
+## node for it: `Twerk` loops until the player stops it, and a one-shot that is
+## never allowed to finish is the clock D-026 exists to keep out of this graph.
+const EMOTE_BLEND_SPEED := 1.0 / PLANE_XFADE
+
 # ----------------------------------------------------------- the upper body --
 
 ## Bones the layered one-shots and blends are allowed to move: everything from
@@ -383,6 +392,7 @@ const P_THROW_RATE := "parameters/throw_rate/scale"
 const P_SWING := "parameters/swing/request"
 const P_SWING_ACTIVE := "parameters/swing/active"
 const P_SWING_RATE := "parameters/swing_rate/scale"
+const P_EMOTE := "parameters/emote/blend_amount"
 
 ## The three ground planes' input names on the `loco` transition.
 const LOCO_STAND := "stand"
@@ -403,6 +413,10 @@ var _draw_blend: float = 0.0
 ## How far the carry pose is over the body (D-070). The same number
 ## `HeldGear.set_carry` is handed for the bow's tilt.
 var _carry_blend: float = 0.0
+## How much of the emote is showing, 0 to 1. Moved toward `Bog.is_emoting()`,
+## which answers off the flag the relay writes on every peer, so the eight
+## machines watching blend the same dance in over the same 0.15 s.
+var _emote_blend: float = 0.0
 ## How far the *aim* is over the body (D-066): whether the torso is turned to
 ## the crosshair. Holds through the loose, which `_draw_blend` does not.
 var _aim_blend: float = 0.0
@@ -591,6 +605,8 @@ func _build_graph(player: AnimationPlayer) -> AnimationNodeBlendTree:
 	# Full body, the only attack that is (D-068): the spin turns the pelvis
 	# through a revolution and a mask cannot draw a line at it.
 	tree.add_node("swing", _shot(SWING_FADE_IN, SWING_FADE_OUT), Vector2(3160, 740))
+	tree.add_node("twerk_clip", _cycle(player, "Twerk", 0.0), Vector2(3160, 1000))
+	tree.add_node("emote", _blend2(), Vector2(3360, 780))
 
 	tree.connect_node("loco", 0, "stand")
 	tree.connect_node("loco", 1, "sword")
@@ -644,7 +660,15 @@ func _build_graph(player: AnimationPlayer) -> AnimationNodeBlendTree:
 	# have the mask's clip win on every bone the mask names (D-068).
 	tree.connect_node("swing", 0, "throw")
 	tree.connect_node("swing", 1, "swing_rate")
-	tree.connect_node("output", 0, "swing")
+	# The emote sits over even the swing, and it is the only node in this graph
+	# allowed to: it is a full-body pose the player asked for, and every other
+	# state in here ends it rather than competing with it
+	# (`BogCombat.refresh_emote` is the whole list), so there is no tie left for
+	# it to win. It is a Blend2 and not a OneShot because `Twerk` loops until it
+	# is told to stop.
+	tree.connect_node("emote", 0, "swing")
+	tree.connect_node("emote", 1, "twerk_clip")
+	tree.connect_node("output", 0, "emote")
 	return tree
 
 
@@ -894,6 +918,13 @@ func _process(delta: float) -> void:
 	set(P_CARRY, _carry_blend)
 	if _body.held_gear != null:
 		_body.held_gear.set_carry(1.0 - _aim_blend if _armed() and not _body.is_spinning() else 0.0)
+
+	# The emote. One flag, written by `BogCombat` on every peer, read here
+	# exactly as the crouch and the draw are: a target of 0 or 1 and a move
+	# toward it. Nothing else in this file knows the emote exists.
+	_emote_blend = move_toward(_emote_blend, 1.0 if _body.is_emoting() else 0.0,
+		EMOTE_BLEND_SPEED * delta)
+	set(P_EMOTE, _emote_blend)
 
 	set(P_STANCE, _stance)
 	set(P_AIRBORNE, _airborne)
