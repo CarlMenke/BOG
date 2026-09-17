@@ -133,5 +133,6 @@ pieces fit together is `docs/ARCHITECTURE.md`.
            re-solved over it and its trunk clearance is a measurement again (**D-103**).
            Still open: the Magic pack's `Standing Run Left` for a true lateral strafe,
            with a `mirror_of` rule for its twin (D-098)
-- [ ] 8.9  Skins — a picker on a lobby roster row, so a player can wear one of the
-           thirteen team skins (**D-108**); in progress
+- [x] 8.9  Skin picker — a strip in the lobby: your own skin in free-for-all, your
+           team's in Teams, no two teams alike, and the ring and the arena wearing
+           what was picked (**D-109**)

@@ -11,6 +11,7 @@ art/skins/<name>/
     *.png                 its textures, with the .import Godot writes
     robe.res / robe.tscn  a clothing mesh (see below), or
     basecolor.png         a recolour (see below)
+    thumb.png             the picker's 128² tile, if it is a skin a player picks
 ```
 
 ## A recolour

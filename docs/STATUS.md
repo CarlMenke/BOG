@@ -153,8 +153,18 @@ example, `example/` the recolour (`tools/make_recolour.gd`,
 glub, gum, muck, rime, roar, slag, toad, void — each a Tripo retexture of the
 same sculpt, extracted from its `.glb` by `python tools/extract_skins.py`
 (D-108). The downloads live under `assets/source/skins/` behind a `.gdignore`
-and are untracked; the 2048² PNGs are what is committed. Nothing in the lobby
-offers one yet: a picker on a roster row is in progress (D-109, pending).
+and are untracked; the 2048² PNGs are what is committed. **The lobby picks
+them** (D-109): `scripts/game/skins.gd` is the pickable list — the thirteen
+plus `bog`, the plain body at index zero — and the strip is one line of 40 px
+swatches under the weapon blurb. In free-for-all a skin is one more roster key
+with `weapon`'s whole lifecycle; in **Teams it belongs to the team**, lives in
+`Net.team_skins` indexed by team, can be changed by any member, and no two
+teams may wear the same one. `Net.skin_for(peer_id)` is the one call every
+dresser makes, so the ring, the arena and the lit swatch cannot disagree.
+Because the team skin *is* the team's identity there, the in-game team recolour
+is off in Teams — the nameplate keeps the colour. `Bog.set_team_tint` now gets
+a real team from only two places: `tools/team_tint.tscn`, which is the check
+that the shader still works, and backdrop entries with no `skin` key.
 
 **One thing only the user can do** (PLAN 8.8), one row in `clips.json` plus
 the fetch: the Magic pack's `Standing Run Left`, so the running strafes stop
@@ -312,8 +322,11 @@ of what that means:
   the robe burns out on a host-owned clock rather than on a death, and a spear
   thrown at one is turned aside in a violet flash. It moves 35% faster, jumps
   to 2.64 m instead of 1.69, and carries **no spear at all**. The same mouse
-  button plays the same `Throw` clip — at 2.5x since D-063, derived from the delay so the
-  arm keeps up — and fires a hitscan **bolt out of the hand 0.2 s after the
+  button plays the Elder's **own `Cast` clip**, not the spear's `Throw` (D-064):
+  its `windup`-to-`release` window is 0.533 s and `BogAnimator.cast_rate_for_release`
+  plays it at whatever rate puts the release on `lightning_delay` — about 2.7x at
+  the default 0.2 s, floored at a 0.14 s wind-up so the arm is still seen to move —
+  and fires a hitscan **bolt out of the hand 0.2 s after the
   click**: 28 m, 1 s recharge, one hit kills, stopped by a shield
   exactly as a spear is, and refused during a letter hold. The fist crackles
   while it is loaded and is bare while it recharges, which is the spear's
@@ -453,7 +466,7 @@ Three tiers, because three different kinds of claim need three different proofs
 | `tools/combat_range.tscn bhop` | timed hops climb to 1.3x run speed and no further, as a Bog, an Elder and a capture carrier; running, one jump, a late hop and a hop out of a dive roll do not beat run speed (D-052). **In the gate**, headless with `--fixed-fps 60` |
 | `tools/combat_range.tscn respawn` | a Bog that dies holding a shield and an Elder that dies in its robe both come back empty-handed, including a remote Bog whose client is 200 ms behind the host (D-043) |
 | `tools/preview_carry.tscn` | **the carry layer, for all three props at once** (D-070), and the one tool here that is not about one weapon — because the carry is one *mechanism*: a `Blend2` filtered to `UPPER_BODY_BONES` over the locomotion plane, pointed at `Loadout.CARRY_CLIPS` by a `Transition`. `-- measure` composes it a bone at a time, exactly as the graph does, and requires every prop to stay 0.15 m off the ground and 0.06 m off the Bog's **skinned trunk** over twelve clips — the real mesh, every head- and torso-weighted vertex, skinned by the formula the GPU runs, which is the method D-065 used and the reason its table is believable. It also requires the spear's shaft to stay within 30° of horizontal in every carried clip (D-072) — the one claim about this grip that was prose twice and went stale twice, once to D-066's six new clips and once to D-071's remirrored strafes; it is `LEVEL_MAX` now and a clip that swings the shaft fails the gate on the commit that lands it. It recomputes `HeldGear.GRIP_OFFSET` from `GRIP_ROTATION` and fails if the const has drifted, and checks the **letter card** — which rides the same grip and therefore moves with it — is out of the grass. Since D-074 it also asks the one question none of those can: whether the shaft is **in the hand**. A spear riding the knuckles is exactly as far from the trunk, as level and as high off the grass as one in the fist, so it measures the whole mitten — the hand bone and the three finger chains, 1,030 vertices skinned in the carry pose — and requires the shaft's axis to pass inside it (`PALM_MAX`, half the mitten's own 0.132 m thickness). D-072's grip passed everything else and reads 0.076 m here; the shipped one reads 0.050. `-- fist` is its picture, one Bog per palm point, framed on the hand from behind the right shoulder — which is the only angle the question can be seen from, because head-on a shaft passing in front of a fist looks the same as one passing through it. `-- solve` is how the spear's grip was found: aim the shaft where it is wanted in the Bog's own frame, read the grip back off the hand, and score every bearing against the trunk — 24 of them for D-070, and 288 for D-072, which had to find the bearing nearest straight forward that still clears the Bog. `-- poses` prints what each candidate clip does with the two fists; `-- sweep` nudges a lever and `-- sheet <weapon>` is the picture, one weapon in Idle, Walk and Run with the layer off and on. `-- hilt` is the **second** thing it is in the gate for (D-073) and is the general form of the fault `level` was a special case of: the great sword's three constants are seventeen poses of `Swing` averaged, so it averages them again and fails if they have drifted (`fit`), if `SWORD_GRIP_OFFSET` has been left behind by its own rotation — or, as at D-074, by the palm point both props hang off (`derived`), or if the pose the sword is *carried* in no longer closes its second fist on the hilt (`carried`) — it found a 0.6 mm drift four steps old on the commit it was written. `-- solve sword` and `-- elevations <weapon> plan` are what said the sword's 45° to the right is the carry pose's own fist line and not a fit. Since D-075 `measure` asks the palm question of the **other** hand as well (`bottle`): the heal potion is the first thing this game puts in a fist that is not a weapon, and it is measured off the left mitten's own 1,073 vertices in the pose `Drink` opens the fingers into — which is 9.5 cm further out along the hand's axis than the fist a spear is carried in, so the *shared* palm point `fist_offset()` lands 0.133 m away and the bottle is the one prop with its own. It reads 0.050 of `PALM_MAX`'s 0.066, and the 0.050 is deliberate: centred in that mitten the bottle spends half its belly inside the Bog's stomach. `-- potion` is the fit — the fist's centre, the two rotations worth arguing about and what each does across the window, and the scale table — and `-- drink fist|body` is the picture, three fists close or six whole Bogs across the channel. **In the gate** twice, headless — forty seconds for `measure` and four for `hilt` |
-| `tools/weapon_select.tscn` | the lobby weapon pick as a **roster row** (D-069): the default for a row that never heard of weapons, a request through the host and back on the rebroadcast, a bogus ordinal refused into a spear, the lock the moment Start is pressed, three rematches keeping it, the real lobby's shape since D-107 (strip and panels up together, no collapse button, the fold defaults, the count live behind a fold, both toggles dropping to `SHRINK_END`, the chat's three states and a submit that keeps the caret, and a second lobby instanced as a client with the config gone), and three **remote** backdrop Bogs each holding only what its row says — and, since D-070, *standing* in only what its row says: the ring asserts each Bog's `carry_pick` is pointing at its own weapon's pose, and that a change of pick moves the stance on the same call that moves the prop. The half that is a *Bog* — the gate, the hand and the three overrides — is `match_rules`. **In the gate**, headless |
+| `tools/weapon_select.tscn` | the lobby weapon pick as a **roster row** (D-069): the default for a row that never heard of weapons, a request through the host and back on the rebroadcast, a bogus ordinal refused into a spear, the lock the moment Start is pressed, three rematches keeping it, the real lobby's shape since D-107 (strip and panels up together, no collapse button, the fold defaults, the count live behind a fold, both toggles dropping to `SHRINK_END`, the chat's three states and a submit that keeps the caret, and a second lobby instanced as a client with the config gone), and three **remote** backdrop Bogs each holding only what its row says — and, since D-070, *standing* in only what its row says: the ring asserts each Bog's `carry_pick` is pointing at its own weapon's pose, and that a change of pick moves the stance on the same call that moves the prop. Since D-109 the same `lobby` stage also drives the **skin** strip — a free-for-all pick round-tripping through the roster and coming back on the Bog in the ring (read off `get_active_material`, so it is what the renderer will draw), two teams starting in different bodies, a pick moving the *team's* entry and not the picker's own row, the other team's swatch disabled and a request for it refused at the host, a team switch as a change of clothes with nothing sent, and the ring's ceiling re-measured at eight Bogs and at five so a taller swatch cannot creep back over their faces. 184 checks. The half that is a *Bog* — the gate, the hand and the three overrides — is `match_rules`. **In the gate**, headless |
 | `tools/team_tint.tscn` | every Bog's body is in its team's nameplate colour, free-for-all is the body's own imported colour, the Elder's robe stays purple, a corpse keeps its colour, and a lobby team switch repaints the Bog (D-046). **In the gate**, headless; through `snapshot.gd` it renders the lineup |
 | `tools/letter_carriers.tscn` | a letter card that starts a hold puts "Name picked up G" in the feed and a wasted duplicate puts nothing; carriers behind a wall, enemy included, have a gold card marker over their heads drawn through it and above the nameplate, your own hold marks nothing on your screen, and the marker goes on bank and on death; the same in free-for-all (`-- ffa`) (D-050). **In the gate**, headless; through `snapshot.gd` it renders the Bog's own view with the feed |
 | `tools/capture_preview.tscn` | a Capture B·O·G match in the real arena: both team bases drawn, three letter cards at home, every Bog on its own team's pad (D-051). **In the gate** on Kopje Crossing, headless; takes a map id; through `snapshot.gd` it renders the view from above Team 1's base. The mode's rules are `match_rules`, and the base/letter layout on every map is checked by `playthrough` |
@@ -472,6 +485,7 @@ Three tiers, because three different kinds of claim need three different proofs
 | `tools/parkour_report.tscn` | every platform on a built map has its rock, fits a Gub, and is reachable from the ground (D-042); on Lantern Wharf also that no jump reaches a tower or wall top, no sightline runs past 25 m (26 m from a roof), and no pad sees the other base's pads (D-056); on Halcyon Wake every deck reachable, the mast out of reach, sightlines under 21 m on the main deck and 38 m from a landing, and nothing but the void over every edge of the deck (D-057); on Twin Quarry that each team's bench is reachable from the pit floor by its two haul ramps and by nothing else, that no jump reaches a 10.2 m column top or the rim, and that no sightline runs past 30 m on the floor or 43 m from a landing (D-082). **In the gate** for all four |
 | `tools/clip_check.gd` | the rebuilt character's import layer (D-095): the body 1.80 m tall with its feet on the floor and 49 bones, every row of `clips.json` in the shared library, every track of every clip on a body bone with the hips locked to the axis, the loop mode from the table, and four clips from four suites posing the body within 0.12 mm of where their own skeleton poses it. **In the gate**, headless, about ten seconds |
 | `tools/preview_bog.tscn` | the rebuilt body playing clips from the library, six BOGs across a clip, one row per clip key — the sheet the clip choice is made from |
+| `tools/skin_thumbs.gd` | the picker's fourteen 128² tiles, rendered rather than painted (D-109): one BOG in `Idle`, the camera aimed off `mixamorig_Head`, one shot per skin, the centre square cut. **Not** in the gate and **not headless** — it needs a real window to render into. `"$GODOT" --path . --resolution 512x512 --script tools/skin_thumbs.gd` (a trailing `-- muck rime` does just those), then `--import` so Godot sees the new PNGs |
 | `tools/preview_*.tscn` | it *looks* right. Needs a person, always will |
 
 **`playthrough` is the one that catches integration.** Every other harness looks
@@ -495,7 +509,7 @@ spawns hollow top canopy tree`,
 plus `match` for real Bogs and the diagnostic flags in its `FLAGS` dictionary.
 `ui_range` modes: `menu menu_join menu_notice settings settings_network lobby
 lobby_full lobby_teams lobby_client lobby_map lobby_capture lobby_weapons
-lobby_chat lobby_feel widths capture_config`. The last two print a verdict and sit in the
+lobby_skins lobby_ffa_skins lobby_chat lobby_feel widths capture_config`. The last two print a verdict and sit in the
 gate (D-076): `widths` puts every slider in the match panel at the value that
 renders its own unit widest, under every win condition, and fails if any track
 is under 180 px — 245 rows, narrowest track **448 px**, and it read **zero**
@@ -510,8 +524,13 @@ collapse to since D-107 — so what is left of it is the part that was doing
 the work: it deals all three weapons into one shot, three buttons in the
 strip and three pairs of hands in the ring above it. `lobby_chat` is the
 panel whose open state is not a boolean, photographed with the caret in its
-input box. Every lobby mode now deals its stand-ins different weapons, so any
-of them is also a shot of the ring carrying three things at once. `hud_range` modes:
+input box. `lobby_skins` is Teams — two teams in two bodies, the local player
+on one, the other team's swatch disabled — and `lobby_ffa_skins` is six
+stand-ins in six bodies; **only those two deal skins**, so every other lobby
+mode leaves the roster's `skin` key alone and the reference shots that predate
+the picker stay comparable with themselves. Every lobby mode now deals its
+stand-ins different weapons, so any of them is also a shot of the ring
+carrying three things at once. `hud_range` modes:
 `hud hud_teams hud_cooldown hud_letters hud_hold hud_elder killfeed scoreboard
 scoreboard_letters pause results results_letters dead spectate hud_letters_teams
 scoreboard_letters_teams results_letters_teams reload_timer weapon_tiles`. The

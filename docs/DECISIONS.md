@@ -12946,3 +12946,155 @@ How a team wears one is the next entry (D-109).
   body's full size.
 - **Trusting the 15 872 vertex match as the verification.** It is evidence
   and it is not proof; the render is cheap and answers the actual question.
+
+## D-109 — A skin is picked in the lobby: your own in free-for-all, your team's in Teams
+The owner is the whole of it. Each player picks their own skin in free-for-all;
+in Teams the skin belongs to the **team**, any member of the team can change
+it, and two teams can never have the same one.
+
+**Free-for-all is D-069, unchanged.** `skin` is one more key in the roster row
+with `weapon`'s whole lifecycle — seeded by `_make_player`, requested by its
+owner, sanitized and rebroadcast by the host, carried in with the name on a
+rejoin, saved to `Settings` as a preference, locked by `match_running` at
+Start, forgotten when the peer goes. `_request_skin` is `_request_weapon` with
+a different clamp. No second channel, no `MultiplayerSynchronizer` field, no
+new RPC shape. That one choice is again why "in the lobby and in the game" is
+one feature: `MatchState._create_bog` reads it off its own copy of the roster
+on the line below the weapon.
+
+**Teams is the half a weapon never had, and it is why this needed state of its
+own.** Everyone on a team wears the team's skin and any member may change it,
+so there is no one row it could sit on. Worse, two things would break it on a
+row: a team that empties would lose its skin, and `_deal_random_teams`
+shuffles *peers between teams*, so a skin following a player would land on a
+team that already had one and two teams would come out of Start in the same
+body. `Net.team_skins` is therefore an array indexed by team —
+host-authoritative, rebroadcast whole and never diffed like `players`, riding
+in `_sync_roster`'s third argument so one packet cannot arrive out of order
+with itself. `skin_for(peer_id)` is the one function that knows which of the
+two stores is the answer, and every dresser calls it — `BogBackdrop._apply_slot`,
+`MatchState._create_bog` and the lobby's own strip — so a team switch and a
+random deal both become changes of clothes with nothing sent.
+
+**No two teams share a body, enforced in one place.** `_seed_team_skins` never
+starts from a collision: team 0 takes the plain body and each team after it
+the next name in `Skins.NAMES`, so teams differ the moment a match goes to
+Teams rather than lining up as eight identical Bogs waiting for somebody to
+open the picker. (The modulo in `Skins.default_for_team` cannot wrap —
+`MatchConfig` allows eight teams and there are fourteen skins — and is there so
+a ninth team is a bad default rather than an index error.) `_request_skin` is
+the only thing that could create a collision and is the only thing that checks.
+It refuses **silently** and broadcasts nothing: the requester's roster is still
+true, and their strip redraws with the tile disabled on the next change. The
+picker draws the rule before it is enforced — a swatch another team holds is
+dim, with that team's colour on its rim — so in the ordinary case nobody ever
+sends the request, and "who has the toad, then?" is answered without a second
+control.
+
+**Under random teams the lobby's teams are not a body.** `teams_decided()` is
+`TEAMS and (match_running or not random_teams)`, which is D-048's rule about
+not painting a line-up nobody will play: in the lobby the strip says "Your
+skin" and the ring wears personal picks, and at Start, when the deal is real,
+everybody puts on their team's.
+
+**The team recolour comes off.** D-046 painted the body in its team's colour;
+in Teams the team *is* a body now, and a Bog wearing its team's skin under its
+team's paint is one team said twice and neither said clearly. The nameplate
+keeps the colour, so "that is my team" is still on screen in the palette the
+stripe, the scoreboard and the kill feed share. The shader,
+`Bog.set_team_tint` and `tools/team_tint.gd` are untouched, and the switch is
+one line at each of two call sites.
+
+**The list is a file.** `Skins` is `Loadout`'s sibling rather than four more
+constants in it, because a weapon is always yours and a skin has a second
+owner. `bog` — the plain body — is index zero, the default, and a folder like
+the rest holding a README and a thumb and no texture, because "the body's own"
+is a real answer to "which skin" and the picker needs a swatch for it.
+`example` and `elder` are not in the list: one is how a recolour is made, the
+other is worn by being the Elder. `NAMES` is appended to and never reordered,
+because the index is what travels on the wire and what sits in `team_skins`.
+Thumbnails come from `tools/skin_thumbs.gd`, which stands one BOG in `Idle`,
+asks the skeleton for `mixamorig_Head` and frames an orthographic camera
+**0.52 m** tall centred **5 cm above** it, then cuts the centre square to
+**128²**: the crop is the camera, so all fourteen are framed identically by
+construction and a re-rig re-aims rather than going stale.
+
+**The strip is one line, and its size is set by what is behind it.** The lobby
+is a room full of real Bogs and the picker is a picker *for* them, so a strip
+standing in front of the faces it is choosing between is the wrong way round —
+the same thing D-107 said when it moved the weapon strip above the Bogs' heads
+rather than across their chests. The first cut ignored that: **84 × 92** tiles
+with the skin's name under each, in a band at **150–272**, which in an
+eight-Bog lobby covered every head and nameplate in the ring.
+
+So the row was measured against the ring rather than estimated. Through the
+backdrop's own camera, in base-viewport rows, eight Bogs put the highest
+nameplate's top edge at **170.2** and the highest head at **182.6**; five,
+standing nearer, at **169.5** and **183.8**. The row ends at **159** and clears
+the lower of those by **10.5 px**, and `tools/weapon_select.gd` takes both
+measurements again on every run — `RING_CLEARANCE` is 8 px, so the ceiling any
+band has to end above is **161.5** — so that a taller swatch cannot quietly
+take the ring's faces back.
+
+Two things had to be got right to take that measurement at all, and each gave
+a confident wrong answer first: `unproject_position` reports in the pixels of
+whatever window is open and a headless run has a 1600 × 1600 one, so the
+projection is built against the base viewport the scene's offsets are actually
+written in; and a billboarded `Label3D` reports a **cube** AABB, every axis the
+length of the text's diagonal, which put a long name's "top" 18 cm above where
+any ink is.
+
+Fitting into that band cost two things. The per-tile names went, into the
+caption beside the strip, which reads `YOUR SKIN · TOAD` and follows the
+pointer or the caret onto whatever swatch it is over — one name where the eye
+already is instead of fourteen laid across the Bogs, and a name a keyboard can
+reach as easily as a mouse; "anyone on the team can change it" became a
+tooltip on that label rather than a second line. And the whole top band moved
+up, to **10–159** for buttons, blurb and swatches together, because the weapon
+block is 105 px. Fourteen 40 px swatches 4 apart (44 with the theme's margins)
+are **668 px** in the **1488** between the margins, so the strip does not
+scroll and must not have to.
+
+**Pressing picks; focus does not** — a deliberate break from D-069's
+focus-picks rule. Fourteen swatches arrowed end to end would be fourteen
+requests and fourteen roster broadcasts, and in Teams it would repaint four
+teammates on the way past. `ui_accept` still presses; nothing is out of a
+keyboard's reach.
+
+### Rejected
+
+- **The team skin as a roster key written onto every member's row.** No wire
+  change at all, and it fails twice: an empty team forgets its skin, and a
+  random deal carries a player's shirt onto a team that already had one.
+- **A `MatchConfig` field.** The dials in that resource are the host's, one
+  value for the whole match. This is per team and changed by any member of it.
+- **A separate broadcast for `team_skins`.** Two reliable calls that must not
+  be reordered, where one already goes out on every change.
+- **A tile with the skin's name under it.** It is the obvious picker and it
+  does not fit above the ring: fourteen names is fourteen lines of type at the
+  exact height an eight-Bog lobby puts its nameplates, so the strip either
+  covered them or covered the heads.
+- **Shrinking the weapon prop to make the room.** D-076 spent a page arguing it
+  out of the project: a 32 px prop is a picture too small to be the thing a
+  player is choosing from. The band moved instead.
+- **Letting the strip overlap the ring's nameplates.** Taken for one commit, on
+  the grounds that the swatches are opaque pictures and the names are in the
+  roster panel. Wrong: the ring is what the lobby is on screen for.
+- **Estimating the ring's ceiling from a screenshot.** A number read off a
+  scaled PNG by eye was out by 50 px, in the unsafe direction, and cost a whole
+  layout.
+- **A horizontally scrolling strip.** The fallback if fourteen would not fit;
+  they fit.
+- **Writing a Teams pick through to `Settings`.** A team's skin belongs to the
+  lobby it was chosen in; only the free-for-all pick persists, and it is what
+  the menu's hero wears.
+- **Generating thumbnails in `extract_skins.py`.** Python and Pillow never open
+  Godot, and a thumb is a render through the game's own importer, material and
+  lights.
+
+### What this does not cover
+
+- `tools/net_test.sh` runs free-for-all and makes no pick, so the Teams rules
+  are not proved over a real socket — only that the two new RPC arguments did
+  not break the roster sync.
+- A fifteenth skin, or a wider swatch, brings the scrolling strip back.
