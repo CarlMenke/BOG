@@ -44,6 +44,12 @@ const LOBBY_SCENE := preload("res://scenes/ui/lobby.tscn")
 ## backdrop's 8100s.
 const PEERS := [1, 951, 952]
 
+## How much sky the skin strip has to leave between its own bottom edge and the
+## highest thing in the ring, in base-viewport pixels. The ring is what the
+## lobby is for looking at; a strip that overlaps it is a picker standing in
+## front of the thing it is picking for.
+const RING_CLEARANCE := 8.0
+
 var _failures: int = 0
 var _checks: int = 0
 ## The weapon this machine had picked before the harness started.
@@ -392,7 +398,7 @@ func _run_lobby() -> void:
 	var ring := lobby.get_node_or_null("%Backdrop") as BogBackdrop
 	_check("the lobby has a skin row", skin_row != null, true)
 	_check("a skin strip", skins != null, true)
-	_check("a caption under the weapon blurb", caption != null, true)
+	_check("a caption beside it", caption != null, true)
 	if skin_row == null or skins == null or caption == null or ring == null:
 		print("weapon_select: lobby FAIL - the scene has no skin strip")
 		_failures += 1
@@ -400,7 +406,7 @@ func _run_lobby() -> void:
 		return
 	_check("the strip is on beside the weapon strip, not instead of it",
 		skin_row.visible and row.visible, true)
-	_check("one tile per pickable skin", skins.get_child_count(), Skins.NAMES.size())
+	_check("one swatch per pickable skin", skins.get_child_count(), Skins.NAMES.size())
 	_check("fourteen of them", Skins.NAMES.size(), 14)
 	# The two folders under `art/skins/` that are not a pick: the worked example
 	# and the Elder's robe. A list that grew one of those by accident would put a
@@ -415,7 +421,8 @@ func _run_lobby() -> void:
 	# and back out onto the strip.
 	_check("the plain body is the one lit",
 		_skin_tile(skins, Skins.DEFAULT).button_pressed, true)
-	_check("and the caption says it is yours", caption.text, "YOUR SKIN")
+	_check("and the caption says whose it is and which it is",
+		caption.text, "YOUR SKIN · BOG")
 	var muck := Skins.NAMES.find("muck")
 	_skin_tile(skins, muck).pressed.emit()
 	await get_tree().process_frame
@@ -455,13 +462,17 @@ func _run_lobby() -> void:
 		Net.team_skin(0) == Net.team_skin(1), false)
 	_check("the caption says whose skin the row changes",
 		caption.text.begins_with("TEAM 1'S SKIN"), true)
+	_check("and it names the team's body, not the player's own pick",
+		caption.text, "TEAM 1'S SKIN · BOG")
+	_check("with the rule about who may press it in a tooltip, not a second line",
+		caption.tooltip_text, "Anyone on the team can change it.")
 	_check("the lit tile is the team's, not the player's",
 		_skin_tile(skins, Net.team_skin(0)).button_pressed, true)
 	_check("and the player's own free-for-all pick is not lit",
 		_skin_tile(skins, muck).button_pressed, false)
 	# **The other team's skin is a disabled tile**, which is where the rule is
 	# drawn before it is ever enforced.
-	_check("a skin the other team holds is disabled",
+	_check("a skin the other team holds is a disabled swatch",
 		_skin_tile(skins, 1).disabled, true)
 	_check("while a free one is not", _skin_tile(skins, muck).disabled, false)
 
@@ -488,7 +499,7 @@ func _run_lobby() -> void:
 	Net.set_team(1)
 	await get_tree().process_frame
 	_check("switching team switches body", Net.skin_for(1), 1)
-	_check("and the tile the old team holds is now the disabled one",
+	_check("and the swatch the old team holds is now the disabled one",
 		_skin_tile(skins, slag).disabled, true)
 	_check("with the new team's lit", _skin_tile(skins, 1).button_pressed, true)
 	_check("the caption follows", caption.text.begins_with("TEAM 2'S SKIN"), true)
@@ -501,7 +512,65 @@ func _run_lobby() -> void:
 	await get_tree().process_frame
 	_check("back in free-for-all the player's own pick is theirs again",
 		Net.skin_for(1), muck)
-	_check("and the caption is back to yours", caption.text, "YOUR SKIN")
+	_check("and the caption is back to yours", caption.text, "YOUR SKIN · MUCK")
+
+	# **The names live in the caption now**, because fourteen of them under
+	# fourteen swatches was fourteen lines of type across the Bogs' faces. So a
+	# swatch has no label of its own, and pointing at one — or arrowing onto it —
+	# is how its name is read. Naming is not picking: the roster must not move.
+	for swatch: Node in skins.get_children():
+		_check("a swatch carries no name of its own",
+			(swatch as Button).text, "")
+	_skin_tile(skins, Skins.NAMES.find("void")).mouse_entered.emit()
+	_check("pointing at a swatch names it", caption.text, "YOUR SKIN · VOID")
+	_check("and changes nothing", Net.skin_for(1), muck)
+	_skin_tile(skins, Skins.NAMES.find("void")).mouse_exited.emit()
+	_check("leaving it says what is being worn again",
+		caption.text, "YOUR SKIN · MUCK")
+	# The caret does the same, which is the whole of the keyboard's access to a
+	# name now that the swatches have none.
+	_skin_tile(skins, Skins.NAMES.find("gilt")).focus_entered.emit()
+	_check("the caret names a swatch too", caption.text, "YOUR SKIN · GILT")
+	_check("and still does not pick it", Net.skin_for(1), muck)
+	_skin_tile(skins, Skins.NAMES.find("gilt")).focus_exited.emit()
+
+	# **The strip must not stand in front of the ring.** The row is laid out in
+	# the scene at fixed offsets and the ring is laid out in 3D, so the two only
+	# meet on screen and nothing but a measurement can say whether they collide.
+	# `_ring_ceiling` projects the backdrop's own Bogs through the backdrop's own
+	# camera; the row's bottom edge has to clear the lower of the two tops with
+	# room to spare, in the fullest ring the lobby can hold.
+	var was_roster := Net.players.duplicate(true)
+	for extra in 8:
+		var peer := 960 + extra
+		if Net.players.size() >= 8:
+			break
+		Net.players[peer] = {"name": "Ring%d" % extra, "team": 0, "ready": true,
+			"weapon": Loadout.DEFAULT, "skin": Skins.DEFAULT}
+	Net.roster_changed.emit()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var ceiling := _ring_ceiling(ring)
+	var row_bottom := skin_row.position.y + skin_row.size.y
+	print("  ring of %d: plate top %.1f, head top %.1f, skin row ends %.1f"
+		% [int(ceiling["bogs"]), ceiling["plate"], ceiling["head"], row_bottom])
+	_check("the strip clears the fullest ring's heads and plates",
+		row_bottom + RING_CLEARANCE <= minf(ceiling["plate"], ceiling["head"]), true)
+
+	while Net.players.size() > 5:
+		Net.players.erase(Net.peer_ids().back())
+	Net.roster_changed.emit()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var ceiling5 := _ring_ceiling(ring)
+	print("  ring of %d: plate top %.1f, head top %.1f, skin row ends %.1f"
+		% [int(ceiling5["bogs"]), ceiling5["plate"], ceiling5["head"], row_bottom])
+	_check("and a smaller ring's, which stands nearer the camera",
+		row_bottom + RING_CLEARANCE <= minf(ceiling5["plate"], ceiling5["head"]), true)
+
+	Net.players = was_roster
+	Net.roster_changed.emit()
+	await get_tree().process_frame
 
 	# The strip goes dead rather than lying about what it can do, once a match is
 	# running. `match_running` is set by hand here and not by pressing Start,
@@ -513,10 +582,11 @@ func _run_lobby() -> void:
 	await get_tree().process_frame
 	_check("a running match disables every button",
 		(picker.get_child(0) as Button).disabled, true)
-	_check("and every skin tile with them",
+	_check("and every skin swatch with them",
 		_skin_tile(skins, Skins.DEFAULT).disabled, true)
+	_check("with the caption saying so", caption.text.begins_with("LOCKED"), true)
 	_skin_tile(skins, Skins.NAMES.find("void")).pressed.emit()
-	_check("a tile pressed after Start does nothing", Net.player_skin(1),
+	_check("a swatch pressed after Start does nothing", Net.player_skin(1),
 		Skins.NAMES.find("muck"))
 	(picker.get_child(Loadout.Weapon.SPEAR) as Button).pressed.emit()
 	_check("and a press does nothing", Net.player_weapon(1), Loadout.Weapon.BOW)
@@ -525,7 +595,7 @@ func _run_lobby() -> void:
 	await get_tree().process_frame
 	_check("and back in the lobby they are live again",
 		(picker.get_child(0) as Button).disabled, false)
-	_check("the tiles too", _skin_tile(skins, Skins.DEFAULT).disabled, false)
+	_check("the swatches too", _skin_tile(skins, Skins.DEFAULT).disabled, false)
 
 	# Escape has one meaning again. D-069 gave it a branch that closed the picker
 	# surface first; there is no such surface, so there is no branch, and the
@@ -684,8 +754,8 @@ func _carry_pose(bog: Bog) -> String:
 	return "<%s>" % state
 
 
-## One tile off the skin strip. The strip is built in `Skins.all()` order, so a
-## skin index is a child index -- which is also what makes "only one is lit" a
+## One swatch off the skin strip. The strip is built in `Skins.all()` order, so
+## a skin index is a child index -- which is also what makes "only one is lit" a
 ## thing this file can ask.
 func _skin_tile(strip: HBoxContainer, skin: int) -> Button:
 	return strip.get_child(skin) as Button
@@ -714,3 +784,98 @@ func _skins_are_unique() -> bool:
 			return false
 		seen[skin] = true
 	return true
+
+
+## Where the ring's ceiling is, in base-viewport pixels: the top edge of the
+## highest nameplate and the top of the highest head, projected through the
+## backdrop's own camera.
+##
+## Projected rather than guessed. The strip is laid out in the scene at fixed
+## offsets and the ring is laid out in 3D at a distance that depends on how many
+## Bogs are in it, so the only place the two are comparable is the screen, and
+## the only honest way to compare them is to ask the camera.
+func _ring_ceiling(ring: BogBackdrop) -> Dictionary:
+	var camera := ring.get("_camera") as Camera3D
+	var bogs: Array = ring.get("_bogs")
+	var plate_top := INF
+	var head_top := INF
+	var counted := 0
+	for bog: Bog in bogs:
+		if not bog.visible:
+			continue
+		counted += 1
+		if bog.body_mesh != null:
+			head_top = minf(head_top, _screen_top(camera, bog.body_mesh))
+		var plate := bog.get_node_or_null("Nameplate")
+		if plate == null:
+			continue
+		for node: Node in plate.find_children("", "Label3D", true, false):
+			plate_top = minf(plate_top, _label_top(camera, node as Label3D))
+	return {"plate": plate_top, "head": head_top, "bogs": counted}
+
+
+## The top edge of a nameplate, in base-viewport rows.
+##
+## **Not `get_aabb()`.** A billboarded `Label3D` reports a *cube* — every axis
+## the length of the text's diagonal, so that culling is right from any angle —
+## which for a long name puts its "top" 18 cm above where any ink is and would
+## have this check measuring a box nobody can see. The text's own world height
+## is `font_size * pixel_size` (`Nameplate`'s header says as much: about 0.21 m),
+## centred on the node, with the outline standing off it. That is the edge a
+## player sees, so that is the edge the strip has to clear.
+func _label_top(camera: Camera3D, label: Label3D) -> float:
+	if camera == null or label == null:
+		return INF
+	var half := (label.font_size * 0.5 + label.outline_size) * label.pixel_size
+	return _project(camera, label.global_position + Vector3.UP * half).y
+
+
+## The topmost row of the **base viewport** this instance covers: every corner
+## of its world-space box through the camera, smallest y wins (screen y grows
+## downward).
+##
+## The projection is built here rather than taken from
+## `Camera3D.unproject_position`, and that is not fussiness. `unproject_position`
+## answers in the pixels of the window the harness happens to have, and a
+## headless run has a **1600x1600** one — so the honest-looking call returns a
+## number in a viewport that does not exist and that nothing in the scene is
+## laid out against. The row's offsets are in base-viewport units, so the ring
+## has to be measured in them too, whatever window is open.
+func _screen_top(camera: Camera3D, what: VisualInstance3D) -> float:
+	if camera == null or what == null:
+		return INF
+	var box := what.get_aabb()
+	var to_world := what.global_transform
+	var top := INF
+	for corner in 8:
+		top = minf(top, _project(camera, to_world * box.get_endpoint(corner)).y)
+	return top
+
+
+## The viewport every `Control` offset in this project is written in.
+func _base_viewport() -> Vector2:
+	return Vector2(
+		float(ProjectSettings.get_setting("display/window/size/viewport_width", 1600)),
+		float(ProjectSettings.get_setting("display/window/size/viewport_height", 900)))
+
+
+## One world point in base-viewport pixels.
+##
+## The projection is built here rather than taken from
+## `Camera3D.unproject_position`, and that is not fussiness. `unproject_position`
+## answers in the pixels of the window the harness happens to have, and a
+## headless run has a **1600x1600** one -- so the honest-looking call returns a
+## number in a viewport that does not exist and that nothing in the scene is
+## laid out against. Every `Control` offset in this project is written in base
+## viewport units, so the ring has to be measured in them too, whatever window
+## is open.
+func _project(camera: Camera3D, point: Vector3) -> Vector2:
+	var base := _base_viewport()
+	var projection := Projection.create_perspective(camera.fov, base.x / base.y,
+		camera.near, camera.far, camera.keep_aspect == Camera3D.KEEP_WIDTH)
+	var view := camera.global_transform.affine_inverse() * point
+	var clip := projection * Vector4(view.x, view.y, view.z, 1.0)
+	if clip.w <= 0.0:
+		return Vector2(INF, INF)  # behind the lens; it is on nobody's screen
+	return Vector2((clip.x / clip.w * 0.5 + 0.5) * base.x,
+		(0.5 - clip.y / clip.w * 0.5) * base.y)
