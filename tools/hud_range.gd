@@ -354,7 +354,7 @@ func _stage_hold() -> void:
 	# The drop lands where the blow struck rather than at the body, so the card
 	# can be put down in front of the player without moving anybody.
 	MatchState.report_kill(victim, Net.local_id(), Bog.Cause.SPEAR,
-		player.global_position + player.facing() * 1.2, Vector3.FORWARD * 18.0, "Spine1")
+		player.global_position + player.facing() * 1.2, Vector3.FORWARD * 18.0, "mixamorig_Spine1")
 
 
 ## Take a bite out of the local player, for real, so the health bar has
@@ -374,7 +374,7 @@ func _stage_hurt() -> void:
 	if player == null or MatchState.phase != MatchState.Phase.PLAYING:
 		return
 	MatchState.report_damage(1, EXTRA_BASE, 62.0, Bog.Cause.SPEAR,
-		player.body_centre(), Vector3.FORWARD * 6.0, "Spine1")
+		player.body_centre(), Vector3.FORWARD * 6.0, "mixamorig_Spine1")
 	# ...and the range's dummies hurt by different amounts, so the plates in the
 	# same frame are not all one colour. Found by walking `MatchState.bogs`
 	# rather than by naming the range's own peer ids, which are its business.
@@ -387,7 +387,7 @@ func _stage_hurt() -> void:
 		if dummy == null or not dummy.alive:
 			continue
 		MatchState.report_damage(peer_id, 1, hurt[at], Bog.Cause.SPEAR,
-			dummy.body_centre(), Vector3.FORWARD * 6.0, "Spine1")
+			dummy.body_centre(), Vector3.FORWARD * 6.0, "mixamorig_Spine1")
 		at += 1
 
 
@@ -413,7 +413,7 @@ func _stage_elder() -> void:
 		return
 	Net.config.elder_drop_chance = 1.0
 	MatchState.report_kill(victim, Net.local_id(), Bog.Cause.SPEAR,
-		player.global_position + player.facing() * 1.2, Vector3.FORWARD * 18.0, "Spine1")
+		player.global_position + player.facing() * 1.2, Vector3.FORWARD * 18.0, "mixamorig_Spine1")
 
 
 ## The spear tile's recharge readout, measured over one real throw (D-054).

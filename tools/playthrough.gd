@@ -589,7 +589,7 @@ func _stage_match() -> bool:
 		# scaled by it, so a zero-length one would leave the ragdoll path
 		# exercised but never actually pushed.
 		MatchState.report_kill(victim, killer, Bog.Cause.SPEAR,
-			point, Vector3.FORWARD * 18.0, "Spine1")
+			point, Vector3.FORWARD * 18.0, "mixamorig_Spine1")
 		deaths += 1
 		await get_tree().process_frame
 		if MatchState.is_alive(victim):
@@ -619,7 +619,7 @@ func _stage_match() -> bool:
 	# A kill after the whistle must not count, here as in `match_rules` — this
 	# is the one place it can be checked with a real Bog on the far end.
 	MatchState.report_kill(victims[0], killer, Bog.Cause.SPEAR,
-		Vector3.ZERO, Vector3.FORWARD, "Spine1")
+		Vector3.ZERO, Vector3.FORWARD, "mixamorig_Spine1")
 	_check("no scoring after the match ends", MatchState.kills(killer), limit)
 
 	print("playthrough: match finished — reason \"%s\", winner %s" % [

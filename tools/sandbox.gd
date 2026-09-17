@@ -112,7 +112,7 @@ func _unhandled_input(event: InputEvent) -> void:
 ## Stand-in for taking a spear: drop a corpse and take the Bog out of play.
 func _kill_for_test() -> void:
 	var direction := _bog.facing()
-	BogRagdoll.spawn_from(_bog, self, direction * 2.4 + Vector3.UP * 0.6, "Spine1")
+	BogRagdoll.spawn_from(_bog, self, direction * 2.4 + Vector3.UP * 0.6, "mixamorig_Spine1")
 	_bog.alive = false
 	_bog.visible = false
 

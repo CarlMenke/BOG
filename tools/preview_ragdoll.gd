@@ -52,7 +52,7 @@ func _physics_process(_delta: float) -> void:
 	if _frames == kill_frame and not _killed:
 		_killed = true
 		BogRagdoll.spawn_from(_bog, self, Vector3(0, 0.25, -1).normalized() * _impulse,
-			"Spine1")
+			"mixamorig_Spine1")
 		# Freed, not just hidden: `--debug-collisions` keeps drawing a hidden
 		# body's shapes, and a phantom 1.55 m standing capsule left at the
 		# origin is the one thing that makes the ragdoll capsules hard to read.

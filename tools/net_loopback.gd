@@ -718,7 +718,7 @@ func _stage_kill() -> bool:
 	# own body says — if those two ever disagree, a player is fighting with a
 	# bar that is lying to them.
 	var took := MatchState.report_damage(_client_id, 1, WIRE_DAMAGE,
-		Bog.Cause.SPEAR, point + Vector3.UP, Vector3.FORWARD * 6.0, "Spine1")
+		Bog.Cause.SPEAR, point + Vector3.UP, Vector3.FORWARD * 6.0, "mixamorig_Spine1")
 	_check("the host's hit landed", took, WIRE_DAMAGE)
 	_check("the host took it off the body",
 		MatchState.health_of(_client_id), Bog.MAX_HEALTH - WIRE_DAMAGE)
@@ -743,7 +743,7 @@ func _stage_kill() -> bool:
 	# A blow with real speed in it: the corpse's flight is scaled by it, so a
 	# unit vector would leave the ragdoll path exercised but never pushed.
 	MatchState.report_kill(_client_id, 1, Bog.Cause.SPEAR, point,
-		Vector3.FORWARD * 18.0, "Spine1")
+		Vector3.FORWARD * 18.0, "mixamorig_Spine1")
 	var spot: Vector3 = MatchState._drop_spot(point)
 	if spot != Vector3.INF:
 		MatchState._spawn_drop(Pickup.Kind.SHIELD, 0, spot)

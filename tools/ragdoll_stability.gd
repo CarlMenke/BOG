@@ -70,7 +70,7 @@ func _physics_process(_delta: float) -> void:
 		# now, and the joints have to survive being thrown hard and *then*
 		# hitting the ground.
 		_corpse = BogRagdoll.spawn_from(_bog, self,
-			Vector3(0, -0.12, -1).normalized() * SpearProjectile.SPEED, "Spine1")
+			Vector3(0, -0.12, -1).normalized() * SpearProjectile.SPEED, "mixamorig_Spine1")
 		_bog.visible = false
 		_bog.alive = false
 		return

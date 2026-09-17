@@ -10,7 +10,7 @@ extends SkeletonModifier3D
 ## points" is most of a right angle and every degree of it lives above the
 ## pelvis. D-065 measured the composed pose at **91° off the Bog's own facing**
 ## and measured three mask variants that do not move it, for the reason none of
-## them could: `align_facing` puts a clip's whole yaw on the **Hips**, `Hips` is
+## them could: `align_facing` puts a clip's whole yaw on the **Hips**, `mixamorig_Hips` is
 ## outside `UPPER_BODY_BONES` on purpose (D-029), and so the one rotation that
 ## would have carried the difference is the one rotation the layer throws away.
 ##
@@ -71,8 +71,8 @@ extends SkeletonModifier3D
 ##
 ## Three, and weighted toward the top: a human twists mostly in the thoracic
 ## spine and hardly at all in the lumbar, and the Bog's own proportions say the
-## same thing louder — `Spine` sits 0.08 m above the hips and carries the whole
-## belly, while `Spine2` sits 0.28 m up under the collarbones and carries only
+## same thing louder — `mixamorig_Spine` sits 0.08 m above the hips and carries the whole
+## belly, while `mixamorig_Spine2` sits 0.28 m up under the collarbones and carries only
 ## the chest. Loading the bottom joint would swing the hips' silhouette; loading
 ## the top one moves the shoulders, which is where the bow is.
 ##
@@ -80,7 +80,7 @@ extends SkeletonModifier3D
 ## bone is turned about the **same** skeleton-space axis, so their rotations
 ## compose by adding their angles, and the chest ends up turned by exactly the
 ## total. Change one and change another.
-const AIM_BONES: Array[String] = ["Spine", "Spine1", "Spine2"]
+const AIM_BONES: Array[String] = ["mixamorig_Spine", "mixamorig_Spine1", "mixamorig_Spine2"]
 const AIM_SHARES: Array[float] = [0.25, 0.35, 0.40]
 
 ## How far the composed bow points off the Bog's own facing, in degrees, with
@@ -96,7 +96,12 @@ const AIM_SHARES: Array[float] = [0.25, 0.35, 0.40]
 ##
 ## Negative because `signed_angle_to` reports the turn that takes the *bow* onto
 ## the *facing*, which is the direction this correction has to go.
-const BOW_OFF_FACING := -92.0
+## **Zero since D-098.** The archer set is imported in its authored frame
+## (`face: none`, D-097), which is a side-on body with the bow pointing down
+## the world's forward — so the composed bow already points where the BOG
+## faces, and this offset has nothing left to correct. `combat_range -- spine`
+## measures the residual; the old rig's clip needed -92.
+const BOW_OFF_FACING := 0.0
 
 ## The pitch the torso is allowed to take, off the camera's own limits rather
 ## than typed here. `BogCamera` already clamps the view to -69°..+54°, and a

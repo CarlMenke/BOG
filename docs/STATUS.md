@@ -22,11 +22,11 @@ island and out to a results screen, and two automated checks now walk that path:
 one in a single process, one across two processes over a real socket.
 
 ```
-bash tools/smoke_test.sh        # 135 checks, ~6 minutes, finds Godot by itself
+bash tools/smoke_test.sh        # 135 checks, ~6 minutes; 7 red until step 5, finds Godot by itself
 bash tools/net_test.sh          # two processes, one socket; ~45 s, run by hand
 ```
 
-`smoke_test.sh` is the gate and it passes, 135 of 135. `net_test.sh` is kept out
+`smoke_test.sh` is the gate; it is at 128 of 135 mid-rebuild (the seven are step 5's grips, see the rebuild section). `net_test.sh` is kept out
 of it to keep the gate fast; run it by hand after touching networking, the lobby
 or the results screen. It passes all twelve stages (200 + 34 assertions), ten of
 which end in a rematch, with the engine quiet in both processes — the error it
@@ -84,13 +84,20 @@ of things nothing else is checking.
 
 ---
 
-## The animation rebuild — steps 1 to 3 of 7 landed
+## The animation rebuild — steps 1 to 4 of 7 landed
 
 The character's animation pipeline is being rebuilt from scratch
-(`ANIMATION_REBUILD_PROMPT.md` is the brief; **D-095** is the first step's
-record). The old path — `tools/build_bog.py`, `assets/source/`,
-`art/generated/bog.glb` — **still runs the game** and stays until the new one
-does. Nothing in `scenes/` or `scripts/player/` references the new body yet.
+(`ANIMATION_REBUILD_PROMPT.md` is the brief; **D-095** to **D-098** are the
+records). **The game runs on the new body and the new animator** since D-098:
+`scenes/player/bog.tscn` instances `art/bog/BOG.fbx` and
+`scripts/player/bog_animator.gd` reads the library and its markers. The old
+path — `tools/build_bog.py`, `assets/source/`, `art/generated/bog.glb`,
+`elder.glb` — is unreferenced by the game and goes at step 7.
+
+**The gate is 135 checks, 7 failures**, and the seven are step 5's: every
+one measures a prop against the body (`preview_carry` card/palm/bottle/
+level/carry, `preview_bow` carry tilt, `preview_sword` fit) with constants
+solved on the old body's hands.
 
 What exists now:
 
@@ -126,28 +133,27 @@ What exists now:
     res://tools/preview_bog.tscn out.png 30 Run-StandardRunning,Run-RunningForward-1
 ```
 
-**Next is step 4, the animator.** Rebuild `scripts/player/bog_animator.gd`
-around the library and the markers: keep its structure where it is sound
-(the blend tree in code, the one-shots, the arc-scrubbed air pose, the
-upper-body layers), delete every hardcoded clip time and every `AUTHORED_*`
-constant in `bog.gd` in favour of the clips' `authored_speed` metadata and
-markers. Locomotion, crouch, jumps (take-off / air loop / light and hard
-landing), the dive, actions, carry poses, weapon locomotion. Point
-`scenes/player/bog.tscn` at `art/bog/BOG.fbx`, and every bone name gains its
-`mixamorig_` prefix (the survey at step 1 lists the files). Smoke test green
-at each sub-step. Then grips, aim, ragdoll and robe (5), skins (6), and
-retiring the old path (7).
+**Next is step 5: grips, aim, ragdoll, robe**, in that order, each with its
+preview. The grips are set visually (design item 8): `preview_carry -- solve`
+/ `preview_bow -- measure` / `preview_sword -- measure` re-solve the palm
+points and grip constants in `held_gear.gd` against the new hands, and the
+seven red checks are their gates. The ragdoll derives its segments from the
+rig (item 9) instead of `ragdoll_builder.gd`'s hand-set table. The Elder's
+robe is refit to the new body as a clothing mesh on the same skeleton (item
+10) — `elder_robe.gd` still binds the old `elder.glb`, which was skinned to
+the old skeleton. Then skins (6) and retiring the old path (7).
 
-Answered at the step 2 checkpoint by the user: **backing up is slower than
-running forward** (a movement cap in step 4, sized so the backward cycles
-play near the forward walk's 2.1x); **the crouch is the deep squat** (the 21
-cm pop into the crouch walk stays); **the double jump is a head-first dive**.
-Three things step 4 has to build that the clips do not give it: the bow's
-pull is a blend from `BowAim` to `BowDraw` (the draw clip is a 3.8 s hold);
-the dive's airborne part is 0.27 s of a low dive, scrubbed over the whole
-arc; and the strafe, crouch and sword cycles travel 24–58° off the body's
-forward after facing alignment (D-097 lists them), which the strafe harness
-will measure as skate.
+**One thing only the user can do:** fetch the Magic pack's `Standing Run
+Left` (D-071's lateral) as a new row, so the running strafes stop sliding at
+1.12 of body speed; D-098 says why and what the import needs (a `mirror_of`
+rule for the right-hand twin).
+
+Answered at the step 2 checkpoint by the user and built at step 4: **backing
+up is slower** (`Bog.BACK_SPEED_SCALE` 0.6); **the crouch is the deep squat**;
+**the double jump is a head-first dive** (`Roll` scrubbed by the arc). Also
+decided at step 4: a BOG with a bow drawn walks (`Bog.AIM_WALKS`), and the
+draw's pull is `BowReload`'s nock-to-cheek half second scrubbed by the
+charge, because the aim and draw clips are the same pose.
 
 ---
 

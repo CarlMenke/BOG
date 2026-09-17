@@ -123,7 +123,7 @@ func _begin(count: int, configure: Callable, root: Node = null,
 
 func _kill(victim: int, killer: int) -> void:
 	MatchState.report_kill(victim, killer, Bog.Cause.SPEAR,
-		Vector3.ZERO, Vector3.FORWARD, "Spine1")
+		Vector3.ZERO, Vector3.FORWARD, "mixamorig_Spine1")
 
 
 ## Bring a dead player back without needing a Bog or a respawn timer.
@@ -1351,7 +1351,7 @@ func _run_capture() -> void:
 
 	# No card ever comes out of a corpse in this mode, even at 100%.
 	var before := MatchState._pickups.size()
-	MatchState.report_kill(903, 1, Bog.Cause.SPEAR, CAPTURE_DEATH_2, Vector3.FORWARD, "Spine1")
+	MatchState.report_kill(903, 1, Bog.Cause.SPEAR, CAPTURE_DEATH_2, Vector3.FORWARD, "mixamorig_Spine1")
 	_check("a death still drops loot", MatchState._pickups.size(), before + 1)
 	_check("but never a letter", _letter_cards().size(), 3)
 	_revive(903)
@@ -1481,7 +1481,7 @@ func _run_capture() -> void:
 	MatchState.claim_pickup(_capture_card(MatchState.LETTER_O), 901)
 	_check("the other team picks up O", MatchState.letter_hold_letter(901),
 		MatchState.LETTER_O)
-	MatchState.report_kill(901, 1, Bog.Cause.SPEAR, CAPTURE_DEATH, Vector3.FORWARD, "Spine1")
+	MatchState.report_kill(901, 1, Bog.Cause.SPEAR, CAPTURE_DEATH, Vector3.FORWARD, "mixamorig_Spine1")
 	_check("a dead carrier carries nothing", MatchState.is_holding_letter(901), false)
 	_check("the card is dropped", MatchState.capture_state(MatchState.LETTER_O), "dropped")
 	var lying: Pickup = MatchState._pickups.get(_capture_card(MatchState.LETTER_O))
@@ -1510,7 +1510,7 @@ func _run_capture() -> void:
 	_check("which clears its return", MatchState.capture_state(MatchState.LETTER_O), "carried")
 
 	# And drops it again; this time nobody reaches it.
-	MatchState.report_kill(902, 901, Bog.Cause.SPEAR, CAPTURE_DEATH_2, Vector3.FORWARD, "Spine1")
+	MatchState.report_kill(902, 901, Bog.Cause.SPEAR, CAPTURE_DEATH_2, Vector3.FORWARD, "mixamorig_Spine1")
 	var second_drop := _capture_card(MatchState.LETTER_O)
 	_check("dropped a second time", MatchState.capture_state(MatchState.LETTER_O), "dropped")
 	MatchState._capture[MatchState.LETTER_O]["return_at"] = 0.001

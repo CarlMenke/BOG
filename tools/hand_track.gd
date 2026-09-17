@@ -4,8 +4,8 @@ extends SceneTree
 ##
 ##   Godot --headless --path . --script tools/hand_track.gd -- [clip] [bone] [step]
 ##
-## Defaults to `Throw`, `RightHand`, 1/60 s. Each line is the clip time, the
-## bone's position relative to `Hips` in the skeleton's own frame, and the
+## Defaults to `Throw`, `mixamorig_RightHand`, 1/60 s. Each line is the clip time, the
+## bone's position relative to `mixamorig_Hips` in the skeleton's own frame, and the
 ## bone's speed over the last step in m/s. The numbers this exists to find are
 ## the ones the throw is built on: where the arm is drawn furthest back (the
 ## pose a full charge holds), where the hand is moving fastest (the release),
@@ -39,7 +39,7 @@ var _failed: bool = false
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
 	_clip = args[0] if args.size() > 0 else "Throw"
-	var bone_name := args[1] if args.size() > 1 else "RightHand"
+	var bone_name := args[1] if args.size() > 1 else "mixamorig_RightHand"
 	_step = float(args[2]) if args.size() > 2 else 1.0 / 60.0
 
 	var scene := load(BOG) as PackedScene
@@ -56,9 +56,9 @@ func _initialize() -> void:
 		_failed = true
 		return
 	_bone = _skeleton.find_bone(bone_name)
-	_hips = _skeleton.find_bone("Hips")
+	_hips = _skeleton.find_bone("mixamorig_Hips")
 	if _bone < 0 or _hips < 0:
-		push_error("hand_track: rig has no '%s' or no 'Hips'" % bone_name)
+		push_error("hand_track: rig has no '%s' or no 'mixamorig_Hips'" % bone_name)
 		_failed = true
 		return
 

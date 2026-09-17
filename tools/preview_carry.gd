@@ -126,7 +126,7 @@ const LEVEL_MAX := 30.0
 ## altogether** while every other number on this page said PASS.
 ##
 ## It went unnoticed because the only thing the palm point had ever been checked
-## against was the `RightHand`-weighted skin **at rest**, which is the wrist and
+## against was the `mixamorig_RightHand`-weighted skin **at rest**, which is the wrist and
 ## not the fist: the three finger chains carry 918 of the mitten's 1,030
 ## vertices, and the hand a carried spear is held in is a closed one that the
 ## rest pose does not show. So this measures the whole mitten — `FIST_BONES`, the
@@ -148,22 +148,22 @@ const PALM_MAX := 0.066
 ## fist a single measurement rather than twelve — the carry clip owns the whole
 ## chain, so where the fist is *in the hand's own frame* is the carry clip's
 ## alone and the locomotion underneath cannot move it.
-const FIST_BONES := ["RightHand",
-	"RightHandThumb1", "RightHandThumb2", "RightHandThumb3", "RightHandThumb4",
-	"RightHandIndex1", "RightHandIndex2", "RightHandIndex3", "RightHandIndex4",
-	"RightHandMiddle1", "RightHandMiddle2", "RightHandMiddle3",
-	"RightHandMiddle4"]
+const FIST_BONES := ["mixamorig_RightHand",
+	"mixamorig_RightHandThumb1", "mixamorig_RightHandThumb2", "mixamorig_RightHandThumb3", "mixamorig_RightHandThumb4",
+	"mixamorig_RightHandIndex1", "mixamorig_RightHandIndex2", "mixamorig_RightHandIndex3", "mixamorig_RightHandIndex4",
+	"mixamorig_RightHandMiddle1", "mixamorig_RightHandMiddle2", "mixamorig_RightHandMiddle3",
+	"mixamorig_RightHandMiddle4"]
 
 ## The **left** mitten, which is the bow fist and is the hand a Bog drinks with
 ## (D-067, D-075). `FIST_BONES` one hand over, letter for letter, because the
 ## question `bottle` asks about the bottle is the question `palm` asks about the
 ## shaft and a second list that had drifted by one finger would be a second
 ## opinion about where this hand is.
-const LEFT_FIST_BONES := ["LeftHand",
-	"LeftHandThumb1", "LeftHandThumb2", "LeftHandThumb3", "LeftHandThumb4",
-	"LeftHandIndex1", "LeftHandIndex2", "LeftHandIndex3", "LeftHandIndex4",
-	"LeftHandMiddle1", "LeftHandMiddle2", "LeftHandMiddle3",
-	"LeftHandMiddle4"]
+const LEFT_FIST_BONES := ["mixamorig_LeftHand",
+	"mixamorig_LeftHandThumb1", "mixamorig_LeftHandThumb2", "mixamorig_LeftHandThumb3", "mixamorig_LeftHandThumb4",
+	"mixamorig_LeftHandIndex1", "mixamorig_LeftHandIndex2", "mixamorig_LeftHandIndex3", "mixamorig_LeftHandIndex4",
+	"mixamorig_LeftHandMiddle1", "mixamorig_LeftHandMiddle2", "mixamorig_LeftHandMiddle3",
+	"mixamorig_LeftHandMiddle4"]
 
 ## The head alone, out of `TRUNK_BONES`, cached for the table `-- potion`
 ## prints and for nothing else — which is worth a paragraph, because it is the
@@ -185,7 +185,7 @@ const LEFT_FIST_BONES := ["LeftHand",
 ## So the scale is judged by eye off `out/carry_potion_palm.png`, the table is
 ## printed so that judgement has its evidence beside it, and this file does not
 ## pretend to cover it.
-const HEAD_BONES := ["Head", "HeadTop_End"]
+const HEAD_BONES := ["mixamorig_Head", "mixamorig_HeadTop_End"]
 
 ## How many moments of the drink window `bottle` and the sheets sample.
 ##
@@ -601,7 +601,7 @@ func _fist_centre(skeleton: Skeleton3D, hand: int,
 ##
 ## The same number and the same method: how far the bottle's axis passes from
 ## the centre of the mitten, in the hand's own frame, measured off the whole
-## mitten rather than off the `LeftHand`-weighted skin at rest. D-074's finding
+## mitten rather than off the `mixamorig_LeftHand`-weighted skin at rest. D-074's finding
 ## is not about the spear, it is about hands — 918 of the right mitten's 1,030
 ## vertices hang off the finger chains and the left one's 1,073 do the same, so
 ## a bone's own vertices are the wrist either way.
@@ -1020,7 +1020,7 @@ func _poses() -> void:
 ## the carry pose answers differently because it is a different pose.
 ##
 ## **Under the layer the answer is one number, not twelve.** Every bone of both
-## arms is in `BogAnimator.UPPER_BODY_BONES` and they all hang off `Spine1`, so
+## arms is in `BogAnimator.UPPER_BODY_BONES` and they all hang off `mixamorig_Spine1`, so
 ## the carry clip owns the whole chain and the left fist's position *in the right
 ## fist's frame* is the carry clip's alone — the locomotion underneath moves both
 ## fists together and cancels out. That is why a carried grip can be fitted
@@ -1105,7 +1105,7 @@ func _hilt_verdict(swing: Vector3, carry: Vector3) -> void:
 
 	# How far past the pommel the joining fist closes, in the pose the sword is
 	# *carried* in. `preview_sword.FIT_TOLERANCE` is the yardstick and its header
-	# says what it is: the size of the mitten, 0.16 m of `RightHand`-weighted
+	# says what it is: the size of the mitten, 0.16 m of `mixamorig_RightHand`-weighted
 	# skin, rather than a residual to drive to zero.
 	var pommel := HeldGear.sword_direction() \
 		* (HeldGear.SWORD_SCALE * HeldGear.SWORD_REAR_HAND) \
@@ -1394,8 +1394,8 @@ func _grip_for(bog: Bog, skeleton: Skeleton3D, player: AnimationPlayer,
 ## a shaft's butt swings past a thigh in every walk cycle that has ever been
 ## drawn, and the thing the floor check above already measures is whether the
 ## same end is in the grass.
-const TRUNK_BONES := ["Hips", "Spine", "Spine1", "Spine2", "Neck", "Head",
-	"HeadTop_End"]
+const TRUNK_BONES := ["mixamorig_Hips", "mixamorig_Spine", "mixamorig_Spine1", "mixamorig_Spine2", "mixamorig_Neck", "mixamorig_Head",
+	"mixamorig_HeadTop_End"]
 
 ## How much of a vertex has to be weighted to the trunk before it counts as
 ## trunk. A half, so every vertex belongs to exactly one side of the line and
@@ -1966,7 +1966,7 @@ func _potion() -> void:
 			% [spec[0], rot.x, rot.y, rot.z, line])
 
 	# Which way is **out of the Bog**, in the hand's own frame, at the frame
-	# the window opens on: horizontally away from `Spine1`, with the component
+	# the window opens on: horizontally away from `mixamorig_Spine1`, with the component
 	# along the bottle projected out because sliding a prop along its own axis
 	# is the grip fraction's business. It is the axis the palm point is fitted
 	# along (`HeldGear.POTION_PALM` says what it bought), derived rather than
@@ -1983,7 +1983,7 @@ func _potion() -> void:
 	# and D-075 has the three pictures.
 	_pose(player, skeleton, "Idle", 0.0, "Drink", BogAnimator.DRINK_CLIP_START)
 	var spine := skeleton.get_bone_global_pose(
-		skeleton.find_bone("Spine1")).origin
+		skeleton.find_bone("mixamorig_Spine1")).origin
 	var hand_at := skeleton.get_bone_global_pose(hand)
 	var out_world := hand_at.origin - spine
 	out_world.y = 0.0
@@ -2136,7 +2136,7 @@ func _drink(view: String, tune: Vector3 = Vector3.ZERO) -> void:
 		if tune != Vector3.ZERO:
 			var dir := HeldGear.potion_direction()
 			var spine := skeleton.get_bone_global_pose(
-				skeleton.find_bone("Spine1")).origin
+				skeleton.find_bone("mixamorig_Spine1")).origin
 			var hand_at := skeleton.get_bone_global_pose(
 				skeleton.find_bone(HeldGear.BOW_HAND_BONE))
 			var out_world := hand_at.origin - spine

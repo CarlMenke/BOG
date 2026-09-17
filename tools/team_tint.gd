@@ -149,12 +149,12 @@ func _check_robe() -> void:
 func _check_corpses() -> void:
 	var team := 5
 	var source := _team_bogs[team]
-	var corpse := BogRagdoll.spawn_from(source, self, Vector3(0.0, 0.0, -2.0), "Spine1")
+	var corpse := BogRagdoll.spawn_from(source, self, Vector3(0.0, 0.0, -2.0), "mixamorig_Spine1")
 	var body := _corpse_body(corpse)
 	var got: Variant = Bog.tint_of(body)
 	var tinted := got is Color and (got as Color).is_equal_approx(Nameplate.colour_for_team(team))
 
-	var plain := BogRagdoll.spawn_from(_ffa_bog, self, Vector3(0.0, 0.0, -2.0), "Spine1")
+	var plain := BogRagdoll.spawn_from(_ffa_bog, self, Vector3(0.0, 0.0, -2.0), "mixamorig_Spine1")
 	var plain_body := _corpse_body(plain)
 	var yellow := plain_body != null and Bog.tint_of(plain_body) == null \
 		and plain_body.get_active_material(0) is BaseMaterial3D

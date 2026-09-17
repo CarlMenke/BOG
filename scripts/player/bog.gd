@@ -9,12 +9,12 @@ extends CharacterBody3D
 ## they only smooth toward what the network last said.
 ##
 ## Movement speeds here are gameplay choices, and the animation is made to fit
-## them rather than the other way round. Each locomotion clip was authored at
-## its own ground speed (`AUTHORED_*` below, measured out of the root motion the
-## asset pipeline strips — see D-008), and `BogAnimator` plays each one back at
-## `game speed / authored speed`, so the feet stay planted at whichever of these
-## speeds the clip is assigned to. Change a speed here and the playback rate
-## follows; there is no shared factor to keep in step any more.
+## them rather than the other way round. Each locomotion clip carries the ground
+## speed it was authored at as metadata (`authored_speed`, recorded by the
+## import from the hips' travel — D-095), and `BogAnimator` plays each one back
+## at `game speed / authored speed`, so the feet stay planted at whichever of
+## these speeds the clip is assigned to. Change a speed here and the playback
+## rate follows; there is no number to keep in step.
 
 signal died(killer_id: int, cause: int)
 signal respawned()
@@ -57,47 +57,25 @@ const MAX_HEALTH := 100.0
 
 ## The body in a team's colour; see `set_team_tint` and D-046.
 const TINT_SHADER := preload("res://resources/shaders/bog_team_tint.gdshader")
-## The body mesh's node name inside `bog.glb`, as `tools/build_bog.py` writes it.
+## The body mesh's node name inside `art/bog/BOG.fbx`, as `tools/import_body.gd` names it.
 const BODY_MESH_NAME := "Bog"
 
-## The ground speed each locomotion clip was authored at, in metres per second,
-## measured on the finished 1.80 m rig by `tools/build_bog.py` (hips travel over
-## the cycle, divided by the cycle's *interval* count and not its frame count —
-## a one-frame error there is a 1.3% skate). `BogAnimator` divides the game
-## speeds below by these to get each clip's playback rate.
-const AUTHORED_WALK := 1.079
-const AUTHORED_RUN := 4.314
-const AUTHORED_CROUCH_WALK := 1.273
+## Backing up is slower than going forward (D-098). The user's call at the
+## rebuild's second checkpoint, and what the clips wanted anyway: the backward
+## cycles are authored at 0.8 and 1.5 m/s, and carrying a full run backwards
+## would play them at 3.6x. At this scale a run backwards plays `RunBack` at
+## 2.2x and a walk backwards plays `WalkBack` at 1.7x. Applied in
+## `_handle_movement` by how far behind the facing the stick points, so a
+## diagonal is scaled by the backward part of it; `BogAnimator` puts its
+## backward blend points at the same scaled speeds, so a backpedal lands on its
+## own clip rather than short of it.
+const BACK_SPEED_SCALE := 0.6
 
-## The same measurement for the six directions `GUB_2` never had (D-066). Left
-## and right are separate numbers rather than one shared one because they are
-## two separate measurements. On the walk pair that is still two files that
-## happen to agree; on the **run** pair the two numbers are now equal for a
-## reason rather than by luck, because `StrafeRight` is `StrafeLeft` reflected
-## in the rig's own sagittal plane (D-071) and a reflection cannot change a
-## speed. They are kept as two constants anyway: the day one of them stops
-## being a mirror, this is where that has to be written down.
-##
-## The run strafes got **slower** at D-071, 3.250 down to 2.580, because the
-## pole moved from `left strafe` — a 27.5 deg forward diagonal — to `Standing
-## Run Left`, which is a 76.5 deg lateral and is a jog rather than a sprint.
-## That costs playback rate: against a 5.4 m/s run it plays at **2.09x** where
-## the old pole played at 1.66x. See `BogAnimator` for what that reads as; the
-## short version is that it is under `WalkBack`'s 2.64x, which ships.
-##
-## The two backward clips are the slow ones and that is what makes them the
-## interesting pair: 0.871 m/s of authored walk has to carry a 2.3 m/s
-## backpedal, which is **2.64x**, the fastest playback rate of any cycle in the
-## game. Its feet are planted — that is what the ratio is for — but a Bog
-## backing away at walking pace is visibly scampering, and the lever if that
-## ever needs to come down is a backward speed penalty in `target_speed` rather
-## than a number here.
-const AUTHORED_STRAFE_LEFT := 2.580
-const AUTHORED_STRAFE_RIGHT := 2.580
-const AUTHORED_STRAFE_WALK_LEFT := 1.245
-const AUTHORED_STRAFE_WALK_RIGHT := 1.245
-const AUTHORED_RUN_BACK := 2.278
-const AUTHORED_WALK_BACK := 0.871
+## A BOG with a bow drawn walks (D-098). The archer set has aiming walks and
+## strafes and no aiming run, and a sprint under a drawn bow would play them at
+## six times their speed; a walk while aiming is also the convention of every
+## third-person shooter this game borrows from. Applied in `target_speed`.
+const AIM_WALKS := true
 
 ## How fast the Bog actually moves. Chosen for how the game plays, not for what
 ## the clips were made at: walking is brisk, sprinting is nearly twice that, and
@@ -154,27 +132,13 @@ const HOP_MIN_AIRTIME := 0.2
 const HOP_MIN_SPEED := 0.9
 const HOP_ALIGNMENT := 0.7
 
-## The great sword's spinning advance, in metres (D-068).
-##
-## **Measured, and printed by the build that measures it.** `Swing` is
-## `7_GreatSword_Suite/GreatSwordHighSpinAttack.fbx` and it is the one clip in
-## this game whose horizontal travel is *kept*: `tools/build_bog.py` clamps the
-## Hips as it does on every clip — it has to, or the mesh leaves the capsule —
-## and then prints
-##
-##     SPIN_ADVANCE               := 1.712   # Swing: KEPT, 1.712 m over 1.867 s
-##
-## because the clip declares an `advance_as`. This is that line. The body
-## produces the metres the clip was drawn covering, which is what keeps the feet
-## planted through it for exactly the reason `AUTHORED_RUN` keeps them planted
-## through a run: the legs were animated cycling against a pelvis advancing at
-## 0.917 m/s, so a body advancing at 0.917 m/s cancels them.
-##
-## Rebuild with a different clip, or a different window, and the build prints a
-## different number and this one stops matching it. `tools/combat_range.tscn --
-## sword` reads the distance a standing swing actually covers and checks it
-## against this, so the disagreement is a failed check rather than a skate.
-const SPIN_ADVANCE := 1.712
+## The great sword's spinning advance, in metres: the swing clip's own
+## authored travel, read off its metadata by `BogAnimator` (D-098). The body
+## produces the metres the clip was drawn covering, which is what keeps the
+## feet planted through the swing for exactly the reason a run cycle's rate
+## keeps them planted through a run. `tools/combat_range.tscn -- sword` reads
+## the distance a standing swing actually covers and checks it against this.
+static var SPIN_ADVANCE: float = BogAnimator.SWING_ADVANCE
 
 ## What a swing adds to the momentum budget, as a fraction of target speed
 ## (D-068).
@@ -421,7 +385,7 @@ var team: int = MatchConfig.TEAM_NONE
 ## It is therefore `team`'s kind of value and gets `team`'s treatment: set once,
 ## beside the plate and the tint, from the row the peer already has.
 var weapon: int = Loadout.DEFAULT
-## The body's own skinned mesh out of `bog.glb`, found once in `_ready` before
+## The body's own skinned mesh out of `BOG.fbx`, found once in `_ready` before
 ## anything else is hung off the skeleton — so never the spear, and never the
 ## robe (D-046). Null only on a rig a re-import has broken.
 var body_mesh: MeshInstance3D
@@ -931,7 +895,7 @@ func _handle_movement(delta: float) -> void:
 		return
 
 	var wish := _wish_direction()
-	var speed := target_speed()
+	var speed := target_speed() * backward_scale(wish)
 	var accelerating := is_on_floor()
 	var acceleration := GROUND_ACCELERATION if accelerating else AIR_ACCELERATION
 	var friction := GROUND_FRICTION if accelerating else AIR_FRICTION
@@ -963,6 +927,14 @@ func _handle_movement(delta: float) -> void:
 ## target in a couple of ticks. And not in a dive's airtime: the dive has its
 ## own tuned speed and roll (D-026), and keeping 9.5 m/s all the way to the
 ## floor would lengthen every dive rather than reward a hop.
+## How much of the target speed a stick pointed `wish` gets: all of it
+## forward and sideways, BACK_SPEED_SCALE of it straight back, and the blend
+## between on a backward diagonal (D-098). Off `facing()`, which is the way the
+## BOG looks and not necessarily the way it moves.
+func backward_scale(wish: Vector3) -> float:
+	return lerpf(1.0, BACK_SPEED_SCALE, clampf(-wish.dot(facing()), 0.0, 1.0))
+
+
 func _keeps_momentum(horizontal: Vector3, wish: Vector3, speed: float) -> bool:
 	if wish.length_squared() < 0.001 or _air_jump_spent:
 		return false
@@ -1023,15 +995,17 @@ func _hop_gain() -> void:
 ## through the whole swing; and there is no alignment test, because a spin has
 ## no stick to be aligned with — it commits to the way the body was facing when
 ## the player asked for it.
-func begin_spin(seconds: float) -> void:
+## `advance` is the metres the clip was drawn covering over `seconds`
+## (`BogAnimator.SWING_ADVANCE`), and the body produces them.
+func begin_spin(seconds: float, advance: float = SPIN_ADVANCE) -> void:
 	_spin_until = Time.get_ticks_msec() * 0.001 + maxf(seconds, 0.01)
 	if not is_local():
 		return
 	_spin_direction = facing()
 	# The speed the clip itself travels at. A standing swing gets exactly this
-	# and so covers exactly SPIN_ADVANCE; anything already moving keeps what it
-	# has and is given more.
-	var authored := SPIN_ADVANCE / maxf(seconds, 0.01)
+	# and so covers exactly the clip's advance; anything already moving keeps
+	# what it has and is given more.
+	var authored := advance / maxf(seconds, 0.01)
 	var carried := maxf(Vector3(velocity.x, 0.0, velocity.z).length(), authored)
 	# `maxf` on the ceiling for the floor's sake: a crouching Bog's cap is
 	# 2.08 m/s and a walking one's is 2.99, both well over the authored speed,
@@ -1138,8 +1112,9 @@ func _wish_direction() -> Vector3:
 ## Rebuilding the blend space to follow a dial would be a graph that changes
 ## shape mid-match, which is a much worse trade.
 func target_speed() -> float:
+	var sprinting := wants_sprint and not (AIM_WALKS and is_drawing())
 	var speed := CROUCH_SPEED if is_crouching() \
-		else (RUN_SPEED if wants_sprint else WALK_SPEED)
+		else (RUN_SPEED if sprinting else WALK_SPEED)
 	return speed * elder_scale(Net.config.elder_speed_multiplier) * carrier_scale()
 
 

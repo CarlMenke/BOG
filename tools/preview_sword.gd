@@ -50,7 +50,7 @@ const CHECKS := 17
 ## extension**, a spread of 0.135 m, so no rigid hilt can sit in both of them at
 ## once and the only question worth asking is whether the pommel stays *in* the
 ## rear fist. This is therefore the size of the mitten rather than a residual to
-## drive to zero: the `RightHand`-weighted skin spans 0.17 m across (see
+## drive to zero: the `mixamorig_RightHand`-weighted skin spans 0.17 m across (see
 ## `HeldGear.GRIP_OFFSET`), and the worst sample comes out at 0.150 m.
 const FIT_TOLERANCE := 0.16
 
@@ -151,7 +151,7 @@ func _measure() -> void:
 	# The roll. Every rotation about the hilt puts both fists in the same place,
 	# so the fists cannot decide which way the edge points — the hand does. The
 	# blade's flat is the model's X, and it is squared up against the hilt from
-	# "across the palm", which is `RightHand`'s own local X (see `GRIP_OFFSET`'s
+	# "across the palm", which is `mixamorig_RightHand`'s own local X (see `GRIP_OFFSET`'s
 	# note on this rig's axes): a sword's edge is square to the knuckles.
 	var across := Vector3.RIGHT
 	var x := (across - hilt * across.dot(hilt)).normalized()
@@ -366,8 +366,8 @@ func _sheet() -> void:
 ## be a compass that never moved — which is the same fact `BogCombat` has to read
 ## the blade off the bone attachment for.
 func _compass(bog: Bog, skeleton: Skeleton3D) -> void:
-	var left := skeleton.find_bone("LeftUpLeg")
-	var right := skeleton.find_bone("RightUpLeg")
+	var left := skeleton.find_bone("mixamorig_LeftUpLeg")
+	var right := skeleton.find_bone("mixamorig_RightUpLeg")
 	if left < 0 or right < 0:
 		return
 	var a := skeleton.get_bone_global_pose(left).origin

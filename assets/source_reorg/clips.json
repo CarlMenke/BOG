@@ -322,7 +322,8 @@
    "loop": false,
    "face": "hips",
    "markers": {
-    "release": 0.867
+    "release": 0.9,
+    "windup": 0.2
    }
   },
   {
@@ -435,7 +436,8 @@
    "loop": false,
    "face": "none",
    "markers": {
-    "swap": 0.367
+    "swap": 0.367,
+    "nock": 0.567
    }
   },
   {
@@ -504,7 +506,8 @@
    "loop": false,
    "face": "hips",
    "markers": {
-    "release": 0.833
+    "release": 1.0,
+    "windup": 0.467
    }
   },
   {

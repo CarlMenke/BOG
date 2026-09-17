@@ -11,7 +11,7 @@ extends Node3D
 ##
 ## Spawned by whoever saw the death; see `spawn_from`.
 
-const MODEL := preload("res://art/generated/bog.glb")
+const MODEL := preload("res://art/bog/BOG.fbx")
 
 ## How long a corpse stays before it fades out, and how long the fade takes.
 ##
@@ -148,7 +148,7 @@ func _adopt(source: Bog) -> void:
 		# Copied from what the dead Bog was *drawn with*, not from the mesh
 		# resource, or a Bog in a team colour would drop dead yellow (D-046). The
 		# live mesh is matched by name, which also leaves the robe out: the corpse
-		# model is a fresh `bog.glb` and has no "Elder" to match.
+		# model is a fresh `BOG.fbx` and has no "Elder" to match.
 		var live := _live_mesh(source_model, node.name)
 		for surface in node.mesh.get_surface_count():
 			var material: Material = live.get_active_material(surface) \
@@ -210,7 +210,7 @@ func _adopt_spears(source: Bog) -> void:
 		if body == null:
 			# No rigid body for that bone — a toe, or a rig without it. The
 			# torso is always present and is a better home than the floor.
-			body = _find_bone_body("Spine1")
+			body = _find_bone_body("mixamorig_Spine1")
 		if body == null:
 			spear.queue_free()
 			continue

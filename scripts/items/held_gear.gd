@@ -61,8 +61,8 @@ const SWORD_MODEL := preload("res://art/generated/greatsword.glb")
 ## — is the wrong way round.
 const POTION_MODEL := preload("res://art/generated/heal_potion.glb")
 
-const HAND_BONE := "RightHand"
-const BOW_HAND_BONE := "LeftHand"
+const HAND_BONE := "mixamorig_RightHand"
+const BOW_HAND_BONE := "mixamorig_LeftHand"
 
 ## Where the shaft sits in the fist.
 ##
@@ -71,7 +71,7 @@ const BOW_HAND_BONE := "LeftHand"
 ## (`GRIP_ROTATION`), and which point of the shaft is in the palm
 ## (`GRIP_OFFSET`, the butt's position in hand-local metres).
 ##
-## `RightHand`'s local +Y runs up the arm and out through the fingers, +X across
+## `mixamorig_RightHand`'s local +Y runs up the arm and out through the fingers, +X across
 ## the palm toward the fingertips (they reach x = +0.22 in this cartoon mitten)
 ## and +Z is the palm normal. A shaft near local +Y is therefore a shaft along
 ## the forearm, which is why the rotation below is a small tilt off identity.
@@ -178,7 +178,7 @@ const BOW_HAND_BONE := "LeftHand"
 ## through it so the left-hand column is a measurement rather than a copy.
 ##
 ## The axes are unchanged and worth restating, because the numbers moved a long
-## way: `RightHand`'s local +Y runs up the arm and out through the fingers, +X
+## way: `mixamorig_RightHand`'s local +Y runs up the arm and out through the fingers, +X
 ## across the palm toward the fingertips and +Z is the palm normal. The old grip
 ## was a small tilt off identity because the shaft ran along the forearm; this
 ## one is most of a right angle because it does not.
@@ -200,7 +200,7 @@ const GRIP_ROTATION := Vector3(52.31, 0.00, 53.82)
 ## attached to the back of the hand when in idle."*
 ##
 ## They are describing a real 4 cm. The number this vector used to be checked
-## against was the `RightHand`-weighted skin **at rest** — x -0.083..0.085,
+## against was the `mixamorig_RightHand`-weighted skin **at rest** — x -0.083..0.085,
 ## z -0.065..0.065 — and a bone's own vertices are the wrist, not the fist: the
 ## three finger chains carry 918 of the mitten's 1,030 vertices and every one of
 ## them was outside that span. Measured instead as the whole mitten **in the pose
@@ -405,7 +405,7 @@ func attach_to(skeleton: Skeleton3D) -> bool:
 
 ## The left fist, and the bow in it (D-065).
 ##
-## A warning and not a refusal on a rig with no `LeftHand`: a Bog with a spear
+## A warning and not a refusal on a rig with no `mixamorig_LeftHand`: a Bog with a spear
 ## and no bow is still a playable Bog, and the pipeline's own
 ## `assert_same_character` is what actually guards the bone list.
 func _attach_bow(skeleton: Skeleton3D) -> void:
@@ -1210,7 +1210,7 @@ const POTION_SCALE := 0.30
 ## The rule survives here; the *number* cannot, and for two reasons that are
 ## both measurements rather than preferences:
 ##
-## * **It is the other hand.** `fist_offset()` is in `RightHand`'s frame and the
+## * **It is the other hand.** `fist_offset()` is in `mixamorig_RightHand`'s frame and the
 ##   two hands are mirrored, so the number is not even in the right units of
 ##   direction.
 ## * **It is the other pose, and that is the bigger half.** D-074's whole
@@ -1237,7 +1237,7 @@ const POTION_SCALE := 0.30
 ## the *outside* of the fist and had to come 3 cm in; here a bottle centred in
 ## the fist spends half its belly inside the Bog's own stomach, because the
 ## drinking hand rests against a body that is a pear. `-- potion` derives the
-## direction rather than guessing it — horizontally away from `Spine1` at the
+## direction rather than guessing it — horizontally away from `mixamorig_Spine1` at the
 ## frame the window opens, with the component along the bottle projected out,
 ## which in this hand's frame is `(0.246, 0.348, -0.905)` — and the sheet is the
 ## argument:

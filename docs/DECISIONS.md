@@ -12163,3 +12163,144 @@ marker loop skipped, 51 rows fail on 162 missing markers. Smoke test
 - **Per-clip rate hints in the table.** Every rate the animator needs is
   either game speed over `authored_speed` or a window over a target time, and
   both are derivations, not table entries.
+
+## D-098 — The animator is rebuilt on the library and the markers: three ground planes, a three-piece jump, and not one clip time in the file
+Step 4 of the animation rebuild. `scripts/player/bog_animator.gd` was 1897
+lines carrying about thirty clip times measured against clips that no longer
+exist (D-029, D-063, D-064, D-068); `scripts/player/bog.gd` carried ten
+authored speeds. Both are gone. The animator is 1139 lines, keeps every part
+of D-029's structure that was sound — the blend tree built in code, the rule
+that ground poses come from speed, air poses from the arc and events are
+one-shots, the upper-body layers, the scrubbed air clips — and reads every
+number it needs off the clips: a marker for an event (D-097), `authored_speed`
+metadata for a rate (D-095). `scenes/player/bog.tscn` instances
+`art/bog/BOG.fbx`; the body's own AnimationPlayer carries the library, put
+there by `tools/import_body.gd` on import, so every scene and tool that
+instances the body has every clip.
+
+### What the graph is now
+
+Three ground planes and a switch, where there was one plane and a carry
+layer. The great sword set and the archer set each have their own idle,
+walks, runs and strafes (design item 5), so `loco` is a `Transition` over
+`stand`, `sword` and `aim`: the sword's while a great sword is in the hands,
+the archer's while a bow is up, the plain one otherwise, cross-faded over
+0.15 s. The crouch is a five-point plane of its own — idle and four walks —
+where it was one clip on a line. The carry layer survives for the one weapon
+whose carry is only an upper-body pose, the bow at rest; the sword's carry
+*is* its plane's idle.
+
+The jump is three pieces (design item 7). A standing jump fires the take-off
+one-shot (`JumpStart`, 0.23 s) and hangs in the air loop (`AirLoop`, a cycle);
+a running jump — from above walking speed — is `RunJump` scrubbed by the arc
+between its `lift`, `apex` and `land` markers, exactly as the dive is `Roll`
+scrubbed between `dive`, `apex` and `land`. A touchdown fires the light
+landing (`Land`, whole), the heavy one (`LandHard` from `impact` to 0.3 s past
+`absorb`) if the body came down faster than **11 m/s** — a jump comes back at
+9, a fall from two and a half metres at 11 — or the roll (`Roll` from `land`
+to `up`) if the airtime was a dive.
+
+Every one-shot window is markers plus a named policy: the throw and the cast
+run from their `windup` to a third of a second past their `release`
+(`FOLLOW_THROUGH`, D-063's number); the loose opens one frame before its
+`release`; the slide runs `down` to `up`; the drink `raise` to `done`; the
+swing is the whole of `SwordSpin` at 1.0x. Every number the combat code and
+the tools read keeps its name — `THROW_RELEASE_TIME`, `BOW_RELEASE_TIME`,
+`SWING_RELEASE_TIME`, `SWING_SECONDS`, `CAST_RATE_MAX`, `DRINK_CLIP_START` —
+as a `static var` derived from the markers at load, so `bog_combat.gd` did
+not change a line of timing.
+
+### Two rules the clips changed
+
+**Backing up is slower** (the user's call at the step 2 checkpoint).
+`Bog.BACK_SPEED_SCALE = 0.6`, applied by how far behind the facing the stick
+points, so a run backwards is 3.24 m/s and plays `RunBack` at 2.2x where
+5.4 m/s would have played it at 3.6x; the planes put their backward points
+at the scaled speeds so a backpedal lands on its own clip.
+
+**A BOG with a bow drawn walks** (`Bog.AIM_WALKS`). The archer set has aiming
+walks and strafes and no run, and a sprint under a drawn bow would play them
+at six times their speed. It is the convention of the genre and it is one
+constant to reverse.
+
+### The draw is the reload's pull
+
+`BowDraw` is a 3.8 s hold at full draw and `BowAim` is the same pose again —
+the drawing hand at 1.04 m in both, 0.00 m ahead of the hips — so a charge
+blended between them moved the hands **0.041 m** and the remote-bow check
+said so ("agreeing means nothing"). The pull is in `BowReload`: the arrow
+comes off the quiver, meets the string at 0.567 s (the `nock` marker, the
+hand at 0.85 m and its slowest) and is drawn to the cheek by the end of the
+clip. The draw layer scrubs that half second by `Bog.draw_fraction()`, over
+the aim plane, and the hands travel **0.29 m** across the charge; the remote
+copy agrees to **1.2 mm** at five charge levels.
+
+### Where the composed hand is, not where the clip's is
+
+The cast's `release` was placed at the clip's furthest-forward frame (0.833)
+and the harness measured the bolt leaving with the hand **55% out and still
+advancing for five ticks**. The cast is an upper-body layer, and this clip
+turns its hips and lower spine 30° into the throw; the mask leaves those to
+the locomotion underneath, so on the body the arm reaches later than it does
+on the clip's own skeleton. `tools/clip_events.gd --masked` reads the hands
+with the hips and spine held at rest, the way the layer composes them, and
+the release moved to where *that* hand stops: **1.000** for the cast (0.28 m
+out, its whole masked reach), **0.900** for the throw. The bolt now leaves
+with the hand 93–98% out and stopping 0–1 ticks away, three runs; the spear
+one tick from full extension, twice. D-064 saw a frame of the same effect on
+the old clip and left it; this clip turns more.
+
+### The strafe axis, honestly
+
+Sixteen legs on the compass harness, the new library against the old build
+(D-071):
+
+    leg                old     new
+    forward walk       0.15    0.15     back walk      0.16    0.16
+    forward run        0.28    0.28     back run       0.23    0.29
+    left/right walk    0.80    0.75     left/right run 0.30    1.12
+    worst diagonal     1.14    1.18     mirror         0.13    0.01
+
+Straight legs plant as before and the mirror is exact, because the two
+running strafes are one clip and its reflection from Mixamo's own catalogue.
+**Running sideways slides at 1.12**, back to D-066's state, because both of
+Mixamo's `Running Strafe` clips are runs turned 77° at the hips; squared by
+the chest they travel 24° off forward, and a body going sideways over that
+slides at `2·sin(33°)`. D-071 closed it with the one lateral Mixamo has —
+the Magic pack's `Standing Run Left`, 76.5° by the chest — and a reflection
+for the right, and that is still the fix: one row in `clips.json` for the
+user to fetch, and a `mirror_of` rule in `import_clip.gd` (swap the left and
+right tracks, reflect the quaternions in the sagittal plane; D-071 wrote the
+matrix). Until then `STRAFE_SIDEWAYS_LIMIT` is held at the compass limit and
+says so in its comment. The crouch control is re-based on the crouch plane's
+own geometry (axes 0.46, diagonals 1.19).
+
+### What is red, and why it is step 5's
+
+The gate is **135 checks, 7 failures**, and every one of the seven measures
+a prop against the body: the spear's palm point and level, the bottle's
+palm, the letter card's height, the bow's carry tilt, the great sword's fit
+and the carry table as a whole. All of them are constants in `held_gear.gd`
+and the `preview_*` tools measured on the old body's hands (D-074, D-075,
+D-077), and step 5 is where they are re-solved. The torso modifier passes
+its harness with `BOW_OFF_FACING` at 0. Nothing in the game's timing,
+movement, replication, rules or maps is red.
+
+### Rejected
+
+- **Keying the draw's charge to a blend weight** between the aim and draw
+  poses. The two are the same pose.
+- **`LandHard` played whole.** It puts both hands on the ground for a second
+  while the player can already move; the absorb is the landing, the crawl is
+  not.
+- **A running jump from the standing take-off.** `JumpStart` is a crouch and
+  a push from a stand; under a run it reads as a stumble.
+- **Aiming at a sprint.** Six-times-speed walks, or a plane clamped to its
+  walk ring with the body running past it.
+- **Leaving `BOW_OFF_FACING` at -92.** The archer set is imported in its
+  authored frame with the bow down the body's forward (D-097), so the
+  correction it was measuring is gone; it is 0 now and the spine harness
+  measures the residual for step 5.
+- **Pruning the 25 roles the animator does not name** (the hit reactions, the
+  death, the sword's other four attacks, the equips, the idles). They are in
+  the library at 2.0 MB and wired to nothing; step 7 decides what stays.

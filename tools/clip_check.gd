@@ -26,14 +26,14 @@ const ImportClip := preload("res://tools/import_clip.gd")
 ## The events the animator and the combat code read (D-097); a re-import that
 ## loses one fails here rather than in a match.
 const REQUIRED_MARKERS := {
-	"Throw": ["release"], "BowLoose": ["release"], "Cast": ["release"],
+	"Throw": ["windup", "release"], "BowLoose": ["release"], "Cast": ["windup", "release"],
 	"SwordSpin": ["swing", "hit", "end"], "SwordPowerSlash": ["swing", "hit", "end"],
 	"SwordDownSlash": ["swing", "hit", "end"], "SwordCombo": ["hit_1", "hit_2", "hit_3"],
 	"SwordJumpAttack": ["hit", "land"],
 	"JumpStart": ["lift"], "Land": ["absorb"], "LandHard": ["absorb", "up"],
 	"Roll": ["dive", "apex", "land", "up"], "Slide": ["down", "up"],
 	"Drink": ["raise", "done"], "Death": ["fall"],
-	"SwordDraw": ["swap"], "SwordSheathe": ["swap"], "BowEquip": ["swap"], "BowUnequip": ["swap"],
+	"SwordDraw": ["swap"], "SwordSheathe": ["swap"], "BowEquip": ["swap"], "BowUnequip": ["swap"], "BowReload": ["nock"],
 }
 
 var _failures := 0

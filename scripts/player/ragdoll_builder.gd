@@ -143,19 +143,19 @@ extends RefCounted
 ## shoulders are driven rather than frozen — which is a change to this table's
 ## size, not to its numbers.
 const SEGMENTS: Array[Dictionary] = [
-	{"bone": "Hips",         "tip": "Spine1",      "girth": 1.80, "mass": 9.0, "swing": 45.0, "twist": 30.0},
-	{"bone": "Spine1",       "tip": "Neck",        "girth": 1.26, "mass": 8.0, "swing": 45.0, "twist": 35.0},
-	{"bone": "Head",         "tip": "HeadTop_End", "girth": 0.87, "mass": 9.0, "swing": 35.0, "twist": 25.0},
-	{"bone": "LeftArm",      "tip": "LeftForeArm", "girth": 0.54, "mass": 1.2, "swing": 95.0, "twist": 60.0},
-	{"bone": "LeftForeArm",  "tip": "LeftHand",    "girth": 0.31, "mass": 1.4, "swing": 105.0, "twist": 40.0},
-	{"bone": "RightArm",     "tip": "RightForeArm", "girth": 0.54, "mass": 1.2, "swing": 95.0, "twist": 60.0},
-	{"bone": "RightForeArm", "tip": "RightHand",   "girth": 0.31, "mass": 1.4, "swing": 105.0, "twist": 40.0},
-	{"bone": "LeftUpLeg",    "tip": "LeftLeg",     "girth": 0.21, "mass": 1.6, "swing": 90.0, "twist": 45.0},
-	{"bone": "LeftLeg",      "tip": "LeftFoot",    "girth": 0.19, "mass": 1.2, "swing": 105.0, "twist": 30.0},
-	{"bone": "LeftFoot",     "tip": "LeftToeBase", "girth": 0.35, "mass": 1.1, "swing": 55.0, "twist": 30.0},
-	{"bone": "RightUpLeg",   "tip": "RightLeg",    "girth": 0.21, "mass": 1.6, "swing": 90.0, "twist": 45.0},
-	{"bone": "RightLeg",     "tip": "RightFoot",   "girth": 0.19, "mass": 1.2, "swing": 105.0, "twist": 30.0},
-	{"bone": "RightFoot",    "tip": "RightToeBase", "girth": 0.35, "mass": 1.1, "swing": 55.0, "twist": 30.0},
+	{"bone": "mixamorig_Hips",          "tip": "mixamorig_Spine1",        "girth": 1.80, "mass": 9.0, "swing": 45.0,  "twist": 30.0},
+	{"bone": "mixamorig_Spine1",        "tip": "mixamorig_Neck",          "girth": 1.26, "mass": 8.0, "swing": 45.0,  "twist": 35.0},
+	{"bone": "mixamorig_Head",          "tip": "mixamorig_HeadTop_End",   "girth": 0.87, "mass": 9.0, "swing": 35.0,  "twist": 25.0},
+	{"bone": "mixamorig_LeftArm",       "tip": "mixamorig_LeftForeArm",   "girth": 0.54, "mass": 1.2, "swing": 95.0,  "twist": 60.0},
+	{"bone": "mixamorig_LeftForeArm",   "tip": "mixamorig_LeftHand",      "girth": 0.31, "mass": 1.4, "swing": 105.0, "twist": 40.0},
+	{"bone": "mixamorig_RightArm",      "tip": "mixamorig_RightForeArm",  "girth": 0.54, "mass": 1.2, "swing": 95.0,  "twist": 60.0},
+	{"bone": "mixamorig_RightForeArm",  "tip": "mixamorig_RightHand",     "girth": 0.31, "mass": 1.4, "swing": 105.0, "twist": 40.0},
+	{"bone": "mixamorig_LeftUpLeg",     "tip": "mixamorig_LeftLeg",       "girth": 0.21, "mass": 1.6, "swing": 90.0,  "twist": 45.0},
+	{"bone": "mixamorig_LeftLeg",       "tip": "mixamorig_LeftFoot",      "girth": 0.19, "mass": 1.2, "swing": 105.0, "twist": 30.0},
+	{"bone": "mixamorig_LeftFoot",      "tip": "mixamorig_LeftToeBase",   "girth": 0.35, "mass": 1.1, "swing": 55.0,  "twist": 30.0},
+	{"bone": "mixamorig_RightUpLeg",    "tip": "mixamorig_RightLeg",      "girth": 0.21, "mass": 1.6, "swing": 90.0,  "twist": 45.0},
+	{"bone": "mixamorig_RightLeg",      "tip": "mixamorig_RightFoot",     "girth": 0.19, "mass": 1.2, "swing": 105.0, "twist": 30.0},
+	{"bone": "mixamorig_RightFoot",     "tip": "mixamorig_RightToeBase",  "girth": 0.35, "mass": 1.1, "swing": 55.0,  "twist": 30.0},
 ]
 
 const LAYER_WORLD := 1

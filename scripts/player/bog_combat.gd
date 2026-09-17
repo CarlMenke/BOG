@@ -1739,7 +1739,7 @@ func try_swing_sword() -> void:
 func _begin_swing() -> void:
 	if _bog == null:
 		return
-	_bog.begin_spin(BogAnimator.SWING_SECONDS)
+	_bog.begin_spin(BogAnimator.SWING_SECONDS, BogAnimator.SWING_ADVANCE)
 	var animator := _bog.get_node_or_null("AnimationTree") as BogAnimator
 	if animator != null:
 		animator.play_swing()

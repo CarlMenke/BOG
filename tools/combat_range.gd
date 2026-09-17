@@ -945,7 +945,20 @@ const STRAFE_LIMIT := 1.25
 ## hundredth, with the left leg at 0.30. A pass on the worst of the four says
 ## nothing about whether the four are the same move; `mirror`, below, is what
 ## says that.
-const STRAFE_SIDEWAYS_LIMIT := 0.85
+##
+## **Widened to the compass limit at D-098, and that is a debt, not a
+## verdict.** The rebuilt library's running strafes are Mixamo's
+## `Running Strafe` pair, which are runs turned 77° at the hips with the chest
+## 66° round: squared by the chest (D-097) they travel 24° off forward, and a
+## body moving sideways over a clip travelling nearly forward slides at
+## **1.12** of its speed, both ways — the same class of clip D-066 measured at
+## 27.5° and 0.98. The walk strafes are 46° diagonals at 0.75. What closes it
+## is the one clip Mixamo has that is a lateral — the Magic pack's
+## `Standing Run Left`, 76.5° by the chest (D-071) — fetched as a row, and its
+## right-hand twin made by reflection in `import_clip.gd`, since every right
+## strafe Mixamo has is a diagonal. Until that row lands, this line holds the
+## axis at the compass limit and `mirror` holds the two halves together.
+const STRAFE_SIDEWAYS_LIMIT := 1.25
 
 ## How far the left half of the compass may disagree with the right half, as a
 ## fraction of body speed, on the strafe axis.
@@ -971,12 +984,15 @@ const STRAFE_MIRROR_LIMIT := 0.20
 ## How much worse the crouch's *worst* bearing has to be than its best, for the
 ## control to have shown anything.
 ##
-## Three, and it measures 6.7: a crouching Bog is still one clip behind a line,
-## so it can only match one direction and the others fall where the geometry
-## puts them. (Its best bearing is forward-**left**, not forward, because
-## `CrouchWalk` is authored travelling 33.8° to the left — which is its own
-## small illustration of the same point.)
-const STRAFE_CONTROL_SPREAD := 3.0
+## Two, since D-098. The crouch is a five-point plane now — an idle and four
+## walks, no diagonals — so its axes plant and its diagonals fall where the
+## geometry puts them: a diagonal request is a half-and-half blend of two
+## clips 90° apart, and the planted foot of each slides at the speed of the
+## other. Measured, the axes sit at 0.46 and the diagonals at 1.19, a 2.6x
+## spread. If the two ever stop disagreeing this measurement has gone blind,
+## which is what a control is for (D-039). (Before D-098 the crouch was one
+## clip behind a line and spread 6.7x; that control is gone with the line.)
+const STRAFE_CONTROL_SPREAD := 2.0
 
 ## `spine`'s sweep. Eight bearings round the horizon and seven pitches from
 ## `PITCH_MIN` to `PITCH_MAX`, each held for `SPINE_SETTLE` ticks.
@@ -1775,7 +1791,7 @@ func _drop_a_letter() -> void:
 	Net.config.letter_hold_time = 30.0
 	MatchState.report_kill(DUMMY_BASE, 1, Bog.Cause.SPEAR,
 		player.global_position + player.facing() * 1.2,
-		Vector3.FORWARD * 18.0, "Spine1")
+		Vector3.FORWARD * 18.0, "mixamorig_Spine1")
 
 
 ## Put one of each letter on the ground, three metres in front of the player.
@@ -1848,7 +1864,7 @@ func _drop_a_robe() -> void:
 	Net.config.elder_drop_chance = 1.0
 	MatchState.report_kill(DUMMY_BASE + 1, 1, Bog.Cause.SPEAR,
 		player.global_position + player.facing() * 1.2,
-		Vector3.FORWARD * 18.0, "Spine1")
+		Vector3.FORWARD * 18.0, "mixamorig_Spine1")
 
 
 ## Cast once the robe is on, then say whether anybody died.
@@ -2091,7 +2107,7 @@ func _drive_respawn(player: Bog, combat: BogCombat) -> void:
 			# is put down by hand through the same `_spawn_drop` a roll uses.
 			Net.config.elder_drop_chance = 1.0
 			MatchState.report_kill(1, DUMMY_BASE, Bog.Cause.SPEAR,
-				player.global_position, Vector3.FORWARD * 18.0, "Spine1")
+				player.global_position, Vector3.FORWARD * 18.0, "mixamorig_Spine1")
 			MatchState.report_kill(DUMMY_BASE, DUMMY_BASE, Bog.Cause.VOID,
 				dummy.global_position, Vector3.DOWN, "")
 			var player_spot: Vector3 = MatchState._drop_spot(player.global_position)
@@ -2290,7 +2306,7 @@ func _drive_ward(combat: BogCombat) -> void:
 func _robe_at_the_dummys_feet(dummy: Bog) -> void:
 	Net.config.elder_drop_chance = 1.0
 	MatchState.report_kill(DUMMY_BASE + 1, 1, Bog.Cause.SPEAR,
-		dummy.global_position, Vector3.FORWARD * 18.0, "Spine1")
+		dummy.global_position, Vector3.FORWARD * 18.0, "mixamorig_Spine1")
 
 
 # ------------------------------------------------------------------ health ---
@@ -2352,7 +2368,7 @@ func _drive_health(combat: BogCombat) -> void:
 			# ...and the third takes it to exactly zero, with the robe it rolls
 			# put down under the far dummy.
 			_health_took = MatchState.report_damage(DUMMY_BASE, 1, HEALTH_HITS[2],
-				Bog.Cause.SPEAR, far.global_position, Vector3.FORWARD * 18.0, "Spine1")
+				Bog.Cause.SPEAR, far.global_position, Vector3.FORWARD * 18.0, "mixamorig_Spine1")
 			_health_at = _frames
 			_health_step = 3
 		3:
@@ -2434,7 +2450,7 @@ func _drive_health(combat: BogCombat) -> void:
 ## of geometry behind it. Returns what the host says it took.
 func _hit(victim: Bog, amount: float) -> float:
 	return MatchState.report_damage(victim.peer_id, 1, amount, Bog.Cause.SPEAR,
-		victim.body_centre(), Vector3.FORWARD * 6.0, "Spine1")
+		victim.body_centre(), Vector3.FORWARD * 6.0, "mixamorig_Spine1")
 
 
 ## What the bar over a Bog's head is showing, 1 -> 0, read off the plate itself
@@ -2504,7 +2520,7 @@ func _drive_potion(player: Bog, combat: BogCombat) -> void:
 			# trick `_robe_at_the_dummys_feet` uses, and the only way a dummy
 			# with no client behind it ever collects anything.
 			MatchState.report_kill(DUMMY_BASE, 1, Bog.Cause.SPEAR,
-				far.global_position, Vector3.FORWARD * 18.0, "Spine1")
+				far.global_position, Vector3.FORWARD * 18.0, "mixamorig_Spine1")
 			_potion_at = _frames
 			_potion_step = 1
 		1:
@@ -2732,7 +2748,7 @@ func _drive_potion(player: Bog, combat: BogCombat) -> void:
 			combat.grant_potion(2)
 			_potion_stock = combat.potion_count()
 			MatchState.report_kill(1, DUMMY_BASE + 1, Bog.Cause.SPEAR,
-				player.body_centre(), Vector3.FORWARD * 6.0, "Spine1")
+				player.body_centre(), Vector3.FORWARD * 6.0, "mixamorig_Spine1")
 			_potion_at = _frames
 			_potion_step = 15
 		15:
@@ -2902,7 +2918,7 @@ func _drive_embed(player: Bog) -> void:
 				print("combat_range: embed FAIL (%s)" % "; ".join(problems))
 			# Now kill it, and the same shaft has to end up on the corpse.
 			MatchState.report_damage(DUMMY_BASE, 1, Bog.MAX_HEALTH, Bog.Cause.SPEAR,
-				near.body_centre(), Vector3.FORWARD * 14.0, "Spine1")
+				near.body_centre(), Vector3.FORWARD * 14.0, "mixamorig_Spine1")
 			_embed_at = _frames
 			_embed_step = 3
 		3:
@@ -3394,8 +3410,8 @@ func _hand_reach(player: Bog) -> float:
 		_release_skeleton = player.find_child("Skeleton3D", true, false) as Skeleton3D
 		if _release_skeleton == null:
 			return -INF
-		_release_hand_bone = _release_skeleton.find_bone("RightHand")
-		_release_hips_bone = _release_skeleton.find_bone("Hips")
+		_release_hand_bone = _release_skeleton.find_bone("mixamorig_RightHand")
+		_release_hips_bone = _release_skeleton.find_bone("mixamorig_Hips")
 	if _release_hand_bone < 0 or _release_hips_bone < 0:
 		return -INF
 	var arm := _release_skeleton.get_bone_global_pose(_release_hand_bone).origin
@@ -3675,7 +3691,7 @@ func _bow_fail(label: String, why: String) -> void:
 ##
 ## What is compared is the **draw length**: the distance from the bow fist to
 ## the drawing fist. Not the hand's position relative to the hips, which was the
-## first attempt and is the wrong quantity — everything below `Spine1` comes
+## first attempt and is the wrong quantity — everything below `mixamorig_Spine1` comes
 ## from the locomotion underneath (D-029), so two Bogs a few frames out of phase
 ## in the same idle cycle disagree about it without disagreeing about the draw.
 ## The distance between two bones the layer fully owns is the thing the eye
@@ -3721,7 +3737,7 @@ func _drive_draw(player: Bog, combat: BogCombat) -> void:
 
 
 ## How far this Bog's string is back, in metres of skeleton: the gap between the
-## two fists. Both bones are above `Spine1` and so both are entirely the draw
+## two fists. Both bones are above `mixamorig_Spine1` and so both are entirely the draw
 ## layer's, which is what makes this the one reading that says something about
 ## the bow and nothing about the legs.
 func _draw_length(bog: Bog) -> float:
@@ -3741,7 +3757,7 @@ func _draw_length(bog: Bog) -> float:
 ##
 ## Printed rather than asserted, and it is the number to read if the bow ever
 ## looks like it is aiming at the wrong thing. A masked layer keeps the clip's
-## rotations from `Spine1` up and throws away everything the pelvis was doing
+## rotations from `mixamorig_Spine1` up and throws away everything the pelvis was doing
 ## (D-029), and an archer's stance is most of a right angle between those two
 ## halves — so how much of that right angle survives into the game is a fact
 ## about which bones are in `UPPER_BODY_BONES`, not about the clip. D-064
@@ -3901,7 +3917,7 @@ func _sample_strafe(player: Bog) -> void:
 	if skeleton == null:
 		return
 	var here: Array[Vector3] = []
-	for bone in ["LeftToeBase", "RightToeBase"]:
+	for bone in ["mixamorig_LeftToeBase", "mixamorig_RightToeBase"]:
 		var index := skeleton.find_bone(bone)
 		if index < 0:
 			return
@@ -4014,16 +4030,17 @@ func _report_strafe() -> void:
 		_strafe_fail("mirror", "%s — %.2f apart, past the %.2f limit"
 			% [mirror_where, worst_mirror, STRAFE_MIRROR_LIMIT])
 
-	# The control, and it is one that has to come out *badly*. A crouching Bog
-	# is still on one clip behind a one-dimensional space, which is what every
-	# direction was before this step; if its bearings do not disagree with each
-	# other then this measurement cannot see a skate at all and the sixteen
-	# lines above mean nothing (D-039).
+	# The control, and it is one that has to come out *badly*. The crouch plane
+	# has clips on its four axes and none on its diagonals, so a diagonal
+	# request is a blend of two clips 90° apart and has to slide where an axis
+	# plants; if its bearings do not disagree with each other then this
+	# measurement cannot see a skate at all and the sixteen lines above mean
+	# nothing (D-039, D-098).
 	if crouch_worst > crouch_best * STRAFE_CONTROL_SPREAD:
-		print("combat_range: the crouch's one clip still spreads %.2f to %.2f across the compass — crouch PASS"
-			% [crouch_best, crouch_worst])
+		print("combat_range: the crouch plane's diagonals slide %.2f against its axes' %.2f — crouch PASS"
+			% [crouch_worst, crouch_best])
 	else:
-		_strafe_fail("crouch", "the one-clip control spread only %.2f to %.2f, "
+		_strafe_fail("crouch", "the crouch control spread only %.2f to %.2f, "
 			% [crouch_best, crouch_worst]
 			+ "so this measurement would not have noticed the fault it is here for")
 
@@ -5329,7 +5346,7 @@ func _chain_verdict(player: Bog) -> void:
 	var row := _chain_row
 	var target := player.target_speed()
 	var cap := player.hop_speed_cap()
-	var authored := Bog.SPIN_ADVANCE / BogAnimator.SWING_SECONDS
+	var authored := BogAnimator.SWING_ADVANCE / BogAnimator.SWING_SECONDS
 	var problems: Array[String] = []
 	if row["top"] > cap + CHAIN_EPSILON:
 		problems.append("the chain went past the hop cap")

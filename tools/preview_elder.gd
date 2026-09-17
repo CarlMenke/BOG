@@ -208,8 +208,8 @@ func _make_bog(clip: String, time: float) -> Node3D:
 ## up x forward, so forward is the hip line turned a quarter turn.
 func _facing(model: Node3D) -> Vector3:
 	var skeleton := model.find_child("Skeleton3D", true, false) as Skeleton3D
-	var left := skeleton.find_bone("LeftUpLeg")
-	var right := skeleton.find_bone("RightUpLeg")
+	var left := skeleton.find_bone("mixamorig_LeftUpLeg")
+	var right := skeleton.find_bone("mixamorig_RightUpLeg")
 	if left < 0 or right < 0:
 		return Vector3.BACK
 	var a := skeleton.global_transform * skeleton.get_bone_global_pose(left).origin

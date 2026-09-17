@@ -31,6 +31,13 @@ const PEAK_FRACTION := 0.5
 
 var _skeleton: Skeleton3D
 var _forward: Vector3
+## `--masked`: read the hands the way an upper-body layer composes them, with
+## the hips and lower spine held at rest — the animator's masks leave those to
+## the locomotion underneath (D-029), and a clip that turns its body into a
+## throw reaches further and earlier on its own skeleton than its arms do over
+## somebody else's hips.
+var _masked := false
+const MASKED_OUT := ["mixamorig_Hips", "mixamorig_Spine"]
 
 
 func _initialize() -> void:
@@ -40,6 +47,7 @@ func _initialize() -> void:
 	var lib := load(LIBRARY) as AnimationLibrary
 	var args := OS.get_cmdline_user_args()
 	var frames := args.has("--frames")
+	_masked = args.has("--masked")
 	var keys: Array = []
 	for a in args:
 		if not a.begins_with("--"):
@@ -62,6 +70,10 @@ func _initialize() -> void:
 
 func _report(key: String, anim: Animation, frames: bool) -> void:
 	var tracks := ImportClip._tracks_by_bone(anim)
+	if _masked:
+		tracks = tracks.duplicate()
+		for bone in MASKED_OUT:
+			tracks.erase(bone)
 	var n := int(round(anim.length * FPS)) + 1
 	var travel: Vector3 = anim.get_meta("travel", Vector3.ZERO)
 	var drift := travel / anim.length if anim.length > 0.0 else Vector3.ZERO
@@ -88,7 +100,8 @@ func _report(key: String, anim: Animation, frames: bool) -> void:
 			rows[f][part + "_speed"] = (v + drift).length() if part.ends_with("toe") else v.length()
 
 	print("\n== %s  (%.3f s, %d frames, %s, %.2f m/s)" % [key, anim.length, n,
-		"loop" if anim.loop_mode != Animation.LOOP_NONE else "once", drift.length()])
+		"loop" if anim.loop_mode != Animation.LOOP_NONE else "once", drift.length()]
+		+ (", hips and spine at rest" if _masked else ""))
 	if frames:
 		print("   f     t   hips  ltoe ltspd  rtoe rtspd   rfwd rspd  r.y   lfwd lspd  l.y")
 		for f in n:
