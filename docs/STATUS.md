@@ -4,7 +4,7 @@ Resume point for BOG. Read this first, then `docs/ARCHITECTURE.md` (how it fits
 together), `docs/PLAN.md` (the full task list, with checkboxes) and
 `docs/DECISIONS.md` (why things are the way they are).
 
-Last updated: 2026-09-17.
+Last updated: 2026-09-18.
 
 ---
 
@@ -22,11 +22,11 @@ island and out to a results screen, and two automated checks now walk that path:
 one in a single process, one across two processes over a real socket.
 
 ```
-bash tools/smoke_test.sh        # 135 checks, ~6 minutes, all green; finds Godot by itself
+bash tools/smoke_test.sh        # 178 checks, ~7 minutes, all green; finds Godot by itself
 bash tools/net_test.sh          # two processes, one socket; ~45 s, run by hand
 ```
 
-`smoke_test.sh` is the gate; it is at **135 of 135**. `net_test.sh` is kept out
+`smoke_test.sh` is the gate; it is at **178 of 178**. `net_test.sh` is kept out
 of it to keep the gate fast; run it by hand after touching networking, the lobby
 or the results screen. It passes all twelve stages (200 + 34 assertions), ten of
 which end in a rematch, with the engine quiet in both processes — the error it
@@ -53,6 +53,132 @@ out. The one networking feature that was outstanding — hosting across the
 internet without every player installing Tailscale — is done (D-028) and needs a
 real tunnel and a real second machine to confirm. What is left below is
 play-testing, not build or release work.
+
+### Where the work is right now — the feel round
+
+**Thirteen pieces of playtest feedback**, grouped by the code they touch into
+six units, implemented in parallel and landed as **D-119..D-124**.
+`docs/PLAN_FEEL.md` is the spec they were argued against and `docs/PLAN.md`
+Phase 10 carries the item-by-item state. What each unit landed:
+
+- **The range at sunset** (**D-119**). Glowworm Grounds moved an hour earlier:
+  `resources/shaders/range_sky.gdshader`, a third fork of Kopje's cumulus, under
+  a sun 9° up on a bearing 30° east of north so 50 m of bank shadow falls off the
+  map instead of across it; `ambient_light_energy` 8.0 → 0.62 with a shadowless
+  `LIGHT_ONLY` `Bounce` from below the southern horizon. The lane fences are one
+  0.60 m rail instead of eight lines of 1.8 m timber, and **the six stations are
+  gone** — a zone's behaviour is authored in the map's tables and never changes,
+  all twenty-seven dummies stand up, and the only thing left to walk into is a
+  timber signboard that zeroes your stats.
+- **The character page** (**D-120**). `PORTRAIT_STEP` is gone: the subject keeps
+  his place on the ring with the fire lighting his face from the front, and
+  `_bog_wanted` hides the other seven on this client while the page is open. The
+  framing re-solved for a subject three metres back.
+- **The bow off the face** (**D-121**). `preview_carry` measures a **head**
+  clearance now — 0.06 m to the skinned head, the spear's own number — and
+  `-- probe` maps the whole tilt space: `CARRY_TILT` (47.5, −34) → (40, +10),
+  and the limb that passed through the nose at 0.002 m clears it by 0.134.
+- **The hit marker** (**D-122**). 3 px arms that land 40% oversize and pull to
+  size over 70 ms before the fade, held 0.45 s; a **kill** is a full white X
+  through the centre gap held 0.6 s with `hitmarker_kill.wav` under it. Sword,
+  spear, arrow and lightning each proven to reach it.
+- **Movement** (**D-123**). A full draw walks at 1.15 m/s (`DRAW_SPEED_SCALE`),
+  the camera comes in to 3.1 m and 2.15 aiming, a **slide jump** is its own move
+  replicated as `sync_slide_jump_serial`, and **crouch alone slides** — held in
+  the air it pre-arms the pose, so a landing at run speed is sliding on the tick
+  the feet arrive with neither `Land` nor `LandHard`.
+- **Fists, the emote and the sword** (**D-124**). **H** holsters: no prop in the
+  fists, 10% more speed, and LMB **punches** for 20. The dance empties the hands.
+  The great sword's click is a three-slash chain at 50 a slash, and the spin it
+  replaced is now the **sprint attack** at 0.8 of run speed.
+
+**Two clips are stand-ins, and only the owner can finish them.** `SlideJump` is
+drawn with `RunJump` and `Punch` with `Cast`, through
+`BogAnimator.clip_or(role, fallback)`, with one `push_warning` each at `_ready`
+and neither in `REQUIRED_CLIPS`, so the gate does not fail on a clip that does
+not exist. For each: run `python tools/mixamo_fetch.py`, paste it into the
+Mixamo tab, choose a take from the candidates (`"flip"` for `SlideJump`,
+`"punch"` for `Punch`), `bash tools/clip_imports.sh`, an `--import`, then place
+the markers with `tools/clip_events.gd` — `lift`/`apex`/`land` on `SlideJump`,
+`hit` on `Punch`.
+
+The gate is at **178 of 178** and green, and `net_test.sh` passed after the
+round with the engine quiet in both processes. D-124 touched replicated fields
+on the Bog (`sync_holstered`) as D-123 did (`sync_slide_jump_serial`); the
+socket run carries them, though no stage presses H or slide-jumps yet. Two things were
+deliberately left out and are PLAN 10.14 and 10.15 — a `✊` kill-feed glyph for
+the fist and a `fist_hit.wav`.
+
+**Committed and pushed on 2026-09-18**, together with the practice-range and UI
+round of 2026-09-17 (**D-112..D-118**) that it is built on top of, which had
+been sitting in the working tree. Nobody has played any of it: every number
+above is a render, a headless tool line or a gate check.
+
+### Previously — the practice range
+
+**Glowworm Grounds** (`range`) is built and in the gate, as **D-112..D-116** and
+`docs/PLAN.md` Phase 9. It is the seventh map and the first that is not an
+arena: a cleared bog with three throwing lanes, a sixty-metre bow lane,
+a gallery, a melee pit, an ability yard, a parkour course and two void lips off
+one lodge deck. A **Practice** button on the main menu goes straight there with
+no lobby and no port. Twenty-seven dummies — real Bogs at roster ids 900+, hidden
+from every roster screen, driven by the host — stand on their marks running eight
+behaviours; item wells, a refill stone and three weapon racks stand on the apron;
+and boards, drifting orbs and a gong are things to shoot that are not Bogs.
+`docs/PLAN_RANGE.md` is the scope it was all argued against and
+`docs/ARCHITECTURE.md` says where each piece lives.
+
+*Three things this paragraph said on 2026-09-17 are no longer true, and D-119 is
+why: it was built **at night** and is now an hour before sunset; it had
+**twenty-three** dummies and four more held in reserve for a station to mint,
+and all twenty-seven stand up; and the **six signposts** that switched a zone's
+behaviour are gone along with `AudioDirector.RANGE_CHIME` and its wav, so a
+lane's lesson is authored in the map and the only thing to walk into is the
+stats signboard.*
+
+The one thing it changed about an ordinary match: the **hit marker flashes on
+every landed hit, on every map**, because `hitmarker.wav` has done so since
+D-062 and the picture had never caught up with the sound. Damage numbers and the
+stats panel stay practice-only. *Its shape is **D-122**'s now — 3 px arms with a
+snap-in, and a kill is a full white X with its own sound rather than the same
+mark in another colour.*
+
+Four new headless tools back it — `tools/range_brains.tscn`,
+`tools/range_items.tscn -- all`, `tools/range_targets.tscn` and the `range`
+branch of `tools/playthrough.tscn` — plus the usual `preview_map` and
+`parkour_report` rows and a `range` mode on `tools/hud_range.tscn`. That is the
+141 → 166 move. **Nobody has stood on it**; PLAN 9.6 is the list of questions
+that need eyes, and the renders to look at first are
+`tools/showroom/out/range_sunset/range_pad{0..7}.png` and `range_top.png` —
+D-119's re-render of the same views an hour before sunset. (`range_final/` is
+the night set, and is what those questions were first asked of.)
+
+### And the UI pass — the look and all three layouts
+
+Landed the same day, as **D-117** and **D-118**, and chosen the same way: built
+as candidates in `tools/showroom/` over a parameterised copy of the real theme
+builder and the real scenes, photographed with the live 3D behind them, and
+picked by the owner off the pictures.
+
+**D-117 is the look.** Seven candidates; **Quiet** won. Surfaces are white at an
+alpha rather than a lighter blue-grey, so a panel is a dimming of whatever is
+behind it and works over the forest at night and the arena at noon. Nothing is
+bordered — four strokes are left in the whole UI and each means something. The
+two accents collapsed into one (`AMBER` is now exactly `BOG`), the accent is a
+wash except on a hovered primary button, and the wordmark went 44 → 72 px,
+because a quiet UI has to earn its one loud thing.
+
+**D-118 is where everything is.** The menu is one bar along the foot with a
+random quip under the wordmark instead of a rule and a place name. The lobby is
+a 460 px match rail and a 480 px room, with the ring reframed to stand in the
+gap on three ranks of nameplate, and the weapon and skin pickers moved out to a
+Weapon and Character page with a computed portrait and 256² cut-out thumbnails.
+The HUD puts everything about you in the bottom-right under the hand on the
+mouse, runs the kill feed up the left edge off the chat, and takes the borders
+off the ability tiles — they were the last accent outlines in the game.
+
+`tools/showroom/` stays as a dev tool; `tools/showroom/out/` is gitignored.
+`docs/ARCHITECTURE.md` says what is in it.
 
 ### What the two integrations each found
 
@@ -114,6 +240,9 @@ What exists now:
   passed on a flat grey BOG.
 - `assets/source/anims/*.fbx` — **70 clips, one per role** (D-096 chose
   them from 104), each with a `.import` that names `tools/import_clip.gd`.
+  `clips.json` carries **72 rows**: `SlideJump` (D-123) and `Punch` (D-124)
+  are rows whose FBX the owner has still to fetch, and the animator draws
+  both with a stand-in until they land.
   The two newest are `SpearCarry` (the one-handed ready idle the spear's
   grip is solved over, D-103) and `Twerk` (the emote on **Y**, D-105); the
   spear also has its own overhead `Throw-SpearThrowObject` now (D-104).

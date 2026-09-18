@@ -374,6 +374,83 @@ onto a standable floor near the bases' height once the physics has stepped.
 line whether the layout was declared or fallen back to. `CaptureBase` draws
 each base in its team's colour, only in this mode.
 
+### The practice range
+
+**Glowworm Grounds** (`range`) is a map like any other in the picker, and
+everything that makes it a practice range hangs off its own `Marker3D` groups
+rather than off a mode (**D-112**..**D-116**, **D-119**). It is worth knowing
+where the pieces are, because none of them is reachable from a search for
+"practice":
+
+- `scripts/world/maps/range_map.gd` + `scenes/world/maps/range.tscn` — the place
+  itself, built from `const` tables before `super()` like every static map, and
+  dressed after it. It authors the marker groups every other piece reads:
+  `DummyStations`, `Signs`, `Plates`, `Wells`, `Racks`, `Targets`, `Boards`,
+  plus the usual `Spawns`, `Bases` and `Letters`. Its build log prints the
+  census, and the gate greps it, so a marker dropped by a later edit fails there
+  rather than in a playtest: `27 dummies (27 live, 0 reserved), 4 wells, 3
+  racks, 1 signboard(s), 9 targets`.
+- **The hour is golden** (**D-119**). `resources/shaders/range_sky.gdshader` is
+  a fork of Kopje's `safari_sky.gdshader` — the third fork, not a second set of
+  values in the second — with a third gradient stop, a stated cloud shadow
+  colour and a warm wash keyed on the angle to the sun; `range_sky.tres` is the
+  material and `range_env.tres` derives its ambient from it. The scene's `Sun`
+  stands 9° up on a bearing 30° east of north, so the west bank's 50.5 m of
+  shadow falls off the map and no lane has the disc at its vanishing point, and
+  a shadowless `Bounce` comes back from the south-south-west at −6°. That second
+  light is `sky_mode = LIGHT_ONLY` and it is not optional: the sky follows
+  LIGHT0 for its disc, and a second light reaching it would move the sun.
+- `scripts/world/range/range_director.gd` — the one thing that walks those
+  groups. Two lines in `range_map.gd` add it and `RangeDummies` after `super()`;
+  it waits for `PLAYING`, then stands the dummies, the signboard and the parkour
+  plates on their marks and calls `RangeItems.build(map)` and
+  `RangeStats.build(map)` behind `ResourceLoader.exists` guards. It carries no
+  RPC: since the stations went there is no shared state left to agree about.
+- `scripts/world/range/range_dummies.gd` — the registry. A dummy is a **real
+  Bog** on a roster row at id 900+, with only its `Sync` node handed to the host
+  so it replicates without stealing a camera or reading a keyboard.
+  `drive_to(bog, pos, yaw, vel, grounded, jumped)` is the single writer of a
+  dummy's body *and* its snapshot; nothing else may touch a `sync_*` field.
+- `scripts/world/range/brains/*.gd` — one file per behaviour, each a position as
+  a function of time, because a dummy runs `move_and_slide` on no machine at all.
+  **Which brain a dummy runs is authored per area** in `range_map.gd`'s `DUMMIES`
+  table and the markers' meta, and never changes at runtime (**D-119**): a lane
+  is one lesson and you choose the lesson by walking to a different lane.
+- `scripts/world/range/signboard.gd`, `parkour_timer.gd` — the stats reset and
+  the clock. The signboard is what is left of the six stations: a timber post
+  and a board in the lodge's own timber with a carved STATS label and an
+  `Area3D`, no lantern, no light and no chime, because the feedback is the HUD
+  panel going to zero (**D-119**).
+- `scripts/world/range/range_target.gd`, `gong.gd`, `glow_orb.gd`,
+  `orb_launcher.gd` — things to shoot that are not Bogs. A projectile asks
+  `collider.has_method("range_hit")` before it asks whether it is a body;
+  damage still lands only on Bogs.
+- `scripts/world/range/range_stats.gd` + `scripts/ui/range_stats_panel.gd` — the
+  per-weapon counter (host-authoritative, broadcast whole at 4 Hz) and its two
+  readouts: a HUD panel bottom-left and `Label3D`s on the lodge wall.
+- `scripts/items/item_well.gd`, `refill_stone.gd`, `weapon_rack.gd` +
+  `scenes/items/*.tscn` — the furniture. A well mints a real `Pickup` through
+  `MatchState.place_pickup` and re-mints on `pickup_taken`; a rack swaps your
+  weapon live through `MatchState.set_weapon`, which is the host deciding and
+  not the lobby's refused-while-running request.
+- Tools: `tools/playthrough.tscn -- range` (the practice branch),
+  `tools/range_brains.tscn`, `tools/range_items.tscn -- all`,
+  `tools/range_targets.tscn`, `tools/hud_range.tscn` `range` mode, and the usual
+  `preview_map` and `parkour_report` with `map=res://scenes/world/maps/range.tscn`.
+
+The one thing the range changed about an ordinary match is the **hit marker**:
+`Crosshair.strike()` now fires on `MatchState.hit_landed` on every map, because
+`hitmarker.wav` has fired on every landed hit since D-062 and the picture had
+never caught up with the sound. Damage numbers and the stats panel stay
+practice-only. Its shape is **D-122**: 3 px arms that land 40% oversize and pull
+to size over 70 ms before the fade, a hit held 0.45 s, and a **kill** that is a
+different event rather than a louder one — the four arms reach in through the
+centre gap and meet as a full white X, held 0.6 s, with `hitmarker_kill.wav`
+under it where `_apply_death` played `HITMARKER`. `strike()` takes a `kill` flag,
+so `flash_hit` — the range's boards — keeps the hit shape by saying nothing.
+The vocabulary is unchanged: `UIPalette.BOG` yellow is a hit, white a kill, amber
+a board.
+
 ---
 
 ## Where things live
@@ -401,6 +478,7 @@ tools/           dev tools and testbeds — none of this ships
 | `scripts/world/arena.gd` | the map scene, and `register_arena` |
 | `scripts/world/map_catalog.gd` | the list of maps; ids in, entries out |
 | `scripts/world/static_map.gd` | what a hand-made map scene owes the match, and its collision |
+| `scripts/world/range/range_director.gd` | the practice range's marker walker: dummies, the signboard, plates, items, targets (**D-112**..**D-116**, **D-119**) |
 | `scripts/game/capture_layout.gd` | Capture B·O·G's bases and letter points: declared by a map, or the fallback (**D-051**) |
 | `scripts/world/capture_base.gd` | a team's base drawn in its colour (**D-051**) |
 | `scripts/world/island_generator.gd` | terrain, and the height oracle |
@@ -415,6 +493,40 @@ tools/           dev tools and testbeds — none of this ships
 | `scripts/items/ward_flash.gd` | what a spear looks like when it fails to kill an Elder (**D-040**) |
 | `scripts/ui/elder_track.gd` | how much of the Elder is left, for its wearer only (**D-040**) |
 | `tools/import_clip.gd`, `tools/import_body.gd` | the character's whole art pipeline: Godot's importer plus a clip table (**D-095**) |
+| `tools/movement_check.tscn` | the moves as numbers, counted in physics ticks on flat ground — 33 checks over `draw`, `slide_jump`, `landing` and `remote` (**D-123**). The `remote` one is the one worth naming: the snapshot handed to a second Bog is copied field by field out of the replication config `scenes/player/bog.tscn` actually ships, so a field left out of that config fails here rather than in a match. **In the gate**, headless |
+| `tools/preview_carry.tscn` | the carry layer for all three props, and since **D-121** the bow's **head** clearance beside its floor and trunk: `-- measure` prints a `head PASS` line (`HEAD_MIN` 0.06 m, the limb segment against the head's skinned vertices and the `Neck`/`Head`/`HeadTop_End` joints), `-- probe` walks the whole 360 × 180 of the tilt at 15° and prints head, layered floor and bare-armed floor in every cell, and `-- candidates <weapon>` sheets that weapon rather than only the spear |
+
+### The showroom
+
+`tools/showroom/` is how a look or a layout gets chosen (**D-117**, **D-118**). A
+theme is the one part of this game that cannot be judged from a diff, and a
+screen layout is the second. So `showroom_theme.gd` is a parameterised copy of
+`scripts/ui/ui_theme.gd` — the same file in the same order, so every knob traces
+back to the line it replaced — driven by one dictionary per candidate, and
+`showroom_layouts.gd` is one recipe per candidate that re-parents and re-anchors
+the nodes of the **real** scene rather than mocking a screen up. Both are
+photographed through `tools/ui_range.gd` on the real menu, the real lobby and the
+real HUD, with the live 3D behind them.
+
+What the lobby does with the layout it was given lives in two places and no
+others: `lobby.gd`'s `_refresh_surface`, still the only thing that writes
+`visible` on a panel, and `scripts/ui/bog_backdrop.gd`, which since **D-120**
+carries `_bog_wanted(index)` beside `_plate_wanted` — on the Weapon and
+Character page **the ring hides**, every Bog but your own slot, on this client
+only, so the subject keeps the spot the ring put him in with the fire lighting
+his face from the front. It is read by `_apply_slot` as well as by
+`focus_on_local`, so somebody joining while you are choosing a skin re-dresses
+the ring without putting the hidden half of it back on screen.
+`tools/ui_range.gd`'s `lobby_character` mode prints what the portrait frame
+contains, in fractions of the frame rather than pixels, because the window a
+screenshot is taken at is not the window a player runs.
+
+It stays in the tree as a dev tool, like `combat_range` and `preview_map`: the
+next look and the next layout are compared the same way, and the recipes that
+lost are the record of what was ruled out. Renders go to `tools/showroom/out/`,
+which is gitignored — the tool that made them is committed instead.
+
+---
 
 `export_presets.cfg` is deliberately committed — it is the only record of what a
 shippable build excludes (`tools/`, `assets/`, `docs/`), and ignoring it would
@@ -425,9 +537,11 @@ make "there is an export preset" a claim nobody could check out.
 ## The character: one body, one library, one table
 
 The BOG is `art/bog/BOG.fbx`, the sculpt as Mixamo auto-rigged it, imported by
-Godot itself at `root_scale = 180` (1.80 m, feet at 0). Its 68 clips are
+Godot itself at `root_scale = 180` (1.80 m, feet at 0). Its 70 clips are
 animation-only FBX files under `assets/source/anims/`, one per row of
-`assets/source/clips.json`, and that table is the whole rule table: per clip
+`assets/source/clips.json` — 72 rows, because `SlideJump` and `Punch` are rows
+whose FBX the owner has still to fetch (**D-123**, **D-124**) — and that table
+is the whole rule table: per clip
 its role, whether it loops, which body line the import squares to the body's
 forward (`face`), and its events in seconds (`markers`). `tools/import_clip.gd`
 runs inside Godot's importer on every clip and applies the row — records the
@@ -446,6 +560,50 @@ or an arc-scrubbed leap or dive, light and heavy landings, one-shots for the
 actions, upper-body layers for the carry, the pull, the loose, the drink, the
 cast and the throw (**D-098**). Bone names carry Mixamo's prefix everywhere:
 `mixamorig_Hips`, `mixamorig_RightHand`.
+
+**What a Bog's hands are doing is its own state** (**D-124**). `Bog.sync_holstered`
+is an ON_CHANGE bool the owner writes on **H** and everybody reads, and it is the
+fifth clause of `has_spear`/`has_bow`/`has_sword` — which is the whole
+implementation, because the gates are where a weapon goes away. Holstered there
+is no prop in either fist, `target_speed()` takes `FISTS_SPEED_SCALE` (the only
+factor above 1.0, 5.94 m/s against 5.40), the HUD tile keeps the picked weapon's
+photograph at the 20% "nothing to spend" level with H on the key cap, and the
+primary click is a **punch**: `Bog.Cause.FIST`, 20 damage at 1.1 m inside a 50°
+front on a 0.5 s cycle, thrown as an **upper-body one-shot** so you keep the
+camera and full speed through it. `_bare_handed()` is the one sentence the
+holster and the emote share, so the dance empties the hands too.
+
+**The great sword has two attacks** (**D-124**): the primary click is a
+three-slash chain on `SwordCombo`, windowed per slash between its own `swing_N`
+and `end_N` markers, upper-body over the sword plane at `SLASH_SPEED_SCALE` 0.85
+with turning and jumping allowed; `SwordSpin` (D-068) stays exactly as it was and
+is now the **sprint attack**, taken on the speed the player is already carrying
+rather than on a second key. The chain's clocks live on `Bog` beside the spin's,
+because what they decide is what is in the fists and how fast the body travels;
+only "which slash is next" stays in `BogCombat`.
+
+**Movement's two new pieces** (**D-123**). A full draw costs speed —
+`target_speed()` scales by `lerp(1.0, DRAW_SPEED_SCALE, draw_fraction())` with
+`DRAW_SPEED_SCALE = 0.5`, so a full draw walks at 1.15 m/s on every screen,
+because `draw_fraction()` reads the replicated `sync_draw`. And a jump out of a
+slide is its own move, replicated as **`sync_slide_jump_serial`** — a second
+ON_CHANGE counter beside `sync_jump_serial`, bumped in the same physics tick, so
+the animator is told which take-off it was on the frame `_open_airtime` runs.
+Crouch in the air pre-arms the pose through **`_crouch_pose`**, a second blend
+beside `_crouch_blend` and the only one allowed to rise airborne: `_crouch_blend`
+is the **rule** (the capsule, `is_crouching()`, the speed, the headroom) and
+stays grounded-only, `_crouch_pose` is only what the body looks like. The camera
+sits closer for all of it — `DISTANCE_DEFAULT` 3.1 and `DISTANCE_AIMING` 2.15,
+shoulders unchanged.
+
+**Two roles are drawn by somebody else's clip.** `BogAnimator.clip_or(role,
+fallback)` resolves `SlideJump` to `RunJump` and `Punch` to `Cast` until the FBX
+lands, with a single `push_warning` at `_ready` behind a static flag — once per
+run, never per Bog and never per frame. Neither is in `REQUIRED_CLIPS`: a missing
+*required* clip is a Bog that never moves and must fail the gate, a missing
+optional one is a move drawn with the wrong picture. `tools/clip_check.gd` skips
+a row with no FBX with a note, and requires `lift`/`apex`/`land` on `SlideJump`
+and `hit` on `Punch` the day they arrive.
 
 Grips are solved by their own tools against the new hands — `preview_bow`,
 `preview_sword`, `preview_carry` — and the sheets are the judge; the ragdoll

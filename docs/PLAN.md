@@ -102,6 +102,19 @@ pieces fit together is `docs/ARCHITECTURE.md`.
            still alive, and cycles with the mouse buttons
 - [x] 6.6  Scene transitions / loading
 - [x] 6.7  Chat (lobby + in-match)
+- [x] 6.8  The look — seven candidate themes built over a parameterised copy of the
+           real builder in `tools/showroom/` and photographed on the real menu, lobby
+           and HUD with the live 3D behind them; the owner picked **Quiet** (white at
+           an alpha, no borders, one accent, a 72 px wordmark) and it is baked into
+           `resources/ui/bog_theme.tres` (**D-117**)
+- [x] 6.9  The layout, on all three screens, chosen the same way: the menu becomes one
+           bar along the foot with a random quip under the wordmark; the lobby becomes
+           a 460 px match rail and a 480 px room with the ring reframed to stand in the
+           gap on three ranks of nameplate, and the weapon and skin pickers move to a
+           Weapon and Character page with a computed portrait and 256² cut-out
+           thumbnails; the HUD moves everything about you to the bottom-right, the kill
+           feed to the left edge, and takes the borders off the ability tiles
+           (**D-118**)
 
 ## Phase 7 — Ship
 
@@ -136,3 +149,138 @@ pieces fit together is `docs/ARCHITECTURE.md`.
 - [x] 8.9  Skin picker — a strip in the lobby: your own skin in free-for-all, your
            team's in Teams, no two teams alike, and the ring and the arena wearing
            what was picked (**D-109**)
+
+## Phase 9 — The practice range (D-112..D-116)
+
+- [x] 9.1  Practice as a property of the map, not a win condition: a `practice` row in
+           `MapCatalog`, five `effective_*` accessors on `MatchConfig` that every rule
+           is read through, a **Practice** button on the main menu (offline, no lobby),
+           the Limits rows folded away in the lobby, and a dummy substrate — real Bogs
+           on roster rows at id 900+, hidden from every roster-derived screen, whose
+           `Sync` node alone changes hands so the host drives them. `hit_landed` and
+           `place_pickup`/`pickup_taken` are the two doors cut for the rest
+           (**D-112**)
+- [x] 9.2  Glowworm Grounds (`range`) — a cleared bog at night, 60 x 90 m, nine zones
+           off one lodge deck: three throwing lanes, a 60 m bow lane, a gallery, a
+           melee pit, an ability yard, a parkour course and two void lips. Built from
+           `const` tables like every static map, its `EXPECT` row turns the sightline
+           scan off and says why, and the gate greps its marker census (**D-113**).
+           *The hour is golden now rather than night, and the lane fences are one
+           0.60 m rail: **D-119** supersedes this line's sky and its dividers.*
+- [x] 9.3  Dummy brains and stations — eight behaviours, each a position as a function
+           of time because a dummy has no physics on any peer; the jumper's arc solved
+           rather than integrated; the pop-up 2.6 m under the floor; six signposts
+           through one RPC on the director; a parkour clock (**D-114**).
+           *The stations are gone — **D-119** supersedes the six signposts, the
+           cycling and the director's RPC. A zone's behaviour is authored in
+           `range_map.gd`'s tables and never changes; the brains themselves stand.*
+- [x] 9.4  Items in the world — item wells that re-mint a real `Pickup` on their own
+           timer, a refill stone with its own caps (2/2/1), and weapon racks that swap
+           your weapon live through `MatchState.set_weapon`, because D-069's lock-in
+           was a rule of the lobby and never of the code (**D-115**)
+- [x] 9.5  Targets and feedback — boards, drifting orbs and a gong, reached by
+           `range_hit` rather than through the damage door; a hit marker on every
+           landed hit **on every map**; damage numbers, distances and a per-weapon
+           stats panel in the range only, with the same table on the lodge wall
+           (**D-116**). *The marker's shape and its kill are **D-122**.*
+- [ ] 9.6  Never played by a person. The whole of it is proven headless — four tools
+           and thirty-one gate checks — and nobody has stood on the deck, walked a
+           lane and shot at anything. The questions that need eyes: whether the
+           golden-hour lighting reads at 45 m (the night it was asked of is
+           D-119's), whether a lane says what it is now that nothing switches it,
+           whether a rusher is fun or merely alarming, and whether the parkour
+           course teaches the jump arc or just frustrates
+
+## Phase 10 — The feel round (D-119..D-124)
+
+Thirteen pieces of playtest feedback, grouped by the code they touch into six
+units and implemented in parallel; `docs/PLAN_FEEL.md` is the spec they were
+argued against.
+
+- [x] 10.1  Sunset, not night. `resources/shaders/range_sky.gdshader`, a fork of
+            Kopje's `safari_sky.gdshader` (D-061) with a third gradient stop, a
+            stated cloud shadow colour and a warm wash keyed on the angle to the
+            sun; a `Sun` 9° up on a bearing 30° east of north, so a 50.5 m shadow
+            off the west bank falls off the map and no lane has the disc at its
+            vanishing point. `ambient_light_energy` 8.0 → 0.62 and a shadowless
+            `LIGHT_ONLY` `Bounce` at −6° from the south-south-west, so the peat at
+            45 m medians 82–126 of 255 and no front pad crushes a pixel; the fog
+            thinner and warmer (0.9 m at 0.015), the backdrop snags shadowless, and
+            the lanterns, glowworms and torches kept, dimmer and warmer (**D-119**)
+- [x] 10.2  The lanes stopped being a stockade — one rail at **0.60 m** in place of
+            eight lines of 1.8 m timber, posts still 2.2 m because they carry the
+            lanterns, cover blocks still 1.25 m because they hide a pop-up
+            (**D-119**)
+- [x] 10.3  No stations. The six signposts, the walk-near cycling, `RangeDirector`'s
+            rings, reserve and RPC are gone; a zone's behaviour is authored in
+            `range_map.gd`'s tables and never changes, the four reserved dummies
+            stand up (27 markers, 27 dummies), and the stats reset is a plain timber
+            signboard with no lantern, no light and no chime (**D-119**)
+- [x] 10.4  The character page keeps its Bog where he stands. `PORTRAIT_STEP` and
+            `_stage_spot` are gone; `_bog_wanted` hides every slot but your own
+            while the page is open, on this client only, so the subject stays on the
+            ring lit by the fire from the front. The framing re-solved at radius 3.0:
+            `PORTRAIT_SUBJECT_X` 0.32 and the crop down to the ground (**D-120**)
+- [x] 10.5  The bow off the face. `preview_carry -- measure` gains `HEAD_MIN`, the
+            0.06 m the spear already owes the skinned head, and `-- probe` maps the
+            whole 360 × 180 of the tilt: `CARRY_TILT` (47.5, −34) → (40, +10), head
+            clearance 0.002 → 0.134 m and the layered floor 0.173 → 0.431 m
+            (**D-121**)
+- [x] 10.6  A hit marker that lands, and a kill with its own shape. Arms 3 px, a
+            snap in from 1.4× over 70 ms before the fade, hit held 0.45 s; a kill is
+            a full X through the centre gap held 0.6 s with `hitmarker_kill.wav`
+            under it, and the void and fall kills take that shape too. Sword, spear,
+            arrow and lightning each proven to reach it (**D-122**)
+- [x] 10.7  A full draw creeps. `target_speed()` scales by `lerp(1.0,
+            DRAW_SPEED_SCALE, draw_fraction())` with `DRAW_SPEED_SCALE = 0.5` —
+            brace 2.30, half 1.72, full 1.15 m/s, and free on the seven screens that
+            are not yours because `draw_fraction()` reads `sync_draw` (**D-123**)
+- [x] 10.8  The camera comes in. `DISTANCE_DEFAULT` 3.6 → 3.1 and `DISTANCE_AIMING`
+            2.4 → 2.15, shoulders unchanged, `bog.tscn`'s own Camera3D moved with
+            the constant; the probe still clears the scenery on all 1700 frames
+            (**D-123**)
+- [x] 10.9  A slide jump is its own move: `max(current, SLIDE_SPEED) * 1.2` along
+            the slide's heading with 1.12 of the jump impulse, replicated as
+            `sync_slide_jump_serial` so remote animators see the take-off, and
+            deliberately not stacking with the bunny hop's `_hop_gain` (**D-123**)
+  - [ ] 10.9a  **Landed with a stand-in clip.** The `SlideJump` role is drawn with
+               `RunJump` through `BogAnimator.clip_or`, with one `push_warning` at
+               `_ready` and no `REQUIRED_CLIPS` entry. To finish it: run `python
+               tools/mixamo_fetch.py`, paste it into the Mixamo tab, choose a take
+               from the `"flip"` candidates, `bash tools/clip_imports.sh`, an
+               `--import`, then place `lift`/`apex`/`land` with `tools/clip_events.gd`
+- [x] 10.10 Crouch alone slides. `wants_sprint` is dropped from entry, the speed
+            floor and the cooldown are what make it a decision, and a crouch held in
+            the air pre-arms the pose (`_crouch_pose` beside `_crouch_blend`) so a
+            slide can begin on the landing tick with neither `Land` nor `LandHard`
+            (**D-123**)
+- [x] 10.11 Hands out, and a fist. **H** toggles `sync_holstered`, the fifth clause
+            of `has_spear`/`has_bow`/`has_sword`, which empties the fists on eight
+            screens and buys `FISTS_SPEED_SCALE` (5.94 m/s against 5.40); LMB then
+            punches for 20 at 1.1 m inside a 50° front on a 0.5 s cycle, as an
+            upper-body one-shot, with the host checking the attacker's own published
+            holster (**D-124**)
+  - [ ] 10.11a **Landed with a stand-in clip.** The `Punch` role is drawn with
+               `Cast` through `clip_or`, capped at 0.25 s so the stand-in lands on
+               the cycle, with one `push_warning` at `_ready`. To finish it: `python
+               tools/mixamo_fetch.py`, paste into the Mixamo tab, choose a take from
+               the `"punch"` candidates, `bash tools/clip_imports.sh`, an `--import`,
+               then place the `hit` marker with `tools/clip_events.gd`
+- [x] 10.12 The dance empties the hands — `_bare_handed()` is the one sentence the
+            holster and the emote share, and the prop comes back off `_tick_hand`'s
+            existing poll (**D-124**)
+- [x] 10.13 The great sword got a second attack rather than a nerf: the primary
+            click is a three-slash chain on `SwordCombo`, 50 a slash so two connect
+            to kill, upper-body over the sword plane at `SLASH_SPEED_SCALE` 0.85 with
+            turning and jumping allowed and `sword_recharge` (0.8 → 0.5) running
+            between chains, while `SwordSpin` becomes the **sprint attack** at 0.8 of
+            run speed for the committed 100 (**D-124**)
+- [ ] 10.14 A `✊` kill-feed glyph for the fist. Deliberately left out this round —
+            the feed draws a weapon's glyph and the fist has none, so a punch kill
+            reads with the default
+- [ ] 10.15 `fist_hit.wav`. Also left out this round: the punch lands with no sound
+            of its own, and `tools/make_sfx.py` is where it would be synthesised
+- [ ] 10.16 **Nobody has played any of this.** Every claim above is a render, a
+            headless tool line or a gate check; not one of the thirteen has been felt
+            by a person with a mouse in their hand. Phase 9's 9.6 is the same
+            sentence about the range itself and stays open beside this one

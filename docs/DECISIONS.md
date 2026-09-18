@@ -13231,3 +13231,1728 @@ The general lesson is the one worth keeping: a facing built by correcting
 *away* from a landmark hides its error at the centre of the arc and pays for it
 at the ends, where nobody had looked. Start from the thing that must be true —
 the face is at the lens — and spend the small angle from there.
+
+## D-112 — Practice is a property of the map, and a dummy is a Bog the host holds the strings of
+The practice range needed two things the game did not have: a match with no
+clock, no score and no ending, and a target that moves. Neither turned out to be
+a new subsystem, and this record is mostly an argument about where each of them
+belongs. It is the first of five (D-112..D-116) that build **Glowworm Grounds**;
+the scope all five were written against is `docs/PLAN_RANGE.md`.
+
+**Practice is a map, not a mode.** `MapCatalog`'s row for `range` carries
+`"practice": true`, and `MatchConfig` grows five accessors — `is_practice`,
+`effective_warmup_time`, `effective_time_limit`, `effective_spawn_protection`,
+`effective_respawn_delay` — that every rule is read through. `MatchState` swaps
+five reads for them, `_check_win` returns first when `is_practice()`, and that
+is the whole of it: no clock, no win check, a one-second respawn, no spawn
+protection, and the kill feed still running because the kill feed is feedback.
+
+The alternative, and the one written first, was a `WinCondition.NONE`. It is
+wrong twice. A win condition is a thing the host picks in the lobby, so
+"practice" would have been selectable on Rust — a kill-limit map with the limit
+switched off, which is not a practice range, it is a broken match. And the
+enum's ordinal travels on the wire, which the comment at the top of it says in
+so many words, so every condition added afterwards would carry a value meaning
+"this match does not end" into every peer that has to reason about endings.
+Practice is not a way of winning. It is a property of the ground you are
+standing on, which is also how the player experiences choosing it: they pick a
+map.
+
+**The rules are read past, not written over.** The first implementation set
+`config.time_limit = 0` and `config.respawn_delay = 1.0` when the range was
+picked. That works until the host picks Rust again and finds the ten minutes and
+the three seconds they spent a lobby dialling in have become zero and one.
+Putting them back means remembering them — a shadow copy of the config, an undo
+stack, or a host who quietly loses their settings to a minute in the range.
+Five one-line accessors cost nothing and touch none of the dials. `map` already
+travels in `_FIELDS`, so every peer computes the same answers from the same row
+with nothing new on the wire.
+
+**A dummy is a real Bog.** Damage in this game lands on exactly one kind of
+thing: `MatchState.bogs`, keyed by peer id, with every weapon either casting for
+`Bog` or picking out of `living_bogs()`. A target that a spear, an arrow, a
+sword, a magnet and a bolt all treat correctly is therefore not a new class of
+object — it is a `Bog`, on a roster row at id 900 and up, spawned through the
+same `_create_bog` as every player, taking hits and ragdolling and respawning
+through the same flow.
+
+A `RangeTarget` with a `take_hit` interface was considered and rejected: five
+weapons would each have had to learn about a sixth kind of collider, and the
+range would then have been exercising that new code path rather than the one the
+game ships — a practice range that lies about the weapon is worse than none. The
+non-Bog targets of D-116 (boards, orbs, the gong) are a different thing on
+purpose: scenery that scores, not bodies that die.
+
+Being a roster row is what makes the name, the team, the weapon and the skin
+reach a client at all, since `_create_bog` reads all four off `Net.players`; the
+alternative was four new arguments on the spawn RPC that every real player would
+carry for nothing. The cost is that the range must not then look like a lobby of
+eleven people, and the answer is **one filter in two places**: `Net.human_ids()`
+for everything derived from the roster, and `MatchState.ranking()` for the
+scoreboard and the results table, which are both built from that one list.
+Filtering per screen was rejected for the obvious reason — there turned out to
+be eight call sites, not the four the survey named, and `_begin_warmup` is the
+one that bites: a dummy row left on the roster would have put a target on a
+spawn pad in the middle of a real match.
+
+**The hard part was authority, and the answer was already written two lines
+above where it was needed.** A Bog's transform replicates from whoever owns its
+`MultiplayerSynchronizer`, and `_create_bog` hands the whole subtree to the
+Bog's `peer_id` — which for a dummy is 900-something, a peer that does not exist
+and will never send a packet. So nothing publishes, `sync_position` never
+changes, and every copy of a dummy on every machine sits exactly where
+`revive_at` seeded it. That is not a regression this work found: it is why
+`tools/combat_range.gd` has carried a `_stand_still` that hand-writes
+`sync_grounded` since D-011, and why a dummy has never moved in this game.
+
+The obvious fix is to hand the dummy to peer 1, and it is wrong three times
+over, because `Bog.is_local()` is `is_multiplayer_authority()`. `_read_input`
+would drive every dummy off the host's own WASD. `BogCombat` would fire their
+abilities on the host's keys. And `BogCamera` would make each dummy's rig
+`current` — the last dummy spawned steals the host's viewport, which is exactly
+the failure the comment already standing in `_create_bog` is about.
+
+So **one node changes hands, non-recursively**, beside the `Combat` override
+that made the same argument for the same reason: `Sync`'s authority becomes the
+host's and nothing else does. The host publishes the transform; on every peer
+including its own the dummy is still a *remote* Bog running `_follow_network` —
+the case that function's own comment already names — so it has no camera, no
+input and no combat anywhere at all. `reads_local_input` is set false on top of
+that as belt and braces.
+
+A driver that wrote only `sync_position` was tried and is subtly worse: the
+host's collision capsule then trails the picture by `_follow_network`'s lerp,
+about 0.3 m at a run, so a shot that looks like a hit is a miss on the one
+machine whose opinion counts. `RangeDummies.drive_to` writes the body and the
+snapshot together, and that pairing is the contract every brain goes through —
+brains never touch a `sync_*` field and never call `move_and_slide` (D-114).
+`sync_jump_serial` is incremented rather than inferred from `grounded` going
+false for the same class of reason: both are ON_CHANGE fields, so two take-offs
+inside one recovered packet collapse into a single "not grounded any more" and
+the animator's take-off one-shot fires once for two jumps.
+
+**Respawning at a station is a general hook, not a range-shaped one.**
+`MatchState` keeps `_respawn_anchors`, `_next_spawn` returns an anchor before it
+touches the pad pool, and `RangeDummies` sets one when it spawns a dummy. The
+file learns nothing about what a practice map is beyond `is_practice()`, and
+`_spawn_bog` and `_respawn` both honour it with no second code path.
+
+**Two new doors, for the items and the targets.** `hit_landed(attacker, victim,
+amount, cause, point, bone)` is a sibling RPC rather than two more arguments on
+`_do_damage`, because `_do_damage` is sent only when the victim survives — a
+killing hit goes down `_kill` instead — and a range built on it would score
+every kill as a miss. It carries the damage *actually dealt*, clamped to what
+the victim had left, because "how much did I take off them" is the number a
+range counts, and the requested figure is a fact about the weapon that the
+caller already knows. `place_pickup` is the public face of `_spawn_drop` with
+`keeps` defaulted the other way round: a well's stock is furniture rather than
+loot, and a pedestal whose item rotted after thirty seconds would stand empty
+with nothing to re-mint on, since `pickup_taken` fires only when somebody
+collects one. D-115 and D-116 are what both doors were cut for.
+
+**Two things the survey did not predict.** `Net.player_count()` now counts
+people rather than rows — otherwise a host showing a friend the range would
+refuse them at `_request_join`, the lobby being "full" of eight dummies, and the
+pause menu would offer to close a lobby of eleven. `_smallest_team`,
+`_deal_random_teams` and `update_config`'s team fix-up moved to `human_ids()`
+for the same reason: a dummy sits on `TEAM_NONE` deliberately — a dummy in
+somebody's colours is a target that reads as a teammate, and with friendly fire
+off it would be a target that cannot be shot at all — and all three read that as
+a player to be dealt a team. And the placeholder map shipped with four pads at
+each end rather than eight on the lodge deck, because `playthrough` plans a
+Capture B·O·G layout on every map in every run and asserts that each team has
+pads of its own to spawn on; D-113 moved them onto the deck and moved the
+declared bases to suit, and that check is what will say so if the pair ever stop
+agreeing.
+
+**The lobby is roster-shaped too, so it is here as well.** With the range
+selected the Limits rows fold away and one line takes their place saying what
+practice is. It is two fields hidden and not six: `warmup_time` and
+`spawn_protection` have no row in the settings panel at all — they are two of
+the eight fields it captures but does not show — so indexing `_fields` for them
+would have crashed the lobby, and the loop is guarded with `_fields.has(field)`
+as well. The **win condition stays visible**: it is the one rule that still does
+something on the range, deciding what the map's `Letters` and `Bases` markers
+are for. **Practice** on the main menu is `Net.start_offline()` (D-011) with
+`config.map = "range"` and straight into the arena — no port, no code, no lobby.
+
+**Gate.** `tools/playthrough.tscn -- range` branches after the warmup: a
+practice map has no limit to reach and no results screen to open, so
+`_stage_practice` replaces both stages rather than being appended to them. It
+asserts the map is practice and its clock is zero, that the map brought a
+`RangeDummies`, that a spawned dummy's `Sync` authority is the host's and the
+Bog node's is not — the claim asserted rather than assumed, because the host
+sees its own dummies move either way and only a client would ever notice — that
+`hit_landed` fires once for a `report_damage` of 40, that `human_ids()`,
+`can_start_match()` and `ranking()` all skip it while `Net.players` holds it,
+that killing it puts it back on its own station rather than on a pad, that a
+placed pickup can be claimed, and that fifteen kills at a limit of fifteen leave
+the phase PLAYING.
+
+## D-113 — Glowworm Grounds: a range is a place with distances in it, and its gate is the one that says so
+The practice range needed somewhere to happen, and the scope was explicit that
+it had to be a corner of the game's own world that somebody built things in
+rather than a grey box with numbers painted on it. So it is **Glowworm
+Grounds**, id `range`, the seventh row in `MapCatalog`: a cleared bog at night,
+60 x 90 m of peat inside a 70 x 100 m footprint, lodge at the south end, void
+off the north and east lips, built from `const` tables the way Kopje Crossing,
+Lantern Wharf, Halcyon Wake and Twin Quarry are (D-042, D-056, D-057, D-082).
+No `.glb`, no random draw, 2,640 triangles swept into one collision shape in
+four milliseconds.
+
+It is also the first map on the list that is **not an arena**, and almost every
+decision below follows from that one fact.
+
+**Nine zones off one hub.** The lodge deck is 1.2 m up under a hall roof with
+two ramps down to an apron, and the apron is where the weapon racks, the item
+wells, the refill plate and four of the six stations are (D-115, D-114). Every
+zone is entered from it: three throwing lanes west, the sixty-metre bow lane on
+the spine, the gallery east, the melee pit and the ability yard beyond them, the
+parkour course in the north-east, and the void lips past all of it.
+
+**Every height in the map is derived, and the derivation is one line.**
+`Bog.eye_height()` is `pose_height() * 0.86`, so a standing Bog's eyes are at
+1.33 m and a crouching one's at 1.16. That fixes the whole cover grammar: 1.25 m
+is waist high because a crouching Bog is hidden behind it and a standing one is
+not, with ten centimetres of crown showing as the tell a pop-up dummy wants —
+and it is also under `GROUND_HOP` (1.30), so it is a step and never a barrier.
+1.80 m is a lane fence because it is over standing eyes and over the hop's
+1.69 m of rise, while a leap's 2.30 lands you on top of one. 3.00 m is the
+magnet ledge because it is past the leap and inside the dive. The parkour gaps
+are the hop's 3.72 m of capsule clearance, the leap's 7.66 and the one-tick
+dive's 10.43.
+
+**`parkour_report` found two of those numbers for me, and one of them is a
+finding about the tool.** It uses *two different* rules for "from the ground":
+`GROUND_BIG` (3.5 m) for whether a declared platform is reachable, which is a
+model of a player who has to aim a dive at a lip, and the raw dive apex (4.23 m)
+for whether an off-limits top is reachable, which is the physical maximum. A 4 m
+wall passes the first and fails the second. So `UNJUMPABLE` is 4.5. In the same
+pass the report caught an 8 m bank standing eight metres from a 3 m ledge — 3.1
+metres of rise, and the dive crosses 8.14 m at that rise — and a hop step whose
+footprint overlapped the dive wall's. All three were geometry that had been
+checked by hand and got wrong.
+
+**The sightline scan is switched off, and that is the point of a per-map
+`EXPECT` row.** Every other entry in that table is an arena, where a line longer
+than the budget is a player dying before they can move. This map's entire job is
+a sixty-metre bow lane, a gong at the spear's flat twenty-eight and a dummy you
+can read at forty-five: a cap would be a number the map is built to break, and a
+loosened one would assert nothing while costing minutes, because the scan is
+O(n^2) over the standable grid and a 60 x 90 m map has about thirteen hundred
+points on it against the wharf's two hundred and eighty. It takes the
+base-versus-pad rule down with it, and that is also right — that check asks
+whether a spawn pad can see the other team's pads, and all eight pads share one
+lodge deck *by design*.
+
+**What the gate checks instead is the marker census.** The dummies, the items
+and the targets were all written against marker groups before this map existed,
+which is a contract, and a contract nothing asserts is one that rots. So the map
+prints `27 dummies (23 live, 4 reserved), 4 wells, 3 racks, 6 stations, 9
+targets, 3 plates, 2 boards` in its build log and the gate greps that line.
+Every `meta` value is a **string** — `"shield"`, `"spear"`, `"popup"` — never an
+enum ordinal, so the map does not depend on `Pickup.Kind`'s or
+`Loadout.Weapon`'s numbering. Four dummy stations are authored `live: false`:
+they are reserved ground, already proven flat, clear of a landing radius and
+four metres clear of a pad, for D-114's stations to switch on. Deciding how many
+Bogs may exist at once is D-112's and D-114's; having somewhere to put them is
+this record's. The one group that had to be renamed is `DummyStations`: D-112's
+registry node is itself a child called `Dummies` and `playthrough.gd` asserts on
+that, so a marker group of the same name won the lookup and the assert failed.
+
+**The eight pads share one deck, and the deck's width is derived from them.**
+`preview_map.PAD_SEPARATION` is 6 m, so eight pads fit only as two rows of four
+at 6.5 m along and 7 m across — which makes the lodge 24 m wide, not the other
+way round. The deck is deliberately **not** a declared landing:
+`SPAWN_PLATFORM_KEEPOUT` fails any landing within 3.5 m of a pad, rightly, and
+the deck is the pads' own floor, exactly as the wharf's concrete is and is
+declared nowhere either. The Capture bases sit at (±20, 0, +30), symmetric about
+x = 0: at the first asymmetric placement one pad was 29.67 m from one base and
+29.99 m from the other, so which team got it turned on thirty-two centimetres.
+
+**Three render findings, and they are the argument for photographing a map
+rather than only checking it.** First: `_slab`'s top and bottom faces were wound
+counter-clockwise, so Godot culled every horizontal surface on the map. The
+parkour report walked, measured and passed a floor that could not be seen,
+because collision is a trimesh with `backface_collision` on (`static_map.gd`)
+and winding is invisible to it. A checker cannot catch this; a picture catches
+it instantly. Second: the moon at 7 degrees put twelve per cent of itself onto a
+horizontal surface, and a horizontal surface is what this map is made of.
+Third — and this is the one worth keeping — **an 11 degree light casts a shadow
+5.1 times as long as the thing casting it**, so the 8 m west bank threw a
+forty-one-metre shadow across a sixty-metre map when the moon was in the
+north-north-west. Turning it due north makes the bank shadow along its own
+length and shadow nothing, does the same for the lane fences, drops the lodge's
+shadow off the south edge of the world, and puts the moon at the vanishing point
+of every lane. The cost is that the faces a shooter sees are the shaded ones,
+and that is the right way round: a target read as a shape against a bright sky
+is a target you can lead at forty-five metres.
+
+**It is lit brighter than the island, and that is a departure from D-009 with a
+reason.** On Whisperbloom Hollow the moon is 0.30 of cold fill and the torches
+are the key light, which works because the island is 50 m across and everything
+that matters is inside a 10.5 m torch pool. A torch pool is still 10.5 m and
+this map is 90 m long, so nine tenths of the ground here has no torch anywhere
+near it. **Sun 1.15, sky ambient 8.0 rather than 2.5**, peat at 0.235 albedo
+rather than the island's 0.085 — and the first two of those are the integration
+pass's numbers, not the map's own. Built and checked at 0.85 and 5.0 the range
+passed every measurement it has and then photographed as a silhouette of itself:
+the moon, the lantern heads and the torch flames read, and the peat, the lane
+fences, the gallery walls and the pit did not. A checker cannot see that, which
+is the same lesson as the backwards winding two paragraphs up arriving by a
+different route. The ambient is the lever that matters, because it is
+omnidirectional and therefore lands exactly on the horizontal surfaces a grazing
+key light cannot reach — and it does not flatten the silhouette, because the sky
+behind a dummy is brighter than the ambient in front of it.
+
+**Twenty-four glowworm lanterns and nineteen lights.** The distance posts carry
+emissive spheres with **no `OmniLight3D` attached at all** — Lantern Wharf's
+quay-lamp trick (D-056): twenty-four of them cost twenty-four spheres and
+nothing else. Ten torches (three casting) and six station lanterns (none
+casting) are the whole light budget, against the island's fourteen-odd torches
+with about half casting. The fog is volumetric at 0.010 rather than the island's
+0.032, which is the wharf's measured trade — half the contrast on a Bog-sized
+target — taken knowingly over twice the distance, with height fog lying in the
+bottom metre so the posts stand out of something.
+
+**Rejected, and why.**
+
+- *A symmetric two-base layout.* Every other built map is one, and it is wrong
+  here: a range has a front and a back, and the whole geometry follows from
+  where you stand to shoot.
+- *Lanes radiating from the lodge in a fan.* A 60 m lane does not fit on the
+  diagonal of a 90 m map, and a fan makes every distance post a different walk
+  from the lodge, which is the one thing a range must not do.
+- *A sightline cap merely loosened to 60 m.* Still minutes of scan, still fails
+  the Capture pad rule, and asserts nothing the map could plausibly break.
+- *Spawns spread around the map.* The scope asks for eight on the deck, and it
+  is right: a practice map wants everyone starting where the racks and the wells
+  are, not scattered across a range they then have to walk back through.
+- *An `OmniLight3D` per lantern post.* Twenty-four more lights for light nobody
+  reads by, and the even wash would have destroyed the distinction between a lit
+  post and the dark peat between posts, which is what makes the marks legible.
+- *The island's 0.032 fog.* Measured: the far end of the bow lane is a grey wall.
+- *Declaring the lodge deck as a landing.* A hard `SPAWN_PLATFORM_KEEPOUT`
+  failure, and the check is right to fail it.
+- *Four metres for a wall nobody may stand on.* Fails the off-limits rule by
+  seven centimetres; see above.
+- *Moving the magnet ledge away from the west bank* instead of raising the bank.
+  The ledge's whole job is being a short dive from something, and the bank is
+  free to be taller.
+- *A round melee pit.* A sixteen-gon revetment is forty triangles and a dozen
+  lines of trigonometry for a shape whose collision, sightlines and cover are
+  identical to a square's. The pit is a 10 m square sunk 1.5 m and the kit rocks
+  in its corners are what make it read as a ring.
+- *New ambient audio files.* `range_ambience.gd` reuses `ambient_forest.wav` at
+  the middle of the bog and `ambient_wind.wav` at the void lips. The island has
+  already shipped silent once behind two loop paths that resolved to nothing.
+- *Drifting mist billboards, as Lantern Wharf has.* The wharf's mist is weather
+  coming in off the water and a `FogVolume` is perfectly still, so it needs
+  them. This map's is standing air over wet peat, which really is still — and
+  thirty sheets drifting across a sixty-metre shooting lane would be thirty
+  things between a player and the target they are trying to read. The motion
+  budget went to the glowworms, which are what the place is named for.
+
+## D-114 — A dummy has no physics, so its brain is a closed-form solver, and the pop-up goes down a hole
+The range needed targets that do interesting things: eight behaviours, six
+stations that switch them, and a parkour clock. None of it is AI — there is
+still no navigation, no perception and nothing that shoots back — and all of it
+is shaped by one sentence in D-112 that was not written with brains in mind.
+
+### The sentence, and what it costs
+
+A dummy is a real Bog whose `Sync` node the host owns and whose Bog node is
+authored by a peer that does not exist. That is what made a dummy replicate at
+all, and it was chosen to stop the host's camera being stolen. But
+`Bog.is_local()` is `is_multiplayer_authority()` **on the Bog**, so a dummy is
+`is_local() == false` on *every* machine, the host included. Its
+`_physics_process` therefore takes the first branch — `_follow_network` — and
+returns. `move_and_slide` never runs. `_apply_gravity` never runs. There is no
+floor contact, no collision response, no gravity and no friction anywhere near a
+dummy on any peer.
+
+So a brain cannot *push* a dummy; it must *place* it. Every behaviour in
+`scripts/world/range/brains/` is a position as a function of time, written
+through the single writer `RangeDummies.drive_to`, which sets the body and its
+snapshot in the same breath. This is less general than steering and much easier
+to be right about: a strafer's lane is an interval, not an emergent property of
+a force and a wall.
+
+Two consequences follow immediately.
+
+**Ground is a ray, not a contact.** `_floor_at` casts 1.2 m above to 3.0 m below
+the dummy against LAYER_WORLD only — world only, so a dummy never stands on
+another dummy's capsule — and caches the answer, re-casting only when the
+horizontal position has moved more than 5 cm. A standing dummy therefore casts
+one ray per life and a circler one per tick. The alternative, trusting the
+station's own y, was rejected on the map: the melee pit floor is at −1.5 m, the
+parkour summit at +5.0 m, the ability yard's ledge at +3.0 m, and a patrol
+crosses a ramp. One rule that works everywhere beat a constant that works in the
+lanes.
+
+**The jumper's arc is solved, not integrated.** `v0 = 9.0` under gravity 24 with
+the 1.35× fall multiplier gives 0.375 s of rise to 1.6875 m (which is
+`Bog.apex_for`, not a number retyped here), then 0.3227 s of fall: an airtime of
+0.6977 s that ends at exactly the height it started. Integrating per tick would
+have been three lines shorter and would have sunk the dummy through the floor
+over a session — the error is one-sided, because a landing test can only clamp
+upward. The closed form also hands the animator a `vertical_speed()` on the real
+curve, which is what `arc_time` scrubs the leap clip by, so a driven jump and a
+played jump are the same pose.
+
+### Nothing new was needed to make them animate
+
+This was the surprise. A remote Bog's animator reads its locomotion from
+`velocity` through blend planes that are keyed on *speed*, so a dummy driven at
+5.4 m/s plays the run ring and one at 2.3 m/s the walk ring, with no flag to
+set; it reads the crouch from `sync_crouching`, the airborne blend from
+`sync_grounded`, and the air pose from `sync_velocity.y`. The one field the
+driver could not reach was `sync_jump_serial`, so `drive_to` gained an optional
+`jumped` flag. Even that is a refinement rather than a fix — the grounded flag
+going false already opens an airtime through the "walked off a ledge" branch,
+and that branch picks the running leap or the standing take-off off flat speed
+by itself. The serial is there because two jumps inside one late packet would
+otherwise be one jump, and because a real Bog publishes it.
+
+### The pop-up, and why it is under the floor
+
+A pop-up target has to be unshootable when it is down and ordinary when it is
+up, and the obvious mechanism — crouch behind cover — does not survive contact
+with the numbers. A Bog stands 1.55 m and crouches 1.35 m; the range's gallery
+walls and lane blocks are 1.25 m (D-113, and that is the number the cover
+grammar is built on). Crouching hides 20 cm of a Bog behind a wall that was
+already too short, and the target stays a head and shoulders.
+
+So the dummy sinks 2.6 m into the ground. The depth is not arbitrary: it is
+where the nameplate — a `Label3D` about 2.1 m above the feet — also passes below
+the floor, and plate visibility is not a replicated property, so a brain running
+on the host cannot hide it on anybody else's screen. What makes the sunk dummy
+unshootable is the map's own collision: every projectile ray from a firing line
+has to cross the bog slab to reach it, and the sword's 1.7 m advance does not
+span 2.6 m of vertical. Up is `pos.y = floor` and nothing else — an ordinary
+standing Bog that everything in the game can hit. The transition is a 0.35 s
+ramp that keeps `grounded` true and the published velocity at zero, so no
+airtime opens and the dummy rises in its idle pose instead of flying.
+
+### Stations are one RPC, on the director
+
+Six signposts, three actions — `cycle_brain`, `reset_zone`, `reset_stats` — read
+off the map's markers, triggered host-only from an `Area3D` on the player mask
+with a one-second per-player debounce, exactly as a `Pickup` is. What is
+replicated is the *result*, through a single `@rpc` on `RangeDirector` keyed by
+station index, rather than an RPC on each station: the stations' node paths
+would in fact agree on every peer, being built from the same markers in the same
+order, but one RPC surface is one place to reason about when they do not, and an
+integer index cannot be misdelivered the way a path can (D-024). The feedback is
+a lamp and a chime and no menu: a `cycle_brain` station's lantern wears the
+colour of the brain its zone is currently on, `reset_zone` puts it back to the
+idle tint the map authored, and the chime's pitch climbs a semitone per step so
+a zone being cycled is audible without reading the sign.
+
+### What was rejected
+
+- **Giving a dummy its physics back** — making the Bog node peer 1's so
+  `move_and_slide` runs, and steering with forces. It is the version where
+  gravity and collision are free, and it is the version D-112 rejected for three
+  separate reasons: the dummy reads the host's keyboard, fires the host's
+  abilities, and its camera rig makes itself `current` and steals the viewport.
+  Re-litigating it here would have undone a decision made two files away.
+- **`NavigationServer3D` and a baked navmesh** for the rusher and the wanderer.
+  The range is flat, fenced and 23 dummies wide; a navmesh is a build step, a
+  bake, a resource and a new failure mode for a rusher that needs to run in a
+  straight line inside a 10 m pit. Kept for the day something has to path around
+  a corner, which is the day the game gets bots.
+- **Integrating the jumper's arc** — above. Drifts one way, forever.
+- **Crouch-behind-cover for the pop-up** — above. 20 cm against a 1.25 m wall.
+- **Sinking only 1.6 m**, enough for the body and not the plate. Cheaper to the
+  eye, but it leaves a name floating on the grass with nothing under it, and the
+  fix — hiding the plate — is not replicated and so would have been right only
+  on the host's screen.
+- **A cover mesh the dummy hides behind**, authored as a slot or a trench. It
+  buys the same invisibility for a geometry dependency across a file boundary,
+  and the floor is already solid.
+- **Per-dummy brain parameters in marker meta.** D-113's contract authors
+  `brain, zone, live, range_m, lane` and nothing else, and adding six numeric
+  keys to twenty-seven markers to express "the melee pit is 10 m across" would
+  have put the map's dimensions in two files. Parameters are zone-keyed defaults
+  derived from the map's own tables; the `meta.get(key, default)` lookup stays,
+  so a key can be authored later without a code change.
+- **Cycling all eight brains at every station.** A circling dummy in a 32 m
+  throwing lane is not a behaviour anyone wanted; each zone cycles a ring that
+  suits it.
+- **A separate `run_cancelled` signal** on the parkour timer. A run that ends in
+  the void is reported through `run_finished` with negative seconds, so the
+  readout has one signal to draw and one rule to know.
+- **A shove on the rusher's hold.** It would teach knockback, and it is the
+  first inch of "dummies that fight back", which the range's scope cuts
+  explicitly.
+- **Scene files for the station and the plates.** The station's post, lamp and
+  sign and the parkour plates are built in code. `range_map.gd` builds seventy
+  metres of bog from `const` tables and instances no scene of its own; two
+  `.tscn` files for a box and a sphere would have been the only part of the
+  range you had to open an editor to read, and the only part a diff could not
+  explain.
+- **Setting every dummy in a zone to the brain a station picked.** It is the
+  obvious reading of "cycle the zone's behaviour" and it throws away the
+  composition the map authored: the gallery is three pop-ups and two strafers on
+  purpose, and one step of a station would have made it five of something. The
+  ring **rotates** the zone instead — each dummy's authored brain is its own
+  index and the step is added to it — so three-and-two stays three-and-two.
+- **Leaving the four reserved positions to a switch that does not exist.**
+  D-113 authors `live: false` on four marks and the stations it authors are four
+  `cycle_brain`, one `reset_zone` and one `reset_stats` — so nothing in the game
+  could ever have filled them. Both zone actions now mint a zone's reserved
+  bodies the first time they touch it, which is what "reserved for later to
+  switch on" has to mean, and a player who never walks into a station never pays
+  for the four extra Bogs.
+
+### What the gate found
+
+Four things, and one of them was real. The three test bugs were a crossing
+counter that sampled the side of the mark on the tick the dummy was standing
+*on* it, a jump-serial assertion that forgot the jumper had been jumping since
+it spawned, and a circler check that compared its first bearing with its last
+after four seconds — which is most of two whole turns, so the answer was
+whatever was left over after the wrap.
+
+The real one was the rusher. It dropped a target only when the target died or
+the six-second chase timer ran out, so a player who walked away left it running
+at the inside of its own fence for six seconds — a dummy pressed against an
+invisible wall, which reads as broken rather than as fenced. It now drops a
+chase the moment the target leaves the zone or gets half again as far away as it
+could have been acquired from, and the hysteresis is what stops somebody
+standing on the edge switching it on and off every other frame.
+
+`tools/range_brains.tscn` proves all of it twice: once on a bare fixture whose
+marker tree is D-113's contract in miniature, and once on
+`scenes/world/maps/range.tscn` itself, where it asserts the map's own census
+back — 23 live dummies across five zones, four reserved positions still empty,
+six stations, a parkour clock holding two plates and not the refill stone.
+
+## D-115 — A weapon can change hands mid-match, because the only thing that was fixed about it was a lobby rule
+The practice range needed three things standing in it that no map in this game
+has ever had: a pedestal that always has an item on it, a stone that fills your
+pockets, and a rack you walk into to put down a spear and pick up a bow. Two of
+them turned out to need no new machinery at all. The third needed nine lines,
+and finding that out meant reading a decision record closely enough to notice
+that it was not saying what everyone had been quoting it as saying.
+
+**The wells place real drops.** An item well is not a new kind of item and it
+grants nothing. It calls `MatchState.place_pickup`, which is D-112's wrapper on
+the same `_spawn_drop` a corpse uses, and what stands on the pedestal is an
+ordinary `Pickup` collected by the ordinary walk-over path with the ordinary
+host-side `claim_pickup` deciding who got it. The only thing the well adds is a
+timer: it remembers the id it minted, listens for `pickup_taken`, and mints
+again after four seconds for a shield or a magnet, six for a potion, twenty for
+the Elder's robe. Twenty is `elder_duration`, so the robe pedestal holds roughly
+one robe at a time and a player who wants to be the Elder again waits about as
+long as being the Elder lasted. Faster than that and the ability yard becomes a
+place where somebody is permanently unkillable (D-040), which is a different
+game rather than practice at this one.
+
+**`keeps` is what makes a well possible**, and it is the one line of D-112 this
+could not have been done without. A placed drop is furniture, not loot. Without
+the flag `Pickup.LIFETIME` rots the stock after thirty seconds — and a rotted
+pickup never emits `pickup_taken`, so the pedestal would stand empty for the
+rest of the match with nothing to re-mint on. The bug would have looked like a
+well that works for half a minute and then dies.
+
+**The glow is read, not broadcast.** A well dims while it is empty, and the
+obvious way to build that is for the host to tell everyone whether it is
+stocked. That would have been a second opinion about a question the first
+opinion already answers: `_spawn_pickup` and `_take_pickup` are both RPCs that
+run on every peer, so the item's *presence* is already the same fact on every
+machine. Each peer's well therefore looks for a `Pickup` of its own kind within
+0.9 m of its pedestal and lights itself from what it finds. The reference is
+cached hard — while it is good, this is one `is_instance_valid` and one boolean
+a frame — and the scan only runs during the few seconds a well believes it is
+empty. Adding a `stocked`/`empty` message would have been the shape of the bug
+D-024 exists because of: two sources of truth for one thing, which disagree the
+first time a packet is late.
+
+**The refill stone's caps are the stone's, and that is the decision.** There is
+no carried-stock cap anywhere in BOG. `BogCombat`'s `_shields`, `_magnets` and
+`_potions` are incremented by the `grant_*` calls, decremented by use and zeroed
+by death, and nothing clamps them; `MatchConfig.shield_max_active` caps
+*deployed* shields, not carried ones. So the stone needed a number to fill to
+and the game did not have one. Adding a real cap to `BogCombat` was rejected: it
+would have changed every map in the game, because a corpse drop refused because
+your pockets are full is a new rule for Rust and the Hollow and nobody asked for
+it. `FULL` is therefore two shields, two magnets and one potion, it lives on the
+stone, and it is read by nothing else in the build. Two shields because
+`shield_max_active` defaults to two and two is one full planting. One potion
+because a potion is the *option* to stand still for two seconds (D-067) and the
+decision is the interesting part — one is a decision, two is a guarantee you
+cannot lose a fight of attrition.
+
+**It fills only what is missing, and a full Bog gets nothing: no grant, no
+chime, no pulse, and not even a cooldown.** A stone that chimed at somebody it
+had done nothing for would be a feedback sound that lies, and lying feedback is
+worse than none. Not starting the cooldown on the no-op is the same thought one
+step further: a player who arrives full, spends a shield where they stand and is
+still on the stone is filled on the next quarter-second re-check rather than
+being told to wait two seconds for something that never happened.
+
+**Nothing about the stone is sent.** The grant is host-only like every award in
+the game, but the chime and the pulse are derived rather than broadcast: every
+peer's stone watches the Bogs overlapping it and fires when one's counts go up,
+and those counts arrive everywhere already through
+`BogCombat._do_set_inventory`. That matters more here than it looks, because
+this node is built by code into a map, and an RPC is addressed by node path —
+the trap `Pickup`'s header spends a paragraph on.
+
+**And then the rack.** D-069 says a weapon is fixed the moment the host presses
+Start, and `Bog.weapon`'s own header said it "cannot change for the rest of the
+match". Both are true statements about the lobby and neither is a statement
+about the code. `Bog.weapon` is a plain writable field. `BogCombat.carries()`
+re-reads it every single time it is asked. `HeldGear` preloads all four models
+and only toggles their visibility, so there is nothing to build or free. And
+`BogCombat.refresh_hand()` has been *public since D-070* for exactly this
+situation — the lobby ring, where the pick moves under a Bog that is already
+standing there — and it repaints both fists and re-points the carry pose in one
+call. The entire swap is a write and a call, and what it actually needed was a
+way to say so to the other peers, because `weapon` is deliberately not one of
+the eleven `sync_*` fields.
+
+**The route is `MatchState.set_weapon`, host-only, and pointedly not
+`Net.set_weapon`.** That one is a *client asking* and is refused while
+`match_running` — that refusal is the lock-in, and loosening it so a rack could
+get through would have opened the lobby's route on every map in the game at the
+same time. A rack is the host *deciding*, which is a different verb: it writes
+the roster row through `Net.set_weapon_of` so a respawn keeps the weapon, and
+broadcasts `_do_set_weapon` so the body standing there now agrees within the
+frame. Two halves because they answer two questions, and a roster row has never
+been able to reach into a Bog that is already built.
+
+**Combat state is cleared by a new `clear_weapon_state()` rather than by
+`reset()`.** `reset()` is the death path and it also zeroes your shields,
+magnets and potions, because everything carried is lost on death (D-032). A rack
+that confiscated your pockets would have punished a player for practising, which
+is the opposite of the building's purpose. So the new function is `reset()`'s
+weapon half exactly — the three ready-ats, the windup, the draw, the swing flag
+and their `_server_*` twins — with the stock, the Elder's clock and the two
+ability cooldowns left alone, because those belong to the Bog rather than to
+what it is holding.
+
+**What was rejected.** Adding a real inventory cap to `BogCombat` (changes every
+map to give one range prop a number). Reusing `Net.set_weapon` with the
+`match_running` refusal relaxed for practice maps (one flag, two meanings, and
+the lock-in weakened for every map to serve one). Calling `reset()` on the swap
+(D-032's confiscation, in a building where nothing is at stake). Broadcasting a
+`stocked`/`empty` state per well (a second truth for a fact already replicated).
+An RPC on the refill stone for its chime (a path-addressed message on a
+code-built map node). Putting the well's re-mint on `MatchState` as a generic
+respawning-item service (four lines of timer in the one node that wants them
+beats a subsystem with one customer). And a robe well with a rule of its own:
+there is no single-Elder rule in the game — `_make_elder` refuses only a peer
+who is already one — so several Elders at once is already legal, and the range
+copes by doing nothing.
+
+**Gate.** `tools/range_items.tscn` builds its own copy of D-113's markers on a
+bare floor, because a check that needed the real map or the director would fail
+when somebody else's file is mid-edit and would not be telling you about this
+one. Eighteen checks: every marker became a node and the two parkour plates were
+left alone; a well stocks itself, empties when the host awards its stock, is
+still empty half way through its delay and has re-minted after it; the robe
+well's schedule is asserted at twenty seconds rather than waited out; the stone
+raises an empty Bog to 2/2/1 and then does nothing at all to it for longer than
+its own cooldown; and a rack changes the weapon, the hand and the roster row
+**inside the overlap signal itself**, which is how "within one frame" is proven
+rather than assumed.
+
+## D-116 — A target is anything that answers `range_hit`, and a hit marker is one flash with two reasons
+The practice range needed two things this game had never had: something to shoot
+that is not a Bog, and a way to tell you that you hit it. Neither needed a new
+subsystem, and the second was mostly already built and wired to the wrong event.
+
+**Damage lands only on Bogs, and it still does.** `MatchState.report_damage` is
+the one door, keyed by `peer_id`. The temptation was to widen it — a `take_hit`
+interface, a damageable base class, a `report_damage` taking a node instead of a
+peer id — and every version of that ends with two kinds of thing that can be
+hurt, two health models, and a `report_kill` that has to ask which one it is
+holding. A wooden board has no health. It has *rings*, and what it owes you is a
+number and a knock, not a death. So targets do not go through the damage door at
+all. A projectile asks the thing it struck one question before it asks whether
+it is a body — `if collider.has_method("range_hit")`. A duck-typed method check
+rather than a `class_name` cast or a group lookup, because the three targets
+share no implementation worth inheriting — a board is a plank on a hinge, an orb
+is a sphere on a parabola, a gong is a disc — and a common base class would have
+been a place for one to grow a field the other two ignore. What they share is a
+contract: `range_hit(point, by_peer, cause)`. Anything that answers it is a
+target, including whatever a station or a later map wants to be.
+
+**The answer decides what becomes of the shaft, and it decides it by living or
+dying** — which matters because it is what the next frame draws. A board
+survives, so the spear `_stick`s in it and stands there: already-written code,
+and the read a practice range wants, where you walk out to the 20 m post and
+your last three arrows are in the plank. An orb does not survive; it
+`queue_free()`s itself inside `range_hit`, the projectile sees that and
+`_glance_off`s, taking the shaft with it. Rejected: a return value, a second
+method, or an "I am solid" flag — three ways of asking a question the object's
+own liveness answers. `_glance_off`'s doc comment had already written the
+argument, about the Elder's ward: a shaft hanging in mid-air after the thing it
+hit is gone reads as the game having lost track of the world.
+
+**The arrow inherited all of it for three lines.** `ArrowProjectile` has been a
+nine-line subclass over a shared `_resolve` since D-065, and that decision paid
+here exactly as it was supposed to: the hook went in the parent, and the arrow's
+whole contribution is `func _cause(): return Bog.Cause.ARROW`. Nothing about the
+sweep, the collision mask, the layer table or the exclude list changed. Targets
+sit on the world layer the sweep already looks at, which is also why an orb is a
+`StaticBody3D` and not an `Area3D` — `_sweep` sets `collide_with_areas = false`
+on purpose, and turning it on to catch one floating ball would have made every
+trigger volume in the game a thing spears stop on.
+
+**Nothing travels for a projectile hit.** This is the decision that removed the
+most code, and it was already proven: spear and arrow flight is pure ballistics
+from a replicated launch, with no randomness, which is why the flight has never
+needed a single position packet. It follows that every peer's own copy of the
+spear strikes the same board at the same point on the same physics tick — so the
+knock, the sound, the score text and the burst are simply local, on every
+machine, derived rather than broadcast. Only the *counter* is the host's.
+Rejected: a `MultiplayerSynchronizer` per target, which is twenty synchronisers
+publishing nothing 99% of the time in order to replicate a 0.3 s tween; and
+rejected: a host-side "a board was hit" RPC for everything, which would have
+made the visible knock arrive a round trip after the spear that caused it, on
+the one machine — the shooter's — that already knew.
+
+**The sword is the exception, because its geometry is the host's alone.** D-068
+put the swing's victim test on the host and nowhere else, and that is still
+right, so a board caught by a swing genuinely needs telling. `RangeTarget`
+therefore carries exactly one RPC, used by exactly one caller. Two replication
+models in one class is worth the paragraph it takes to explain rather than the
+symmetry it would take to avoid — forcing the projectile path through the RPC
+for consistency would have slowed down the common case to make the rare one look
+like it.
+
+**Boards and the gong take a swing; orbs do not.** A range where the great sword
+is the one weapon with nothing to practise on would send every sword player back
+to the dummies, and the sword's own feedback (`connected`, D-068) is the
+thinnest in the game. The pass reuses `_sword_victims`' reach and arc verbatim,
+adds the target's radius so a 1.4 m board is not a point, and is guarded by
+`is_practice()`. Orbs are in the group and simply never in reach; no special
+case was written for them.
+
+**The orb is a seed and a timestamp.** The host sends both with the launch
+origin and every peer builds the same parabola from them — the spear's argument
+applied to something that was never a spear. Streaming the orb's position would
+have been a packet per tick for a decorative ball, and a client joining
+mid-flight starts in phase instead of watching one teleport.
+
+**The gong's pitch comes off distance, not impact speed.** Impact speed is the
+physically obvious input and `range_hit` does not carry it; widening the
+contract for one target's audio would have put a parameter on every target for
+ever. So the gong uses the number it exists to teach — it sits at 28 m because
+that is the spear's measured flat band — and a shot from 40 m rings brighter and
+louder than one from 5 m.
+
+**On the feedback side, most of it existed and was connected to the wrong
+event.** `Crosshair.strike()` — four diagonals that snap in and fade over 0.4 s
+— has been in the file since D-036, called from exactly one place: the kill
+handler. Meanwhile `hitmarker.wav` has been playing on *every* landed hit since
+D-062, for the reason D-062 wrote down at the time: the victim may be sixty
+metres away and behind a tree, still standing, and without it the only
+difference between a hit and a miss is a bar four pixels tall. The sound was
+honest and the picture was not. So the flash moved onto `hit_landed`, tinted —
+the Bog's yellow for a hit somebody walked away from, white and a little longer
+for one they did not — and **that is now true on every map, not only in the
+range**, because a hitmarker that fires in your ears and not in your eyes was
+never a design, it was an omission. It is the one thing in the practice range
+that changes a shipping match, and it was decided rather than assumed.
+
+**No new sound was added, anywhere**, and the kill path was narrowed rather than
+left alone. Playing `hitmarker.wav` from the new handler would have been two
+hitmarkers per hit — the exact bug `crosshair.gd`'s own comment warns about — so
+`MatchState` keeps the sound and the HUD keeps the picture. And since a killing
+hit emits `hit_landed` too, `_on_player_killed`'s `strike()` would have doubled
+the flash on every kill; it now fires only for `VOID` and `FALL`, the two
+credited kills that report no damage and would otherwise have silently lost
+their feedback. Two callers, two disjoint reasons.
+
+**Damage numbers are practice-only, and the hit marker is not.** The numbers are
+a teaching aid: you want to know a two-thirds draw did 38 and not 80, standing
+on a marked lane at a known distance. In a real fight the honest gauge is the
+bar over the head (D-062) and a screen of rising integers is a different game.
+The marker is different in kind — it says *that* something happened, not how
+much — so it goes everywhere.
+
+**The distance is measured from the attacker's Bog, and the attacker may be
+dead.** A corpse keeps its node until respawn (D-043), so the lookup usually
+resolves; when it does not, the local Bog stands in if the attacker is local,
+and otherwise the line is omitted. No fallback invents a number: a readout that
+is occasionally absent is a readout, one that is occasionally wrong is a lie you
+cannot spot.
+
+**Launches are counted from a signal on `BogCombat`, not by watching the
+world.** The obvious cheap trick — watch nodes appear under `spawned_items` —
+cannot see a sword swing at all, and cannot say whose arrow it is looking at
+without reaching inside it. So `weapon_launched` is emitted from the four `_do_*`
+handlers, which the host runs locally for every Bog in the session because it is
+the authority that calls them. One signal, four one-line emits, and the host
+sees every throw, loose, swing and cast anybody makes. `RangeStats` finds them
+by walking `MatchState.bogs` on a one-second timer rather than by being told,
+which is what makes it survive respawns — a life is a new Bog node — without a
+single line in a file D-112 owns.
+
+**The streak lags a miss by one launch, and that is written down rather than
+hidden.** Nothing can observe a shaft that never hit anything: it flies, it
+sticks in a hill, no signal fires. So a miss is noticed when the *next* shot is
+fired. The alternative was a lifetime hook on every arrow for a number on a
+practice board.
+
+**The stats table broadcasts whole, not as deltas**, at 4 Hz and only when dirty
+— the argument `_sync_scores` makes, for the same reason: a peer that drops a
+delta is permanently wrong, a peer that drops a snapshot is corrected by the
+next. The panel sits **top-left**, which is a free corner rather than a
+preference: the clock and the score are top-centre, the health bar and the
+ability tiles own the bottom-right, and the kill feed runs up the left edge off
+the top of the chat (D-118), which is why it is not bottom-left. Of the two
+corners left it takes the one furthest from the crosshair. The same table is
+`Label3D`s on two planks on the lodge wall.
+
+**The bug that justified the gate.** Every target was first built with its
+collision shape under the swinging hinge, so the hitbox would move with the
+plank. Godot only registers a `CollisionShape3D` that is an immediate child of
+its `CollisionObject3D`, and one nested a level deeper is ignored in silence —
+no warning, no error, a `StaticBody3D` with no collision at all. All three board
+assertions passed anyway, because they call `range_hit` by hand; the one check
+that threw a real spear through a real sweep is the one that caught it, sailing
+through a 1.6 m bronze disc and sticking in the floor nine metres behind. The
+shapes are direct children now and the knock is cosmetic, which is the better
+answer regardless: a board that physically retreated would put the next shot at
+a different range than the distance post beside it claims, and a practice range
+whose distances move is a practice range that lies.
+
+**What this deliberately does not do.** No headshot multiplier: the range
+reports the bone because the spear already computes it, and does not invent a
+damage rule the game lacks. No persistence — the board is this session's,
+cleared by the station (D-114) and by leaving. No kill-feed line for a target: a
+board is not a player.
+
+## D-117 — Seven looks photographed on the real screens, and the one that won is called Quiet
+A theme is the one part of this game that cannot be judged from a diff, and it
+is also the one part where "try it and see" costs a full re-bake and a round of
+renders per idea. That is the problem `tools/showroom/` exists to solve, and it
+is worth writing down before the look it chose, because the look is one
+afternoon's output and the method is the thing that stays.
+
+**What a showroom is.** `tools/showroom/showroom_theme.gd` is a parameterised
+copy of the real builder — deliberately the same file in the same order as
+`scripts/ui/ui_theme.gd`, so every knob traces back to the line it replaced —
+driven by one dictionary per candidate. `showroom_layouts.gd` is the same trick
+for arrangement: one recipe per candidate that re-parents and re-anchors the
+nodes of the **real** scene rather than mocking a screen up. Both are
+photographed through `tools/ui_range.gd` on the real menu, the real lobby and the
+real HUD, with the live 3D behind them, into `tools/showroom/out/`. Seven looks,
+three screens each, and nothing in the game's own theme touched until the choice
+was made. It stays in the tree as a dev tool, alongside `combat_range`,
+`hud_range` and `preview_map`: the next look, and the next layout, are compared
+the same way. `out/` is gitignored — renders are large, and the tool that made
+them is committed instead.
+
+**The seven, and why each lost.** *Hearth* was the existing look warmed toward
+moss and umber: better, and still the same design, which was the complaint.
+*Toybox* was party-game energy — fat opaque cards, black outlines, hard offset
+shadows — and read as a different game's menu bolted onto this one's forest.
+*Storybook* was the only light option, cream parchment and serif heads, and it
+put a bright rectangle over a night-time scene: the backdrop stopped being the
+backdrop. *Arcade* was near-black, zero radius, skewed buttons, acid-yellow
+condensed caps; sharp, and completely humourless, which is the wrong note for a
+game about throwing sticks at your friends. *Terminal* was 2 px phosphor-green
+borders on black, a joke that stops being funny at the second screen.
+*Swampglow* was teal glass with an outer glow on everything touchable; it looked
+best in a single screenshot and worst in a lobby, where a glow on every roster
+row is mud. **Quiet** was the one that got out of the way, and it is what landed
+in `ui_palette.gd` and `ui_theme.gd` and was re-baked to `bog_theme.tres`, with
+10 px corner radii.
+
+**What Quiet is: three rules.** Surfaces are **white at an alpha** — 4%, 8%, 12%,
+30% — not a lighter blue-grey. That is the load-bearing change: a panel is now a
+dimming of whatever is behind it, so the same stylebox works over the forest at
+night and over the arena at noon, and the lobby's ring of Bogs stays visible
+through the match settings rather than being replaced by navy. **Nothing is
+bordered.** The old scheme drew a hairline around every card, and at 1600x900
+with eight panels open that is a wireframe drawing of the layout instead of a
+layout; a shape is now its fill and its typography, and the four strokes left in
+the entire UI are the ones that mean something — the focus ring, the nav
+underline, the rule under a text field, and the primary button's outline. And
+**there is one accent.**
+
+**Collapsing two accents into one.** The scheme carried torch amber for "you can
+touch this" and Bog yellow for "this is you". On a real screen they were one
+colour with a slightly different mood, which meant neither of them said
+anything: a player cannot learn a distinction they cannot see. `AMBER` is now
+exactly `BOG`, as a `const` alias rather than a rename, because twelve scripts
+read these names and the distinction is still worth *saying* at the call site —
+`BOG` where the thing is the player, `AMBER` where the thing is interactive. The
+yellow is now the only chroma on screen apart from `DANGER` and `GOOD`, which
+are verdicts rather than decorations, so it reliably answers "where am I, and
+what can I press".
+
+**The accent is a wash, except once.** Where the accent is a fill rather than a
+line it is the accent at 18% alpha: pressed buttons, a hovered popup row, a
+pressed ghost. The one solid yellow block left in the UI is `PrimaryButton` on
+hover. That is also why `PrimaryButton` became an **outline**. As a solid amber
+block on a near-black screen with nothing else coloured it was the loudest thing
+in the game by a wide margin, and the eye went to START MATCH before it went to
+the match settings the button exists to confirm. As an outline it is still the
+only accent-shaped control on the screen, and it fills solid the moment you
+point at it — so the loud state is the one you asked for. `NavButton` became an
+**underline** for a plainer reason: the old 4 px bar down the left edge of a
+filled row was information in the axis a vertical stack runs in, and the menu is
+a horizontal bottom bar now (D-118).
+
+**Typography carries what the chrome gave up.** Body steps down (19 → 18, small
+16 → 15, tiny 14 → 13) and the wordmark goes **44 → 72**, in Segoe UI at weight
+300 with 8 px of tracking. A quiet UI has to earn its one loud thing, and the
+loud thing is the word BOG. The Light weight is asked for as a **weight, not a
+face**: Windows reports the family "Segoe UI Variable Display" and reaches its
+named instances through `font_weight`, so a `SystemFont` asking for the face
+"Segoe UI Light" silently falls through to Regular — which is how the showroom's
+first Quiet render came back looking like every other candidate.
+
+**Two things the showroom got wrong that the port does not, and both are about
+looking at the picture.** Its colour helper *replaces* an alpha rather than
+scaling it, which on a palette of white-at-an-alpha turns `GhostButton`'s hover
+and the scroll bar's grabber into near-solid white; no candidate render caught
+it, because a screenshot has nothing hovered. And the slider track was a
+near-black — correct when it sat on a blue-grey panel, invisible now that the
+panel is near-black too. The first `settings` render of the real port came back
+as seven bars of yellow floating in nothing, with no way to see how far a dial
+had left to go. The track is now a `LINE` groove: the one place a hairline earns
+its keep is the one that has to be seen past the end of the fill. (The health
+bar's trough is the same finding a second time, in D-118.)
+
+**Rejected along the way.** Keeping the showroom's hairline on the dropdown — on
+a near-black card a 12% line around a control you are meant to click is not an
+affordance, so `OptionButton` takes the same RAISED surface every other
+pressable thing has. Keeping the text field as a bare rule, also as the showroom
+had it: a field with no left border has nothing to stop the text starting hard
+against the edge, so it is a soft RAISED surface with a lit rule under it and
+12 px of inner padding. And the showroom's `PopupMenu` hover, a near-white on
+this palette; a hovered menu row now wears the same accent wash a pressed button
+does, so they are one gesture.
+
+Gate: `widths`, `capture_config`, `weapon_tiles`, `reload_timer` and
+`bake_tiles` all pass. The `widths` floor moved **448 → 462 px** — the narrowest
+slider track got *wider*, because a smaller `ValueLabel` gives the unit string's
+width back to the slider.
+
+## D-118 — Three screens rearranged: a bar along the foot, a rail and a room, and one corner for yourself
+The Quiet theme (D-117) answered what the UI looks like. It did not answer where
+anything is, and on all three screens the answer was the same shape of wrong: a
+control had been placed where it was written rather than where it is read. Each
+of the three was picked by the owner out of `tools/showroom/`'s layout recipes,
+photographed on the real scene with the live 3D behind it, and each landed as a
+scene-file change with as little code as the move allowed.
+
+### The menu is one bar along the foot
+
+The old menu was a single left-hand column — wordmark, a yellow rule, a place
+name, the name field, five stacked buttons, a notice card — centred down the
+left edge. Two faults. A vertical list of five items is the shape of a *list*:
+the eye reads five options of descending importance, with QUIT looking like a
+thing you might do fifth, when these are five doors of roughly equal standing.
+And the column owned the whole left half of the screen, which is where the
+backdrop's lit Bog and the glade behind it are — the game's best argument for
+itself was being covered by the game's own furniture. A bar along the foot is
+what a controller UI would do anyway, and it hands the middle of the frame back
+to the thing worth looking at.
+
+One `HBoxContainer` on the bottom edge, 40 in from each side and 48 up: the name
+field at the left end, a flexible gap, the five nav buttons, another flexible
+gap. `Notice` sits above the bar at the left and `Version` above it at the
+right. `SideScrim`, the left-edge gradient that existed to keep the old column
+legible over the trees, is off; `FootScrim` has the whole job. **The nav is
+nested rather than flat**, and that is the one real layout finding: the bar's
+own separation is 0 and the five buttons live in a box of their own at 36. Flat
+— which is what the showroom recipe did, since it was transposing an existing
+container rather than authoring one — makes the name field and both gaps pay
+36 px apiece too, and with the join panel unfolded the row walked past the right
+margin. Nesting puts the 36 exactly between nav buttons and lets the gaps go to
+zero when the row needs the room, which is also the whole of how JOIN WITH A
+CODE still unfolds inline.
+
+It also dissolved a clipping bug rather than tuning it: after the theme pass the
+"Lobby closed" card was losing its third line off the bottom of the screen,
+because a 72 px display font pushed the whole left column down. `Notice` no
+longer shares a column with the nav, so the overflow has nowhere to come from.
+
+**The rule and the tagline are gone, and six jokes replace them.** The wordmark
+carried a 118 px yellow bar and the words WHISPERBLOOM HOLLOW in tracked caps. A
+bar under a logo is decoration in a scheme that has just spent a pass deleting
+decoration. The tagline was worse than decoration, because it was untrue:
+Whisperbloom Hollow is one of seven maps, not the game, and a menu that names it
+is a menu that thinks the game is smaller than it is. Under the wordmark there
+is now one dim line chosen at random from six every time the menu opens — a
+subtitle that is the same on every launch is read once and is furniture
+forever; a line that changes is read every time. They also do a job the place
+name could not: they say what kind of game this is. The pick is per open rather
+than per build, so backing out of a lobby gets you a new one, and the scene file
+ships with one of the six already in the label so the editor lays the wordmark
+block out at its real height. Rejected: a quip that animates or cycles (it turns
+the first screen into something you wait on), and a quip in the accent colour
+(the wordmark is the one loud thing on a Quiet screen).
+
+### The lobby is a rail and a room, and choosing a body is a page you go to
+
+The right 460 px is **the match**: the host's dials full height, the gate hint
+and the one button you press at the end of them at the foot of the same column,
+and in Teams the team picker above those. The left 480 is **the room**: who is
+here at the top, what they are saying at the bottom, and the ring of Bogs
+standing in the gap between them.
+
+**Why the weapon and the skin left it.** They were the last two things on the
+lobby that were neither the match nor the room, and they had spent two decisions
+being squeezed. D-069 put the weapon strip behind a header toggle; D-107 pulled
+it back out into a permanent strip over the Bogs' heads, because a weapon you
+have to go and find is a weapon most players never change. D-109 then fitted
+fourteen skin swatches into the same band at **40 px a side**, with 10.5 px to
+spare. Both were arguments about how far away the picture of the consequence
+was, and both were losing: a 40 px swatch of a 2048-square body is a coloured
+pip, and at eight metres — where the ring camera stands — a Bog is 90 px tall,
+so "what do I look like?" was being asked of a picture too small to answer it.
+The page settles it by changing what the screen is. The camera walks in to
+**2.9 m**, the Bog fills two thirds of the height with the weapon in his fist,
+and the cells go to **120 px** in a three-column grid. Every constraint D-109
+measured — `RING_CLEARANCE`, 668 px of swatches in 1488, "the strip must not
+scroll" — simply stops existing, because the picker is no longer standing in
+front of the faces it is choosing between.
+
+**A surface that swaps, which is the thing D-069 took out** — worth saying
+plainly, because the shape looks like the mistake. D-069's toggle hid the
+weapon strip behind the panels *and* the panels behind the strip, so reading the
+match settings and changing your weapon meant pressing a button to see the other
+half of one screen. This swap is the other way up: the lobby is complete on its
+own, and the page is a thing you go to once, do, and come back from, like the
+settings dialog over the menu. What it keeps is D-069's **mechanism**:
+`_character_open` is a third view state beside the two folds, read by
+`_refresh_surface`, still the only thing in `lobby.gd` that writes `visible` on
+a panel. So "somebody joins while you are choosing a skin" is not a case anybody
+had to remember, and the page closes itself when your own row leaves the roster,
+because a portrait of your own Bog cannot outlive you being on it. LEAVE becomes
+BACK on the page and Escape means the same thing on both screens — back out of
+where you are, one level at a time — as a branch on the one boolean rather than
+a rewire on the view change, because a rewire is a second place for two states
+to disagree and the failure mode is a button that ends the session when the
+player meant to close a picker.
+
+**The portrait is computed, not authored.** `BogBackdrop.focus_on_local` tweens
+0.6 s between the ring framing and a framing solved from the local player's
+*slot*, so it follows the Bog when the ring rearranges instead of being a second
+eye position that goes stale. The lens is rotated round **the Bog's own facing**
+rather than placed on a world bearing, so the three-quarter holds wherever on
+the arc he stands — and the rotation is negative, putting the camera on his
+right, because every weapon is carried in the right fist. The distance falls out
+of the framing (`half / tan(fov/2)`) rather than being picked and then matched
+with a field of view, which would have to be matched again the day the sculpt
+changes height. And he is held left of centre **by aiming past him**,
+`FRAMING[HERO]`'s own trick: the eye stays on the axis so the body is not
+skewed, only the look point slides. Which slot is yours arrives on the
+**roster**, as a `local` column beside `weapon` and `skin`, for exactly D-069's
+reason — the ring is driven from the roster and nothing else, and the backdrop
+Bogs carry peer ids that are in no roster at all.
+
+**Two things measurement caught that reasoning had not.** The first framing cut
+both antennae off, because the top of the frame was taken from
+`Bog.STAND_HEIGHT` — which is the collision capsule, 1.55, and has nothing to do
+with where the body ends. The antennae reach **1.778**, and the tips are not on
+the skeleton to ask: this is a Mixamo rig and they are weighted to the head. So
+`tools/skin_thumbs.gd` measures them **off a photograph** — one wide probe shot
+through the Bog's own camera, the silhouette's alpha scanned for its highest lit
+row and, separately, its widest lit column above the waist, which is the other
+half of "both antennae in frame" and the half a height cannot answer.
+`mesh.get_aabb()` is two centimetres out at the top and is not used because it
+answers the wrong question about *width*, holding the whole body including the
+elbows of the Idle guard, which are below the crop. And the second: at 1.06 of
+margin the frame left 61 px over the tips, which under a 34 px title reads as
+touching; 1.22 gives 0.22 m.
+
+**The thumbnails are 256 square and cut out.** 128 on a near-black card was
+right while they were 40 px swatches — at that size a cut-out would have shown
+the glade through the Bog's ears. At 120 px on a page of their own, a rectangle
+of near-black is the largest thing in the cell. Against transparency the
+button's own stylebox reads *through* the picture everywhere the Bog is not, so
+hover, focus and "this is the one you are wearing" are legible on a tile made
+almost entirely of photograph. The file draws two rims and only two, because
+that is roster state and not input state: a 2 px accent on the skin being worn,
+and 2 px in a team's colour over a 42% picture on one another team holds
+(D-109, unchanged).
+
+**The ring was reframed to stand in the gap, and its nameplates stack in three
+ranks.** The first cut of the rail left two Bogs behind the roster card and two
+behind the settings. Fixed by moving the ring and the lens rather than the
+panels: radius 4.0 → 3.0 and arc 150° → 98°, which takes the group's world span
+from 9.1 m to 6.4 m, so the eye pulls back only 8.7 → 10.6 m instead of the
+~70% further a pull-back alone would have needed. But fitting eight Bogs into
+740 px put eight names on one line 75 px apart and 200 px wide, and the middle
+four were one illegible smear — worse than the problem being fixed. **No framing
+solves that**: the only thing that separates names on a line is depth, and every
+geometry-only answer the search found wanted a 256° arc from fifteen metres, a
+ring wrapped round the fire with two Bogs backlit between it and the camera. So
+the plates stack — rank is `index % 3`, three because on one line a name hits
+its neighbour and on two it hits the one after, while on three the nearest name
+sharing a rank is 225 px away and clears by 26. Only RING stacks. And because
+the tightened ring then crowded the portrait — a neighbour 12° off the lens, and
+no lens fixes that, since the neighbour's angular offset and the frame's angular
+width scale together — the subject **steps 2.8 m out of the ring** while the
+page is open, along his own facing, on the frame the camera begins its six-metre
+move, which is the one moment it is invisible.
+
+**The gate check turned from a clearance test into a containment test.**
+`tools/weapon_select.gd` keeps every behaviour D-069 and D-109 assert and now
+opens the page through its real button first, because a control that is not
+visible in the tree cannot take focus. `RING_CLEARANCE` is gone;
+`BAND_LEFT`/`BAND_RIGHT`/`BAND_TOP` replace it, keeping D-109's projection
+machinery and adding a horizontal span. Two traps found writing it: a skinned
+mesh's AABB reaches far enough toward the lens that a corner projects a thousand
+pixels off the side of the screen, so the body's width comes from
+`Bog.CAPSULE_RADIUS` swept across the camera's right; and the box has to be
+measured **before the page is ever opened**, because a measurement taken during
+the 0.6 s tween is a measurement of a camera on its way somewhere.
+
+### The HUD is one corner for yourself
+
+Everything about *you* — health, four tiles, lives, letters, the Elder clock —
+sat in a column at the **bottom centre**, directly under the crosshair;
+everything about everyone else sat top-right. That is the arrangement a HUD gets
+when each element is placed as it is written, and it puts the two things a
+player reads mid-fight — "am I about to die" and "can I throw yet" — in the one
+part of the screen the aiming happens in.
+
+So the screen is now four corners and a middle that is only ever the crosshair.
+Your own column is bottom-right, 32 px in from both edges, everything flush to
+one right margin — Elder clock, letter lamps, lives, health bar, tiles, upward
+in that order. The kill feed runs up the **left** edge, bottom-anchored 260 px
+so it stacks straight off the top of the chat panel, rows beginning at the
+margin instead of hanging off it. The clock and score stay top-centre, where a
+clock goes. The offsets are the showroom recipe's own numbers rather than a
+reconstruction, so the shipped screen and the picture the choice was made from
+are the same screen. `BottomCentre` is renamed `BottomRight`, because a node
+named for the wrong corner is a trap.
+
+**Two of those moves could not be made in the scene alone.** `KillFeed`'s rows
+are built in `kill_feed.gd`, which shrink-wraps each one to the *end* of the
+column — exactly right for the top-right corner it lived in, exactly backwards
+at the left margin — and re-asserts its own alignment in `_ready`. Rather than
+teach the feed which corner it is in, the HUD states the placement: it owns the
+layout of everything in `hud.tscn`, a child is readied before its parent, so
+saying it in `HUD._ready` is saying it last, and rows are flagged as they enter
+the tree because a feed makes and frees them continuously. And the health bar is
+built in code, so its `SHRINK_CENTRE` — which was the fix for D-076's "it filled
+the column's 440" — became `SHRINK_END`: a 224 px bar centred over a 440 px
+column would have been the one element whose right edge did not line up with the
+tiles.
+
+**The ability tiles lose their borders, which were the last accent outlines in
+the game.** Since D-036 a tile drew a 1.5 px amber rectangle around itself, and
+that entry called it "the state at a glance from the corner of the eye" — which
+it was, on a HUD where a dozen other things were also outlined. D-117 took every
+border away and left four strokes that mean something. Four permanently-visible
+yellow boxes in the corner are not one of them: with nothing else outlined they
+became the loudest thing in the frame, and they said "ready" in the same yellow
+that says "this is you" everywhere else. The three levels D-036 settled are now
+carried by the photograph's brightness alone — full, 46%, 20% — which is what a
+player was reading anyway, and which is the one channel a *photograph* of a prop
+has that a drawn glyph does not.
+
+**A rounded tile is rounded all the way down.** The plate, the dark foot the
+count and key cap sit on, the photograph and the recharge sweep all take one
+8 px corner — 8 rather than the theme's 10 because this is a 62 px square, not a
+panel, and 10 eats the two corners the numbers live in. The plate and the foot
+are `StyleBoxFlat`s built once and held statically, because `draw_rect` has no
+corner and a rounded box drawn as a bare polygon has no antialiasing. The sweep
+is the interesting one: it has always traced out to the tile's *edge* rather
+than drawing a circle, so a nearly-full recharge fills the corners instead of
+leaving four dark triangles that read as "not quite" — and "the tile's edge" was
+`half / max(|x|, |y|)`, which is the square. On a rounded tile that is a 3 px
+spur of yellow poking out of each corner at the moment the player is looking
+hardest. It now solves for the rounded boundary instead: flat edge where the ray
+leaves through one, the positive root of `|t*dir - centre| = RADIUS` where it
+leaves through an arc. Solved rather than sampled, because a running recharge
+asks for ninety of them every frame.
+
+**The health bar keeps its hairline, and that is deliberate.** Its backing went
+from 0.72 to 0.35 with everything else, so it too is a dimming of the arena
+rather than a plate over it — it was the last opaque rectangle on the HUD. But
+the 1 px `LINE` border stays, and it is the only border left on the bar. At 0.35
+over the arena's lit ground the *empty* half of the trough is very nearly the
+ground itself, and a bar whose far end cannot be found is a bar with no scale.
+That is the slider track of D-117 a second time, caught the same way: by looking
+at the picture.
+
+Gate, across all three screens: `widths` PASS with the narrowest track at
+**200.0 px** against a `MIN_TRACK` of 180 (the 460 px rail leaves 20 px of
+headroom; it read exactly 180 at a 440 px rail, which is why the rail is 460),
+`capture_config` PASS, `weapon_select` PASS at 200 checks, `full playthrough`
+PASS — which is the one that matters for the menu, since it asserts `%HostButton`
+still resolves as a `Button`, and a re-parent into a bar is exactly what could
+have broken that — plus `mouse capture entering a match`, `weapon_tiles`,
+`reload_timer` and the range panel. Every menu, lobby and HUD render was re-shot
+at 1600x900 and read; nothing clips.
+
+## D-119 — Glowworm Grounds moves to golden hour, loses its stations, and stops fencing its lanes in
+Three complaints from the playtest and one answer to all of them: the range was
+a night map you could not read the ground of, a corridor you could not see out
+of, and a set of controls nobody found. It is now **an hour earlier**, its
+dividers are thigh high, and the only thing left to walk into is a signboard
+that zeroes your stats.
+
+**The hour was the wrong lever, not the wrong number.** D-113 built this at
+night on the honest argument that the range is a cleared bog a mile from
+Whisperbloom Hollow and a different sky over it would say it was somewhere
+else. It was then lit by pushing every fill in the file until the ground
+appeared — moon 1.15 against the island's 0.30, sky ambient 8.0 against 2.5,
+peat albedo 0.235 against 0.085 — which is three numbers all saying the same
+thing, namely that the light was wrong rather than too low. The fix is to move
+the clock: **a sun nine degrees up on a bearing thirty degrees east of north**,
+and the fill comes free. `ambient_light_energy` goes from **8.0 to 0.62** — not
+a taste change, since 8.0 multiplied a night sky whose radiance cubemap
+averages near-black and the same 8.0 over an apricot skyline is eight times a
+real number. The peat at the far end of the range now medians 82 to 126 of 255
+across the four front pads at mean RGB 186/122/73, and the apron at 8 m sits at
+29 to 37 with a tenth percentile of 26: dark, and not crushed. None of pads 0
+to 3 crushes a pixel.
+
+**The azimuth is the load-bearing decision and D-113's argument re-runs
+cleanly.** A shadow from a 9-degree light is **6.31 times as long as the thing
+casting it**. The 8 m west bank runs the full 90 m length of the map, so it
+throws **50.5 m**, and where that lands is entirely the bearing:
+north-north-west laid it *across* the range (D-113's first attempt, 41 m of it
+at 11 degrees), due north laid it along its own length and shadowed nothing but
+put the disc at the vanishing point of every lane. North-north-east sends it
+**25.2 m west — off the map, since the bank is the west edge — and 43.7 m
+south**, out under the lodge. It shadows nothing for the same reason due north
+did, and it does it standing thirty degrees off every lane's axis, so an archer
+at the firing line gets the glory ahead-right of the crosshair instead of a
+disc in it: the half-horizontal FOV at 16:9 is 53.7 degrees and the sun is at
+30. The lodge ridge's 46.7 m and both south banks fall off the south edge of
+the world. What is left inside the map is a 2.2 m distance post throwing 13.9 m
+diagonally across a 6 m lane, which is a stripe of texture on the peat and the
+reason it reads as ground.
+
+**The sky is a third fork, not a fourth set of values in the second.**
+`range_sky.gdshader` comes from Kopje's `safari_sky.gdshader` (D-061): the
+gradient, the sun aureole, the haze and the ground hemisphere the environment's
+sky-derived ambient depends on. Three knobs are added and each is a thing this
+hour has that noon does not: a **third gradient stop**, because twilight runs
+apricot then rose then periwinkle and two stops put the rose at the skyline or
+overhead and never in between; a **stated shadow colour** on the cloud, because
+a cumulus flank out of a low sun is lit by the violet half of the sky and the
+noon shader's multiply can take a channel away but can never put violet in; and
+a **warm wash keyed on the angle to the sun**, because cloud on the sun's side
+is peach and cloud on the far side is nearly grey, and that difference across
+one sky is most of what says the light comes from one low place.
+
+**Two findings came out of the renders and neither was predicted.** The first:
+the map's **height fog**, 1.2 m deep at density 0.10, was invisible under a
+cold moon and is a *lit sheet* under a warm sky — the first sunset frame was a
+featureless pale plain with the lane rails inside it, and the tell was that the
+lodge deck at exactly 1.2 m, the old `fog_height`, was the only clean surface
+in frame. It is 0.9 m at 0.015 now, and `range_ambience`'s own `FogVolume` came
+down from 0.020 to 0.012 and went warm for the same reason. The second: the
+**thirty-four backdrop snags cast shadows**. Standing north and east of the map
+they were harmless under a moon due north; up-sun of it at nine degrees a
+fifteen-metre snag four metres past the lip lays ninety-five metres of darkness
+south-south-west across the range, and thirty-four of them lay it in bands.
+They are shadowless now, on the same principle the azimuth is chosen by:
+scenery outside the play space does not get to decide the light inside it. The
+cost is the shafts they threw through the volumetric fog, which were lovely and
+which a range cannot pay for in readable ground.
+
+**A second light, for the same reason Kopje needed one.** At nine degrees the
+key reaches the tops of things and their north-north-east faces and nothing
+else; every south face a shooter is looking at, the underside of the lodge roof
+the eight pads stand under and the shaded half of every block is on ambient
+alone, and the back pads came back with sixteen per cent of frame at literal
+black. `Bounce` is a shadowless directional from the south-south-west at **-6
+degrees** — from under the horizon, because bounce off ninety metres of wet
+peat arrives from below and a light at +6 would be a second sun — at 0.45
+against the key's 4.2, with **`sky_mode = LIGHT_ONLY`**, which is not optional:
+the sky follows LIGHT0 for its disc, and a second light reaching it would move
+the sun to the south-south-west and disagree with every shadow on the map.
+D-061 records the same trap. It took the back pads to 2 to 10 per cent, and
+what is left is the roof's underside, which is a dim hall at dusk and reads as
+one.
+
+**The stations are gone and nothing replaces them.** Six glowing signposts
+cycled a zone's dummies through a ring of behaviours, reset a zone, or reset
+the stats (D-114). The argument against them is that a range is a place you go
+to practise one thing, and a control that changes what the lanes are doing is a
+control that has to be found, understood, and then put back before the lane
+means what the post beside it says it means. A zone's behaviour is now
+**authored in the map and never changes**: the west lane is always four
+standing bodies at 8, 15, 22 and 28 m, the middle lane three strafers, the east
+lane a patrol at 8 and 22 with a pop-up at 15 behind the cover block, the bow
+lane a stander at 45, and you choose a lesson by walking to a different lane.
+The four positions D-113 authored `live: false` for a station to mint a body
+onto all stand up at build time, because with nothing left to mint them a
+reserved position is a coordinate in a table rather than a target on a range:
+**twenty-seven markers, twenty-seven dummies**, and the census line the gate
+greps says so. `RangeDirector` loses the rings, the reserve, the step counter
+and — this is the part worth noting — **its RPC**: there is no shared state
+left to agree about. What survives is the stats reset, because it is the one
+switch that is about the player rather than about the range, and it is now the
+dullest object on the map: a timber post and a board in the lodge's own timber,
+carved letters, an `Area3D`, no lantern, no light, no chime. The feedback is
+the HUD panel going to zero, which is the thing you were looking at when you
+decided to reset it. `AudioDirector.RANGE_CHIME` and its wav went with the
+stations.
+
+**And the lanes stopped being a stockade.** Eight lines of 1.8 m timber running
+32 m north of the firing line is correct by the cover grammar — over standing
+eyes, over the hop — and wrong in the picture: from the apron the range read as
+a palisade and from inside a lane you could see your own lane and nothing else,
+when every other lane's dummy is part of the lesson. One rail at **0.60 m**,
+thigh high on a 1.80 m Bog: a hop clears it without a thought, a standing Bog
+sees over it from anywhere, and it still says where the lane is, which is the
+whole job. The posts stay 2.2 m because they carry the lanterns, so not one
+distance mark moved. The cover blocks stay at 1.25 m, which is the one height
+on the map measured against a *crouching* Bog's eyes and is there to hide a
+pop-up. The map is 2,592 triangles, down 48: six rails out, one signboard in.
+
+**Rejected.** *Keeping the night and lighting it harder* — that is what D-113
+already did, three times, and the third time is where the peat albedo stopped
+being peat. *A shadow-casting backdrop* — see above; it is picturesque and it
+costs two thirds of the range. *Due north for the sun* — it works for the
+shadows and puts the disc in the archer's sight. *Cycling kept on a single
+station* — one control is not less discoverable than six, it is the same
+problem with a smaller surface, and the composition it rotates is the thing the
+map is for.
+
+**The clouds are painted on the dome, because a slab seen edge-on can only give
+shelves.** Kopje's sky marches a heightfield — a column on a flat base, walked
+front to back along the view ray — and that is the right model for a camera
+looking up at twenty to sixty degrees. It was tried here at length and it
+cannot make a cotton-candy sunset, for a reason that is arithmetic rather than
+taste. A standing Bog sees nought to thirty-seven and a half degrees of sky.
+For a ray at elevation θ to climb a whole column the march has to run to `top /
+sin θ`; for there to be sky *between* two clouds its horizontal travel through
+the layer, `tower / tan θ`, has to stay under about one noise tile. At
+seventeen and a half degrees that is 3.2 tower-heights, so the tile must be at
+least three times the tower — and a tile that big is most of the visible sky,
+so the whole composition is one or two cells of the hash. Measured at a 2200 m
+tower: tiles of 3000 and 3800 m came back as a continuous veil, 11,000 m put
+one cloud across half the frame, and the best case, 7000 m, gave two or three
+shelves with a straight diagonal top edge. Adding a second marched layer, a rim
+term, a lump term and a rounded belly improved the shelves and did not stop
+them being shelves.
+
+So the cumulus are **not in the world at all**. They are a stylised
+two-dimensional field on the dome, `dir.xz / (dir.y + k)`, which is how a
+hand-painted sky does it and how every stylised game with a ground-level camera
+does it. The `+ k` is load-bearing: at k = 0 the projection *is* the slab and
+the scale runs away at the horizon, and at 0.75 a puff eight degrees up is one
+and a half times the size of the same puff overhead rather than seven, so a
+cloud keeps its shape all the way down to the treeline and still reads as
+further off. The silhouette is domain-warped fbm with two **billow** octaves
+over it — the noise folded about its middle, so its minima become creases where
+plain fbm would give smooth hills — which is the difference between a hill and
+a cauliflower. The shading needs no third dimension and takes two more taps of
+the same field: one a short step **toward the sun**, which says whether this
+point is a sun-facing shoulder or is standing behind something, and one a step
+**outward from the zenith**, which on this projection is downward on screen and
+so finds the belly. The rim is `a·(1 - a)`, which peaks exactly on the
+silhouette edge and nowhere else, gated on the sun-facing term so only the
+sunward edge lights up — at nine degrees that edge is most of what a cumulus
+is. A second layer of the same field at 1.6× scale and its own patch of the
+hash is the scatter of small fair-weather cloud between and under the big ones;
+one layer at any coverage is one size of cloud everywhere.
+
+Two numbers were bracketed rather than chosen and both are worth keeping.
+**Coverage** is the map of the sky: 0.36 gives a mackerel of small clots over
+the whole dome, 0.50 a connected chain, 0.60 a chain with holes, and 0.68 four
+to six separate clouds with rose sky between them and beneath them. And **the
+light gain** is a gain on a finite difference, so where it lands decides
+whether the answer is a terminator or a line: at twenty the two taps read as a
+stencil with a hard edge across every cloud, and at nine the lit side fades
+into the shadow the way a cumulus does.
+
+It costs no march, so it runs at full resolution. One field evaluation is 28
+hash lookups, three evaluations per layer and two layers is 168 per pixel,
+about 620 million a frame at 2560×1440 — against 295 million for the marched
+version at quarter resolution. Twice the arithmetic for sixteen times the
+resolution, and the edges are edges rather than a 640×360 buffer magnified four
+times, which is where every previous version's softness came from.
+
+### And the sun was sixty degrees from where every argument said it was
+
+The build-time check written to keep the sky and the light honest printed `sun
+and sky agree to 59.6 degrees` the first time it ran, and the sky was not the
+guilty party. **A `.tscn` stores a `Transform3D` as the basis's three rows, and
+the axes are its columns.** The Sun had been authored as columns, so the built
+light was the transpose of the intended one: 7.8 degrees up on a bearing thirty
+degrees *west* of north instead of nine degrees and thirty east.
+`sun_follow_light` had been doing its job perfectly the whole time, pinning the
+disc faithfully to the wrong place — which is why the pictures all looked
+plausible, a sunset looking much like a sunset from either side. The
+consequence was not cosmetic: with the sun north-north-west the eight-metre
+west bank threw a fifty-eight-metre shadow east-south-east straight across the
+range, which is exactly the failure the azimuth was chosen to avoid in the
+first place.
+
+It was invisible for as long as this map had a moon due north, where x is zero,
+the basis is symmetric and a transpose is itself; it appeared the instant the
+sun moved off the meridian. The fix is one transposed line each for the Sun and
+the Bounce, and the durable part is the check: `range_map._check_sun_and_sky`
+reads the elevation and the bearing back out of the built scene, compares them
+with the two constants the transform is derived from and with the sky's own
+fallback direction, and prints all of it into the build log where the gate
+greps it. The lesson generalises past this map — a hand-written basis in a
+scene file is a number that can be wrong in a way that renders fine — and it is
+the reason that line exists rather than a comment claiming the two agree.
+
+## D-120 — The character page's Bog keeps his place in the ring, and the ring gets out of the way
+D-118 put a portrait on the Weapon and Character page and had one problem to
+solve that no lens could reach: the ring it frames is 3.0 m across an eight-Bog
+arc, so the subject's neighbour stands a dozen degrees off the axis at the same
+distance and is half a portrait of somebody else. The neighbour's angular
+offset and the frame's angular width scale together, so a longer lens from
+further away puts him in exactly the same place. The answer was to move the
+subject — a 2.8 m step out of the ring along his own facing, taken on the frame
+the camera begins its move, which is the one moment it is invisible.
+
+It worked and it cost the light. The step carried him from radius 3.0 to radius
+0.2 — onto the camera's side of the fire. D-106 spent a paragraph getting the
+menu's hero *behind* the flame so that the only warm source in the glade lands
+on his face instead of outlining him, and this quietly undid that for the one
+screen whose entire job is showing you your own face and the weapon in your
+fist. A step is also the wrong kind of answer: it makes the ring's arrangement
+and the portrait's framing two facts that have to agree about where a Bog is
+standing.
+
+**So the ring is hidden instead, and the subject does not move.**
+`_bog_wanted(index)` mirrors `_plate_wanted` — every slot but `_local_slot` is
+not drawn while `_focused` — and `focus_on_local` applies it to all slots
+rather than to one. It costs nothing that the step was buying: it is this
+client's own view of a page nobody else can see, the ring is still standing
+where it was, and it comes back the instant the page closes. It is also read by
+`_apply_slot`, not only by `focus_on_local`, so somebody joining while you are
+choosing a skin re-dresses the ring without putting the hidden half of it back
+on screen. Plates need no rule of their own — a plate is a label on a Bog, so
+the other seven go with their bodies, and only "You" is still hidden by name.
+`PORTRAIT_STEP` and `_stage_spot` are gone, and because `_stage_spot` was the
+one place both the stage and the lens asked where a slot stands, deleting the
+step re-framed the camera by itself.
+
+**The framing was then re-solved for a subject three metres back rather than
+two centimetres.** Two of its numbers were doing two jobs each and are now
+doing one. `PORTRAIT_SUBJECT_X` was holding the body left of the skin grid
+*and* swinging the lens far enough right to push the neighbours off the left
+edge; free of the second job it is **0.32** rather than 0.27, because as
+composition alone 0.27 was wrong twice — it left 0.31 of the width empty
+between his shoulder and the first tile against 0.17 outside his other arm, and
+it stood the antennae directly under WEAPON AND CHARACTER. And
+`PORTRAIT_BOTTOM` goes from the knee to **the ground**: 0.36 was chosen while
+the fire was behind the lens and there was nothing at his feet worth showing,
+but the light now arrives from in front of him and below, and a portrait lit
+from below that crops before the source is a picture of an effect with its
+cause cut off. It costs size — the frame is 2.24 m tall instead of 1.81, so the
+body is 80% of what it was — and buys the whole carried spear, which hangs past
+the shin, and a stance that says which way it is pointing. The lens stays at 30
+degrees and −34: negative because every weapon is in the right fist, and 34
+because there is no clean answer. The ring faces the camera rather than the
+flame, so the fire's bearing off a Bog's own facing runs from −29 degrees at
+one end of the arc to +29 at the other; the key is therefore between 5 and 63
+degrees off this lens depending on which slot is yours, and no single number
+holds a 58-degree spread inside the 15–45 a portrait wants. What every slot
+does get is a key in *front* of the face, which was the whole point.
+
+**The gate check did not have to change, and that is the useful part.**
+`tools/weapon_select.gd`'s `BAND_LEFT`/`BAND_RIGHT`/`BAND_TOP` measure the ring
+before the page is ever opened — for the reason D-118 found the hard way, that
+a box measured during the 0.6 s tween is a box around a camera on its way
+somewhere — so a pass that changes only what happens *after* the button is
+pressed leaves it untouched. The portrait has no assertions and should not:
+`tools/ui_range.gd`'s `lobby_character` mode now prints what the frame
+contains, through the camera's own `unproject_position` and in fractions of the
+frame rather than pixels, because the window a screenshot is taken at is not
+the window a player runs. Lens 4.19 m from the subject and 1.23 from the fire;
+spine at 0.320 across; antenna tips 0.112 down and soles 0.916.
+
+## D-121 — The bow's carry is solved on a map, and the floor it was solved against was a counterfactual
+The owner, of the shipped carry: *the top limb passes through the nose.* It
+did, and every number in the gate said the bow was fine — because the two that
+could have seen it were answering different questions. The floor is about
+grass. `preview_carry.SKIN_MIN` is about the trunk, and the bow's trunk column
+reads **0.002 m** in all fifteen carried clips whatever the tilt does, because
+the bow fist and the trunk are both bones the carry layer owns: a bow lying
+**along** a belly and a bow **through** a face score it identically. That is
+exactly the confusion D-099 disarmed `SKIN_MIN` over, so it stays disarmed for
+this weapon and a second measurement decides, on the half of the body a leaning
+limb never touches. `preview_carry.HEAD_MIN` is the nearest distance from the
+limb segment to the head's skinned vertices and to the
+`Neck`/`Head`/`HeadTop_End` joints, **0.06 m**, which is D-074's own number and
+the spear's. The shipped tilt read 0.002 m: not near the face, on it.
+
+D-110 is why it was needed now rather than at D-066. The carry layer used to
+turn the head 58° to the Bog's left, so the face was out of the limb's path *by
+accident*; `untwist` squared it and put it back in, and the bow was then
+re-solved against the floor alone because the floor was the only thing with a
+check. **A clearance nobody measures is a clearance that gets spent.**
+
+The re-solve is a map, not two lines through a point. `-- sweep` walks one axis
+at a time, and both of its sweeps through the shipped tilt were true and
+useless: the cell that fixes this is 60° away on one axis and 44° on the other,
+and no line through the old point passes near it. `-- probe` walks the whole
+360 × 180 at 15° and prints head clearance, layered floor and bare-armed floor
+in every cell. Three things fell out. **The pitch was never the problem** — the
+bow lies 41° off horizontal now against 45° before; what moved is the bearing,
+−107° to −169°, the low limb swinging from across the body to along it.
+**Vertical is not available**: a 1.54 m bow hangs 0.47 m below a fist the
+crouch drops to knee height, so every cell past about 60° of pitch puts a tip
+in the grass. And **no cell in the whole map clears the face by 0.06 m and the
+bare-armed floor by 0.10 m at once** — the best that constraint allows on that
+column is 0.082 m.
+
+`CARRY_TILT` goes **(47.5, −34) → (40, +10)**: head **0.002 → 0.134 m** (2.2×),
+layered floor **0.173 → 0.431 m** (2.9×), and the trunk **0.002 → 0.077 m**,
+which takes the bow off the chest as well as off the face — the other half of
+what a carried bow must not cross. Judged on a front-and-side sheet against the
+shipped tilt in the same frame, as D-103 judged the spear's.
+
+**What gave is `preview_bow`'s floor, and it gave because the pose it measures
+is not one the game holds.** `BogAnimator` hands `set_carry` and the carry
+layer's blend the same number, so bare arms wear the full tilt only for the
+fifth of a second `CARRY_BLEND_SPEED` takes to raise the layer, and only partly
+even then — the composed pose is between the two tables and both ends are above
+the ground. Its motivating case has stopped reproducing anyway, which is this
+repo's own test for a threshold: D-065 measured the untilted carry at **−0.158
+m**, a bow through the grass in `Run`; on the rebuilt library it is **+0.003
+m**. So that table is printed and not judged, and the verdict of `preview_bow
+-- measure` becomes the one it could always have made and never did — **a grip
+is still the grip its own clips solve for** (D-073), asked of the bow: the six
+constants that put a bow and an arrow in two fists at every charge level,
+compared with the solve that printed them. Six were being pasted by hand and
+compared with nothing, which is precisely how the great sword shipped `1.2586`
+against a solve printing `1.2585` for four steps. `grip PASS` reads 0.0001 m,
+0.000° and 0.0000 of scale.
+
+### Rejected
+
+- **Moving `BOW_GRIP_ROTATION`/`OFFSET`.** The tilt alone clears both floors;
+  the grip is an equation about a string and every millimetre of it is paid for
+  at the draw.
+- **A bow hanging vertically along the leg**, which is what a carried longbow
+  wants to do. The map says it costs the crouch: below about −60° of pitch a
+  limb tip is in the grass in `CrouchIdle`.
+- **Lowering `CARRY_CLEARANCE_MIN` to 0.08** to keep the old verdict alive — a
+  restatement of today's run with no room in it, which is the fault `LEVEL_MAX`
+  exists to name.
+- **The end-for-end twin at (220, −10)**, which measures identically (the map
+  is symmetric under x+180, −y) and renders indistinguishably; the nearer cell
+  to the shipped tilt is the smaller edit.
+
+## D-122 — The hitmarker lands, and a kill is its own shape
+D-116 put a mark on every landed hit and it was not seen. The instinct is to
+make it bigger or brighter; the thing it was actually missing was an *arrival*.
+It was two pixels wide and its alpha started falling on the frame it appeared,
+so at the moment a player's eye reached it, it was already half gone. So: arms
+three pixels, and the mark lands 40% oversize and pulls to its true size over
+70 ms at full alpha, with the fade starting only afterwards. Seventy
+milliseconds is two frames at 30 fps and ten at 144 — long enough to be a
+movement at any frame rate, short enough that nobody can say what it did. The
+eye reports a snap, which is the whole intent. The hit is held 0.45 s.
+
+A kill is not a louder hit, it is a different event: every other mark in a
+fight means *again*, and this one means *done*, which is the one piece of
+feedback a player acts on immediately by turning to look for the next Bog. It
+had been carried by colour and 0.15 s of extra life, and colour alone is
+exactly what a player is least able to read against a Bog standing in front of
+a sunset. So the four arms now reach in through the centre gap and meet: a
+whole X rather than four corners of one, white, held 0.6 s. Three signals for
+one distinction. `strike` takes a `kill` flag rather than gaining a twin
+function, so the call that is neither — `flash_hit`, for the range's boards —
+keeps the hit shape by saying nothing, and a struck board stays a struck board.
+The vocabulary is unchanged: yellow hit, white kill, amber board. The void and
+fall kills in `_on_player_killed`, which report no damage and so emit no
+`hit_landed`, take the kill shape too.
+
+The ears got the same split. `hitmarker_kill.wav` is deliberately the *same
+tick with a body under it* — the identical 2400→1500 Hz sweep at 0.62 gain,
+with a 900→500 Hz drop entering 6 ms later — because a kill is the last hit of
+a string of hits, and a confirmation sharing nothing with the one before it
+reads as an unrelated noise. Measured, it is 0.14 s against 0.09 s with half
+the spectral centroid (1056 Hz against 2112 Hz), which is the whole of what a
+player has to hear across a firefight. It plays where `_apply_death` played
+`HITMARKER`; the non-lethal line is untouched.
+
+Every damage path was proven rather than assumed. The four weapons reach the
+mark by one road — `bog_combat` and `spear_projectile` both end their impact in
+`MatchState.report_damage`, the only emitter of `hit_landed` — so
+`tools/playthrough` now walks the four causes and requires each to report one
+hit naming the attacker, carrying its own cause, and repainting the real HUD's
+crosshair. Asserting the road rather than staging four impacts is deliberate:
+staged impacts would be a test of four hit tests, and the hit tests are not
+what this changed.
+
+## D-123 — The draw costs you speed, the camera comes in half a metre, and a slide is a move: crouch into it, jump out of it
+Four changes to how a Bog moves, from one round of playtest notes, and three of
+them are about the same thing: a move that costs something has to buy
+something.
+
+**A full draw creeps.** `AIM_WALKS` (D-098) already took the archer down to a
+walk the moment the string moved, because the archer set has walks and no runs.
+That is a rule about clips. This is the rule about the fight: `target_speed()`
+now scales by `lerp(1.0, DRAW_SPEED_SCALE, draw_fraction())` with
+**`DRAW_SPEED_SCALE = 0.5`**, so a full draw walks at **1.15 m/s** — brace
+2.30, half 1.72, full 1.15, measured on the body and not on the dial. It is
+applied in `target_speed()` beside the Elder's boost and the carrier's penalty,
+which is the one place every stance comes out of (D-040), and it works on the
+seven screens that are not yours for free: `draw_fraction()` answers off the
+replicated `sync_draw` (D-065). The aim plane needed nothing — under the walk
+ring it blends toward its own idle, `BowAim`, which is the pose a bow held at
+full draw creeping forward should be in. The animator's comment about a
+`Bog.AIM_SPEED_SCALE` that never existed is gone with it.
+
+**The camera comes in.** `DISTANCE_DEFAULT` 3.6 → **3.1** and `DISTANCE_AIMING`
+2.4 → **2.15**, shoulders unchanged at 0.62 and 0.48, and `bog.tscn`'s own
+Camera3D moved with the constant so the scene default and the code agree. At
+3.6 m the Bog was a figure in a landscape and a fight read as two dots meeting;
+the shoulders staying put means the Bog keeps the same share of the frame off
+the crosshair while the world behind it gets closer. The probe (D-045, D-083,
+D-086) needed no retuning: the camera range is still 0 of 1700 frames inside
+the scenery, the shoulder still comes in with the boom on all 1700, and the
+lens still turns no more than 1.00° in a frame against a 1.20° budget.
+
+**A slide jump is its own move.** Jumping out of a slide used to end the slide
+and hand back an ordinary hop, which meant the slide's commitment — a fixed
+direction, a fixed duration, a 0.9 s cooldown — bought nothing but a lower
+hitbox. It now leaves at `max(current, SLIDE_SPEED) * 1.2` **along the slide's
+own heading** with `jump_velocity() * 1.12` of lift: measured, a slide at 4.79
+m/s leaves at 5.75 and 10.08 m/s up against a plain jump's 9.00. The horizontal
+is taken from `max(current, SLIDE_SPEED)` rather than the velocity alone so
+that `SLIDE_FRICTION` cannot make a late jump worth less than an early one —
+the move must not have a right moment nobody can see. It does not stack with
+the bunny hop's `_hop_gain` (D-052): a slide that begins on a landing tick
+opens the landing grace too, and paying both would make a crouch pressed on
+touchdown the strongest thing in the game.
+
+It is replicated as **`sync_slide_jump_serial`**, a second counter in the same
+ON_CHANGE config as `sync_jump_serial`, bumped in the same physics tick and
+never on its own — D-098's argument exactly: a flag that goes true and false
+inside one replication tick arrives as no change, and two slide jumps have to
+be two slide jumps on every screen. It is a second counter rather than a kind
+packed into the first because the jump serial's job is to say an airtime
+opened, and nothing should have to know how that is encoded to read it. The
+animator reads it beside the jump serial, so `_open_airtime` is told which
+take-off it was on the frame it opens.
+
+**`SlideJump` is a clip that does not exist yet**, and the graph ships anyway.
+`clips.json` carries the row with `mixamo_query: "flip"` for the owner to pick
+from; `BogAnimator.clip_or(role, fallback)` resolves the role to `RunJump`
+until the FBX lands, with **one** `push_warning` at `_ready` guarded by a
+static flag — once per run, not once per Bog and never per frame. It is
+deliberately not in `REQUIRED_CLIPS`: a missing *required* clip is a Bog that
+never moves and must fail the gate, a missing optional one is a move drawn with
+somebody else's clip. `RunJump` is an honest stand-in because it is the other
+leap scrubbed by the same arc between the same three markers, so only the
+drawing is provisional. In the graph it is a second scrubbed node under a
+`leap_kind` Blend2 rather than one node whose `animation` is swapped at
+take-off, for D-026's reason: both are told what time it is every frame whether
+or not anything is looking. `tools/clip_check.gd` now skips a row with no FBX
+with a note instead of failing it, and requires `lift`/`apex`/`land` on
+`SlideJump` the day it arrives.
+
+**Crouch alone slides.** Entry asked for crouch *and* sprint, and the effect of
+asking for a chord was that nobody ever slid — sprint is held all the time and
+crouch is the key a player presses on purpose. Sprint is dropped; what makes
+the slide a decision is still the speed floor (`SLIDE_ENTRY_SPEED`, 0.7 of a
+run) and the cooldown. The entry list became `_can_slide()`, one function,
+because it is now asked from two places.
+
+The second of those places is the **landing tick**. A slide that started on the
+next physics tick would start one tick after the animator's first look at a
+grounded Bog, so `Land` would already have fired and the slide would fade in
+over a stumble it was meant to replace. `_detect_landing` therefore begins it
+on the tick the feet arrive, and `_close_airtime` finds a Bog that is already
+sliding and plays nothing — under the dive roll and under the hard landing,
+both of which keep their priority, because a slide may not be a way to walk
+away from a fall the game has already decided was heavy. Crouch held in the
+*air* pre-arms the pose: `_crouch_pose` is a second blend beside
+`_crouch_blend` and is the only one allowed to rise airborne. The split is the
+point — `_crouch_blend` is the **rule** (the capsule, `is_crouching()`, the
+speed, the headroom) and stays grounded-only, so a crouch pressed in mid-air
+cannot shrink the hitbox or turn air control down to `CROUCH_SPEED`;
+`_crouch_pose` is only what the body looks like, and the animator's stance
+blend is the one thing that reads it. Measured: a run-speed landing with crouch
+held comes down at 9.92 m/s with the crouch pose already at 1.00, is sliding on
+the same tick, and fires the Slide one-shot with neither `Land` nor `LandHard`.
+
+**Measured in `tools/movement_check.gd`**, a new harness rather than lines in
+`tools/playthrough.gd`: all four claims are counted in physics ticks on flat
+ground, and the playthrough runs seven times on seven floors. Thirty-three
+checks, and the remote one is the one worth naming — the snapshot handed to the
+second Bog is copied field by field out of the replication config
+`scenes/player/bog.tscn` actually ships, so a field left out of that config
+fails here rather than in a match.
+
+## D-124 — Hands out, a fist, and a sword that lets go of you
+Three of these are one idea: a Bog should be able to decide what its hands are
+doing. Until now it could not — the weapon the lobby handed you was in your
+fists for the whole match, the dance was performed holding a great sword, and
+the sword's only attack took your feet away from you for 1.867 seconds.
+
+**H puts the weapon away.** `Bog.sync_holstered` is an ON_CHANGE bool the owner
+writes and everybody reads — one field and not the draw's local-plus-replicated
+pair, because a toggle a player presses has no continuous value for two fields
+to disagree about. It is the fifth clause of `has_spear`/`has_bow`/`has_sword`,
+which is the whole implementation: the gates are where a weapon goes away, so
+the fists empty on eight screens, the throw refuses itself, the HUD tile drops
+its photograph to the shade it uses for *nothing to spend* and puts H on the
+key cap, all without a line anywhere that asks "is this Bog holstered" outside
+the gate. What it buys is `FISTS_SPEED_SCALE`, the only factor above 1.0 in
+`target_speed()` — 5.94 m/s against 5.40 — and the one attack a Bog has with
+nothing in its hands. Refused while dead, mid-wind-up, drawing, holding a card
+or dancing; deliberately **not** re-asked every frame the way `refresh_emote`
+is, because an emote is something you are doing and a holster is something you
+are, and a punch must not put the weapon back half way through itself. The
+roster's `weapon` is untouched throughout: holstering is a state on the Bog,
+not a weapon change, so the racks and the lobby lock-in (D-069, D-115) are
+unaffected.
+
+**The punch is the sixth outcome on one release tick.** D-025's wind-up has
+carried a spear, a bolt, an arrow and a blade; it now carries a fist, with the
+sword's four-function relay around it and a host that reads the attacker's own
+published `sync_holstered` before it hurts anybody. 20 damage at 1.1 m inside a
+50-degree front, on a 0.5 s cycle, as an upper-body one-shot — so unlike every
+other melee attack in this game you keep the stick, the camera and full speed
+while you throw it. It is small on purpose: five punches kill a full Bog, two
+finish one a weapon already hurt. `Bog.Cause.FIST` is appended to the enum and
+`RangeStats` has no row for it, because the practice panel counts weapons.
+`Punch` is a clip that does not exist yet: `clips.json` carries the row with
+`mixamo_query: "punch"` for the owner to pick from, and the animator draws it
+with `Cast` through `clip_or` until the FBX lands, its release capped at 0.25 s
+so the stand-in lands on the cycle.
+
+**The dance empties the hands**, which is D-105 finished. `_bare_handed()` is
+the one sentence the holster and the emote share and the five `_wants_*` ask it
+once each; the prop comes back off `_tick_hand`'s existing poll with nothing
+having to remember.
+
+**The great sword got a second attack rather than a nerf.** The primary click
+is a three-slash chain on `SwordCombo` — 50 each, so two connect to kill,
+windowed per slash between its own `swing_N` and `end_N` markers, upper-body
+over the sword plane at `SLASH_SPEED_SCALE` 0.85 with turning and jumping
+allowed, reaching the dial plus the 0.35 m it steps into the cut. A click after
+the blade has passed and before `end_N` + 0.15 s chains; `SLASH_MAX` is three
+because the clip is three. D-068's spin is untouched and is now the **sprint
+attack**: the same button at 0.8 of run speed still buys the committed
+revolution and the whole 100. The branch is taken on the speed the player is
+already carrying rather than on a second key, which is D-070's one-button rule
+kept rather than broken.
+
+Two things about the chain are worth writing down. Its clocks live on `Bog`
+beside the spin's, for D-068's reason exactly — what they decide is what is in
+the fists and how fast the body travels, and both have to be the same answer on
+eight machines; the chain's *decision*, which slash is next, is the only part
+that stays in `BogCombat`. And it is relayed as an event with the slash number
+on it rather than through a replicated serial: the wind-up already travels that
+way, a chain is a sequence of events rather than a quantity anybody samples,
+and a serial would have been a second road carrying the same news with the
+index packed into it to stop the two arriving apart. `sword_recharge`'s default
+drops 0.800 → 0.500 and changes what it is the recharge *of*: it used to be
+what was left of the spin's clip, and it now runs between chains. The spin's
+own cycle comes out at 1.567 against a 1.867 s clip, so its earliest second
+click is still the tick the spin ends — gated by `is_spinning()` rather than by
+the dial, and the bunny-hop budget it feeds is measured unchanged.
