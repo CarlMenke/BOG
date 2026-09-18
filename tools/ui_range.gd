@@ -14,11 +14,19 @@ extends Node
 ##
 ## Modes: menu, menu_join, menu_notice, settings, settings_network,
 ##        lobby, lobby_full, lobby_teams, lobby_client, lobby_map, lobby_capture,
-##        lobby_weapons, lobby_skins, lobby_ffa_skins, lobby_chat, lobby_feel,
-##        widths, capture_config.
+##        lobby_character, lobby_weapons, lobby_skins, lobby_ffa_skins,
+##        lobby_chat, lobby_feel, widths, capture_config.
+##
+## **Four of those open the Weapon and Character page**, which is where the
+## weapon strip and the skin grid live now: `lobby_character` is the plain shot
+## of it, and `lobby_weapons`, `lobby_skins` and `lobby_ffa_skins` are the three
+## states of the pickers on it. They were shots of the main lobby until the page
+## existed; what each of them is *about* has not changed, only which screen that
+## thing is on.
 ##
 ## `widths` and `capture_config` print a verdict and are in the gate (D-076).
-## Everything else is a photograph.
+## `lobby_character` prints what its portrait frames — measurements, not a
+## verdict, and only at a warmup of 60. Everything else is a photograph.
 
 const MENU_SCENE := preload("res://scenes/ui/main_menu.tscn")
 const LOBBY_SCENE := preload("res://scenes/ui/lobby.tscn")
@@ -85,6 +93,13 @@ func _ready() -> void:
 			_open_lobby(4, false, false)
 		"lobby_map", "lobby_capture":
 			_open_lobby(3, _mode == "lobby_capture", true)
+		"lobby_character":
+			# The page itself, on `lobby_full`'s roster: a seven-Bog ring for the
+			# camera to pick one slot out of, and the local player standing in
+			# the middle of it. The point of the shot is the portrait and the
+			# grid together, so it deals no skins — every tile is a body
+			# somebody could still choose.
+			_open_lobby(7, false, true)
 		"lobby_weapons":
 			# Three Bogs and three weapons, so the strip and the ring above it
 			# carry one of each. Nothing is folded away for it any more — the
@@ -191,6 +206,13 @@ func _open_lobby(extra: int, teams: bool, as_host: bool) -> void:
 	await get_tree().process_frame
 	for line: Array in FAKE_CHAT:
 		Net.chat_received.emit(FAKE_BASE + int(line[0]), String(line[1]))
+	# Pressed **before** the dressing below and not awaited, so the camera's
+	# 0.6 s walk in and the two frames a roster deal takes run at the same time.
+	# Awaiting it first spent the whole of `snapshot.gd`'s warmup on the tween
+	# and the shot went off before the skins were dealt — a `lobby_skins` that
+	# photographed the seeded defaults and looked perfectly plausible doing it.
+	if PAGE_MODES.has(_mode):
+		_open_character_page(lobby)
 	if _mode == "lobby_map":
 		await _show_map_row(lobby)
 	elif _mode == "lobby_capture":
@@ -207,12 +229,93 @@ func _open_lobby(extra: int, teams: bool, as_host: bool) -> void:
 		await _worst_labels(lobby)
 	elif _mode == "capture_config":
 		await _capture_config(lobby)
+	if _mode == "lobby_character":
+		await _report_portrait(lobby)
 
 
-## All three weapons at once, in the strip and in the ring above it.
+## The lobby modes whose subject lives on the Weapon and Character page.
+const PAGE_MODES := ["lobby_character", "lobby_weapons", "lobby_skins",
+	"lobby_ffa_skins"]
+
+## Open the page through its real button.
+##
+## The button, not the boolean: `_character_open` is private and pressing the
+## control is what proves the control is wired to it — `_open_chat` below takes
+## the same line about focus for the same reason.
+##
+## **Nothing is awaited here.** `BogBackdrop.FOCUS_SECONDS` is 0.6 and
+## `tools/snapshot.gd` pins the frame rate to the physics rate, so the camera
+## takes 36 of the 40 warmup ticks these shots are given — every one of which it
+## has to share with whatever else the mode is setting up. Pressing on the first
+## frame and letting the rest of `_open_lobby` run underneath is what fits both
+## into one warmup; a shot taken at fewer than ~38 ticks would catch the lens in
+## mid-walk.
+func _open_character_page(lobby: Node) -> void:
+	var button := lobby.get_node_or_null("%CharacterButton") as Button
+	if button == null:
+		push_warning("ui_range: the lobby has no Weapon and Character button")
+		return
+	button.pressed.emit()
+
+
+## Print what the portrait actually frames, so the shot beside it is not the
+## only evidence.
+##
+## The numbers in `BogBackdrop`'s portrait block — the lens over the fire, the
+## air over the antennae and under the feet, the spine's place across the frame
+## — are a solved framing, and a solved framing is exactly the kind of thing
+## that goes quietly wrong when the sculpt or the ring moves under it. So the
+## mode that photographs the page also measures it, through the camera's own
+## `unproject_position`, in fractions of the frame rather than in pixels: the
+## window a screenshot is taken at is not the window a player runs.
+##
+## Waited out rather than watched: `FOCUS_SECONDS` is 0.6 and there is no signal
+## when a tween lands, so this counts past it and reads the camera where it
+## stopped. That lands around tick 48, so the **measurement wants a warmup of
+## 60** where the picture only wants 40 — at 40 the tree is gone before the line
+## is printed, and the shot is unaffected either way. It asserts nothing:
+## `tools/weapon_select.gd` is where the page has assertions, and a photograph
+## tool that could fail the gate would be a second place to look when the gate
+## goes red.
+func _report_portrait(lobby: Node) -> void:
+	var backdrop := lobby.get_node_or_null("%Backdrop") as BogBackdrop
+	if backdrop == null:
+		return
+	for i in 45:
+		await get_tree().process_frame
+	var camera := backdrop.get_node_or_null("BackdropCamera") as Camera3D
+	var bogs := backdrop.get_node_or_null("Bogs")
+	if camera == null or bogs == null:
+		return
+	var shown: Array[Node3D] = []
+	for child: Node in bogs.get_children():
+		var body := child as Node3D
+		if body != null and body.visible:
+			shown.append(body)
+	print("portrait: %d of %d Bogs on stage" % [shown.size(), bogs.get_child_count()])
+	if shown.is_empty():
+		return
+	var subject := shown[0]
+	var frame := get_viewport().get_visible_rect().size
+	var spine := camera.unproject_position(subject.global_position + Vector3.UP * 0.9)
+	var fire := backdrop.get_node_or_null("Fire") as Node3D
+	var to_fire := camera.global_position - (
+		fire.global_position if fire != null else Vector3.ZERO)
+	to_fire.y = 0.0
+	print("portrait: lens %.2f m from the subject, %.2f m from the fire, %.1f deg"
+		% [camera.global_position.distance_to(subject.global_position
+			+ Vector3.UP * 0.92), to_fire.length(), camera.fov])
+	print("portrait: spine at %.3f across the frame" % (spine.x / frame.x))
+	for part: Array in [["soles", 0.0], ["antenna tips", 1.778]]:
+		var at := camera.unproject_position(
+			subject.global_position + Vector3.UP * float(part[1]))
+		print("portrait: %s at %.3f down the frame" % [part[0], at.y / frame.y])
+
+
+## All three weapons at once, on the page's strip and in the ring behind it.
 ##
 ## This used to press the header's collapse button and photograph the picker
-## surface D-069 made. There is no such surface: the strip is always on, so what
+## surface D-069 made, and then the always-on strip D-107 replaced it with. What
 ## is left of the mode is the part that was always doing the work — making sure
 ## the three buttons and the three pairs of hands behind them are not all
 ## carrying the same thing.

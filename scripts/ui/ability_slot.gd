@@ -19,13 +19,21 @@ extends Control
 ## Which means this file still holds a complete drawn set, and a fresh clone
 ## before its first import still has a readable ability bar.
 ##
-## **State is the border and the brightness, not the hue.** A drawn glyph could
-## be tinted to the slot's colour for free; a photograph cannot, and painting one
-## amber would throw away the only thing it is there for. So the three levels
-## D-036 settled — empty, waiting, ready — are carried by the border (which that
-## entry already called "the state at a glance from the corner of the eye") and
-## by how brightly the photograph is lit: full for a tile you can press, knocked
-## back for one you cannot, knocked back further for one you have none of.
+## **State is the brightness, and since D-118 only the brightness.** A drawn
+## glyph could be tinted to the slot's colour for free; a photograph cannot, and
+## painting one amber would throw away the only thing it is there for. So the
+## three levels D-036 settled — empty, waiting, ready — are carried by how
+## brightly the photograph is lit: full for a tile you can press, knocked back
+## for one you cannot, knocked back further for one you have none of.
+##
+## They used to be carried by a 1.5 px amber border as well, which D-036 called
+## "the state at a glance from the corner of the eye". The Quiet theme took every
+## border in the UI away and left four strokes that mean something, and an outline
+## drawn around four tiles that are *always* on screen is not one of them: with
+## nothing else on the HUD outlined, four yellow boxes in the corner became the
+## loudest thing in the frame, and they said "ready" in the same yellow the tile
+## says "this is you" in everywhere else. A lit photograph on a dark plate is the
+## same three levels with nothing drawn around them.
 ##
 ## The key cap is read out of the input map rather than typed in, so a slot can
 ## never claim Q while the action is bound to something else.
@@ -67,7 +75,18 @@ extends Control
 enum Kind { SPEAR, SHIELD, MAGNET, LIGHTNING, POTION, BOW, SWORD }
 
 const SIZE := 62.0
-const RADIUS := 5.0
+## The tile's corner, and the corner of everything drawn inside it: the plate,
+## the foot, the photograph's mask and the recharge sweep all use this one
+## number, so the square has exactly one silhouette. Eight rather than the
+## theme's ten because this is a 62 px square and not a panel — ten on a tile
+## this small eats the corners the count and the key cap sit in.
+const RADIUS := 8.0
+
+## The plate the photograph sits on. Near-black at 0.35, which is the same
+## reading the rest of the Quiet HUD gives: a dimming of the arena rather than a
+## surface painted over it. It was 0.62 and, with the border gone, that much
+## opacity made a square of night sky in the corner of a lit map.
+const PLATE := Color(0.02, 0.025, 0.03, 0.35)
 
 ## Which photograph each kind wears. Keyed by `Kind` so a tile that changes what
 ## it stands for (D-069, and the Elder since D-038) changes its picture with it,
@@ -154,6 +173,15 @@ var _lit: bool = true
 ## letter hold) that this clock does not measure.
 var _remaining: float = 0.0
 var _total: float = 0.0
+## Is the weapon this tile stands for put away (the feel round)?
+##
+## A third readiness state on the photograph, and it is the one D-036 already
+## has words for: "you have none" and "not for another second" are different
+## answers, and "you put it away" is a third — so it borrows `ART_EMPTY`, which
+## is the shade this bar uses for *nothing to spend*, rather than the recharge's
+## `ART_WAITING`. A player who sees the waiting shade waits; a player who sees
+## this one has to do something, and what they have to do is on the key cap.
+var _stowed: bool = false
 
 @onready var _cap: Label = %KeyCap
 @onready var _name: Label = %Name
@@ -213,6 +241,29 @@ func set_armed(is_armed: bool, remaining: float = 0.0, total: float = 0.0) -> vo
 	_apply(-1, is_armed)
 
 
+## Is the weapon on this tile put away, and which key brings it back (the feel
+## round)?
+##
+## The two are one call because they are one statement. A tile that dimmed
+## without changing its cap would be telling a player their weapon is gone and
+## leaving them pressing the button that used to fire it; a cap that changed
+## without the tile dimming would be a key with no reason on it. This is the one
+## caller `set_kind`'s `next_action` parameter was kept alive for, and it obeys
+## that function's rule exactly: what fires the tile changed, so what the tile
+## says it is fired with changed with it.
+##
+## Read out of the input map rather than typed, so a rebound H moves both.
+func set_stowed(stowed: bool, next_action: String) -> void:
+	if next_action != action:
+		action = next_action
+		_cap.text = SettingsPanel.primary_key(next_action)
+		queue_redraw()
+	if stowed == _stowed:
+		return
+	_stowed = stowed
+	queue_redraw()
+
+
 ## Fraction of the recharge already done, 0..1, or -1 while no timer is shown.
 ## Read by `tools/hud_range.gd`, which is why it exists as a function rather than
 ## as arithmetic inside `_draw`.
@@ -257,23 +308,81 @@ func _draw() -> void:
 	var box := Rect2(Vector2.ZERO, Vector2(SIZE, SIZE))
 	var tint := _tint()
 
-	draw_rect(box, Color(0.02, 0.027, 0.04, 0.62), true)
-	# The border is the state at a glance from the corner of the eye; the count
-	# is the detail you look at when you are deciding whether to spend one.
-	draw_rect(box, UIPalette.faded(tint, 0.85 if _lit else 0.5), false, 1.5)
+	# No border. The plate, the sweep, the photograph and the foot all end on the
+	# same 8 px corner instead, which is what makes the tile a shape rather than
+	# a rectangle with a drawing in it.
+	draw_style_box(_plate(), box)
 	if _total > 0.0:
 		_draw_sweep(recharge_progress())
 	var photographed := _draw_art()
 	if not photographed:
 		_draw_glyph(tint)
 	else:
-		draw_rect(Rect2(0.0, SIZE - FOOT_HEIGHT, SIZE, FOOT_HEIGHT),
-			FOOT_TINT, true)
+		draw_style_box(_foot(), Rect2(0.0, SIZE - FOOT_HEIGHT, SIZE, FOOT_HEIGHT))
 	if _total > 0.0:
 		_draw_timer()
 
 	if _count >= 0:
 		_draw_count()
+
+
+## The plate and the foot, built once for the whole bar. Both are `StyleBoxFlat`
+## rather than `draw_rect` because `draw_rect` has no corner and a rounded box
+## drawn as a polygon has no antialiasing — at 62 px with an 8 px radius the
+## stair-stepping on a bare polygon is plainly visible against the arena.
+##
+## Static, because seven tiles drawing two identical boxes every frame of a
+## recharge is seven times the garbage for one picture.
+static var _plate_box: StyleBoxFlat = null
+static var _foot_box: StyleBoxFlat = null
+
+
+static func _plate() -> StyleBoxFlat:
+	if _plate_box == null:
+		_plate_box = StyleBoxFlat.new()
+		_plate_box.bg_color = PLATE
+		_plate_box.set_corner_radius_all(int(RADIUS))
+		_plate_box.corner_detail = 8
+		_plate_box.anti_aliasing = true
+	return _plate_box
+
+
+## The foot is square along the top, where it meets the photograph, and takes
+## the tile's own corner along the bottom, where it *is* the tile's edge.
+static func _foot() -> StyleBoxFlat:
+	if _foot_box == null:
+		_foot_box = StyleBoxFlat.new()
+		_foot_box.bg_color = FOOT_TINT
+		_foot_box.corner_radius_top_left = 0
+		_foot_box.corner_radius_top_right = 0
+		_foot_box.corner_radius_bottom_left = int(RADIUS)
+		_foot_box.corner_radius_bottom_right = int(RADIUS)
+		_foot_box.corner_detail = 8
+		_foot_box.anti_aliasing = true
+	return _foot_box
+
+
+## The outline of the tile as a polygon, clockwise from the top-left corner's
+## arc. Used to mask the photograph, so a picture that runs to the edge of its
+## square is cut by the same corner the plate under it has.
+##
+## `uvs` come back in the same order, in 0..1 over the *art* rect rather than
+## over the tile, because that is the rect the texture is stretched across.
+static func _rounded_points(rect: Rect2, radius: float) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	var r := minf(radius, minf(rect.size.x, rect.size.y) * 0.5)
+	var centres := [
+		rect.position + Vector2(r, r),
+		rect.position + Vector2(rect.size.x - r, r),
+		rect.end - Vector2(r, r),
+		rect.position + Vector2(r, rect.size.y - r),
+	]
+	for corner in 4:
+		var start := PI + float(corner) * PI * 0.5
+		for step in 5:
+			var angle := start + PI * 0.5 * float(step) / 4.0
+			points.append(centres[corner] + Vector2(cos(angle), sin(angle)) * r)
+	return points
 
 
 ## The photograph, at the brightness its state calls for. Returns false for a
@@ -289,13 +398,23 @@ func _draw_art() -> bool:
 	if texture == null:
 		return false
 	var shade := ART_READY
-	if _count == 0:
+	if _count == 0 or _stowed:
 		shade = ART_EMPTY
 	elif not _lit:
 		shade = ART_WAITING
-	draw_texture_rect(texture,
-		Rect2(Vector2(ART_INSET, ART_INSET), Vector2(SIZE, SIZE) - Vector2(ART_INSET, ART_INSET) * 2.0),
-		false, Color(shade, shade, shade, 1.0))
+	# Drawn through the tile's own corner rather than as a plain rect. Every
+	# prop baked so far is framed clear of its corners, so today this masks
+	# nothing; it is here because the plate under it *is* rounded, and the day a
+	# tile is baked with a background — or with a shaft running to the edge —
+	# the picture would hang out past the shape by 3 px on the diagonal and read
+	# as a printing error.
+	var rect := Rect2(Vector2(ART_INSET, ART_INSET),
+		Vector2(SIZE, SIZE) - Vector2(ART_INSET, ART_INSET) * 2.0)
+	var points := _rounded_points(rect, RADIUS - ART_INSET)
+	var uvs := PackedVector2Array()
+	for point in points:
+		uvs.append((point - rect.position) / rect.size)
+	draw_colored_polygon(points, Color(shade, shade, shade, 1.0), uvs, texture)
 	return true
 
 
@@ -337,7 +456,7 @@ func _tint() -> Color:
 
 ## Deliberately does *not* dim with the use-delay. How many you are carrying is
 ## a fact about your pack and it is the thing this slot exists to tell you; the
-## border and the glyph carry the delay instead. At zero the number dims with
+## photograph's brightness carries the delay instead. At zero the number dims with
 ## everything else, because there the count and the state are the same news.
 func _draw_count() -> void:
 	var colour := UIPalette.TEXT if _count > 0 \
@@ -346,10 +465,14 @@ func _draw_count() -> void:
 		str(_count), HORIZONTAL_ALIGNMENT_LEFT, -1, COUNT_FONT_SIZE, colour)
 
 
-## The recovered part of the recharge as a wedge of the square, clockwise from
-## twelve o'clock. Traced out to the square's edge rather than drawn as a circle,
+## The recovered part of the recharge as a wedge of the tile, clockwise from
+## twelve o'clock. Traced out to the tile's edge rather than drawn as a circle,
 ## so at nearly-full it fills the corners too instead of leaving four dark
 ## triangles that read as "not quite".
+##
+## "The tile's edge" is now the rounded one (D-118). It used to be the square,
+## which is the same thing while the tile was a square and a 3 px spur of yellow
+## sticking out of each corner the moment the tile was not.
 func _draw_sweep(progress: float) -> void:
 	if progress <= 0.0:
 		return
@@ -360,8 +483,36 @@ func _draw_sweep(progress: float) -> void:
 	for i in steps + 1:
 		var angle := -PI * 0.5 + TAU * progress * float(i) / float(steps)
 		var dir := Vector2(cos(angle), sin(angle))
-		points.append(c + dir * (half / maxf(absf(dir.x), absf(dir.y))))
+		points.append(c + dir * _edge_distance(dir))
 	draw_colored_polygon(points, UIPalette.faded(UIPalette.BOG, SWEEP_ALPHA))
+
+
+## How far the tile's outline is from its centre along `dir` (a unit vector).
+##
+## Solved rather than sampled, because the sweep asks for up to ninety of these
+## every frame of a recharge. Two cases: the ray leaves through a flat edge,
+## which is the old `half / max(|x|, |y|)`; or it leaves through a corner arc,
+## where the tile's outline is a circle of radius `RADIUS` centred `half -
+## RADIUS` along both axes, and the distance is the positive root of
+## `|t·dir - centre| = RADIUS`.
+static func _edge_distance(dir: Vector2) -> float:
+	var half := SIZE * 0.5
+	var inner := half - RADIUS
+	var ax := absf(dir.x)
+	var ay := absf(dir.y)
+	if ax > 0.0:
+		var t := half / ax
+		if t * ay <= inner:
+			return t
+	if ay > 0.0:
+		var t := half / ay
+		if t * ax <= inner:
+			return t
+	# `dir` is a unit vector, so the quadratic's leading coefficient is 1 and
+	# the discriminant cannot go negative inside the corner wedge.
+	var sum := ax + ay
+	return inner * sum + sqrt(maxf(0.0,
+		inner * inner * (sum * sum - 2.0) + RADIUS * RADIUS))
 
 
 func _draw_timer() -> void:

@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3 uid="uid://gubhud00000001"]
+[gd_scene load_steps=14 format=3 uid="uid://gubhud00000001"]
 
 [ext_resource type="Script" path="res://scripts/ui/hud.gd" id="1_hud"]
 [ext_resource type="Theme" path="res://resources/ui/bog_theme.tres" id="2_theme"]
@@ -12,6 +12,7 @@
 [ext_resource type="Script" path="res://scripts/ui/letter_track.gd" id="10_letters"]
 [ext_resource type="Script" path="res://scripts/ui/elder_track.gd" id="11_elder"]
 [ext_resource type="Script" path="res://scripts/ui/letter_call.gd" id="12_call"]
+[ext_resource type="Script" path="res://scripts/ui/range_stats_panel.gd" id="13_range"]
 
 [node name="HUD" type="CanvasLayer"]
 layer = 8
@@ -84,18 +85,30 @@ script = ExtResource("12_call")
 [node name="KillFeed" type="VBoxContainer" parent="Root"]
 unique_name_in_owner = true
 layout_mode = 1
-anchors_preset = 1
-anchor_left = 1.0
-anchor_right = 1.0
-offset_left = -520.0
-offset_top = 22.0
-offset_right = -34.0
-offset_bottom = 200.0
-grow_horizontal = 0
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 32.0
+offset_top = -438.0
+offset_right = 518.0
+offset_bottom = -260.0
+grow_vertical = 0
 mouse_filter = 2
 theme_override_constants/separation = 4
-alignment = 0
+alignment = 2
 script = ExtResource("4_feed")
+
+[node name="RangeStats" type="PanelContainer" parent="Root"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 0
+offset_left = 34.0
+offset_top = 22.0
+offset_right = 34.0
+offset_bottom = 22.0
+mouse_filter = 2
+script = ExtResource("13_range")
 
 [node name="Crosshair" type="Control" parent="Root"]
 unique_name_in_owner = true
@@ -167,71 +180,73 @@ theme_type_variation = &"SmallLabel"
 text = "Spectating"
 horizontal_alignment = 1
 
-[node name="BottomCentre" type="VBoxContainer" parent="Root"]
+[node name="BottomRight" type="VBoxContainer" parent="Root"]
 layout_mode = 1
-anchors_preset = 7
-anchor_left = 0.5
+anchors_preset = 3
+anchor_left = 1.0
 anchor_top = 1.0
-anchor_right = 0.5
+anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = -220.0
-offset_top = -282.0
-offset_right = 220.0
-offset_bottom = -46.0
-grow_horizontal = 2
+offset_left = -472.0
+offset_top = -268.0
+offset_right = -32.0
+offset_bottom = -32.0
+grow_horizontal = 0
 grow_vertical = 0
 mouse_filter = 2
 theme_override_constants/separation = 10
 alignment = 2
 
-[node name="Elder" type="Control" parent="Root/BottomCentre"]
+[node name="Elder" type="Control" parent="Root/BottomRight"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 8
 mouse_filter = 2
 script = ExtResource("11_elder")
 
-[node name="Letters" type="Control" parent="Root/BottomCentre"]
+[node name="Letters" type="Control" parent="Root/BottomRight"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 8
 mouse_filter = 2
 script = ExtResource("10_letters")
 
-[node name="Lives" type="HBoxContainer" parent="Root/BottomCentre"]
+[node name="Lives" type="HBoxContainer" parent="Root/BottomRight"]
 unique_name_in_owner = true
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 5
-alignment = 1
+alignment = 2
 
-[node name="Abilities" type="HBoxContainer" parent="Root/BottomCentre"]
+[node name="Abilities" type="HBoxContainer" parent="Root/BottomRight"]
 unique_name_in_owner = true
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 12
-alignment = 1
+alignment = 2
 
-[node name="SpearSlot" parent="Root/BottomCentre/Abilities" instance=ExtResource("5_slot")]
+[node name="SpearSlot" parent="Root/BottomRight/Abilities" instance=ExtResource("5_slot")]
 unique_name_in_owner = true
 layout_mode = 2
 kind = 0
 action = "primary_attack"
 label_text = "Spear"
 
-[node name="ShieldSlot" parent="Root/BottomCentre/Abilities" instance=ExtResource("5_slot")]
+[node name="ShieldSlot" parent="Root/BottomRight/Abilities" instance=ExtResource("5_slot")]
 unique_name_in_owner = true
 layout_mode = 2
 kind = 1
 action = "place_shield"
 label_text = "Shield"
 
-[node name="MagnetSlot" parent="Root/BottomCentre/Abilities" instance=ExtResource("5_slot")]
+[node name="MagnetSlot" parent="Root/BottomRight/Abilities" instance=ExtResource("5_slot")]
 unique_name_in_owner = true
 layout_mode = 2
 kind = 2
 action = "throw_magnet"
 label_text = "Magnet"
 
-[node name="PotionSlot" parent="Root/BottomCentre/Abilities" instance=ExtResource("5_slot")]
+[node name="PotionSlot" parent="Root/BottomRight/Abilities" instance=ExtResource("5_slot")]
 unique_name_in_owner = true
 layout_mode = 2
 kind = 4

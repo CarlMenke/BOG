@@ -23,17 +23,18 @@ extends Node
 ##   lock   — a pick is free while people are joining and fixed the moment the
 ##            host presses Start; a rematch keeps it; coming back to the lobby
 ##            makes it free again.
-##   lobby  — the real scene: the strip is on beside the panels rather than
-##            instead of them, the three panels fold to their own headings on
-##            their own toggles and open at the defaults the lobby ships with,
-##            the config is not shown to a client at all, the strip's buttons
-##            pick, and they go dead while a match is running. **And the skin
-##            strip under it**, which is the same feature with a second owner:
-##            a pick round-trips through the roster in free-for-all, a pick in
-##            Teams moves the *team's* body and every member of the team wears
-##            it, a skin another team holds is a disabled tile and a refused
-##            request, and the Bog standing in the ring is wearing whatever the
-##            strip says.
+##   lobby  — the real scene: the Weapon and Character page opens from the
+##            header and takes the lobby's place while it is up, the panels fold
+##            to their own headings on their own toggles and open at the
+##            defaults the lobby ships with, the config is not shown to a client
+##            at all, the page's buttons pick, and they go dead while a match is
+##            running. **And the skin grid beside them**, which is the same
+##            feature with a second owner: a pick round-trips through the roster
+##            in free-for-all, a pick in Teams moves the *team's* body and every
+##            member of the team wears it, a skin another team holds is a
+##            disabled tile and a refused request, and the Bog standing in the
+##            ring is wearing whatever the grid says. And the ring stands in the
+##            gap between the two columns rather than behind them.
 ##   ring   — `BogBackdrop.set_roster` puts three different weapons in three
 ##            **remote** Bogs' hands, which is the lobby half of "your character
 ##            should only show the weapon you have selected".
@@ -44,11 +45,25 @@ const LOBBY_SCENE := preload("res://scenes/ui/lobby.tscn")
 ## backdrop's 8100s.
 const PEERS := [1, 951, 952]
 
-## How much sky the skin strip has to leave between its own bottom edge and the
-## highest thing in the ring, in base-viewport pixels. The ring is what the
-## lobby is for looking at; a strip that overlaps it is a picker standing in
-## front of the thing it is picking for.
-const RING_CLEARANCE := 8.0
+## The band of screen the ring has to stand in, in base-viewport pixels.
+##
+## The lobby is a left column (the roster and the chat, out to x 504) and a
+## right rail (the match, from x 1116), and the ring is what is between them.
+## This used to be a *clearance* check — the skin strip lived over the Bogs'
+## heads and had to leave their nameplates alone — and it is a *containment*
+## check now that the pickers have moved to a page of their own: a Bog or a
+## nameplate outside this band is standing behind the furniture, which is the
+## one way this layout can quietly come apart. `BogBackdrop.FRAMING` has the
+## arithmetic that puts them here.
+##
+## 400 and 1140 rather than 504 and 1116: the two panels are translucent and a
+## nameplate that grazes one is still hard to read, so the band is drawn a
+## Bog's shoulder inside each of them.
+const BAND_LEFT := 400.0
+const BAND_RIGHT := 1140.0
+
+## And below the header, which ends at 96.
+const BAND_TOP := 100.0
 
 var _failures: int = 0
 var _checks: int = 0
@@ -242,6 +257,10 @@ func _run_lobby() -> void:
 	await get_tree().process_frame
 
 	var stack := lobby.get_node_or_null("%PanelStack") as Control
+	var rail := lobby.get_node_or_null("%RightRail") as Control
+	var page := lobby.get_node_or_null("%CharacterPage") as Control
+	var open_page := lobby.get_node_or_null("%CharacterButton") as Button
+	var leave := lobby.get_node_or_null("%LeaveButton") as Button
 	var row := lobby.get_node_or_null("%WeaponRow") as Control
 	var picker := lobby.get_node_or_null("%WeaponPicker") as HBoxContainer
 	var players := lobby.get_node_or_null("%Players") as Control
@@ -250,13 +269,18 @@ func _run_lobby() -> void:
 	var count := lobby.get_node_or_null("%PlayerCount") as Label
 	var settings := lobby.get_node_or_null("%MatchSettings") as MatchSettingsPanel
 	var chat := lobby.get_node_or_null("%Chat") as ChatPanel
+	var ring := lobby.get_node_or_null("%Backdrop") as BogBackdrop
 	_check("the lobby has a panel stack", stack != null, true)
-	_check("a weapon row", row != null, true)
+	_check("a match rail", rail != null, true)
+	_check("a Weapon and Character page", page != null, true)
+	_check("a button that opens it", open_page != null, true)
+	_check("a weapon row on it", row != null, true)
 	_check("a strip", picker != null, true)
 	_check("a roster panel that folds", players_fold != null, true)
 	_check("a match panel", settings != null, true)
 	_check("and a chat panel", chat != null, true)
-	if stack == null or row == null or picker == null or players == null \
+	if stack == null or rail == null or page == null or open_page == null \
+			or leave == null or row == null or picker == null or players == null \
 			or roster_list == null or players_fold == null or count == null \
 			or settings == null or chat == null:
 		print("weapon_select: lobby FAIL - the scene is missing controls")
@@ -264,11 +288,13 @@ func _run_lobby() -> void:
 		lobby.queue_free()
 		return
 
-	# **The header no longer swaps one for the other**, which D-069's did. Both
-	# are on at once, and that is the thing most likely to be undone by accident:
-	# a strip behind a toggle is a weapon most players never change.
+	# **The lobby opens on the lobby.** D-069's header swapped the panels for
+	# the picker and back; the picker is a page of its own now and the lobby is
+	# complete without it, which is the thing most likely to be undone by
+	# accident — a lobby that opens on the picker is a lobby nobody reads.
 	_check("the panels are up", stack.visible, true)
-	_check("and so is the strip, at the same time", row.visible, true)
+	_check("and the rail with them", rail.visible, true)
+	_check("the page is not", page.visible, false)
 	_check("with nothing left to swap between",
 		lobby.get_node_or_null("%CollapseButton"), null)
 	_check("one button per weapon", picker.get_child_count(), Loadout.all().size())
@@ -276,41 +302,39 @@ func _run_lobby() -> void:
 	# The defaults, which are the answer to "what is on this screen the moment it
 	# opens".
 	var config_rows := settings.get_node("%Scroll") as Control
-	_check("the roster opens folded", roster_list.visible, false)
-	_check("but its count is on show", count.visible, true)
+	_check("the roster opens open", roster_list.visible, true)
+	_check("with its count on show", count.visible, true)
 	_check("and says who is here", count.text,
 		"%d / %d" % [Net.player_count(), Net.config.max_players])
 	_check("the config opens open", settings.visible, true)
 	_check("with its rows out", config_rows.visible, true)
 
-	# The count keeps counting while the list is away, which is the only reason
-	# folding the roster by default is allowed to be the default: `_refresh`
-	# rebuilds the list whether or not anybody can see it.
+	# The count follows the list, which is what makes the heading worth having
+	# whether the list is out or away: `_refresh` rebuilds both or neither.
 	Net.players[953] = {"name": "Late", "team": 0, "ready": true,
 		"weapon": Loadout.DEFAULT}
 	Net.roster_changed.emit()
 	await get_tree().process_frame
-	_check("a join moves the count with the list folded", count.text,
+	_check("a join moves the count", count.text,
 		"%d / %d" % [Net.player_count(), Net.config.max_players])
-	_check("and the list is still folded", roster_list.visible, false)
 
 	# Both toggles, through the real controls. A fold is a boolean the one
 	# `_refresh` reads, so pressing the button is what proves the button is wired
 	# to the boolean.
 	players_fold.pressed.emit()
 	await get_tree().process_frame
-	_check("the toggle opens the roster", roster_list.visible, true)
-	_check("and it claims a share of the stack again",
-		players.size_flags_horizontal, int(Control.SIZE_EXPAND_FILL))
-	players_fold.pressed.emit()
-	await get_tree().process_frame
-	_check("and folds it back", roster_list.visible, false)
+	_check("the toggle folds the roster away", roster_list.visible, false)
 	_check("shrinking to its heading rather than leaving an empty box",
 		players.size_flags_horizontal, int(Control.SIZE_SHRINK_BEGIN))
-	# Downward, which is what the stack being anchored to the footer is for: a
-	# folded panel drops to the bottom of the box so the Bogs above it are whole.
-	_check("and dropping to the foot of the stack rather than sitting on a waist",
+	# Downward, so a folded panel keeps its heading where the heading was rather
+	# than floating in the middle of a column of glass.
+	_check("and dropping to the foot of its slot rather than sitting on a waist",
 		players.size_flags_vertical, int(Control.SIZE_SHRINK_END))
+	players_fold.pressed.emit()
+	await get_tree().process_frame
+	_check("and the toggle brings it back", roster_list.visible, true)
+	_check("claiming its share of the column again",
+		players.size_flags_horizontal, int(Control.SIZE_EXPAND_FILL))
 
 	settings.fold_requested.emit()
 	await get_tree().process_frame
@@ -323,23 +347,23 @@ func _run_lobby() -> void:
 	await get_tree().process_frame
 	_check("and comes back", config_rows.visible, true)
 
-	# Chat is the one panel whose open state is not a boolean in `lobby.gd`: it
-	# is the caret, which the engine already owns.
+	# **Chat is a panel now, not a line of input.** It was `reveal_on_focus` —
+	# heading and log hidden until the caret arrived — because it shared a
+	# horizontal bar with two other panels and a chat nobody had written in was
+	# a tall empty box in the third of the screen the ring stands in. It has the
+	# bottom of its own column now, so it is simply open, and `ChatPanel`'s
+	# plain mode is what that is. What has not changed is the half that is about
+	# *sending*, which is below.
 	var chat_log := chat.get_node("%Log") as Control
 	var chat_heading := chat.get_node("%Heading") as Control
 	var chat_input := chat.get_node("%Input") as LineEdit
-	_check("chat opens as an input box and nothing else", chat_log.visible, false)
-	_check("with its heading away too", chat_heading.visible, false)
-	_check("and the box itself on show", chat_input.visible, true)
+	_check("chat is open without being asked", chat_log.visible, true)
+	_check("with its heading", chat_heading.visible, true)
+	_check("and the box under it", chat_input.visible, true)
 	chat_input.grab_focus()
 	await get_tree().process_frame
-	_check("the caret brings the log up", chat_log.visible, true)
-	_check("and the heading with it", chat_heading.visible, true)
-	_check("and the panel is allowed to be tall for it",
-		chat.size_flags_vertical, int(Control.SIZE_FILL))
-	# **Sending does not put the caret down**, unlike the in-match panel, because
-	# the log is the half that arrived with the caret here and folding it on send
-	# would hide the line that was just sent from the person who wrote it.
+	# **Sending does not put the caret down**, unlike the in-match panel, so a
+	# player writing two lines does not have to click back in between them.
 	chat_input.text = "who has the sword"
 	chat_input.text_submitted.emit("who has the sword")
 	await get_tree().process_frame
@@ -348,9 +372,83 @@ func _run_lobby() -> void:
 	_check("and the box is empty for the next line", chat_input.text, "")
 	chat_input.release_focus()
 	await get_tree().process_frame
-	_check("putting the caret down folds it away", chat_log.visible, false)
-	_check("and the panel shrinks back to the box, at the foot of the stack",
-		chat.size_flags_vertical, int(Control.SIZE_SHRINK_END))
+	_check("and putting the caret down leaves the log where it was",
+		chat_log.visible, true)
+
+	# ---------------------------------------------- the ring stands in the gap ---
+	#
+	# **The ring must stand between the two columns.** This used to be the other
+	# way round — the skin strip lived over the Bogs' heads and had to clear
+	# their nameplates — and the question survives the move with its sign
+	# flipped: the ring is laid out in 3D and the panels are laid out in the
+	# scene at fixed offsets, so the two only meet on screen and nothing but a
+	# measurement can say whether they collide. `_ring_box` projects the
+	# backdrop's own Bogs and their own nameplates through the backdrop's own
+	# camera, in base-viewport pixels, and all of it has to land inside the band.
+	#
+	# Taken with the lobby's **fullest** roster and again with a five-Bog one,
+	# because the arc's ends do not move with the count but the spacing does, and
+	# a five-Bog ring stands nearer the camera.
+	#
+	# **Before the page is ever opened**, which is not tidiness: opening it walks
+	# the camera in to one Bog over 0.6 s, and a measurement taken while that
+	# tween is in flight is a measurement of a camera on its way somewhere. The
+	# band only means anything from the lobby's own framing, so it is asked for
+	# while that is the framing the lens is actually at.
+	#
+	# The stand-ins are renamed to the longest name the range uses, because it is
+	# the *nameplate* that sets the width — an eleven-character name is 1.3 m of
+	# world, wider than the Bog under it.
+	var was_roster := Net.players.duplicate(true)
+	var swelled := Net.players.duplicate(true)
+	for peer: int in swelled:
+		swelled[peer]["name"] = "Bramblewick"
+	for extra in 8:
+		if swelled.size() >= 8:
+			break
+		swelled[960 + extra] = {"name": "Bramblewick", "team": 0, "ready": true,
+			"weapon": Loadout.DEFAULT, "skin": Skins.DEFAULT}
+	Net.players = swelled
+	Net.roster_changed.emit()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var box := _ring_box(ring)
+	print("  ring of %d: x %.1f..%.1f, plate top %.1f"
+		% [int(box["bogs"]), box["left"], box["right"], box["plate"]])
+	_check("the fullest ring stands clear of the roster column",
+		box["left"] >= BAND_LEFT, true)
+	_check("and clear of the match rail", box["right"] <= BAND_RIGHT, true)
+	_check("with its names below the header", box["plate"] >= BAND_TOP, true)
+
+	while Net.players.size() > 5:
+		Net.players.erase(Net.peer_ids().back())
+	Net.roster_changed.emit()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var box5 := _ring_box(ring)
+	print("  ring of %d: x %.1f..%.1f, plate top %.1f"
+		% [int(box5["bogs"]), box5["left"], box5["right"], box5["plate"]])
+	_check("and a smaller ring, which stands nearer the camera, does too",
+		box5["left"] >= BAND_LEFT and box5["right"] <= BAND_RIGHT, true)
+	_check("with its names below the header as well", box5["plate"] >= BAND_TOP, true)
+
+	Net.players = was_roster
+	Net.roster_changed.emit()
+	await get_tree().process_frame
+
+	# ------------------------------------------- the Weapon and Character page ---
+	#
+	# Everything from here is on it, so it is opened through its real button —
+	# the boolean behind it is private, and a control that is not *visible in the
+	# tree* cannot take focus, which the arrow-key half of the strip below
+	# depends on.
+	open_page.pressed.emit()
+	await get_tree().process_frame
+	_check("the header's button opens the page", page.visible, true)
+	_check("and the panels get out of the way", stack.visible, false)
+	_check("the rail with them", rail.visible, false)
+	_check("the button that opened it goes too", open_page.visible, false)
+	_check("and LEAVE becomes BACK", leave.text.contains("BACK"), true)
 
 	# Which one is lit has to be read off the roster, not off whatever was
 	# pressed last: the lobby renders what came back from the host and nothing
@@ -388,25 +486,27 @@ func _run_lobby() -> void:
 
 	# ------------------------------------------------------------ the skins ---
 	#
-	# The strip under the weapon strip, and the half of this feature the weapon
+	# The grid beside the weapon strip, and the half of this feature the weapon
 	# never had: a second owner. In free-for-all a skin is a roster key and reads
 	# exactly like a weapon. In Teams it belongs to the **team** - any member may
 	# change it, everyone on it wears it, and no two teams may have the same one.
 	var skin_row := lobby.get_node_or_null("%SkinRow") as Control
-	var skins := lobby.get_node_or_null("%SkinPicker") as HBoxContainer
+	var skins := lobby.get_node_or_null("%SkinPicker") as GridContainer
 	var caption := lobby.get_node_or_null("%SkinCaption") as Label
-	var ring := lobby.get_node_or_null("%Backdrop") as BogBackdrop
 	_check("the lobby has a skin row", skin_row != null, true)
-	_check("a skin strip", skins != null, true)
-	_check("a caption beside it", caption != null, true)
+	_check("a skin grid", skins != null, true)
+	_check("a caption above it", caption != null, true)
 	if skin_row == null or skins == null or caption == null or ring == null:
-		print("weapon_select: lobby FAIL - the scene has no skin strip")
+		print("weapon_select: lobby FAIL - the scene has no skin grid")
 		_failures += 1
 		lobby.queue_free()
 		return
-	_check("the strip is on beside the weapon strip, not instead of it",
+	_check("the grid is on the page beside the weapon strip, not instead of it",
 		skin_row.visible and row.visible, true)
-	_check("one swatch per pickable skin", skins.get_child_count(), Skins.NAMES.size())
+	# Three columns, which is what makes the cell 120 px wide in a 380 px column
+	# rather than the 40 px swatch it was when it lived over the ring (D-109).
+	_check("in three columns", skins.columns, 3)
+	_check("one cell per pickable skin", skins.get_child_count(), Skins.NAMES.size())
 	_check("fourteen of them", Skins.NAMES.size(), 14)
 	# The two folders under `art/skins/` that are not a pick: the worked example
 	# and the Elder's robe. A list that grew one of those by accident would put a
@@ -534,44 +634,6 @@ func _run_lobby() -> void:
 	_check("and still does not pick it", Net.skin_for(1), muck)
 	_skin_tile(skins, Skins.NAMES.find("gilt")).focus_exited.emit()
 
-	# **The strip must not stand in front of the ring.** The row is laid out in
-	# the scene at fixed offsets and the ring is laid out in 3D, so the two only
-	# meet on screen and nothing but a measurement can say whether they collide.
-	# `_ring_ceiling` projects the backdrop's own Bogs through the backdrop's own
-	# camera; the row's bottom edge has to clear the lower of the two tops with
-	# room to spare, in the fullest ring the lobby can hold.
-	var was_roster := Net.players.duplicate(true)
-	for extra in 8:
-		var peer := 960 + extra
-		if Net.players.size() >= 8:
-			break
-		Net.players[peer] = {"name": "Ring%d" % extra, "team": 0, "ready": true,
-			"weapon": Loadout.DEFAULT, "skin": Skins.DEFAULT}
-	Net.roster_changed.emit()
-	await get_tree().process_frame
-	await get_tree().process_frame
-	var ceiling := _ring_ceiling(ring)
-	var row_bottom := skin_row.position.y + skin_row.size.y
-	print("  ring of %d: plate top %.1f, head top %.1f, skin row ends %.1f"
-		% [int(ceiling["bogs"]), ceiling["plate"], ceiling["head"], row_bottom])
-	_check("the strip clears the fullest ring's heads and plates",
-		row_bottom + RING_CLEARANCE <= minf(ceiling["plate"], ceiling["head"]), true)
-
-	while Net.players.size() > 5:
-		Net.players.erase(Net.peer_ids().back())
-	Net.roster_changed.emit()
-	await get_tree().process_frame
-	await get_tree().process_frame
-	var ceiling5 := _ring_ceiling(ring)
-	print("  ring of %d: plate top %.1f, head top %.1f, skin row ends %.1f"
-		% [int(ceiling5["bogs"]), ceiling5["plate"], ceiling5["head"], row_bottom])
-	_check("and a smaller ring's, which stands nearer the camera",
-		row_bottom + RING_CLEARANCE <= minf(ceiling5["plate"], ceiling5["head"]), true)
-
-	Net.players = was_roster
-	Net.roster_changed.emit()
-	await get_tree().process_frame
-
 	# The strip goes dead rather than lying about what it can do, once a match is
 	# running. `match_running` is set by hand here and not by pressing Start,
 	# because pressing Start is also what walks this scene into the arena - the
@@ -597,13 +659,32 @@ func _run_lobby() -> void:
 		(picker.get_child(0) as Button).disabled, false)
 	_check("the swatches too", _skin_tile(skins, Skins.DEFAULT).disabled, false)
 
-	# Escape has one meaning again. D-069 gave it a branch that closed the picker
-	# surface first; there is no such surface, so there is no branch, and the
-	# boolean it read is gone. Not driven with a real event here, because
-	# `_on_leave` ends the session this harness is still standing in - what is
-	# checked is that the state the branch hung off no longer exists.
-	_check("escape has nothing left to back out of",
-		lobby.get("_picking"), null)
+	# Escape backs out of one thing at a time, and the button says which. On the
+	# page it closes the page; on the lobby it would end the session, which is
+	# why only the first half is driven here — the harness is standing in that
+	# session. The two share `_on_leave`, so proving the button is proving the
+	# key.
+	_check("the page is up for this", lobby.get("_character_open"), true)
+	leave.pressed.emit()
+	await get_tree().process_frame
+	_check("BACK closes the page rather than the session", Net.in_session, true)
+	_check("and the lobby is back", stack.visible, true)
+	_check("with LEAVE meaning leave again", leave.text.contains("LEAVE"), true)
+
+	# **And the page cannot outlive your own roster row.** A host who kicks you
+	# arrives as a roster without you in it; the page would otherwise stay up
+	# with the camera aimed at whoever inherited your slot.
+	open_page.pressed.emit()
+	await get_tree().process_frame
+	_check("the page opens again", lobby.get("_character_open"), true)
+	var mine: Dictionary = Net.players[1]
+	Net.players.erase(1)
+	Net.roster_changed.emit()
+	await get_tree().process_frame
+	_check("losing your own row closes it", lobby.get("_character_open"), false)
+	Net.players[1] = mine
+	Net.roster_changed.emit()
+	await get_tree().process_frame
 
 	lobby.queue_free()
 	await get_tree().process_frame
@@ -611,30 +692,40 @@ func _run_lobby() -> void:
 	# And the client's view of the same screen. Editing the config has been
 	# host-gated since the panel was written, so a client's copy was forty dead
 	# dials taking the widest column on the screen; it is not shown at all now.
-	# The strip and the roster count are - a client picks a weapon and counts the
-	# room exactly as the host does.
+	# The page and the roster count are - a client picks a weapon and a body and
+	# counts the room exactly as the host does.
 	Net.is_host = false
 	Net.roster_changed.emit()
 	var client := LOBBY_SCENE.instantiate()
 	add_child(client)
 	await get_tree().process_frame
 	var client_settings := client.get_node_or_null("%MatchSettings") as Control
+	var client_button := client.get_node_or_null("%CharacterButton") as Button
 	var client_row := client.get_node_or_null("%WeaponRow") as Control
 	var client_skins := client.get_node_or_null("%SkinRow") as Control
+	var client_ready := client.get_node_or_null("%ReadyButton") as Button
+	var client_start := client.get_node_or_null("%StartButton") as Button
 	var client_count := client.get_node_or_null("%PlayerCount") as Label
 	var client_list := client.get_node_or_null("%Scroll") as Control
-	if client_settings == null or client_row == null or client_count == null \
-			or client_list == null:
+	if client_settings == null or client_button == null or client_row == null \
+			or client_ready == null or client_start == null \
+			or client_count == null or client_list == null:
 		print("weapon_select: lobby FAIL - the client scene is missing controls")
 		_failures += 1
 	else:
 		_check("a client is not shown the config at all",
 			client_settings.visible, false)
-		_check("but still gets the weapon strip", client_row.visible, true)
-		_check("and the skin strip with it",
+		# The rail is the one place a client's screen differs, and it differs by
+		# what is at the foot of it: READY UP instead of START MATCH.
+		_check("it gets READY UP at the foot of the rail", client_ready.visible, true)
+		_check("and not the host's START MATCH", client_start.visible, false)
+		_check("but still gets the way in to the page",
+			client_button.visible, true)
+		_check("with the weapon strip on it", client_row.visible, true)
+		_check("and the skin grid beside that",
 			client_skins != null and client_skins.visible, true)
 		_check("and still gets the roster count", client_count.visible, true)
-		_check("folded, exactly as the host's is", client_list.visible, false)
+		_check("out, exactly as the host's is", client_list.visible, true)
 	client.queue_free()
 	Net.is_host = true
 	await get_tree().process_frame
@@ -757,8 +848,8 @@ func _carry_pose(bog: Bog) -> String:
 ## One swatch off the skin strip. The strip is built in `Skins.all()` order, so
 ## a skin index is a child index -- which is also what makes "only one is lit" a
 ## thing this file can ask.
-func _skin_tile(strip: HBoxContainer, skin: int) -> Button:
-	return strip.get_child(skin) as Button
+func _skin_tile(grid: Container, skin: int) -> Button:
+	return grid.get_child(skin) as Button
 
 
 ## The texture a Bog's body is actually drawn with, read off the material the
@@ -786,19 +877,25 @@ func _skins_are_unique() -> bool:
 	return true
 
 
-## Where the ring's ceiling is, in base-viewport pixels: the top edge of the
-## highest nameplate and the top of the highest head, projected through the
-## backdrop's own camera.
+## The box the ring occupies on screen, in base-viewport pixels: how far left
+## and right the Bogs and their nameplates reach, and how high the highest
+## nameplate and the highest head go.
 ##
-## Projected rather than guessed. The strip is laid out in the scene at fixed
+## Projected rather than guessed. The panels are laid out in the scene at fixed
 ## offsets and the ring is laid out in 3D at a distance that depends on how many
 ## Bogs are in it, so the only place the two are comparable is the screen, and
 ## the only honest way to compare them is to ask the camera.
-func _ring_ceiling(ring: BogBackdrop) -> Dictionary:
+##
+## The **nameplate is included in the width**, and it is usually what sets it:
+## an eleven-character name is 1.3 m of world, wider than the Bog under it, and
+## a name half behind the match rail is the failure this is looking for.
+func _ring_box(ring: BogBackdrop) -> Dictionary:
 	var camera := ring.get("_camera") as Camera3D
 	var bogs: Array = ring.get("_bogs")
 	var plate_top := INF
 	var head_top := INF
+	var left := INF
+	var right := -INF
 	var counted := 0
 	for bog: Bog in bogs:
 		if not bog.visible:
@@ -806,12 +903,61 @@ func _ring_ceiling(ring: BogBackdrop) -> Dictionary:
 		counted += 1
 		if bog.body_mesh != null:
 			head_top = minf(head_top, _screen_top(camera, bog.body_mesh))
+		# **The body's width comes from the capsule, not from the mesh.** A
+		# skinned mesh's `get_aabb()` is the bind pose inflated by a skinning
+		# margin, and on this body it reaches far enough toward the lens that
+		# one of its corners projects a thousand pixels off the side of the
+		# screen — a number about the bounding volume and not about the Bog.
+		# `Bog.CAPSULE_RADIUS` is what the game itself calls this Bog's width,
+		# so it is what the measurement uses, swept across the camera's own
+		# right at head height and at the feet.
+		var side := _camera_right(camera) * Bog.CAPSULE_RADIUS
+		for foot: float in [0.0, Bog.STAND_HEIGHT]:
+			var centre := bog.global_position + Vector3.UP * foot
+			for edge: Vector3 in [centre - side, centre + side]:
+				var at := _project(camera, edge).x
+				left = minf(left, at)
+				right = maxf(right, at)
 		var plate := bog.get_node_or_null("Nameplate")
 		if plate == null:
 			continue
 		for node: Node in plate.find_children("", "Label3D", true, false):
 			plate_top = minf(plate_top, _label_top(camera, node as Label3D))
-	return {"plate": plate_top, "head": head_top, "bogs": counted}
+			var text_span := _label_span(camera, node as Label3D)
+			left = minf(left, text_span.x)
+			right = maxf(right, text_span.y)
+	return {"plate": plate_top, "head": head_top,
+		"left": left, "right": right, "bogs": counted}
+
+
+## The leftmost and rightmost **base viewport** columns a nameplate covers, as
+## `(left, right)`.
+##
+## A billboarded `Label3D` reports a cube whose every axis is the text's
+## diagonal, which `_label_top` has to correct for vertically. Horizontally it
+## needs no correction worth making — a name is an order of magnitude wider than
+## it is tall, so the diagonal and the width agree to within a centimetre — and
+## the box is small enough and far enough from the lens that projecting its
+## corners is honest, which is exactly what is *not* true of a skinned body's
+## AABB (see `_ring_box`).
+func _label_span(camera: Camera3D, label: Label3D) -> Vector2:
+	if camera == null or label == null:
+		return Vector2(INF, -INF)
+	var box := label.get_aabb()
+	var to_world := label.global_transform
+	var span := Vector2(INF, -INF)
+	for corner in 8:
+		var at := _project(camera, to_world * box.get_endpoint(corner)).x
+		span = Vector2(minf(span.x, at), maxf(span.y, at))
+	return span
+
+
+## The camera's own right, in world space: what "sideways on screen" means from
+## where it is standing.
+func _camera_right(camera: Camera3D) -> Vector3:
+	if camera == null:
+		return Vector3.RIGHT
+	return camera.global_transform.basis.x.normalized()
 
 
 ## The top edge of a nameplate, in base-viewport rows.

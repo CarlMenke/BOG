@@ -13,21 +13,39 @@ extends Node3D
 ## renders what came back. That is why `_refresh` is safe to call from every
 ## signal that could possibly have changed anything.
 ##
-## **Independent panels, one refresh.** D-069 made the screen two surfaces that
-## swapped: the header folded the whole panel stack away to show the weapon
-## strip. It does not any more. The strip is always on, over the ring, and each
-## of the three panels folds on its own — the config is the host's and starts
-## open, the roster starts folded to its count, and chat is a line of input
-## until somebody puts the caret in it.
+## **Two screens, and the second one is a page.** The lobby proper is a right
+## rail (the match, and the two things you press at the end of it), a left
+## column (who is here, and what they are saying) and the ring between them.
+## Choosing a weapon and a body is not on it: that is the **Weapon and
+## Character** page, opened from the header, and while it is open the camera
+## walks in to a portrait of your own Bog and everything but the invite chip
+## gets out of the way.
+##
+## Which is a surface that swaps — the thing D-069 took *out* of this file. The
+## difference is what is on the two sides of the swap and what it costs to be on
+## the wrong one. D-069's toggle hid the weapon strip behind the panels and the
+## panels behind the strip, so a player who wanted to read the match settings
+## and change their weapon had to keep pressing a button to see the other half
+## of one screen. This swap is the other way up: the lobby is complete on its
+## own — nothing on it is hidden by the page — and the page is a thing you go to
+## once, do, and come back from, like the settings dialog over the menu. It also
+## buys the thing neither layout had: at eight metres a Bog is 90 px tall, and
+## "what do I look like" was being asked of a picture too small to answer it.
+##
+## **Independent panels, one refresh.** Each panel still folds on its own — the
+## config is the host's and starts open, the roster starts open too now that the
+## left column is a column rather than a third of a bar, and chat is a panel
+## rather than a line of input for the same reason.
 ##
 ## What D-069 decided and this keeps is the **mechanism**: a fold is a *view
-## state that `_refresh` reads*, never a second update path. There are two
-## booleans now instead of one, `_refresh_surface` is still one of the calls
-## `_refresh` already makes, and it is still the only thing in this file that
-## writes `visible` on anything in the stack. A roster change arriving while a
-## panel is folded redraws the fold and the roster together and cannot leave one
-## behind. The alternative is what the comment over `_refresh` has always said
-## it is.
+## state that `_refresh` reads*, never a second update path. There are three
+## booleans now, the page's among them, `_refresh_surface` is still one of the
+## calls `_refresh` already makes, and it is still the only thing in this file
+## that writes `visible` on a panel, a rail or the page. A roster change
+## arriving while the page is open redraws the page and the roster together and
+## cannot leave one behind — which is exactly what makes "somebody joins while
+## you are choosing a skin" a case nobody had to remember. The alternative is
+## what the comment over `_refresh` has always said it is.
 ##
 ## The one fold this file does *not* own is the chat's, and the reason is worth
 ## stating: that panel's state is **where the caret is**, which the engine is
@@ -42,81 +60,54 @@ const SHOW_EMPTY_SLOTS := true
 ## How tall the prop is on a weapon button.
 ##
 ## 84 under D-069, when the strip had the whole screen because the panels had
-## been folded away to make room for it. It has to share now, and what it shares
-## with is the sky: the strip lives in the 92 px band between the header and the
-## topmost nameplate of an eight-Bog ring, and this number is what decides
-## whether it fits there.
+## been folded away to make room for it; 56 when the strip had to live in the
+## 92 px band of sky between the header and an eight-Bog ring's topmost
+## nameplate. It has neither constraint now — the strip is on a page of its own,
+## along the foot, with nothing above it but the portrait — and 56 stays anyway.
 ##
-## **Above the Bogs, and above means above.** The first try put it in the wider
-## band between the ring's feet and the panels, which cut four Bogs off at the
-## chest and covered the very weapons in their hands -- the thing the ring is on
-## screen to show, and the reason the pick is worth making. Over their heads
-## there is nothing but sky and the empty middle of the header bar.
+## It stays because D-076's argument for it never depended on the band: a prop
+## is on these buttons so that the thing a player picks here and the thing they
+## see in the corner of the screen for the next ten minutes are **one picture**
+## rather than two descriptions of it, and the ability bar's tile is the size it
+## is. Growing this one would make the picker's picture and the HUD's picture
+## disagree about what a spear looks like, which is the whole thing the shared
+## bake exists to prevent.
 ##
-## The prop moved from **above** the name to **beside** it, which is what bought
-## the picture back. D-076 put it above because that was free when the strip
-## owned the screen; stacked, an icon costs its own height plus the caption's,
-## and getting the row under 120 px that way meant a 32 px prop — a picture too
-## small to be the thing a player is choosing from, which is the one thing D-076
-## asked of it. Side by side the row is as tall as the icon and no taller, so
-## 56 px of prop fits in a band that 32 px did not.
-##
-## The `YOUR WEAPON` caption over the strip went with the same squeeze and is
-## not missed. It was a dim grey line laid across whichever Bog was standing
-## behind the middle of the ring, to say what three props, three names and one
-## amber-lit button already say — which is exactly the "professionalise means
-## add" move D-076 spent a page arguing against.
-##
-## **The band the strip sits in now starts at 10, not 44**, and the 56 survived
-## that. The skin strip needs 40 px under the blurb and the ring's nameplates
-## come down to 170 (see `SKIN_TILE`), which left 149 px for a weapon block that
-## is 105 — so the whole stack moved up rather than the prop getting smaller.
-## Shrinking it was the other way to find the room and it is the one D-076
-## argued out of the project: a 32 px prop is a picture too small to be the thing
-## a player is choosing from.
+## The prop is **beside** the name rather than above it, which is where the band
+## put it and where it is staying: side by side the row is as tall as the icon
+## and no taller, and three wide flat buttons along the foot of a portrait read
+## as a shelf of weapons rather than as three towers.
 const WEAPON_ICON := 56
 
-## A skin swatch, and the face inside it.
+## A skin cell, and the face inside it.
 ##
-## **The size is set by what is behind the strip, not by what is in it.** The
-## ring is what the lobby is on screen for, and a picker standing in front of the
-## faces it is choosing between is the wrong way round — so the row takes the sky
-## between the weapon blurb and the top of the ring, and nothing below it.
+## **120, and the size is the feature.** For two decisions this was a 40 px
+## swatch, because it lived on one line above the ring and the ring's nameplates
+## came down to 170 px — fourteen of them 4 apart came to 668 px of the 1488
+## between the margins, and anything taller covered the faces the strip was
+## choosing between (D-109 has the measurements). That constraint is gone: the
+## grid is on its own page, in the right third, with the portrait it is choosing
+## for beside it rather than behind it. So the tile is now big enough to be a
+## picture of a body instead of a coloured pip, which is what the owner asked
+## for and what a 40 px swatch of a 2048² texture could never be.
 ##
-## Measured, through the backdrop's own camera, in base-viewport rows, by
-## `tools/weapon_select.gd` on every run:
+## **Three columns of them.** Fourteen skins is five rows of three (the last
+## short), 3 x 120 + 2 x 10 = **380 px** wide and 5 x 120 + 4 x 10 = **640 px**
+## tall, in a column that is 380 wide and 756 tall at the base viewport — so it
+## fits without scrolling today and the `ScrollContainer` it sits in is what
+## makes a fifteenth skin, or a shorter window, somebody else's problem rather
+## than a redesign. Four columns would have been 510 px of a 1600 px screen and
+## left the portrait nowhere to stand; two would have scrolled at fourteen.
 ##
-##   ring     highest nameplate    highest head
-##   eight          170.2              182.6
-##   five           169.5              183.8
-##
-## The row ends at **159**, which clears the lower of those by 10.5 px. It is a
-## tight band and it is tight in both directions: the weapon block above it is
-## 105 px of button and blurb, so the whole top band — weapons, blurb, skins —
-## runs 10 to 159 and there is nowhere for a fourth thing to go. That is why the
-## weapon strip moved up from 44: not taste, arithmetic. Anything that grows the
-## weapon prop, the blurb or a swatch comes out of the 10.5.
-##
-## **The first cut was a 84x92 tile with the skin's name under it**, in a band at
-## 150-272, and it stood in front of the ring: in an eight-Bog lobby it covered
-## every plate and crowded the heads, which is the thing D-069 moved the weapon
-## strip above the Bogs to avoid. What went was the per-tile name. The caption
-## beside the strip says it instead, for whichever swatch the pointer or the
-## caret is on — one name, where the eye already is, instead of fourteen laid
-## across the Bogs' faces.
-##
-## `SKIN_TILE` is the swatch's *minimum*; the theme's button margins make it 44
-## wide in practice, so fourteen of them 4 apart come to 668 px in the 1488
-## between the margins, and **the strip does not scroll and must not have to.** A
-## horizontally scrolling strip was the fallback if they would not fit, and it
-## would have put some of the fourteen behind a gesture on the one screen where
-## "what can I be?" is the whole question being asked.
-##
-## The face is inset 2 px so that the button's own stylebox shows all round it,
-## which is where "lit", "hovered" and "the caret is here" come from without this
-## file drawing any of them.
-const SKIN_TILE := Vector2(40, 40)
-const SKIN_THUMB := 36
+## `SKIN_THUMB` is the picture and it is the **whole** cell, not an inset one.
+## The old swatch inset its face by 2 px so the button's own stylebox showed all
+## round it as a rim; the thumbnails are cut out against transparency now
+## (`tools/skin_thumbs.gd`), so the button's surface shows *through* the picture
+## everywhere the Bog is not — which is the same affordance, in the whole cell
+## rather than in a 2 px frame, and it is what makes hover and focus legible on
+## a tile this size.
+const SKIN_TILE := Vector2(120, 120)
+const SKIN_THUMB := 120
 
 ## The glyph on a fold toggle. Down means "this is open and pressing me shuts
 ## it"; right means the opposite. One pair, on all three toggles, because three
@@ -137,7 +128,11 @@ const FOLD_SHUT := "▸"
 @onready var _start_button: Button = %StartButton
 @onready var _gate_hint: Label = %GateHint
 @onready var _leave_button: Button = %LeaveButton
+@onready var _title: Label = %Title
+@onready var _character_button: Button = %CharacterButton
+@onready var _character_page: Control = %CharacterPage
 @onready var _panel_stack: Control = %PanelStack
+@onready var _right_rail: Control = %RightRail
 @onready var _players_panel: Control = %Players
 @onready var _players_scroll: Control = %Scroll
 @onready var _players_fold: Button = %PlayersFold
@@ -146,7 +141,7 @@ const FOLD_SHUT := "▸"
 @onready var _weapon_picker: HBoxContainer = %WeaponPicker
 @onready var _weapon_blurb: Label = %WeaponBlurb
 @onready var _skin_row: Control = %SkinRow
-@onready var _skin_picker: HBoxContainer = %SkinPicker
+@onready var _skin_picker: GridContainer = %SkinPicker
 @onready var _skin_caption: Label = %SkinCaption
 
 ## The roster as it was on the previous refresh, so joins and leaves can be
@@ -157,13 +152,25 @@ var _copy_reset: SceneTreeTimer = null
 ## Which panels are unfolded. Read by `_refresh_surface`, written by the two
 ## toggles, and by nothing else.
 ##
-## The roster starts **folded**, because the heading already answers the
-## question it is usually asked — "is everyone here yet" is `7 / 8`, and the
-## count keeps counting while the list is away. The config starts **open**,
-## because the host opened this lobby in order to set it. A default that hid
-## both would be a screen that opens with nothing on it.
-var _players_open: bool = false
+## The roster starts **open**. It started folded while the three panels shared
+## one bar along the foot and a full list was a third of the screen's width
+## spent on eight short rows; the left column is a column now, 480 px wide and
+## full height, and the eight rows fit in the top 380 of it with the chat at the
+## bottom and the ring standing in the gap between them. A panel that opens
+## folded in a layout with room for it open is a click the player has to make
+## every time they arrive. The config starts **open** too, because the host
+## opened this lobby in order to set it.
+var _players_open: bool = true
 var _config_open: bool = true
+## Whether the Weapon and Character page is up. The third view state, read by
+## `_refresh_surface` exactly as the two folds are, written by the header button
+## and by `_on_leave`, and by nothing else.
+##
+## It is the only one of the three that anything outside this file can see,
+## because opening the page also walks the backdrop camera in — so the boolean
+## and `BogBackdrop.focus_on_local` are written on adjacent lines in
+## `_set_character_page` and nowhere else.
+var _character_open: bool = false
 ## Set while `_rebuild_weapon_picker` is writing the strip's buttons, so the
 ## focus and toggle signals that causes are not read back as picks. The match
 ## settings panel keeps an `_applying` flag for exactly this reason and this is
@@ -191,7 +198,14 @@ func _ready() -> void:
 		SceneFlow.go_to_menu()
 		return
 
+	# One connection, not two. The header's first button is LEAVE on the lobby
+	# and BACK on the page, and the spec for it is "the same button, relabelled
+	# and rewired" — but rewiring a signal on a view change is a second place
+	# for the two states to disagree, and the failure is a button that leaves
+	# the session when the player meant to close a picker. `_on_leave` reads the
+	# one boolean instead.
 	_leave_button.pressed.connect(_on_leave)
+	_character_button.pressed.connect(_on_character)
 	_players_fold.pressed.connect(_on_players_fold)
 	_settings.fold_requested.connect(_on_config_fold)
 	_copy_button.pressed.connect(_on_copy)
@@ -213,7 +227,9 @@ func _ready() -> void:
 	# `ARENA_READY_TIMEOUT` and then started without them.
 	Net.rematch_requested.connect(_on_match_start)
 
-	_known_peers = Net.peer_ids()
+	# `human_ids` throughout this file, never `peer_ids`: the practice range
+	# puts dummies on the roster and the lobby is a list of people (D-112).
+	_known_peers = Net.human_ids()
 	_chat.add_system("Welcome to the hollow. Say hello.")
 	_refresh()
 
@@ -222,11 +238,16 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not event.is_action_pressed("pause"):
 		return
 	get_viewport().set_input_as_handled()
-	# One key, one meaning: leave. D-069 gave Escape a "back out of the picker"
-	# branch because the picker was a surface you could be lost on — the panels
-	# were gone and it was not obvious which screen you were looking at. There is
-	# no such surface now; the strip and the panels are on screen together, and a
-	# fold leaves its own heading behind. Nothing is left to back out of.
+	# One key, one meaning: **back out of where you are**. On the lobby that is
+	# the session; on the Weapon and Character page it is the page. D-069 took
+	# this branch out because the surface it backed out of had been taken out
+	# with it; there is a surface again, and a page you can only leave by finding
+	# a button in the header is a page the one key everybody presses does nothing
+	# on.
+	#
+	# Which is `_on_leave`'s branch, not a second one here, so there is exactly
+	# one answer to "what does going back mean right now" and the button and the
+	# key both read it.
 	#
 	# The one place Escape still means something else is inside the chat box, and
 	# `ChatPanel` takes it there, on the focused control, before it ever reaches
@@ -240,6 +261,14 @@ func _unhandled_input(event: InputEvent) -> void:
 ## anything calls this, because the alternative — a targeted updater per signal —
 ## is a dozen partial refreshes and one of them is always missing a case.
 func _refresh() -> void:
+	# The page is a portrait of **your own** Bog, so it cannot outlive your row.
+	# A host who kicks you, or a session that ends under you, arrives here as a
+	# roster without you in it; the page would otherwise stay up with the camera
+	# aimed at whoever inherited your slot. Closed here rather than in a handler
+	# on one of the ways it can happen, because there are several and this is the
+	# place they all come through.
+	if _character_open and not Net.has_player(Net.local_id()):
+		_set_character_page(false)
 	_announce_roster_changes()
 	_rebuild_player_list()
 	_rebuild_team_picker()
@@ -254,7 +283,7 @@ func _refresh() -> void:
 func _backdrop_entries() -> Array:
 	var entries: Array = []
 	var teams := _teams_are_picked()
-	for peer_id: int in Net.peer_ids():
+	for peer_id: int in Net.human_ids():
 		entries.append({
 			"name": Net.player_name(peer_id),
 			"team": Net.player_team(peer_id) if teams else MatchConfig.TEAM_NONE,
@@ -269,12 +298,19 @@ func _backdrop_entries() -> Array:
 			# The ring is where a team finds out what it looks like: one member
 			# presses a tile and four Bogs change together.
 			"skin": Net.skin_for(peer_id),
+			# Which of these is the person at this keyboard, so the backdrop can
+			# aim the Weapon and Character page's camera at the right slot. A
+			# column of the roster like the three above it, for their reason: the
+			# ring is driven from the roster and nothing else, and the backdrop
+			# Bogs carry peer ids that are in no roster at all, so asking `Net`
+			# out there would find nothing to answer with.
+			"local": peer_id == Net.local_id(),
 		})
 	return entries
 
 
 func _announce_roster_changes() -> void:
-	var now := Net.peer_ids()
+	var now := Net.human_ids()
 	for peer_id: int in now:
 		if not _known_peers.has(peer_id):
 			_chat.add_system("%s joined." % Net.player_name(peer_id))
@@ -291,7 +327,7 @@ func _rebuild_player_list() -> void:
 		child.queue_free()
 
 	var teams := _teams_are_picked()
-	for peer_id: int in Net.peer_ids():
+	for peer_id: int in Net.human_ids():
 		_player_list.add_child(_player_row(peer_id, teams))
 	if SHOW_EMPTY_SLOTS:
 		for i in maxi(0, Net.config.max_players - Net.player_count()):
@@ -424,13 +460,18 @@ func _rebuild_team_picker() -> void:
 ## One button per weapon, built exactly the way the team picker above is —
 ## because it is the same kind of control and it must behave like one (D-069).
 ##
-## **Always on screen**, over the ring, between the Bogs' feet and the top of
-## the panels. D-069 hid it behind a header toggle that swapped it for the whole
-## panel stack; a weapon you have to go and find is a weapon most players never
-## change, and the ring right above the strip is the thing that makes the pick
-## worth making.
-## Untinted, unlike that one: a team button wears its team colour because the
-## colour *is* the answer, and a weapon has no colour to be.
+## **Along the foot of the Weapon and Character page**, under the portrait of
+## the Bog whose hands the pick lands in. D-069 hid it behind a header toggle
+## that swapped it for the whole panel stack and D-107 pulled it out into a
+## permanent strip over the ring, on the grounds that a weapon you have to go
+## and find is a weapon most players never change. Both were arguments about
+## *how far away the picture of the consequence was*, and the page settles it
+## the other way: the consequence is now a metre-high Bog holding the thing,
+## which is a better answer than a 56 px prop on a strip could ever be. The
+## header button is one press from anywhere in the lobby, and the ring still
+## carries everybody's pick on the screen you land on.
+## Untinted, unlike the team picker: a team button wears its team colour because
+## the colour *is* the answer, and a weapon has no colour to be.
 ##
 ## **Plain `Button`s in an `HBoxContainer`, which is the whole of the input
 ## work.** The lobby has never handled a key event of its own: every control on
@@ -518,22 +559,24 @@ func _focus_pick() -> void:
 
 # -------------------------------------------------------------------- skins ---
 
-## One swatch per skin on one short line under the weapon blurb, rebuilt from the
-## roster the way everything else on this screen is.
+## One cell per skin in a three-column grid down the right third of the Weapon
+## and Character page, rebuilt from the roster the way everything else on this
+## screen is.
 ##
-## **One line, above the ring, and nothing below it.** The lobby is a room full
-## of real Bogs and the strip is a picker *for* them; a picker standing in front
-## of the faces it is choosing between is the wrong way round. So the row is a
-## caption and fourteen small swatches, 40 px tall in total, ending 10.5 px above
-## the highest thing an eight-Bog ring puts on screen (`SKIN_TILE` has the
-## measurements, and `tools/weapon_select.gd` takes them again on every run).
+## **Beside the body, not in front of it.** D-109 spent a page measuring this
+## strip against the ring's nameplates because it was a picker standing in the
+## same 1600 px the faces it was choosing between were standing in. On the page
+## the two share the screen instead: the portrait holds the left, held there by
+## `BogBackdrop`'s own arithmetic, and the grid holds the right 380 px. Nothing
+## is measured against a nameplate any more, and the cell went 40 -> 120 because
+## the only thing that was ever holding it at 40 was that argument.
 ##
-## **The names moved into the caption.** Fourteen names under fourteen swatches
-## is fourteen lines of type laid across the Bogs; one name, beside the strip,
-## where the eye already is, is the same information in the place it is being
-## asked for. So the caption reads `YOUR SKIN · TOAD`, and follows the pointer or
-## the caret onto whatever swatch it is over — which is how a name is discovered
-## without printing all fourteen at once.
+## **The names are still in the caption.** Fourteen names under fourteen cells
+## is fourteen lines of type in a column that has room for exactly three, and
+## the caption is where "whose skin is this row changing" already has to be
+## said. So it reads `YOUR SKIN · TOAD`, and follows the pointer or the caret
+## onto whatever cell it is over — which is how a name is discovered without
+## printing all fourteen at once.
 ##
 ## **Which question the strip is asking depends on the mode**, and the caption is
 ## also where that is said. In free-for-all a swatch changes *your* body and is a
@@ -634,13 +677,28 @@ func _write_skin_caption() -> void:
 		_skin_caption.tooltip_text = "Your own body. In Teams the skin is the team's."
 
 
-## One swatch: a 40 px face in a 44 px toggle button.
+## One cell: a 120 px cut-out of a Bog in a 120 px toggle button.
 ##
-## The picture is a child rather than the button's `icon` so that the 2 px all
-## round is the button's *own* stylebox showing through — which is where "lit",
-## "hovered" and "the caret is here" come from without this file drawing any of
-## them. It takes no mouse input, so the button underneath is still the whole
-## swatch as far as a click, the caret and the theme are concerned.
+## The picture is a child rather than the button's `icon` so that the button's
+## *own* stylebox is what the player sees behind it — 4% white at rest, 8%
+## hovered, the accent wash pressed, and a focus ring when the caret is on it.
+## The thumbnails are transparent outside the Bog, so that surface reads through
+## the whole cell rather than as a 2 px rim, which is what a picker at this size
+## needs: at 40 px a rim was the only thing there was room for, and at 120 px a
+## rim around a 2048² body is a hairline nobody sees.
+##
+## **The three rims this file draws, and what each says.** The theme's button
+## states cover "you are pointing at it" and "the caret is here"; what they
+## cannot say is *whose body this is*, because that is roster state rather than
+## input state. So: a **2 px accent border** on the skin being worn — the
+## theme's pressed state is an 18% wash, which is legible on a bare button and
+## invisible under a full-bleed photograph — and a **2 px team border** on one
+## another team holds (D-109), in that team's own colour, which answers "who has
+## the toad, then?" without a second control. No border is "free".
+##
+## The border carries no content margin, so a chosen cell and a plain one hold
+## their picture at exactly the same size; a 2 px inset that appeared when you
+## picked something would read as the tile flinching.
 func _skin_swatch(skin: int, chosen: bool, held_by: int, locked: bool) -> Button:
 	var swatch := Button.new()
 	swatch.toggle_mode = true
@@ -657,17 +715,24 @@ func _skin_swatch(skin: int, chosen: bool, held_by: int, locked: bool) -> Button
 	swatch.mouse_exited.connect(_on_skin_unnamed.bind(skin))
 	swatch.focus_exited.connect(_on_skin_unnamed.bind(skin))
 
-	# The rim, inside the button's own frame: this one says "somebody else's",
-	# and the button's states say "yours" and "the caret is here".
 	var frame := PanelContainer.new()
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var rim := Color(0, 0, 0, 0)
 	if held_by >= 0:
+		rim = UIPalette.team_colour(held_by)
+	elif chosen:
+		rim = UIPalette.AMBER
+	if rim.a > 0.0:
 		var border := StyleBoxFlat.new()
 		border.bg_color = Color(0, 0, 0, 0)
 		border.set_border_width_all(2)
-		border.border_color = UIPalette.team_colour(held_by)
+		border.border_color = rim
 		border.set_corner_radius_all(UIPalette.RADIUS)
+		border.content_margin_left = 0
+		border.content_margin_right = 0
+		border.content_margin_top = 0
+		border.content_margin_bottom = 0
 		frame.add_theme_stylebox_override("panel", border)
 	swatch.add_child(frame)
 
@@ -681,6 +746,8 @@ func _skin_swatch(skin: int, chosen: bool, held_by: int, locked: bool) -> Button
 	# of child controls would sit there at full brightness looking pressable. The
 	# picture is dimmed by hand, which is also the difference between "taken" and
 	# "locked": a held skin is dim behind a coloured rim, a locked one is just dim.
+	# D-109 asks for 40% on a tile another team holds, and 0.42 is what that has
+	# always been.
 	if swatch.disabled:
 		picture.modulate = Color(1, 1, 1, 0.42)
 	frame.add_child(picture)
@@ -731,15 +798,32 @@ func _on_skin_chosen(skin: int) -> void:
 	Net.set_skin(skin)
 
 
-## Lay out the stack: who is folded, and what a client is not shown at all.
+## Lay out the screen: which of the two it is, who is folded, and what a client
+## is not shown at all.
 ##
-## The only place in this file that writes `visible` on anything in the stack,
-## which is the whole of what D-069 decided about this screen and the only part
-## of that entry this revision keeps intact. Called from `_refresh`, so a roster
-## change arriving mid-fold redraws both.
-##
-## The strip is not in here: it is always on.
+## The only place in this file that writes `visible` on a panel, a rail or the
+## page, which is the whole of what D-069 decided about this screen and the part
+## of that entry every revision has kept. Called from `_refresh`, so a roster
+## change arriving mid-fold, or while the page is up, redraws all of it.
 func _refresh_surface() -> void:
+	# The page first, because everything under it is on screen or not according
+	# to this one boolean. "Everything else hides except the invite chip": the
+	# chip stays because the answer to "what is the code again" is the one thing
+	# somebody is going to be asked for while they are in here doing something
+	# else, and a page you have to leave to read it out is a page you leave.
+	_character_page.visible = _character_open
+	_panel_stack.visible = not _character_open
+	_right_rail.visible = not _character_open
+	# The button that opens the page is not on the page. It would be a control
+	# whose only meaning is "you are already here".
+	_character_button.visible = not _character_open
+	# The header says which of the two screens this is, in the one place a
+	# screen's name has ever been written on it, and the first button says what
+	# going back does. Between them there is no state to be lost in, which is
+	# what D-069 wanted from the Escape branch it could not keep.
+	_title.text = "WEAPON AND CHARACTER" if _character_open else "LOBBY"
+	_leave_button.text = "‹   BACK" if _character_open else "‹   LEAVE"
+
 	_fold(_players_panel, _players_scroll, _players_open)
 	_players_fold.text = FOLD_OPEN if _players_open else FOLD_SHUT
 
@@ -754,20 +838,31 @@ func _refresh_surface() -> void:
 	# and the chat are where that has to come from until something puts it back.
 	_settings.visible = Net.is_host
 	_settings.set_folded(not _config_open)
+	# `set_folded` writes `SIZE_FILL` on the open panel, which was right when the
+	# stack was a fixed-height bar handing out width, and is wrong in a rail that
+	# hands out **height**: FILL without EXPAND means "take your minimum", and the
+	# panel's minimum is its heading — so the config would have opened as a card
+	# the height of one line with the Start button floating under it. The rail
+	# asks for the opposite and asks for it here, where the fold is read, rather
+	# than by changing a shared panel's idea of what folding means.
+	if _config_open:
+		_settings.size_flags_vertical = Control.SIZE_EXPAND_FILL
 
 
 ## Fold one panel down to its heading, or let it back out.
 ##
 ## Taking the size flags with the fold is the half that is easy to forget and is
 ## the difference between a heading and a heading floating in a full-height
-## sheet of glass: the stack is an `HBoxContainer` handing out the width by
-## stretch ratio, so a folded panel has to stop asking for a share of it.
+## sheet of glass: a container hands out its spare space to whatever asks for a
+## share, so a folded panel has to stop asking.
 ##
-## **It shrinks downward.** The stack's box grows up from the footer now, and a
-## folded panel sits at the bottom of it, so folding everything leaves a line of
-## headings along the foot of the screen with whole Bogs standing above it --
-## rather than a bar across their waists with an empty glade underneath, which
-## is what `SHRINK_BEGIN` gave and is the one thing a client saw.
+## **It shrinks downward and leftward.** Both flags are written, because this
+## same function is read by two containers that run in different directions: the
+## left column is a `VBoxContainer` (so vertical is the one that matters, and
+## `SHRINK_END` keeps a folded roster's heading where the heading was) and the
+## right rail's panel is handed its width the same way. Writing only the axis
+## the current layout cares about is how a fold stops working the next time a
+## column becomes a row.
 static func _fold(panel: Control, body: Control, open: bool) -> void:
 	body.visible = open
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL if open \
@@ -785,6 +880,26 @@ func _on_players_fold() -> void:
 
 func _on_config_fold() -> void:
 	_config_open = not _config_open
+	_refresh()
+
+
+## The header's second button, and Escape's and BACK's shared answer.
+##
+## Flip the boolean and walk the camera; the one refresh draws the rest. The
+## camera call lives here rather than in `_refresh_surface` for the one reason a
+## fold's does not: `_refresh_surface` runs on every roster change, every config
+## broadcast and every chat line, and asking for a 0.6 s tween forty times a
+## minute would be a camera that never arrived. Opening the page is an *event*;
+## being on it is a state.
+func _set_character_page(open: bool) -> void:
+	if _character_open == open:
+		return
+	_character_open = open
+	_backdrop.focus_on_local(open)
+
+
+func _on_character() -> void:
+	_set_character_page(true)
 	_refresh()
 
 
@@ -859,14 +974,14 @@ func _refresh_actions() -> void:
 func _why_not_startable() -> String:
 	if Net.player_count() < MatchConfig.MIN_PLAYERS:
 		return "Nobody is here yet."
-	for peer_id: int in Net.peer_ids():
+	for peer_id: int in Net.human_ids():
 		if peer_id != 1 and not Net.is_ready(peer_id):
 			return "Waiting on %s." % Net.player_name(peer_id)
 	if Net.config.mode == MatchConfig.Mode.TEAMS:
 		if Net.config.random_teams:
 			return "Random teams need at least two Bogs." if Net.player_count() < 2 else ""
 		var occupied := {}
-		for peer_id: int in Net.peer_ids():
+		for peer_id: int in Net.human_ids():
 			occupied[Net.player_team(peer_id)] = true
 		if occupied.size() < 2:
 			return "Everyone is on the same team."
@@ -915,6 +1030,16 @@ func _on_match_start() -> void:
 
 
 func _on_leave() -> void:
+	# **Back out of one thing at a time.** On the Weapon and Character page this
+	# button says BACK and Escape means the same, and both come here: the page
+	# closes and the lobby comes back with the camera walking out to the ring.
+	# Only from the lobby itself does going back end the session — which is the
+	# property that makes it safe for one key and one button to mean "back"
+	# everywhere on this screen.
+	if _character_open:
+		_set_character_page(false)
+		_refresh()
+		return
 	# Announce nothing: the player chose this, so the menu has no news for them.
 	Net.leave_lobby(Net.Leave.LOCAL_REQUEST, "", false)
 	SceneFlow.go_to_menu()

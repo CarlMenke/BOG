@@ -9,17 +9,44 @@ extends Node3D
 ## above it.
 ##
 ## Joining is deliberately a two-step reveal rather than a modal: pressing
-## "Join with a code" opens a field directly beneath the button that opened it,
-## so the eye never leaves the column it was already reading.
+## "Join with a code" opens a field directly inside the bar that opened it, so
+## the eye never leaves the row it was already reading.
+##
+## The layout is one bar along the foot (D-118): the wordmark keeps the top-left
+## corner and everything you can press lives in a single row at the bottom, name
+## field at the left end and the five ways out of here centred in the rest of
+## it. It is built in `main_menu.tscn` with anchors and containers; nothing here
+## moves a control at runtime.
 
 ## Long enough to read, short enough that nobody wonders if it has hung. `Net`
 ## puts its own eight-second clock on the connection itself.
 const CONNECT_HINT := "Connecting..."
 
+## The one line under the wordmark, picked fresh every time this screen opens.
+##
+## It replaces "WHISPERBLOOM HOLLOW" and the yellow rule above it. A place name
+## set in tracked caps is the furniture of a menu that wants to look like a
+## menu, and it was saying something untrue as well: the hollow is one of seven
+## maps and not the game. A joke told once is worth more than a subtitle told
+## every time, and six of them means the screen is not quite the same screen
+## twice — which is the cheapest possible reason to look at it again.
+##
+## Kept short enough to sit on one line under a 148 px wordmark at 1280 wide,
+## and kept in the game's own voice: nobody in it is a hero.
+const QUIPS: PackedStringArray = [
+	"Throw first, apologise later.",
+	"Nothing personal. Just spears.",
+	"Two antennae. One bad idea.",
+	"Friends are just targets that talk back.",
+	"Mind the drop.",
+	"Somebody has to fetch the spears.",
+]
+
 @onready var _backdrop: BogBackdrop = %Backdrop
 @onready var _name_edit: LineEdit = %NameEdit
 @onready var _host_button: Button = %HostButton
 @onready var _join_button: Button = %JoinButton
+@onready var _practice_button: Button = %PracticeButton
 @onready var _settings_button: Button = %SettingsButton
 @onready var _quit_button: Button = %QuitButton
 @onready var _join_panel: Control = %JoinPanel
@@ -30,10 +57,15 @@ const CONNECT_HINT := "Connecting..."
 @onready var _notice_body: Label = %NoticeBody
 @onready var _settings: SettingsPanel = %Settings
 @onready var _version: Label = %Version
+@onready var _quip: Label = %Quip
 
 ## True between pressing Host/Join and the session opening or failing, so the
 ## buttons can be locked without a second flag for each of them.
 var _pending: bool = false
+
+## Set for the one beat between pressing Practice and this screen being left, so
+## that `_on_joined` does not send us to the lobby. See `_on_practice`.
+var _practice_pending: bool = false
 
 
 func _ready() -> void:
@@ -49,6 +81,12 @@ func _ready() -> void:
 		Net.leave_lobby(Net.Leave.LOCAL_REQUEST, "", false)
 
 	_version.text = "v%s" % ProjectSettings.get_setting("application/config/version", "0.0.0")
+	# Per open, not per build: the seed is Godot's global one, which is random
+	# at startup, so a player who backs out of a lobby gets a different line on
+	# the way back in. The scene ships with one of the six already in it so the
+	# editor and any tool that never runs `_ready` still show a real line rather
+	# than a blank row that silently changes the wordmark's height.
+	_quip.text = QUIPS[randi() % QUIPS.size()]
 	_name_edit.text = Settings.sanitized_player_name()
 	_code_edit.text = String(Settings.get_value("last_invite_code"))
 	_join_panel.visible = false
@@ -57,6 +95,7 @@ func _ready() -> void:
 
 	_host_button.pressed.connect(_on_host)
 	_join_button.pressed.connect(_on_join_toggled)
+	_practice_button.pressed.connect(_on_practice)
 	_settings_button.pressed.connect(_settings.open)
 	_quit_button.pressed.connect(_on_quit)
 	_connect_button.pressed.connect(_on_connect)
@@ -135,9 +174,10 @@ func _on_join_toggled() -> void:
 
 
 func _set_join_open(open: bool) -> void:
-	# No open/closed marker on the button: the field appearing directly beneath
+	# No open/closed marker on the button: the field appearing directly beside
 	# it is the affordance, and a bare glyph on the end of a label reads as a
-	# typo.
+	# typo. The bar's two flexible gaps absorb the width the field takes, so the
+	# other four buttons slide rather than the row overflowing.
 	_join_panel.visible = open
 	if open:
 		_code_edit.grab_focus()
@@ -165,6 +205,34 @@ func _on_connect() -> void:
 		_set_busy(false)
 
 
+## Straight into the practice range: no port, no code, no lobby (D-112).
+##
+## The third way out of this screen, and the only one that does not end at the
+## lobby. Hosting binds a socket and asks the player to wait for someone;
+## practice is a thing you do alone at two in the morning to learn where the bow
+## drops, and making that a five-click trip through a lobby you are the only
+## person in is the kind of friction that stops people practising at all.
+##
+## The session is a real one — `Net.start_practice` opens the same socket-less
+## host `tools/playthrough.gd` and every dev harness use (D-011) — so everything
+## downstream of here takes exactly the path it takes in a hosted match. Nothing
+## about the range is a special case except which map is on.
+##
+## **This navigates itself** rather than leaving it to `joined_lobby`, and
+## `_practice_pending` exists only to stop that signal doing it first.
+## `start_practice` emits `joined_lobby` from inside `start_offline`, one line
+## before it has said which map this is; a `go_to_arena` hanging off the signal
+## would read `Net.config.map` in that window and load the island.
+func _on_practice() -> void:
+	if _pending:
+		return
+	_commit_name()
+	_practice_pending = true
+	Net.start_practice()
+	_practice_pending = false
+	SceneFlow.go_to_arena()
+
+
 func _on_quit() -> void:
 	get_tree().quit()
 
@@ -172,6 +240,9 @@ func _on_quit() -> void:
 # -------------------------------------------------------------------- session ---
 
 func _on_joined() -> void:
+	# Practice has no lobby and drives its own transition; see `_on_practice`.
+	if _practice_pending:
+		return
 	SceneFlow.go_to_lobby()
 
 
