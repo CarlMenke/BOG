@@ -155,7 +155,13 @@ var _phase: float = 0.0
 ## Called on every peer, from `MatchState._spawn_pickup`, with the values the
 ## host rolled. Everything cosmetic is built here rather than in `_ready`
 ## because until this runs the node does not know what it is.
-func drop(id: int, of_kind: Kind, of_letter: int, spot: Vector3) -> void:
+##
+## `keeps` is the caller's word that this item belongs to the **map** rather
+## than to a corpse, and is therefore exempt from `LIFETIME` — the practice
+## range's item wells (D-115). It is OR-ed with the capture rule below rather
+## than replacing it: a Capture card never rots whoever asked for it.
+func drop(id: int, of_kind: Kind, of_letter: int, spot: Vector3,
+		keeps: bool = false) -> void:
 	pickup_id = id
 	# Clamped rather than trusted, like every other value that arrives off the
 	# wire (see the header of `match_config.gd`). Only the host can send this
@@ -170,8 +176,8 @@ func drop(id: int, of_kind: Kind, of_letter: int, spot: Vector3) -> void:
 	# card that withered on this clock would be a letter leaving the match — or,
 	# on a client, a card that vanished while the host still has it on the
 	# ground. Read from the config every peer already shares.
-	_keeps = kind == Kind.LETTER \
-		and Net.config.win_condition == MatchConfig.WinCondition.CAPTURE
+	_keeps = keeps or (kind == Kind.LETTER \
+		and Net.config.win_condition == MatchConfig.WinCondition.CAPTURE)
 	# The robe sits lower than the others — see ROBE_DROP. The catch volume is
 	# built off HOVER regardless, so a drop that hangs differently is still
 	# collected by walking over the same patch of ground as every other one.

@@ -41,6 +41,12 @@ enum Kind {
 ## load. `MAPS` must always contain it.
 const DEFAULT := "hollow"
 
+## The practice range. Named here rather than spelled in `main_menu.gd` for the
+## reason the whole file exists: the Practice button and the lobby's picker have
+## to open the same map, and a second copy of the string is how they stop doing
+## that.
+const PRACTICE := "range"
+
 const MAPS: Array[Dictionary] = [
 	{
 		"id": "hollow",
@@ -98,6 +104,22 @@ const MAPS: Array[Dictionary] = [
 		# up on a cut bench, reached by two haul ramps and nothing else (D-082).
 		"loading_line": "Cutting the benches",
 	},
+	{
+		"id": "range",
+		"display_name": "Glowworm Grounds",
+		"kind": Kind.STATIC,
+		"scene": "res://scenes/world/maps/range.tscn",
+		# The first row with a `practice` key, and the only one that has it. A
+		# practice map is not a mode — `MatchConfig.WinCondition` is untouched —
+		# it is a property of the *place*, because that is what the player
+		# picked: the range is a map in this list chosen exactly like every
+		# other one, and everything that follows from picking it (no clock, no
+		# win check, a one-second respawn, no spawn protection) follows from
+		# being *on* it. Read through `MatchConfig.is_practice` and its
+		# `effective_*` accessors and nowhere else.
+		"practice": true,
+		"loading_line": "Lighting the glowworms",
+	},
 	# A static map is one more entry and nothing else in this file changes —
 	# the lobby's picker, `SceneFlow`'s loading card and `arena.gd`'s branch all
 	# read this table and none of them names a map.
@@ -147,6 +169,19 @@ static func is_valid(id: String) -> bool:
 ## loading card mentions it.
 static func is_procedural(id: String) -> bool:
 	return int(get_entry(id)["kind"]) == Kind.PROCEDURAL
+
+
+## Whether this map is a place to practise rather than a place to compete.
+##
+## The defaulted `get` is what keeps the other six rows from having to say
+## `"practice": false` — a map is competitive unless it says otherwise, which is
+## the right way round for a key that exactly one entry will ever carry.
+##
+## **Nothing outside `MatchConfig` calls this.** The rules that follow from it
+## are `MatchConfig.effective_*`, so there is one answer to "what does practice
+## change" rather than one per caller. See `match_config.gd`.
+static func is_practice(id: String) -> bool:
+	return bool(get_entry(id).get("practice", false))
 
 
 static func _find(id: String) -> Dictionary:

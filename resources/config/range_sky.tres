@@ -1,0 +1,155 @@
+[gd_resource type="Sky" load_steps=3 format=3 uid="uid://d7gubrangesky"]
+
+; The sky over Glowworm Grounds, and the reason the map is worth standing on.
+;
+; It was the island's night: `enchanted_sky.gdshader` with a moon pinned to the
+; map's own Sun, a flat sheet of cloud, stars, an aurora and a glow band over
+; the trees to the south. That was correct — the range is a cleared bog a mile
+; from Whisperbloom Hollow and it would be strange under a different moon — and
+; it gave a range you could barely see the ground of, which is the one thing a
+; range must not be. So this is **the same bog an hour earlier**: nine degrees
+; of sun north-north-east, a cotton-candy sky, and the glowworm lanterns just
+; coming on.
+;
+; The shader is `range_sky.gdshader`. Its header carries the argument for why
+; the clouds are a **stylised 2D field on the dome** rather than the marched
+; heightfield Kopje uses; the short of it is that a slab seen edge-on from eye
+; height can only ever give shelves, and it was measured three ways before it
+; was believed. All the tuning lives here. What the numbers are for:
+;
+;   the three stops       apricot at the skyline (`horizon_color`), rose through
+;                         the middle of the dome (`mid_color`, centred at
+;                         `mid_height` 0.38 of the way up the ramp and 0.5
+;                         wide), soft periwinkle overhead (`zenith_color`). The
+;                         zenith was a saturated 0.22/0.45/0.84 blue first and
+;                         read as a hole punched in the sunset.
+;   the glory             `sun_aureole_falloff` **100 against Kopje's 190**, at
+;                         0.85 energy. A nine-degree sun is seen through about
+;                         six times the air a noon one is, so a wide aureole is
+;                         the honest picture as well as the pretty one. It was
+;                         70 at 1.5 to begin with and the horizon went white.
+;   the disc              `sun_energy` 9.0 against Kopje's 22, because a low sun
+;                         is reddened by what it comes through — and because the
+;                         lanes point near it. `sun_angular_size` 0.021 is twice
+;                         the real sun: a low sun reads bigger, and at 0.0093 it
+;                         is four pixels.
+;   which sun             `sun_follow_light` is **on**, so the disc and the
+;                         glory are pinned to the map's own `Sun` and cannot
+;                         disagree with the shadows. `sun_direction` is the
+;                         fallback for a scene opened without its light, and it
+;                         is kept equal to that node's +Z:
+;                         `range_map._check_sun_and_sky` prints how far apart
+;                         they are and the gate reads it. That check exists
+;                         because the two were sixty degrees apart for a whole
+;                         pass and no render said so.
+;   the puff field        `puff_scale` 1.5 dome units per noise tile on a
+;                         `puff_dome_k` 0.75 projection, `puff_coverage` 0.68.
+;                         Coverage is the map of the sky and it was found by
+;                         bracketing: 0.36 gives a mackerel sky of small clots
+;                         over the whole dome, 0.50 a connected chain, 0.60 a
+;                         chain with holes, 0.68 four to six separate clouds
+;                         with rose sky between them and under them. `puff_warp`
+;                         0.45 is what stops them being round blobs and
+;                         `puff_billow` 0.60 is the cauliflower knob — the two
+;                         folded octaves that give a lobed edge instead of a
+;                         smooth one.
+;   the light on them     `puff_light` 9.0 over a `puff_light_step` of 0.09
+;                         dome units. It is a gain on a finite difference, so it
+;                         wants to land where the answer is a **terminator**
+;                         rather than a line: at 20 the two taps read as a
+;                         stencil with a hard edge across every cloud, at 9 the
+;                         lit side fades into the shadow the way a cumulus does.
+;                         `puff_belly` 0.75 over a longer step, because an
+;                         underside is a broader feature than a shoulder.
+;   the rim               `puff_rim` 2.6 in a warm peach. At nine degrees the
+;                         sunward edge of a cloud is most of what you see of it.
+;   the second layer      the same field at `puff2_scale` 1.6 and its own patch,
+;                         at 0.6 opacity: the small fair-weather cumulus between
+;                         and under the big ones. One layer at any coverage is
+;                         one size of cloud everywhere.
+;   which weather         `puff_offset` and `puff2_offset`. The field is a fixed
+;                         function of direction and time and the camera sits at
+;                         its origin, so without an offset the sky over this map
+;                         is whatever the hash does near (0, 0), and the only
+;                         other way to change it is `puff_scale`, which changes
+;                         the clouds as well as which ones you get.
+;   drift                 0.004 dome units per second, about eight minutes to
+;                         cross the visible sky: slow enough to be weather, fast
+;                         enough that a player waiting out a respawn sees it.
+;   the lower hemisphere  `ground_*` is **not scenery**. `range_env.tres` takes
+;                         100% of its ambient from this dome, so the bottom half
+;                         of it is the only light reaching anything that faces
+;                         down — the lodge roof over the eight spawn pads most
+;                         of all. It was lifted twice for exactly that.
+;
+; INCREMENTAL, like every sky here: nothing in it moves fast enough for one
+; radiance mip a frame to be visible.
+
+[ext_resource type="Shader" path="res://resources/shaders/range_sky.gdshader" id="1_range_sky_shader"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_range_sky"]
+shader = ExtResource("1_range_sky_shader")
+shader_parameter/zenith_color = Color(0.46, 0.5, 0.74, 1)
+shader_parameter/horizon_color = Color(1, 0.6, 0.33, 1)
+shader_parameter/horizon_falloff = 0.45
+shader_parameter/mid_color = Color(0.97, 0.55, 0.52, 1)
+shader_parameter/mid_height = 0.38
+shader_parameter/mid_width = 0.5
+shader_parameter/mid_energy = 0.5
+shader_parameter/ground_horizon_color = Color(0.54, 0.4, 0.33, 1)
+shader_parameter/ground_bottom_color = Color(0.34, 0.27, 0.24, 1)
+shader_parameter/ground_falloff = 0.16
+shader_parameter/sky_energy = 1.0
+shader_parameter/haze_color = Color(1, 0.74, 0.47, 1)
+shader_parameter/haze_energy = 0.24
+shader_parameter/haze_band = 0.11
+shader_parameter/haze_power = 2.2
+shader_parameter/sun_direction = Vector3(0.49384, 0.15643, -0.85537)
+shader_parameter/sun_follow_light = true
+shader_parameter/sun_color = Color(1, 0.71, 0.42, 1)
+shader_parameter/sun_energy = 9.0
+shader_parameter/sun_angular_size = 0.021
+shader_parameter/sun_aureole_color = Color(1, 0.65, 0.36, 1)
+shader_parameter/sun_aureole_energy = 0.85
+shader_parameter/sun_aureole_falloff = 100.0
+shader_parameter/sun_wash = 0.28
+shader_parameter/puff_sun_color = Color(1, 0.84, 0.66, 1)
+shader_parameter/puff_body_color = Color(0.97, 0.66, 0.66, 1)
+shader_parameter/puff_shadow_color = Color(0.46, 0.44, 0.74, 1)
+shader_parameter/puff_rim_color = Color(1, 0.79, 0.56, 1)
+shader_parameter/puff_energy = 1.35
+shader_parameter/puff_coverage = 0.68
+shader_parameter/puff_softness = 0.045
+shader_parameter/puff_scale = 1.5
+shader_parameter/puff_dome_k = 0.75
+shader_parameter/puff_warp = 0.45
+shader_parameter/puff_warp_scale = 0.65
+shader_parameter/puff_billow = 0.6
+shader_parameter/puff_light_step = 0.09
+shader_parameter/puff_light = 9.0
+shader_parameter/puff_belly_step = 0.16
+shader_parameter/puff_belly = 0.75
+shader_parameter/puff_rim = 2.6
+shader_parameter/puff_opacity = 1.0
+shader_parameter/puff_drift = 0.004
+shader_parameter/puff_drift_azimuth = 0.78
+shader_parameter/puff_offset = Vector2(0, 0)
+shader_parameter/puff_horizon_fade = 0.13
+shader_parameter/puff2_scale = 1.6
+shader_parameter/puff2_coverage = 0.06
+shader_parameter/puff2_offset = Vector2(7.3, -4.1)
+shader_parameter/puff2_opacity = 0.6
+shader_parameter/cirrus_color = Color(1, 0.75, 0.71, 1)
+shader_parameter/cirrus_opacity = 0.06
+shader_parameter/cirrus_coverage = 0.6
+shader_parameter/cirrus_size_m = 7000.0
+shader_parameter/cirrus_height_m = 8000.0
+shader_parameter/cirrus_wind = 26.0
+shader_parameter/cirrus_azimuth = 1.15
+shader_parameter/cirrus_parallax = 0.0016
+
+[resource]
+resource_name = "GlowwormGroundsSky"
+sky_material = SubResource("ShaderMaterial_range_sky")
+process_mode = 2
+radiance_size = 3

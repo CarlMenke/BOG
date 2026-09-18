@@ -94,6 +94,32 @@ const EXPECT := {
 		"sightline": 21.0, "roof_sightline": 38.0, "reach": 37.0, "grid": 2.0,
 		"overboard": true,
 	},
+	"res://scenes/world/maps/range.tscn": {
+		"min_platforms": 28, "min_big_edges": 2, "summit_zone": "",
+		# **The sightline scan is off, and this is the one map it should be off
+		# on.** Every other entry here is an arena, where a line longer than the
+		# budget is someone dying before they can move. Glowworm Grounds is a
+		# range: its whole job is a sixty-metre bow lane, a gong at the spear's
+		# flat twenty-eight, and a dummy you can read at forty-five. A cap would
+		# be a number this map is built to break, and a loosened one would be a
+		# cap that asserts nothing while costing minutes — the scan is O(n²) over
+		# the standable grid, and a 60 x 90 m map has about thirteen hundred
+		# points on it against the wharf's two hundred and eighty.
+		#
+		# It takes the base/pad rule down with it, and that is also right. That
+		# check asks whether a spawn pad can see a pad belonging to the other
+		# team's base, which is a Capture fairness question. On this map all
+		# eight pads share one lodge deck **by design** (the scope asks for it),
+		# so of course they see each other; declaring bases for Capture practice
+		# does not turn a range into an arena.
+		#
+		# What is checked instead is the jump arc, which is what a practice map
+		# is actually promising: `min_big_edges` 2 because a parkour course with
+		# no one-tick dive in it is a course where the 4.23 m rise is never
+		# learned, and `min_platforms` 28 against the 43 the tables declare, the
+		# same slack the wharf's 20-against-28 carries.
+		"sightline": 0.0, "roof_sightline": 0.0, "reach": 52.0, "grid": 2.0,
+	},
 }
 
 ## The sightline scan's grid, and where on a Bog the line runs between. Eye to

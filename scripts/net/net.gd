@@ -188,6 +188,27 @@ func start_offline() -> void:
 	joined_lobby.emit()
 
 
+## A socket-less session already pointed at the practice range, for the
+## **Practice** button on the main menu: no port, no code, no lobby.
+##
+## `match_running` is set here because nothing else will. The lobby's Start
+## button goes through `request_match_start` → `_begin_match`, which is what
+## normally raises it; a session that walks straight into the arena skips both,
+## and `teams_decided`, the join refusal and the HUD all read the flag.
+##
+## The map is set **after** `start_offline` rather than by an argument to it,
+## and the menu navigates to the arena itself rather than off `joined_lobby` —
+## that signal is emitted from inside `start_offline`, one line before this
+## function has said which map it is, and a `go_to_arena` hanging off it would
+## read `config.map` in the window where the answer is still the island.
+func start_practice(map_id: String = MapCatalog.PRACTICE) -> void:
+	start_offline()
+	config.map = map_id
+	match_running = true
+	roster_changed.emit()
+	config_changed.emit()
+
+
 func join_lobby(code: String) -> bool:
 	var endpoint := InviteCode.decode(code)
 	if endpoint.is_empty():
@@ -344,15 +365,84 @@ func peer_ids() -> Array:
 	return ids
 
 
+# --------------------------------------------------------------- dummies ---
+#
+# The practice range's targets are **real Bogs on real roster rows** at ids from
+# `BOT_BASE` up (D-112). They have to be rows, because `MatchState._create_bog`
+# reads a Bog's name, team, weapon and skin off this dictionary and a row is how
+# those four reach a client at all — the alternative is four new fields on the
+# spawn RPC that every real player would carry for nothing.
+#
+# What a row must not do is make the range look like a lobby of eleven people.
+# `human_ids()` below is **the one filter**, and every screen derived from the
+# roster calls it instead of `peer_ids()`. `MatchState.ranking()` is the second
+# and last place dummies are dropped, which covers the scoreboard and the
+# results table together because both are built from that one list.
+
+## Where dummy peer ids start. Above `MAX_PLAYERS` by three orders of magnitude,
+## so a dummy id can never collide with a peer id ENet hands out, and the same
+## base `tools/combat_range.gd` has used for its own stand-ins since D-011.
+const BOT_BASE := 900
+
+
+## Host only. Put a row in the roster for something that is not a player, and
+## tell everybody. `row` wants `"dummy": true` on it or it is simply a player.
+func add_bot(peer_id: int, row: Dictionary) -> void:
+	if not is_host:
+		return
+	players[peer_id] = row
+	_broadcast_roster()
+	roster_changed.emit()
+
+
+## Host only. Take one back out. Called when a dummy is retired; `leave_lobby`
+## clears the whole roster anyway, so this is not the cleanup path for leaving.
+func remove_bot(peer_id: int) -> void:
+	if not is_host or not players.has(peer_id):
+		return
+	players.erase(peer_id)
+	_broadcast_roster()
+	roster_changed.emit()
+
+
+## Whether this row is a practice dummy rather than somebody playing.
+##
+## Read off the row rather than off the id, deliberately. `peer_id >= BOT_BASE`
+## would be the same answer today and a silent bug the first time anything else
+## wants a non-player body — a spectator, a replay ghost — and it would be a
+## bug at exactly one remove from the thing it broke.
+func is_dummy(peer_id: int) -> bool:
+	return bool(players.get(peer_id, {}).get("dummy", false))
+
+
+## Everybody on the roster who is a person. **The filter**: the lobby list, the
+## start gate and the warmup's spawn loop all walk this rather than `peer_ids`.
+func human_ids() -> Array:
+	var ids: Array = []
+	for peer_id: int in peer_ids():
+		if not is_dummy(peer_id):
+			ids.append(peer_id)
+	return ids
+
+
+## How many **people** are here. Dummies are not players and are not counted:
+## "a lobby of 3" on the pause menu must not become "a lobby of 11" because
+## somebody walked into the range, and `max_players` is a cap on who can join,
+## not on what the map has standing in it.
 func player_count() -> int:
-	return players.size()
+	return human_ids().size()
 
 
 ## True when the host is allowed to press Start.
 func can_start_match() -> bool:
-	if not is_host or players.size() < MatchConfig.MIN_PLAYERS:
+	# `human_ids` throughout, not `players`. A dummy is never ready, is on
+	# `TEAM_NONE`, and would fail both tests below — a host who walked into the
+	# range and came back to the lobby would find Start greyed out and no
+	# explanation that made any sense.
+	var humans := human_ids()
+	if not is_host or humans.size() < MatchConfig.MIN_PLAYERS:
 		return false
-	for peer_id: int in players:
+	for peer_id: int in humans:
 		if peer_id != 1 and not is_ready(peer_id):
 			return false
 	if config.mode == MatchConfig.Mode.TEAMS:
@@ -360,11 +450,11 @@ func can_start_match() -> bool:
 		# more Bogs on at least two teams — so whatever the roster says right now
 		# is about to be overwritten, and only the head count matters.
 		if config.random_teams:
-			return players.size() >= 2
+			return humans.size() >= 2
 		# Every team that exists must have someone on it, or a team wins by
 		# default the moment the match starts.
 		var occupied := {}
-		for peer_id: int in players:
+		for peer_id: int in humans:
 			occupied[player_team(peer_id)] = true
 		if occupied.size() < 2:
 			return false
@@ -413,7 +503,9 @@ func _smallest_team() -> int:
 	var counts := PackedInt32Array()
 	counts.resize(config.team_count)
 	counts.fill(0)
-	for peer_id: int in players:
+	# Humans only: a lobby of two people and eight dummies is a lobby of two,
+	# and balancing against bodies that are on no team balances nothing.
+	for peer_id: int in human_ids():
 		var team := player_team(peer_id)
 		if team >= 0 and team < counts.size():
 			counts[team] += 1
@@ -445,7 +537,9 @@ static func deal_teams(ids: Array, team_count: int) -> Dictionary:
 
 ## Host only. Overwrite every roster row's team with a fresh deal.
 func _deal_random_teams() -> void:
-	var dealt := deal_teams(players.keys(), config.team_count)
+	# `human_ids` rather than every key: dealing a dummy onto Team 2 would put a
+	# target in somebody's colours and count it toward the balance.
+	var dealt := deal_teams(human_ids(), config.team_count)
 	for peer_id: int in dealt:
 		players[peer_id]["team"] = dealt[peer_id]
 
@@ -570,7 +664,10 @@ func _request_join(desired_name: String, weapon: int = Loadout.DEFAULT,
 	if not is_host:
 		return
 	var peer_id := multiplayer.get_remote_sender_id()
-	if players.size() >= config.max_players:
+	# People, not rows: the practice range stands eight dummies on the roster
+	# and a friend must still be able to join the host who is showing it to
+	# them. `max_players` has always been a cap on players.
+	if player_count() >= config.max_players:
 		_reject.rpc_id(peer_id, Leave.LOBBY_FULL, "This lobby is full.")
 		return
 	var clean := _unique_name(sanitize_name(desired_name), peer_id)
@@ -711,6 +808,33 @@ func _request_weapon(weapon: int) -> void:
 	roster_changed.emit()
 
 
+## Host only. Put a weapon in somebody's row because the *host* decided to,
+## rather than because they asked (D-112).
+##
+## `_request_weapon`'s sibling, and the difference between them is the whole
+## reason this exists rather than being a flag on that one. That function is a
+## client asking, and it is refused while `match_running` — the lock-in D-069
+## describes, which stops a player swapping weapons in the middle of a fight
+## they are losing. This one is the host acting on something that happened in
+## the world: a Bog walked into a weapon rack in the practice range, and the
+## host is recording what it is now carrying. Weakening the refusal to let the
+## rack through would have opened the lobby's route at the same time, for every
+## map, which is the one thing D-069 is about.
+##
+## The row and not the body. `MatchState.set_weapon` calls this for the roster —
+## so a respawn, which reads `Net.player_weapon` in `_create_bog`, comes back
+## with the weapon the rack gave — and broadcasts its own per-Bog message for
+## the Bog that is standing there now. Two halves, because they answer two
+## different questions and a roster row has never been able to reach into a body
+## that is already built.
+func set_weapon_of(peer_id: int, weapon: int) -> void:
+	if not is_host or not players.has(peer_id):
+		return
+	players[peer_id]["weapon"] = Loadout.sanitize(weapon)
+	_broadcast_roster()
+	roster_changed.emit()
+
+
 ## Ask the host for a skin.
 ##
 ## `set_weapon`'s twin, with one difference that is the whole feature: **what
@@ -807,7 +931,9 @@ func update_config(new_config: MatchConfig) -> void:
 	config.apply_dict(new_config.to_dict())
 	# Changing team count can strand players on a team that no longer exists.
 	if config.mode == MatchConfig.Mode.TEAMS:
-		for peer_id: int in players:
+		# Humans only. A dummy sits on `TEAM_NONE` deliberately and this loop
+		# would read that as stranded and deal it a team.
+		for peer_id: int in human_ids():
 			var team: int = players[peer_id].get("team", 0)
 			if team < 0 or team >= config.team_count:
 				players[peer_id]["team"] = _smallest_team()

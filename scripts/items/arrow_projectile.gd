@@ -136,3 +136,11 @@ func _model_offset() -> Vector3:
 ## it rather than a second, differently sized one.
 func _model_scale() -> float:
 	return HeldGear.ARROW_SCALE
+
+
+## The fifth swapped thing (D-116): what this counts as when it lands on one of
+## the practice range's targets, which is a bow's hit and not a spear's. The
+## whole of the range hook is inherited — the duck-typed question, the three
+## endings, the knock — and this is the only line of it an arrow has to own.
+func _cause() -> int:
+	return Bog.Cause.ARROW

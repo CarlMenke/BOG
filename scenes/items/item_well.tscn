@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://bgubitemwell01"]
+
+[ext_resource type="Script" path="res://scripts/items/item_well.gd" id="1"]
+
+[node name="ItemWell" type="Node3D"]
+script = ExtResource("1")

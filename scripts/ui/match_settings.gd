@@ -25,6 +25,20 @@ signal fold_requested
 ## question of what it would do, and there is no good answer.
 const TEAM_ONLY := ["team_count", "random_teams", "friendly_fire"]
 
+## Rows that mean nothing on a practice map, whatever else is picked (D-112):
+## `MatchConfig.effective_*` reads past all of them there.
+##
+## `warmup_time` and `spawn_protection` are two of the eight fields this panel
+## has no row for (see `UNLISTED_SECTION`) and so are not listed — they are read
+## past just the same, and there is nothing here to hide.
+##
+## The **win condition stays visible**. It is the one rule that still does
+## something on the range: it decides what the map's `Letters` and `Bases`
+## markers are for, and practising Capture B·O·G on it is the point of their
+## being there. What it no longer does is *end* anything — `_check_win` returns
+## first — which is why its limits go and it does not.
+const PRACTICE_HIDDEN := ["time_limit", "respawn_delay"]
+
 @onready var _rows_root: VBoxContainer = %Rows
 @onready var _summary: Label = %Summary
 @onready var _host_only_hint: Label = %HostOnlyHint
@@ -51,6 +65,7 @@ var _seed_button: Button
 ## rows when another condition is picked (D-051).
 var _capture_section: Array[Control] = []
 var _capture_note: Label
+var _practice_note: Label
 
 ## field name -> {"row": Control, "control": Control, "readout": Label}
 var _fields: Dictionary = {}
@@ -151,6 +166,17 @@ func _build() -> void:
 		+ "it; it goes back to the middle. A carrier cannot throw. A dead carrier "
 		+ "drops the card for anyone to take. Bank B, O and G to win.")
 	_capture_note.name = "CaptureRules"
+
+	# The practice range's rules are not dials and there are no dials for them
+	# — that is the point of the map (D-112). Shown in the Limits rows' place
+	# when the range is picked, because otherwise the panel would offer a kill
+	# limit and a clock for a match that has neither and silently ignore both.
+	# Named for the reason `MapRow` is: `tools/playthrough.gd` checks that it
+	# appears on the range and not on anything else.
+	_practice_note = _note("Practice. No clock, no score, nothing at stake. "
+		+ "One-second respawns and no spawn protection. Weapons, items and "
+		+ "damage are the real ones. Leave from the pause menu.")
+	_practice_note.name = "PracticeRules"
 
 	_section("Feel")
 	# The single most important balance dial in the game: spears always kill, so
@@ -781,18 +807,35 @@ func _write_readout(field: String, value: float) -> void:
 
 ## Show only the rows this configuration can act on.
 func _apply_visibility(config: MatchConfig) -> void:
+	# **The practice range folds the whole rules half of the panel away**
+	# (D-112). Every row below is a rule about a match that is being won, and
+	# on a practice map none of them is enforced — `MatchConfig.effective_*`
+	# reads past the limits, the clock and both delays. A dial the host can drag
+	# that changes nothing is worse than no dial: it is a lie the panel tells.
+	#
+	# Written as `and not practice` on each line rather than as an early return,
+	# so a row added later is hidden by whichever of the two rules applies to it
+	# and neither branch can forget about the other.
+	var practice := MapCatalog.is_practice(config.map)
 	var teams := config.mode == MatchConfig.Mode.TEAMS
 	for field: String in TEAM_ONLY:
-		_fields[field]["row"].visible = teams
-	_fields["kill_limit"]["row"].visible = \
-		config.win_condition == MatchConfig.WinCondition.KILL_LIMIT
-	_fields["lives"]["row"].visible = \
-		config.win_condition == MatchConfig.WinCondition.LIVES
-	_fields["letter_drop_chance"]["row"].visible = \
-		config.win_condition == MatchConfig.WinCondition.LETTERS
-	_fields["letter_hold_time"]["row"].visible = \
-		config.win_condition == MatchConfig.WinCondition.LETTERS
-	var capture := config.win_condition == MatchConfig.WinCondition.CAPTURE
+		_fields[field]["row"].visible = teams and not practice
+	_fields["kill_limit"]["row"].visible = not practice \
+		and config.win_condition == MatchConfig.WinCondition.KILL_LIMIT
+	_fields["lives"]["row"].visible = not practice \
+		and config.win_condition == MatchConfig.WinCondition.LIVES
+	_fields["letter_drop_chance"]["row"].visible = not practice \
+		and config.win_condition == MatchConfig.WinCondition.LETTERS
+	_fields["letter_hold_time"]["row"].visible = not practice \
+		and config.win_condition == MatchConfig.WinCondition.LETTERS
+	# The rows that have no condition of their own and are still meaningless
+	# here: the clock is off and the respawn is fixed at a second.
+	for field: String in PRACTICE_HIDDEN:
+		if _fields.has(field):
+			_fields[field]["row"].visible = not practice
+	_practice_note.visible = practice
+	var capture := config.win_condition == MatchConfig.WinCondition.CAPTURE \
+		and not practice
 	for node: Control in _capture_section:
 		node.visible = capture
 	_capture_note.visible = capture

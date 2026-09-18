@@ -132,24 +132,33 @@ const TEAM_NONE := -1
 ## floor on how fast a stack can be spent. Without it a Bog who has just walked
 ## over four shield drops empties all four into the same square metre on one
 ## frame, which is neither cover nor a decision.
-## How long after a swing's blade connects before another swing may be asked
-## for, in seconds (D-068).
+## How long after a great sword's attack before another may be asked for, in
+## seconds (D-068, and the feel round).
 ##
-## **0.800 is not a feel number — it is what is left of the clip.**
-## `BogAnimator.SWING_SECONDS` is 1.867 s and `SWING_RELEASE_TIME` is 1.067, so
-## this default puts the earliest second click on the exact tick the first
-## swing's spin ends. That is what makes the sword chainable at all: `Bog`
-## opens `LANDING_GRACE` on that frame, so a player who clicks then keeps the
-## speed the last swing built and a player who is late loses it — the same
-## window a bunny hop gets, off the same field (D-052).
+## **0.800 was what was left of the spin's clip; 0.500 is what is left between
+## chains.** The old default put the earliest second click on the exact tick the
+## spin ended — `BogAnimator.SWING_SECONDS` 1.867 less `SWING_RELEASE_TIME`
+## 1.067 — which is what made the sword chainable at all, and it was a number
+## about one attack that no longer is the common one. The click is a three-slash
+## chain now and this dial runs **between chains**, from the far side of the
+## window a follow-up slash is taken in: a whole chain is about a second of
+## blade and half a second of nothing, which is a rhythm rather than a
+## commitment.
 ##
-## Dragged up, the chain gets harder and then impossible. Dragged down, a swing
-## can be cut short by the next one, which costs whatever part of the advance
-## had not happened yet. Both are the right way round, and
-## `tools/combat_range.tscn -- sword` asserts the relationship rather than
-## trusting this comment: the default plus the release has to come out at the
-## clip's own length.
-@export_range(0.0, 10.0) var sword_recharge: float = 0.8
+## The spin keeps every property it had. It is the sprint attack now
+## (`BogCombat.SPRINT_ATTACK_SPEED`), it still spends `sword_cycle()` on the
+## click, and at 0.500 that cycle is 1.567 against a 1.867 s clip — so the
+## earliest second spin is still the tick the first one's spin ends, gated by
+## `Bog.is_spinning()` instead of by this. `Bog` opens `LANDING_GRACE` on that
+## frame, so a player who clicks then keeps the speed the last swing built and a
+## player who is late loses it — the same window a bunny hop gets, off the same
+## field (D-052), and `tools/combat_range.tscn -- chain` still measures it.
+##
+## Dragged up, chains get further apart and then stop overlapping the momentum
+## window. Dragged down, a chain can be started again before the last one's
+## blade has settled. Both are the right way round and neither needs a second
+## rule.
+@export_range(0.0, 10.0) var sword_recharge: float = 0.5
 
 ## How far a great sword reaches, in metres from the swinging Bog's own body
 ## centre to the *surface* of whatever it catches (D-068).
@@ -561,6 +570,65 @@ func _clamp_all() -> void:
 	# TIME_ONLY with no clock would never end.
 	if win_condition == WinCondition.TIME_ONLY and time_limit <= 0:
 		time_limit = 600
+
+
+# ------------------------------------------------------------- practice ---
+#
+# **Practice is a property of the map, not a mode** (D-112). The range is a row
+# in `MapCatalog` with `"practice": true` on it, chosen from the same picker as
+# every other map, and the five rules below follow from standing on it.
+#
+# They are read *through* rather than written *in*, and that is the whole design
+# of this block. Mutating the config when the range is picked — setting
+# `time_limit = 0` and `respawn_delay = 1.0` on the host's own resource — would
+# destroy the numbers the host spent a lobby dialling in, and putting them back
+# when they pick Rust again means remembering what they were: a second copy of
+# the config, an undo stack, or a host who quietly loses their settings to a
+# minute in the range. None of those is worth having when the alternative is
+# five one-line accessors.
+#
+# `map` already travels in `_FIELDS`, so every peer computes the same answers
+# from the same row with nothing new on the wire.
+#
+# Everything *else* about a practice match is unchanged on purpose: the kill
+# feed still runs (it is feedback), damage and death are the real ones, and the
+# drop table rolls exactly as it does anywhere else. What practice removes is
+# only what makes a match a match — the clock, the win check, and the two
+# delays that exist to make dying cost something.
+
+## How long a Bog is down for in the range. Long enough to see the ragdoll land,
+## short enough that nobody counts it.
+const PRACTICE_RESPAWN := 1.0
+
+
+## Whether this match is being played somewhere nothing is at stake.
+func is_practice() -> bool:
+	return MapCatalog.is_practice(map)
+
+
+## No warmup. Standing still for five seconds is a thing a match does so that
+## everyone starts together; a range has nobody to start together with.
+func effective_warmup_time() -> float:
+	return 0.0 if is_practice() else warmup_time
+
+
+## No clock. Zero is already "no time limit" everywhere that reads it
+## (`MatchState._tick_clock` returns on it), so this needs no second branch.
+func effective_time_limit() -> int:
+	return 0 if is_practice() else time_limit
+
+
+## No spawn protection. It exists to stop a spawn camp, and the thing you are
+## practising on is a dummy that does not camp — while two seconds of
+## invulnerability after every death is two seconds in which the range lies to
+## you about whether your own shots land.
+func effective_spawn_protection() -> float:
+	return 0.0 if is_practice() else spawn_protection
+
+
+## A second, not three. See `PRACTICE_RESPAWN`.
+func effective_respawn_delay() -> float:
+	return PRACTICE_RESPAWN if is_practice() else respawn_delay
 
 
 ## Whether a win condition is scored in B·O·G letters — the lamps, the letters

@@ -271,6 +271,31 @@ func _resolve(hit: Dictionary) -> void:
 	var normal: Vector3 = hit["normal"]
 	var collider: Object = hit["collider"]
 
+	# The practice range's boards, gong and orbs, asked about **before** the Bog
+	# cast (D-116). Damage still lands only on Bogs — a board has no health, it
+	# has rings — so a target does not go through `report_damage` at all, and the
+	# question is a duck-typed one rather than a cast against a class so that
+	# anything at all can answer it.
+	#
+	# What becomes of the shaft is the target's to decide, and it decides it by
+	# living or dying: a board survives, so the spear stands in it; an orb frees
+	# itself inside `range_hit`, so the shaft goes with it rather than hanging in
+	# mid-air after the thing it hit is gone — which is the failure `_glance_off`
+	# was written about.
+	#
+	# Nothing here travels. Every peer's own copy of this shaft reached this
+	# point on the same tick from the same replicated launch, so every peer
+	# knocks the same board at the same moment without a packet.
+	if collider.has_method("range_hit"):
+		collider.call("range_hit", point, thrower_id, _cause())
+		if is_instance_valid(collider) \
+				and not (collider as Node).is_queued_for_deletion():
+			global_position = point
+			_stick(normal)
+		else:
+			_glance_off(point)
+		return
+
 	var victim := collider as Bog
 	if victim != null:
 		# Spawn protection makes a Bog solid but unkillable, so the spear passes
@@ -308,6 +333,17 @@ func _resolve(hit: Dictionary) -> void:
 	global_position = point
 	_stick(normal)
 	struck_world.emit(point, normal)
+
+
+## What this shaft counts as when it lands on something that is not a Bog.
+##
+## A method rather than a constant, because `ArrowProjectile` is this class with
+## four things swapped and this is the fifth: an arrow that reported itself as a
+## spear would file its hits in the wrong row of the range's stats board. The
+## damage path does not need this — the callers there already know what they
+## threw — which is why it did not exist until targets did.
+func _cause() -> int:
+	return Bog.Cause.SPEAR
 
 
 ## Which bone a hit landed on, so the ragdoll spins around the right place.
