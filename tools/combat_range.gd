@@ -4921,7 +4921,12 @@ func _drive_sword() -> void:
 const PRIMARY_ROUNDS := [
 	{"weapon": Loadout.Weapon.SPEAR, "elder": false, "started": "windup"},
 	{"weapon": Loadout.Weapon.BOW, "elder": false, "started": "draw"},
-	{"weapon": Loadout.Weapon.SWORD, "elder": false, "started": "spin"},
+	# A **slash** and not a spin since the feel round. The great sword has two
+	# attacks on the one button now and the body's speed is what chooses: this
+	# round presses from a standstill, so what it must start is the first slash
+	# of the chain. The spin is still on the same button — it is what a press at
+	# 0.8 of run speed starts — and `chain` below is the mode that drives it.
+	{"weapon": Loadout.Weapon.SWORD, "elder": false, "started": "slash"},
 	{"weapon": Loadout.Weapon.SPEAR, "elder": true, "started": "windup"},
 ]
 
@@ -5044,6 +5049,10 @@ func _check_primary_started(player: Bog, combat: BogCombat,
 	var started := ""
 	if player.is_spinning():
 		started = "spin"
+	elif combat.is_slashing():
+		# Before the windup and after the spin: a slash *is* a windup, so asking
+		# in the other order would call every slash a throw.
+		started = "slash"
 	elif player.is_drawing():
 		started = "draw"
 	elif combat.is_winding_up():

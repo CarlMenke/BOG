@@ -71,6 +71,11 @@ const WARMUP_TIME := 0.5
 const SPAWN_PROTECTION := 0.0
 const RESPAWN_DELAY := 0.0
 
+## How many physics ticks a newly spawned Bog gets to land on its pad before
+## "is it standing on the map" is asked. Deliberately **not** one of the
+## wall-clock budgets below: see `_settle_on_floor`.
+const SETTLE_TICKS := 30
+
 ## Wall-clock budgets. Generous, because they exist to turn a hang into a
 ## legible failure rather than to measure anything.
 const SCENE_TIMEOUT := 30.0
@@ -165,10 +170,26 @@ func _ready() -> void:
 		ok = await _stage_arena()
 	if ok:
 		ok = await _stage_warmup()
-	if ok:
-		ok = await _stage_match()
-	if ok:
-		ok = await _stage_results()
+	# A practice map is a different end to the same walk (D-112). Everything up
+	# to here is identical — menu, session, lobby, arena, warmup — and then
+	# there is nothing to win and no results screen to open, so the kill loop
+	# and the table it produces are replaced rather than added to. Running
+	# `_stage_match` on the range would wait out `KILL_TIMEOUT` for a limit
+	# `_check_win` has been told to ignore.
+	# The feel round's combat, once and on the island only. Everything it
+	# measures is about two Bogs standing on a floor and has nothing to do with
+	# which floor, so running it on all six maps would be five copies of one
+	# answer at five times the cost — and the default run is the one the gate
+	# reads a `combat` verdict out of.
+	if ok and _map == MapCatalog.DEFAULT:
+		ok = await _stage_combat()
+	if ok and MapCatalog.is_practice(_map):
+		ok = await _stage_practice()
+	else:
+		if ok:
+			ok = await _stage_match()
+		if ok:
+			ok = await _stage_results()
 
 	print("playthrough: %d checks, %d failures" % [_checks, _failures])
 	print("playthrough: %s" % ("PASS" if _failures == 0 else "FAIL"))
@@ -476,17 +497,56 @@ func _stage_warmup() -> bool:
 	# roughly right. On Rust the collision is built at load from world-space
 	# triangles (D-031), which is a good deal more that can go wrong than
 	# "the terrain mesh has a shape under it".
+	#
+	# **Settled on the floor, not on the floor at t=0.** `is_on_floor()` is a
+	# fact about the last `move_and_slide`, and a Bog that has not had one yet
+	# reports false however good the collision under it is: `revive_at` places
+	# it a few centimetres clear of the pad and the first physics tick is what
+	# drops it the rest of the way. Which tick this line lands on depends
+	# entirely on how long the warmup was — Lantern Wharf's is 0.4 s and hid
+	# this for four maps, and the practice range's is zero, so PLAYING arrives
+	# on the same frame the Bogs were created and the assertion was reading a
+	# body mid-spawn. Nothing about the map was wrong; the question was asked
+	# too early.
 	var mine: Bog = MatchState.bogs.get(Net.local_id())
+	var settled := -1
 	if _require("the local Bog is in the world", is_instance_valid(mine)):
+		settled = await _settle_on_floor(mine)
 		_check("the local Bog is standing on the map", mine.is_on_floor(), true)
 		_check("the local Bog has not fallen through it",
 			mine.global_position.y > MatchState.void_height + 1.0, true)
 
-	print("playthrough: phase PLAYING after %.1f s, local Bog on the floor at %.2f m" % [
+	print("playthrough: phase PLAYING after %.1f s, local Bog on the floor at %.2f m after %d tick(s)" % [
 		float(Time.get_ticks_msec() - started) * 0.001,
-		mine.global_position.y if is_instance_valid(mine) else NAN])
+		mine.global_position.y if is_instance_valid(mine) else NAN, settled])
 	_check_capture_layout()
 	return true
+
+
+## Give a freshly spawned Bog the physics ticks it needs to land, and return how
+## many it took. Bounded, so a map with no collision under the pads still fails
+## rather than hanging.
+##
+## **Physics ticks, not wall clock**, and that is the whole point of it not
+## being an `_await_until`. Every other wait in this file is a deadline in
+## seconds, which is right for "has the island finished building" — a question
+## about a blocking main thread. This one is about how many times the body has
+## been simulated, and a wall clock answers that only on an idle machine. The
+## gate runs six playthroughs and a dozen Godot processes, sometimes beside
+## another agent's, and a second of real time can be two ticks or two hundred.
+## Counting the thing the question is actually about makes the check immune to
+## load.
+##
+## Thirty ticks is half a second of simulation — twenty times the one or two a
+## spawn pad actually needs, and still nothing next to the timeouts around it.
+## A Bog that has not found the floor by then is not slow, it is falling, and
+## the assertion that follows says so.
+func _settle_on_floor(bog: Bog) -> int:
+	for tick in SETTLE_TICKS:
+		if not is_instance_valid(bog) or bog.is_on_floor():
+			return tick
+		await get_tree().physics_frame
+	return SETTLE_TICKS
 
 
 ## Capture B·O·G's bases and letters on this map, as the match would place them
@@ -547,6 +607,478 @@ func _floor_under(space: PhysicsDirectSpaceState3D, at: Vector3) -> bool:
 	var ray := PhysicsRayQueryParameters3D.create(at + Vector3.UP * 0.6, at + Vector3.DOWN * 0.6)
 	ray.collision_mask = 1
 	return not space.intersect_ray(ray).is_empty()
+
+
+## The feel round's combat: fists, the emote and the sword chain, in the real
+## arena with two real Bogs on a real floor.
+##
+## It is a stage of `playthrough` rather than a mode of `combat_range` for the
+## reason `_stage_practice` is one: every claim here is about two bodies, the
+## host's geometry and `MatchState.report_damage` acting together, and the
+## honest place to make it is the arena the game actually builds. It is also the
+## cheapest place — everything it needs is already standing up by the time the
+## warmup ends.
+##
+## The victim is one of the stand-in players, moved rather than spawned: a fake
+## peer's Bog is not simulated on this machine (nobody owns it), so it holds
+## exactly where it is put and every distance below is the distance that was
+## asked for.
+func _stage_combat() -> bool:
+	var failures_before := _failures
+	var mine: Bog = MatchState.bogs.get(Net.local_id())
+	var other: Bog = MatchState.bogs.get(FAKE_BASE)
+	if not _require("combat: both Bogs are in the world",
+			is_instance_valid(mine) and is_instance_valid(other)):
+		return false
+	var combat := mine.get_node_or_null("Combat") as BogCombat
+	if not _require("combat: the local Bog has a Combat node", combat != null):
+		return false
+	# Every hit the host decides, in order, as [amount, cause]. One listener for
+	# the whole stage: what each attack is worth is the only thing being
+	# measured and `hit_landed` is the one door all of it comes through.
+	var hits: Array = []
+	MatchState.hit_landed.connect(func(_attacker: int, _victim: int, amount: float,
+		cause: int, _point: Vector3, _bone: String) -> void:
+			hits.append([amount, cause]))
+
+	# ------------------------------------------------------ hands out (H) ---
+	mine.weapon = Loadout.Weapon.SPEAR
+	combat.refresh_hand()
+	mine.sync_holstered = false
+	var armed_speed := mine.target_speed()
+	_check("combat: an armed Bog has its spear", combat.has_spear(), true)
+	combat.toggle_holster()
+	_check("combat: H puts the weapon away", combat.is_holstered(), true)
+	_check("combat: a holstered Bog has no spear", combat.has_spear(), false)
+	_check("combat: a holstered Bog has no bow", combat.has_bow(), false)
+	_check("combat: a holstered Bog has no sword", combat.has_sword(), false)
+	var fists_speed := mine.target_speed()
+	# The number, not the flag: 1.10 exactly, out of `target_speed` itself, so a
+	# scale applied somewhere other than the one place every stance comes out of
+	# would fail here rather than be discovered in a match.
+	_check("combat: a holstered Bog walks %.2fx as fast (%.3f / %.3f)"
+		% [Bog.FISTS_SPEED_SCALE, fists_speed, armed_speed],
+		is_equal_approx(fists_speed, armed_speed * Bog.FISTS_SPEED_SCALE), true)
+	await get_tree().process_frame
+	_check("combat: a holstered Bog's fists are empty",
+		mine.held_gear.is_carried(), false)
+	_verdict("fists", failures_before,
+		"hands out: %.2f m/s against %.2f armed, both fists empty, no weapon gate open"
+			% [fists_speed, armed_speed])
+
+	# ---------------------------------------------------------- the punch ---
+	var punch_mark := _failures
+	# In front, inside the reach and well inside the arc.
+	var forward := mine.facing()
+	_place(other, mine.global_position + forward * 1.1, mine.body_yaw + PI)
+	other.set_health(Bog.MAX_HEALTH)
+	hits.clear()
+	combat.try_punch()
+	if not await _await_until("the punch to land", PHASE_TIMEOUT,
+			func() -> bool: return not hits.is_empty()):
+		return false
+	_check("combat: a punch deals %d" % int(BogCombat.PUNCH_DAMAGE),
+		hits[0][0], BogCombat.PUNCH_DAMAGE)
+	_check("combat: a punch is its own cause", hits[0][1], int(Bog.Cause.FIST))
+	_check("combat: the punched Bog took it",
+		other.health, Bog.MAX_HEALTH - BogCombat.PUNCH_DAMAGE)
+	# The range's stats panel counts weapons, and a fist is not one.
+	_check("combat: the range counts nothing for a fist",
+		RangeStats.weapon_for(Bog.Cause.FIST), "")
+
+	# The same distance, the other way round the compass. `PUNCH_ARC` is 50
+	# degrees either side, so a Bog standing behind the puncher is inside the
+	# reach and outside the punch — which is the whole of "a punch can miss".
+	_place(other, mine.global_position - forward * 1.1, mine.body_yaw)
+	var before_behind := other.health
+	hits.clear()
+	await _await_until("the punch to recharge", PHASE_TIMEOUT,
+		func() -> bool: return combat.punch_cooldown() <= 0.0)
+	combat.try_punch()
+	await _await_frames(30)
+	_check("combat: a punch behind you hits nobody", hits.size(), 0)
+	_check("combat: and takes nothing off them", other.health, before_behind)
+	_verdict("punch", punch_mark,
+		"a punch took %d at %.1f m inside %d degrees and nothing at the same range behind"
+			% [int(BogCombat.PUNCH_DAMAGE), BogCombat.PUNCH_REACH,
+				int(BogCombat.PUNCH_ARC)])
+
+	# --------------------------------------------- the emote empties both ---
+	var emote_mark := _failures
+	combat.toggle_holster()
+	_check("combat: H puts the weapon back", combat.is_holstered(), false)
+	await get_tree().process_frame
+	_check("combat: and the spear is back in the fist",
+		mine.held_gear.is_carried(), true)
+	combat.toggle_emote()
+	_check("combat: Y starts the dance", combat.is_emoting(), true)
+	await get_tree().process_frame
+	_check("combat: a dancing Bog's hands are empty",
+		mine.held_gear.is_carried(), false)
+	combat.toggle_emote()
+	_check("combat: Y ends it", combat.is_emoting(), false)
+	await get_tree().process_frame
+	_check("combat: and the spear comes back", mine.held_gear.is_carried(), true)
+
+	# ------------------------------------ the holster is refused mid-draw ---
+	mine.weapon = Loadout.Weapon.BOW
+	combat.refresh_hand()
+	combat.try_draw_bow()
+	# A frame, because `is_drawing()` answers off the field `_tick_draw` puts on
+	# the body and the point of asking it that way is that a remote Bog gets the
+	# same answer (D-065).
+	await get_tree().process_frame
+	_check("combat: the bow is drawing", mine.is_drawing(), true)
+	combat.toggle_holster()
+	_check("combat: a drawing Bog may not put its bow away",
+		combat.is_holstered(), false)
+	combat.clear_weapon_state()
+	combat.refresh_hand()
+	_verdict("emote", emote_mark,
+		"the dancer's hands empty and fill again, and a drawing Bog is refused the holster")
+
+	# ----------------------------------------------------- the slash chain ---
+	var sword_mark := _failures
+	mine.weapon = Loadout.Weapon.SWORD
+	combat.refresh_hand()
+	_place(other, mine.global_position + forward * 1.5, mine.body_yaw + PI)
+	other.set_health(Bog.MAX_HEALTH)
+	mine.velocity = Vector3.ZERO
+	hits.clear()
+	var launches: Array[String] = []
+	combat.weapon_launched.connect(func(weapon: String) -> void:
+		launches.append(weapon))
+
+	_check("combat: a standing sword Bog may attack", combat.has_sword(), true)
+	combat.try_sword_attack()
+	_check("combat: a standing click does not spin", mine.is_spinning(), false)
+	_check("combat: it slashes", combat.is_slashing(), true)
+	if not await _await_until("the first slash to connect", PHASE_TIMEOUT,
+			func() -> bool: return not hits.is_empty()):
+		return false
+	_check("combat: a slash deals %d" % int(BogCombat.SLASH_DAMAGE),
+		hits[0][0], BogCombat.SLASH_DAMAGE)
+	_check("combat: the slashed Bog is still alive",
+		MatchState.is_alive(other.peer_id), true)
+	# The second click, the moment the first blade has passed — which is the
+	# window the chain is actually taken in, and asking for it by the state
+	# rather than by a frame count is what keeps this from being a timing race.
+	_check("combat: the great sword is still in the fists between slashes",
+		mine.held_gear.has_sword(), true)
+	combat.try_sword_attack()
+	_check("combat: the second click chains", combat.is_slashing(), true)
+	if not await _await_until("the second slash to connect", PHASE_TIMEOUT,
+			func() -> bool: return hits.size() >= 2):
+		return false
+	_check("combat: the second slash deals %d too" % int(BogCombat.SLASH_DAMAGE),
+		hits[1][0], BogCombat.SLASH_DAMAGE)
+	_check("combat: two slashes kill", MatchState.is_alive(other.peer_id), false)
+	# And a third, with nobody in front of it: what is being counted is the
+	# chain's arithmetic, so the victim is deliberately out of the picture.
+	launches.clear()
+	combat.try_sword_attack()
+	_check("combat: the third click chains", combat.is_slashing(), true)
+	if not await _await_until("the third slash to be accepted", PHASE_TIMEOUT,
+			func() -> bool: return launches.size() >= 1):
+		return false
+	# And a fourth, which `SLASH_MAX` refuses. Proved by what the chain *did*
+	# rather than by a flag read on the click: the third slash's blade is still
+	# out on this tick, so "is it slashing" cannot tell a refused fourth from
+	# the third still running. A slash that was accepted would land and emit,
+	# so counting the launches to the far side of the chain is the one reading
+	# that separates them.
+	combat.try_sword_attack()
+	if not await _await_until("the chain to close", PHASE_TIMEOUT,
+			func() -> bool: return not combat.in_chain()):
+		return false
+	_check("combat: a fourth click is refused — three slashes and no more",
+		launches.size(), 1)
+	_check("combat: the chain spends the recharge",
+		combat.sword_cooldown() > 0.0, true)
+
+	# ----------------------------------------------------- the sprint spin ---
+	# The same button at speed. The velocity is written rather than run up to,
+	# because what is being measured is the *gate* — `ground_speed()` read at
+	# the click — and a run-up across an island is a test of the island.
+	await _await_until("the sword to come back", PHASE_TIMEOUT,
+		func() -> bool: return combat.has_sword())
+	var revived: Bog = MatchState.bogs.get(FAKE_BASE)
+	revived.set_health(Bog.MAX_HEALTH)
+	hits.clear()
+	mine.velocity = forward * Bog.RUN_SPEED
+	combat.try_sword_attack()
+	_check("combat: a click at sprint speed spins", mine.is_spinning(), true)
+	# The spin is aimed by the blade, not by the body (D-068): `SwordSpin`
+	# turns the skeleton through a revolution, and at the `hit` marker the
+	# blade is read off the bone attachment, roughly a hundred degrees off the
+	# body's own facing (`combat_range -- sword` rehearses a swing at nobody to
+	# find out where). The body is also travelling, across whatever the island
+	# puts in the way. So the victim is stood one metre down the blade's own
+	# direction on every physics tick until the release — the same reading
+	# `_blade_direction` makes, taken off `held_gear.sword_blade()` — inside
+	# the reach, outside the two capsules touching, and at the attacker's own
+	# height so the sight line is the sight line and not the terrain's. What is
+	# being measured is the gate and the damage, not the lane.
+	var spin_deadline := Time.get_ticks_msec() + int(PHASE_TIMEOUT * 1000.0)
+	while hits.is_empty() and Time.get_ticks_msec() < spin_deadline:
+		var blade := forward
+		if mine.held_gear != null:
+			var tip: Vector3 = mine.held_gear.sword_blade()[0]
+			var flat := Vector3(tip.x - mine.global_position.x, 0.0,
+				tip.z - mine.global_position.z)
+			if flat.length_squared() > 0.0001:
+				blade = flat.normalized()
+		_place(revived, mine.global_position + blade * 1.0,
+			Bog.yaw_towards(-blade))
+		await get_tree().physics_frame
+	_checks += 1
+	if hits.is_empty():
+		_failures += 1
+		print("  FAIL  timed out after %.0f s waiting for the spin to connect"
+			% PHASE_TIMEOUT)
+		return false
+	_check("combat: the spin still kills outright",
+		hits[0][0], BogCombat.SWORD_DAMAGE)
+	_verdict("sword", sword_mark,
+		("%d + %d killed at %.2f m reach, three slashes chained and a fourth was"
+			+ " refused, and a click at %.1f m/s spun for %d")
+			% [int(BogCombat.SLASH_DAMAGE), int(BogCombat.SLASH_DAMAGE),
+				combat.slash_reach(), Bog.RUN_SPEED, int(BogCombat.SWORD_DAMAGE)])
+
+	if _failures == failures_before:
+		print("playthrough: combat PASS")
+	return true
+
+
+## One line per part of the combat stage, with the numbers it actually measured
+## in it, and a PASS the gate can name. Four verdicts out of one stage for the
+## reason `combat_range`'s modes print four out of one run: they fail for
+## different reasons and a single line would say which one only by omission.
+func _verdict(part: String, failures_before: int, measured: String) -> void:
+	print("playthrough: %s — combat %s %s" % [measured, part,
+		"PASS" if _failures == failures_before else "FAIL"])
+
+
+## Stand a Bog somewhere, facing a way, without it being a respawn: the
+## transform and the two replicated fields that publish it, which is what
+## `RangeDummies.drive_to` does for the same reason.
+func _place(body: Bog, spot: Vector3, yaw: float) -> void:
+	body.global_position = spot
+	body.body_yaw = yaw
+	body.sync_position = spot
+	body.sync_yaw = yaw
+	body.velocity = Vector3.ZERO
+	body.sync_velocity = Vector3.ZERO
+	body.sync_grounded = true
+
+
+func _await_frames(count: int) -> void:
+	for _i in count:
+		await get_tree().process_frame
+
+
+## The practice range, in place of a match and a results screen (D-112).
+##
+## Everything unit 1 of the range built, walked once in the real arena: the
+## rules a practice map turns off, a dummy spawned, driven, hit, killed and
+## brought back to its station, the roster filter that keeps it off every screen
+## derived from the roster, and a map-placed pickup claimed.
+##
+## It is a stage of `playthrough` rather than a harness of its own because every
+## one of those things is a claim about the *game* — `MatchState`, `Net` and the
+## arena together — and the only honest place to make it is the arena the game
+## actually builds, after the same menu, session and lobby every other map goes
+## through.
+func _stage_practice() -> bool:
+	var failures_before := _failures
+
+	# ---------------------------------------------- the rules practice ends ---
+	_check("practice: the map says it is practice", Net.config.is_practice(), true)
+	_check("practice: there is no clock", Net.config.effective_time_limit(), 0)
+	_check("practice: the clock is not running", MatchState.time_left, 0.0)
+	_check("practice: there is no spawn protection",
+		Net.config.effective_spawn_protection(), 0.0)
+	_check("practice: the respawn is a second",
+		Net.config.effective_respawn_delay(), MatchConfig.PRACTICE_RESPAWN)
+	# The dials themselves are untouched — read past, not overwritten — so the
+	# host's lobby settings survive a trip to the range (the whole argument for
+	# `effective_*` existing rather than a mutation).
+	_check("practice: the host's own time limit was not overwritten",
+		Net.config.time_limit > 0, true)
+
+	# ------------------------------------------------------------ the map ---
+	var arena := get_tree().current_scene as Arena
+	var map := arena.get_node_or_null("Map") as StaticMap
+	if not _require("practice: the range is in the tree as `Map`", map != null):
+		return false
+	var dummies := map.get_node_or_null("Dummies") as RangeDummies
+	if not _require("practice: the range brought a RangeDummies node",
+			dummies != null):
+		return false
+	_check("practice: the range's dummies are reachable as the singleton",
+		RangeDummies.instance == dummies, true)
+	print("playthrough: the range brought a RangeDummies node")
+
+	# ---------------------------------------------------------- a dummy ---
+	# Somewhere on the slab, clear of the pads, facing back down the range.
+	var station := Transform3D(Basis(Vector3.UP, PI), Vector3(4.0, 0.12, -12.0))
+	# The ordinal this spawn will wear, read *before* it happens. The map itself
+	# now stands twenty-three dummies on its own marks the moment the director
+	# lands, so this one is "Dummy 24" on Glowworm Grounds and "Dummy 1" on a
+	# bare fixture; what is being asserted is that the registry numbers them in
+	# order, not that this test got there first.
+	var ordinal := dummies.ids().size() + 1
+	var id := dummies.spawn(station, "stand")
+	if not _require("practice: spawning a dummy returned an id", id >= Net.BOT_BASE):
+		return false
+	if not await _await_until("the dummy's body", SCENE_TIMEOUT,
+			func() -> bool: return MatchState.bogs.has(id)):
+		return false
+	var dummy: Bog = MatchState.bogs[id]
+	_check("practice: the dummy stands at its station",
+		dummy.global_position.distance_to(station.origin) < 0.5, true)
+	_check("practice: the dummy is named", Net.player_name(id), "Dummy %d" % ordinal)
+
+	# **The authority claim, asserted rather than assumed.** This is the one
+	# thing in the unit that could be quietly wrong and still look right on the
+	# host's own screen: the host would see a dummy move and nobody else would.
+	var sync := dummy.get_node_or_null("Sync")
+	if _require("practice: the dummy has a Sync node", sync != null):
+		_check("practice: the dummy's transform is published by the host",
+			sync.get_multiplayer_authority(), 1)
+	_check("practice: the dummy's body still belongs to nobody real",
+		dummy.get_multiplayer_authority(), id)
+	_check("practice: the dummy reads no keyboard", dummy.reads_local_input, false)
+
+	# It moves, and it says so on the wire. `drive_to` is the one writer every
+	# brain in unit 3 goes through, so proving it here is proving all of them.
+	var moved := station.origin + Vector3(0.0, 0.0, 3.0)
+	dummies.drive_to(dummy, moved, 0.0, Vector3(0.0, 0.0, 6.0), true)
+	_check("practice: driving the dummy moved its body",
+		dummy.global_position.distance_to(moved) < 0.01, true)
+	_check("practice: driving the dummy moved what replicates",
+		dummy.sync_position.distance_to(moved) < 0.01, true)
+	_check("practice: a driven dummy is on the ground", dummy.sync_grounded, true)
+
+	# ------------------------------------------------------ the filters ---
+	_check("practice: the roster has the dummy", Net.players.has(id), true)
+	_check("practice: the dummy is a dummy", Net.is_dummy(id), true)
+	_check("practice: the dummy is not a person", Net.human_ids().has(id), false)
+	_check("practice: the dummy is not counted as a player",
+		Net.player_count(), Net.human_ids().size())
+	_check("practice: the dummy is not in the ranking",
+		MatchState.ranking().has(id), false)
+	_check("practice: the local player still is",
+		MatchState.ranking().has(Net.local_id()), true)
+	print("playthrough: dummies are hidden from every roster screen")
+
+	# ------------------------------------------------- hit, die, come back ---
+	var hits: Array = []
+	MatchState.hit_landed.connect(func(attacker: int, victim: int, amount: float,
+		cause: int, _point: Vector3, _bone: String) -> void:
+			hits.append([attacker, victim, amount, cause]))
+	var before := dummy.health
+	MatchState.report_damage(id, Net.local_id(), 40.0, Bog.Cause.SPEAR,
+		dummy.global_position, Vector3.FORWARD, "")
+	_check("practice: hit_landed fired once", hits.size(), 1)
+	if hits.size() == 1:
+		_check("practice: hit_landed named the attacker", hits[0][0], Net.local_id())
+		_check("practice: hit_landed named the victim", hits[0][1], id)
+		_check("practice: hit_landed carried the damage dealt", hits[0][2], 40.0)
+	_check("practice: the dummy took the hit", dummy.health, before - 40.0)
+
+	# ------------------------------------------- every weapon draws a mark ---
+	# The hitmarker is drawn by one handler off one signal, and the four weapons
+	# reach it by one road: `bog_combat` and `spear_projectile` each end their
+	# impact in `MatchState.report_damage`, which is the only thing that emits
+	# `hit_landed`. So what is worth asserting is that the road is open for each
+	# `Cause` and that the HUD's own handler paints when it arrives — not that
+	# four impacts can be staged, which would be a test of four hit tests.
+	#
+	# The crosshair is asked whether it is *processing*, because `strike` is what
+	# turns its per-frame fade back on: switch it off, report the hit, and a
+	# crosshair that is running again has been struck within that call. Each of
+	# the four is knocked back off first, so the second weapon cannot pass on
+	# the first one's mark.
+	var hud := _find_hud()
+	var crosshair: Crosshair = null
+	if hud != null:
+		crosshair = hud.get_node_or_null("%Crosshair") as Crosshair
+	if _require("practice: the HUD is up with a crosshair in it", crosshair != null):
+		for weapon: Array in [
+			["a spear", Bog.Cause.SPEAR], ["an arrow", Bog.Cause.ARROW],
+			["a sword swing", Bog.Cause.SWORD], ["a lightning strike", Bog.Cause.LIGHTNING],
+		]:
+			var what := String(weapon[0])
+			var cause: Bog.Cause = weapon[1]
+			hits.clear()
+			crosshair.set_process(false)
+			MatchState.report_damage(id, Net.local_id(), 5.0, cause,
+				dummy.global_position, Vector3.FORWARD, "")
+			_check("practice: %s reports one landed hit" % what, hits.size(), 1)
+			if hits.size() == 1:
+				_check("practice: %s names the attacker" % what,
+					hits[0][0], Net.local_id())
+				_check("practice: %s carries its own cause" % what, hits[0][3], cause)
+			_check("practice: %s marks the crosshair" % what,
+				crosshair.is_processing(), true)
+		print("playthrough: spear, arrow, sword and lightning each flash the mark")
+
+	# And the overkill: a body's worth into what is left reports what was left,
+	# not the hundred that was asked for. The number a range counts.
+	hits.clear()
+	var remaining := dummy.health
+	MatchState.report_kill(id, Net.local_id(), Bog.Cause.SPEAR,
+		dummy.global_position, Vector3.FORWARD, "")
+	_check("practice: the killing hit was announced too", hits.size(), 1)
+	if hits.size() == 1:
+		_check("practice: a killing hit reports what it actually took",
+			hits[0][2], remaining)
+	_check("practice: the dummy died", MatchState.is_alive(id), false)
+
+	# Back at its station — not on a spawn pad, which is what an anchor is for.
+	if not await _await_until("the dummy to come back", PHASE_TIMEOUT,
+			func() -> bool: return MatchState.is_alive(id)):
+		return false
+	var home: Bog = MatchState.bogs[id]
+	_check("practice: the dummy respawned at its station",
+		home.global_position.distance_to(station.origin) < 0.5, true)
+	var nearest_pad := INF
+	for pad: Transform3D in MatchState.capture_layout().bases.map(
+			func(v: Vector3) -> Transform3D: return Transform3D(Basis.IDENTITY, v)):
+		nearest_pad = minf(nearest_pad, pad.origin.distance_to(home.global_position))
+	_check("practice: and not at a base", nearest_pad > 5.0, true)
+	# Nothing was won by any of that.
+	_check("practice: killing a dummy ended nothing",
+		MatchState.phase, MatchState.Phase.PLAYING)
+
+	# ------------------------------------------------------ a placed item ---
+	var mine: Bog = MatchState.bogs.get(Net.local_id())
+	if not _require("practice: the local Bog is in the world",
+			is_instance_valid(mine)):
+		return false
+	var spot := mine.global_position
+	var taken: Array = []
+	MatchState.pickup_taken.connect(func(pid: int, kind: int, by: int) -> void:
+		taken.append([pid, kind, by]))
+	var item := MatchState.place_pickup(Pickup.Kind.SHIELD, spot, true)
+	_check("practice: placing a pickup returned an id", item > 0, true)
+	# Straight through the host's own door, exactly as the overlap does: the
+	# Bog is standing on it, and `claim_pickup` is the one place a drop is
+	# awarded whether the trigger was an Area3D or a well's own bookkeeping.
+	MatchState.claim_pickup(item, Net.local_id())
+	_check("practice: the placed pickup was claimed", taken.size(), 1)
+	if taken.size() == 1:
+		_check("practice: pickup_taken named the item", taken[0][0], item)
+		_check("practice: pickup_taken named the kind", taken[0][1],
+			int(Pickup.Kind.SHIELD))
+		_check("practice: pickup_taken named the collector", taken[0][2],
+			Net.local_id())
+	print("playthrough: a placed pickup was claimed")
+
+	if _failures == failures_before:
+		print("playthrough: practice PASS")
+	return true
 
 
 ## Play the match out. Kills go through `MatchState.report_kill`, which is

@@ -21,7 +21,7 @@ extends Node
 ##        hud_elder, killfeed, scoreboard, scoreboard_letters, pause, results,
 ##        results_letters, dead, spectate,
 ##        hud_letters_teams, scoreboard_letters_teams, results_letters_teams,
-##        reload_timer, weapon_tiles.
+##        reload_timer, weapon_tiles, range, range_kill.
 ##
 ## `hud_health` is your own health bar part-empty (D-062). `hud` has it full,
 ## which is the state it spends most of a match in and the least interesting one
@@ -143,6 +143,10 @@ func _stage() -> void:
 	if _mode == "reload_timer":
 		# The shipping three, set rather than inherited from the range's 1.5.
 		Net.config.spear_recharge = RELOAD_RECHARGE
+	if _mode == "range" or _mode == "range_kill":
+		# The panel is on only in the range, and the HUD asks the catalog rather
+		# than being told — so the map is the whole of the staging.
+		Net.config.map = MapCatalog.PRACTICE
 	if _mode == "hud_elder":
 		# The shipping twenty, so the picture is of the bar a player actually
 		# sees rather than of one this file invented a length for.
@@ -180,6 +184,9 @@ func _stage() -> void:
 		"controls":
 			_stage_kills()
 			_run_controls()
+		"range", "range_kill":
+			_stage_kills()
+			_run_range()
 		"dead":
 			_stage_kills()
 			var dying: Dictionary = MatchState.stats.get(1, {})
@@ -740,6 +747,123 @@ func _local_combat() -> BogCombat:
 	if bog == null:
 		return null
 	return bog.get_node_or_null("Combat") as BogCombat
+
+
+## The practice range's corner readout, with a session's shooting already in it.
+##
+## A hand-written table rather than a staged firefight, for the reason every
+## other mode here stages its numbers: what this photographs is the *panel*, and
+## a picture whose contents depend on whether a spear happened to land is a
+## picture that changes between runs. The rows are chosen to exercise every
+## column — a weapon with a good ratio, one with a bad one, one with almost no
+## shots, a long best hit and a live streak.
+##
+## It also fires one `hit_landed`, so the crosshair's mark is mid-flash in the
+## frame. That is the one piece of feedback in this unit that no still frame
+## would otherwise catch.
+func _run_range() -> void:
+	var stats := RangeStats.new()
+	stats.name = "Stats"
+	add_child(stats)
+
+	var me := Net.local_id()
+	var crosshair := _hud.get_node_or_null("%Crosshair") as Crosshair
+	var panel := _hud.get_node_or_null("%RangeStats") as RangeStatsPanel
+	if panel == null or crosshair == null:
+		print("hud_range: no range panel or crosshair - range FAIL")
+		return
+
+	# **The wiring, proven before the picture is staged.** One real `hit_landed`
+	# through the HUD's own handler: it has to reach the crosshair, and it has to
+	# reach the counter and be filed under the bow, because the cause was an
+	# arrow. Then the table is wiped and written by hand, so what is
+	# photographed does not depend on it.
+	MatchState.hit_landed.emit(me, _a_dummy(), 38.0, Bog.Cause.ARROW,
+		Vector3.ZERO, "mixamorig_Spine1")
+	var took_the_mark := crosshair.is_processing()
+	var counted := int(stats.row(me, "bow")["hits"]) == 1
+	stats.reset()
+	for entry: Dictionary in [
+		{"weapon": "spear", "launches": 12, "hits": 9, "kills": 6,
+			"longest": 41.2, "streak": 4},
+		{"weapon": "bow", "launches": 20, "hits": 11, "kills": 3,
+			"longest": 52.8, "streak": 0},
+		{"weapon": "sword", "launches": 6, "hits": 4, "kills": 2,
+			"longest": 1.4, "streak": 2},
+	]:
+		for i: int in int(entry["launches"]):
+			stats.record_launch(me, String(entry["weapon"]))
+		for i: int in int(entry["hits"]):
+			stats.record_hit(me, String(entry["weapon"]), 0.0)
+		for i: int in int(entry["kills"]):
+			stats.record_kill(me, String(entry["weapon"]))
+		var row := stats.row(me, String(entry["weapon"]))
+		# Set outright rather than replayed: `longest` is a max over real
+		# distances and the streak is a running count, and neither is worth
+		# faking a firefight to produce.
+		row["longest"] = float(entry["longest"])
+		row["streak"] = int(entry["streak"])
+	stats.rows_changed.emit()
+
+	if _hud.has_method("refresh_range_panel"):
+		_hud.call("refresh_range_panel")
+
+	# Held open for the photograph, and only for the photograph. The real mark
+	# is 0.45 s and this frame is taken about 1.8 s in, so a picture of the live
+	# one is not a thing that exists — the assertion above is what proves it
+	# fires, and this is what puts it in the frame.
+	#
+	# `range_kill` is the same staging with the kill mark instead: white, and
+	# the whole X rather than four corners of one. Two modes rather than one
+	# picture with both, because the marks are drawn on the same four pixels and
+	# a photograph of them overlaid would show neither. The long life also parks
+	# both past the 70 ms snap, so what is photographed is the mark at rest —
+	# the size it holds for the other 0.38 s, not the 1.4x it arrives at.
+	if _mode == "range_kill":
+		crosshair.strike(Color(1, 1, 1), 30.0, true)
+	else:
+		crosshair.strike(UIPalette.BOG, 30.0)
+
+	var failures: PackedStringArray = []
+	if not took_the_mark:
+		failures.append("a landed hit did not reach the crosshair")
+	if not counted:
+		failures.append("a landed hit was not filed under the bow")
+	if not panel.visible:
+		failures.append("the panel is hidden on a practice map")
+	if Net.config.map != MapCatalog.PRACTICE:
+		failures.append("the map is not the range")
+	var used := stats.weapons_used(me)
+	var wanted: Array[String] = ["spear", "bow", "sword"]
+	if used != wanted:
+		failures.append("weapons_used read %s, wanted %s" % [str(used), str(wanted)])
+	var spear_row := stats.row(me, "spear")
+	if not is_equal_approx(RangeStats.accuracy(spear_row), 0.75):
+		failures.append("spear accuracy read %.2f, wanted 0.75"
+			% RangeStats.accuracy(spear_row))
+	# The panel is a grid of five cells per weapon used, built on `rows_changed`.
+	var cells := 0
+	for child: Node in panel.find_children("", "GridContainer", true, false):
+		cells = (child as GridContainer).get_child_count()
+	if cells != used.size() * 5:
+		failures.append("the panel drew %d cells for %d weapons"
+			% [cells, used.size()])
+
+	for weapon: String in used:
+		var row := stats.row(me, weapon)
+		print("  %-6s %d/%d  %d%%  %.1f m  x%d" % [weapon.to_upper(),
+			int(row["hits"]), int(row["launches"]),
+			roundi(RangeStats.accuracy(row) * 100.0),
+			float(row["longest"]), int(row["streak"])])
+
+	if failures.is_empty():
+		print("hud_range: the range panel shows %d weapon rows over a live mark"
+			% used.size())
+		print("hud_range: range PASS")
+	else:
+		for line: String in failures:
+			print("  " + line)
+		print("hud_range: range FAIL")
 
 
 func _summary() -> Dictionary:

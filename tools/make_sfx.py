@@ -423,6 +423,192 @@ def hitmarker():
     return sweep(n, 2400.0, 1500.0, 1.0) * envelope(n, 0.002, 0.9, 3.5)
 
 
+def hitmarker_kill():
+    """The same click with a body under it: the sound of a hit that finished
+    somebody.
+
+    Deliberately *the tick plus something*, not a different sound. A kill is the
+    last hit of a sequence of hits, and a confirmation that shares nothing with
+    the one before it reads as a separate event rather than as the end of the
+    one you were already hearing. So the tick is the same sweep, at the same
+    length, and what marks the kill is what arrives under it a few milliseconds
+    later: a short 900 to 500 Hz drop, low enough to be felt as weight rather
+    than heard as a second beep, and gone by 0.14 s.
+
+    Lower and a hair longer than `hitmarker`, which is the whole of the
+    difference a player has to hear across a firefight.
+    """
+    n = seconds(0.14)
+    tick = np.zeros(n)
+    click = seconds(0.09)
+    tick[:click] = sweep(click, 2400.0, 1500.0, 1.0) * envelope(click, 0.002, 0.9, 3.5)
+    # The body starts 6 ms in, so the tick is still the leading edge: one sound
+    # with a thud behind it rather than two sounds in a row.
+    start = seconds(0.006)
+    body = np.zeros(n)
+    drop = n - start
+    body[start:] = sweep(drop, 900.0, 500.0, 1.6) * envelope(drop, 0.004, 0.86, 2.2)
+    return tick * 0.62 + body * 1.0
+
+
+def range_board():
+    """A shaft going into one of the range's target boards.
+
+    A struck plank, not a struck body: `spear_hit_world` is dirt and this has to
+    be wood, or a board at twenty metres is indistinguishable from a miss behind
+    it. What makes it read as a plank is the pair of low resonances a flat piece
+    of timber on a stake actually has — a fundamental around 180 Hz and a fifth
+    above it — under a very short, very dry knock.
+    """
+    n = seconds(0.26)
+    t = np.linspace(0.0, n / RATE, n)
+    # The knock itself: a burst of filtered noise, gone in a few milliseconds.
+    knock = lowpass(noise(n, 71), 2600.0) * envelope(n, 0.001, 0.94, 5.0)
+    # The body of the board ringing under it. Barely any sustain: a board on a
+    # stake is damped by the stake, which is the difference between this and the
+    # gong below.
+    body = np.zeros(n)
+    for freq, gain in [(178.0, 1.0), (267.0, 0.45), (455.0, 0.22)]:
+        body += gain * np.sin(2.0 * np.pi * freq * t)
+    body *= envelope(n, 0.002, 0.88, 2.6)
+    return knock * 0.85 + body * 0.6
+
+
+def range_gong():
+    """The gong at 28 m, which is the spear's flat band and the whole reason it
+    is standing there.
+
+    The one sound in the game that is allowed a long tail. A gong is a struck
+    disc, so the partials are deliberately *not* harmonic — a harmonic series
+    rings as a bell or an organ and a gong is neither — and they beat against
+    each other, which is what gives bronze its shimmer. Pitch is not baked in:
+    `Gong` plays this shifted by how far the shot came from, so the clip has to
+    stay clean over roughly a fifth either way.
+    """
+    n = seconds(2.1)
+    t = np.linspace(0.0, n / RATE, n)
+    tone = np.zeros(n)
+    # Inharmonic, and the ratios are irrational on purpose so nothing lines up
+    # and the beating never resolves into a chord.
+    for freq, gain, decay in [
+        (196.0, 1.00, 1.6),
+        (283.0, 0.62, 1.9),
+        (409.0, 0.44, 2.3),
+        (571.0, 0.30, 2.9),
+        (838.0, 0.18, 3.6),
+    ]:
+        tone += gain * np.sin(2.0 * np.pi * freq * t) * np.exp(-t * decay)
+    # The strike. Bright, immediate, and over before the disc has answered.
+    strike = lowpass(noise(n, 907), 5200.0) * envelope(n, 0.0008, 0.985, 6.0)
+    return tone + strike * 0.5
+
+
+def range_orb():
+    """A glowworm orb bursting.
+
+    Soft rather than percussive — nothing about a drifting light should sound
+    like it was hit with a hammer — so the transient is short and dull and what
+    carries it is a bright upward shimmer that falls away immediately. It has to
+    survive being heard four or five times a minute for as long as somebody is
+    practising, which is what rules out anything with an edge on it.
+    """
+    n = seconds(0.42)
+    t = np.linspace(0.0, n / RATE, n)
+    pop = lowpass(noise(n, 4211), 1400.0) * envelope(n, 0.002, 0.9, 4.0)
+    # Two rising voices a little out of tune with each other, so the burst
+    # sparkles instead of whistling.
+    shimmer = (sweep(n, 900.0, 2300.0, 0.6) + 0.7 * sweep(n, 1180.0, 3050.0, 0.6))
+    shimmer *= np.exp(-t * 9.0)
+    return pop * 0.7 + shimmer * 0.55
+
+
+def refill_chime():
+    """The range's refill stone topping somebody up.
+
+    A rising arpeggio on three partials rather than one tone, because what it
+    has to say is "you have more than you did" and a single note says only
+    "something happened". The voices enter in sequence over the first third and
+    ring together after that, so the ear hears a count.
+
+    Deliberately quiet and soft-edged. The stone can be stood on every two
+    seconds for as long as somebody feels like standing on it, and any sound
+    with a transient on the front becomes unbearable at that rate — which is the
+    same argument `range_orb` makes one screen up, for the same reason.
+    """
+    n = seconds(0.55)
+    t = np.linspace(0.0, n / RATE, n)
+    out = np.zeros(n)
+    # A major triad up, an octave apart at the ends: unambiguously "gained",
+    # and the only frankly musical sound in the game, which is what marks it as
+    # a piece of the range's furniture rather than an event in a match.
+    for i, freq in enumerate([523.3, 659.3, 1046.5]):
+        start = int(n * 0.10 * i)
+        voice = np.zeros(n)
+        m = n - start
+        u = np.linspace(0.0, m / RATE, m)
+        voice[start:] = np.sin(2.0 * np.pi * freq * u) * np.exp(-u * 5.0)
+        out += voice * (0.9 - 0.15 * i)
+    # A breath of air under it, so the triad sits on something rather than
+    # floating in silence.
+    out += lowpass(noise(n, 5501), 900.0) * envelope(n, 0.15, 0.8, 2.0) * 0.18
+    return out
+
+
+def rack_swap():
+    """A weapon lifted off the practice range's rack.
+
+    Wood and a little metal, in that order: a dull knock as the old weapon is
+    set down on the timber, then a short scrape as the new one comes off it. The
+    two are staged rather than mixed, because the sound is describing an
+    exchange and an exchange has an order to it.
+
+    Short — 0.28 s — because it fires the instant a Bog crosses the rack's area
+    and anything longer would still be playing while the player is already
+    aiming with the new weapon.
+    """
+    n = seconds(0.28)
+    t = np.linspace(0.0, n / RATE, n)
+    # The knock. A low sweep with the grit of `spear_hit_world` over it, which
+    # is the sound in this file that already means "shaft against solid thing".
+    knock = sweep(n, 260.0, 150.0, 0.7) * envelope(n, 0.004, 0.55, 3.0)
+    knock += lowpass(noise(n, 5502), 2200.0) * envelope(n, 0.003, 0.35, 5.0) * 0.5
+    # The scrape, delayed into the second half, band-limited so it is a slide
+    # along timber rather than a hiss.
+    scrape = np.zeros(n)
+    start = int(n * 0.45)
+    m = n - start
+    u = np.linspace(0.0, m / RATE, m)
+    rasp = lowpass(noise(m, 5503), 5200.0) - lowpass(noise(m, 5503), 900.0)
+    scrape[start:] = rasp * np.sin(np.pi * np.linspace(0.0, 1.0, m)) * np.exp(-u * 4.0)
+    return knock * 0.8 + scrape * 0.55
+
+
+def range_plate():
+    """A foot landing on a parkour timing plate.
+
+    Wood on a hollow box: the plates are timber squares laid on the bog, and
+    what the player needs from this is a single unmissable "counted" at the
+    start of a run and again at the finish. It is the shortest clip in the
+    library at 0.18 s, because it fires the frame a Bog crosses the plate and a
+    runner is already two strides past it by the time anything longer ends.
+
+    No pitch, no tone, no ring. A timing plate that sang would be the second
+    musical object in the range and would compete with the station chime it
+    sits twenty metres from; this one is a knock and nothing else.
+    """
+    n = seconds(0.18)
+    # The board itself: a fast fall from a low thump, which is a plank
+    # deflecting rather than a stone being hit.
+    body = sweep(n, 220.0, 96.0, 0.8) * envelope(n, 0.003, 0.92, 3.2)
+    # The hollow under it — one octave up, quieter and shorter, so the box
+    # reads as a box and not as solid ground.
+    body += 0.35 * sweep(n, 440.0, 200.0, 0.8) * envelope(n, 0.002, 0.88, 5.0)
+    # The contact. Mid-band noise only: the top end is a slap on stone and the
+    # bottom is already in the sweep.
+    grit = lowpass(noise(n, 5505), 4200.0) - lowpass(noise(n, 5505), 380.0)
+    return body + grit * envelope(n, 0.001, 0.75, 6.0) * 0.55
+
+
 def thunder_crack():
     """The Elder's bolt landing. The loudest thing in the game, on purpose.
 
@@ -493,6 +679,13 @@ EFFECTS = {
     "death": death,
     "respawn": respawn,
     "hitmarker": hitmarker,
+    "hitmarker_kill": hitmarker_kill,
+    "range_board": range_board,
+    "range_gong": range_gong,
+    "range_orb": range_orb,
+    "refill_chime": refill_chime,
+    "rack_swap": rack_swap,
+    "range_plate": range_plate,
     "thunder_crack": thunder_crack,
     "thunder_roll": thunder_roll,
 }

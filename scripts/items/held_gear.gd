@@ -1014,7 +1014,53 @@ func set_sword_grip(model_scale: float, offset: Vector3,
 ## needs and takes the unlayered one under its own floor. Six degrees on Z buys
 ## more and costs 15 mm of a number that has 36 mm to give. The bow's Idle
 ## elevation moves one degree, -44 to -45, which is the look holding still.
-const CARRY_TILT := Vector2(47.5, -34.0)
+##
+## **And that solve was the wrong shape, because the thing it balanced was a
+## floor against a counterfactual while the top limb went through the nose.**
+## Both tables above are the limb tip's height; neither could see where the
+## limb *pointed*, and after D-110 squared the head into its path it pointed at
+## the face. `preview_carry.HEAD_MIN` is that measurement — 0.06 m from the
+## limb segment to the head's own skin — and the shipped tilt read **0.002 m**
+## in all fifteen carried clips: not near the face, *on* it.
+##
+## The re-solve is a map rather than two lines, because the two angles are not
+## separable: `preview_carry -- probe` walked the whole 360 x 180 of tilt space
+## at 15 deg and printed head clearance, layered floor and unlayered floor in
+## every cell. Three facts came out of it.
+##
+## **The pitch was never the problem.** The bow lies 41 deg off horizontal now
+## against 45 before; what moved is the **bearing**, from -107 deg to -169 —
+## the low limb swings from across the body to along it, and the high limb
+## comes off the cheek without the bow standing up at all. Which is why no
+## amount of sweeping one axis at a time found it: both tables scored height.
+##
+## **Vertical is not available and the map says why.** A 1.54 m bow hangs 0.47 m
+## below a fist that the crouch drops to knee height, so every cell past about
+## 60 deg of pitch puts a limb tip in the grass: the family that clears both
+## floors is the one lying over at 30-45 deg, and inside it the bearing is free.
+##
+## **No cell in the whole map clears the face by 0.06 m and the bare-armed floor
+## by 0.10 m at once** — the best the head constraint allows on that column is
+## 0.082 m, which is this one. So the unlayered floor stops being a verdict and
+## becomes what it always described (`preview_bow.CARRY_TILT_GAIN`): the
+## bare-armed pose is composed for about a fifth of a second while the carry
+## layer fades, and a clearance the player looks at for the whole of every
+## carried frame outranks it.
+##
+##     tilt            head     layered floor   trunk   bare-armed
+##     (47.5, -34)    0.002        +0.173        0.002     +0.121
+##     (30, +15)      0.156        +0.432        0.025     +0.049
+##     **(40, +10)**  **0.134**    **+0.431**  **0.077**  **+0.082**
+##     (45, +15)      0.150        +0.338        0.070     +0.068
+##     (40, +5)       0.115        +0.436        0.084     +0.081
+##
+## (40, +10) is the best cell on three columns at once and second on the fourth:
+## 2.2x the head floor, 2.9x the grass floor, and it takes the bow off the
+## **chest** as well (0.002 m to the trunk before, 0.077 m now), which is the
+## other half of what a carried bow must not cross. Judged on a front-and-side
+## sheet as D-103 judged the spear's, against the shipped tilt in the same
+## frame: `tools/showroom/out/bow_face/final_candidates.png`.
+const CARRY_TILT := Vector2(40.0, 10.0)
 
 const BOW_SCALE := 1.5408
 

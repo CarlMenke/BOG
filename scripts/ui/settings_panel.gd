@@ -40,6 +40,11 @@ const CONTROL_REFERENCE: Array[Array] = [
 	# what it does for all three rather than naming a weapon this player may not
 	# have brought.
 	["Attack", "primary_attack"],
+	# The one key a player would not find on their own: it takes a weapon *away*
+	# rather than using one, and nothing on screen invites a press. The tile's
+	# cap says H once the weapon is down; this is where you find out it is H
+	# before you have put it down (the feel round).
+	["Put weapon away", "holster"],
 	["Aim", "aim"],
 	["Plant shield", "place_shield"],
 	["Throw magnet", "throw_magnet"],

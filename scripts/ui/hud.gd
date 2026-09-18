@@ -25,6 +25,14 @@ extends CanvasLayer
 ## it is on a short leash.
 const FLASH_TIME := 1.4
 
+## How long the hitmarker sits, by what it was. A kill is held longer than a hit
+## that did not land one — but the length is the *smallest* of the three things
+## that separate them now: a kill is white where a hit is the Bog's yellow, and
+## it is a whole X where a hit is four corners of one (D-122). Three signals for
+## the one distinction a player has to read without looking at it.
+const HIT_MARK := 0.45
+const KILL_MARK := 0.6
+
 ## Your own health bar, in pixels. The same 224 wide as the Elder's track and
 ## the letter hold's, because they stack in one column and a column of bars of
 ## three different widths reads as three unrelated things. Taller than either,
@@ -38,6 +46,7 @@ const HEALTH_BAR := Vector2(224.0, 22.0)
 ## hiding it rather than by each element knowing about each overlay.
 @onready var _root: Control = $Root
 @onready var _crosshair: Crosshair = %Crosshair
+@onready var _range_stats: RangeStatsPanel = %RangeStats
 @onready var _clock: Label = %Clock
 @onready var _score_line: RichTextLabel = %ScoreLine
 @onready var _team_chip: PanelContainer = %TeamChip
@@ -109,6 +118,7 @@ func _ready() -> void:
 	MatchState.phase_changed.connect(_on_phase_changed)
 	MatchState.scores_changed.connect(_refresh_score)
 	MatchState.player_killed.connect(_on_player_killed)
+	MatchState.hit_landed.connect(_on_hit_landed)
 	MatchState.match_finished.connect(_on_match_finished)
 	MatchState.local_death.connect(_on_local_death)
 	MatchState.local_respawn.connect(_on_local_respawn)
@@ -125,10 +135,16 @@ func _ready() -> void:
 	Net.return_to_lobby_requested.connect(_go_to_lobby)
 	Net.rematch_requested.connect(_on_rematch)
 
+	# So the practice range's targets can reach the hitmarker without holding a
+	# reference to a node that is rebuilt every time a match starts.
+	add_to_group("hud")
+
 	_banner.visible = false
+	_place_kill_feed()
 	_build_health()
 	_refresh_score()
 	_refresh_letters()
+	refresh_range_panel()
 	_on_phase_changed(MatchState.phase)
 
 
@@ -287,6 +303,32 @@ func _refresh_health() -> void:
 	_health_fill_style.bg_color = colour
 
 
+## **Which way the feed reads, stated after the feed has had its say.**
+##
+## Since D-118 the kill feed runs up the *left* edge of the screen instead of
+## hanging off the top right, so a row has to begin at the margin rather than end
+## at it, and the column has to fill from the bottom so the newest row is always
+## the same distance off the chat panel. Both of those are placement, which is
+## this file's job — `hud.tscn` says the same two things and is where to change
+## them — but `kill_feed.gd` builds each row with the size flag its old corner
+## wanted and re-asserts `ALIGNMENT_BEGIN` in its own `_ready`. A child is
+## readied before its parent, so saying it here is saying it last.
+##
+## Connected rather than set once: rows are made and freed continuously, and the
+## flag has to be on the row before the container measures it.
+func _place_kill_feed() -> void:
+	_kill_feed.alignment = BoxContainer.ALIGNMENT_END
+	_kill_feed.child_entered_tree.connect(_align_feed_row)
+	for row in _kill_feed.get_children():
+		_align_feed_row(row)
+
+
+func _align_feed_row(row: Node) -> void:
+	var control := row as Control
+	if control != null:
+		control.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+
+
 ## Built here rather than in `hud.tscn` for the same reason the lives pips are:
 ## it is one row of two rectangles and a number whose whole behaviour is in this
 ## file, and a scene node for it would be a second place to look.
@@ -305,7 +347,12 @@ func _build_health() -> void:
 	# filled the column's 440 and sat at twice the width of the two bars it was
 	# written to match. The Elder track draws its own 224 centred inside whatever
 	# it is given, which is why that one was right and this one was not.
-	_health.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	#
+	# Shrunk to the **end** since D-118, where the column moved to the bottom
+	# right corner: everything else in it is right-aligned against the same
+	# 32 px margin, and a 224 px bar centred over a 440 px column would be the
+	# one thing in the stack whose right edge did not line up with the tiles.
+	_health.size_flags_horizontal = Control.SIZE_SHRINK_END
 	_health.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_health.visible = false
 
@@ -316,10 +363,17 @@ func _build_health() -> void:
 	# `Nameplate`'s own (D-062) and are shared with the plate over every head, so
 	# a HUD that coloured health by a different rule than the bodies do would be
 	# two answers to one question.
+	# The backing went 0.72 -> 0.35 with the Quiet theme (D-117): every other
+	# surface on this HUD is now a dimming of the scene behind it rather than a
+	# near-solid plate, and the health bar was the last opaque rectangle left.
+	# **The hairline stays**, and it is the only border on the bar: at 0.35 over
+	# the arena's lit ground the empty part of the trough is nearly the ground
+	# itself, and a bar whose far end cannot be found is a bar with no scale —
+	# the same trap unit T's slider track fell into.
 	var back := Panel.new()
 	back.set_anchors_preset(Control.PRESET_FULL_RECT)
 	back.add_theme_stylebox_override("panel", _health_box(
-		UIPalette.faded(UIPalette.VOID, 0.72), UIPalette.LINE))
+		UIPalette.faded(UIPalette.VOID, 0.35), UIPalette.LINE))
 	back.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_health.add_child(back)
 
@@ -351,13 +405,15 @@ func _build_health() -> void:
 	column.move_child(_health, _abilities.get_index())
 
 
-## One box for both halves of the bar. Radius 3 rather than the palette's 4:
-## the bar is 22 px tall and a 4 px corner on something that short starts to
-## read as a capsule.
+## One box for both halves of the bar, at radius 4. It was 3, on the argument
+## that a 4 px corner on a 22 px bar starts to read as a capsule; it does not,
+## and 4 is what the rest of this corner of the screen is now rounded to — the
+## tiles under the bar are 8, and a bar and its tiles disagreeing about their
+## geometry is exactly the kind of near-miss a quiet UI has nothing else to hide.
 static func _health_box(fill: Color, border: Color) -> StyleBoxFlat:
 	var box := StyleBoxFlat.new()
 	box.bg_color = fill
-	box.set_corner_radius_all(3)
+	box.set_corner_radius_all(4)
 	if border.a > 0.0:
 		box.border_color = border
 		box.set_border_width_all(1)
@@ -422,6 +478,15 @@ func _refresh_abilities() -> void:
 		_spear_slot.set_armed(combat.has_spear(),
 			combat.spear_cooldown() if spear_timed else 0.0,
 			Net.config.spear_recharge)
+	# And, whichever of the four it turned out to be, whether that weapon is
+	# currently **put away** (the feel round). After the branch and not inside
+	# it, because a holster is a state of the Bog and not of the weapon: all
+	# four branches above have already said no to `set_armed`, and this is the
+	# line that says *why* — the photograph drops to the "nothing to spend"
+	# shade and the cap reads H, so the tile answers the question a dark square
+	# always raises.
+	var stowed := combat.is_holstered()
+	_spear_slot.set_stowed(stowed, "holster" if stowed else "primary_attack")
 	# Stock, not cooldowns (D-032). The count is the readout; the use-delay only
 	# dims the tile, because it is a floor on spend rate and not something worth
 	# timing a fight around. Note what is *not* passed: no totals — the spear
@@ -604,11 +669,100 @@ func _on_phase_changed(phase: int) -> void:
 
 func _on_player_killed(victim_id: int, killer_id: int, cause: int) -> void:
 	_kill_feed.add_kill(victim_id, killer_id, cause)
-	# Visual only. `MatchState` already plays the hitmarker sound and shakes the
-	# camera on a kill; a second one from here would be two of each.
-	if killer_id == Net.local_id() and victim_id != killer_id:
-		_crosshair.strike()
+	# **Narrowed, not removed** (D-116). A killing hit emits `hit_landed` as well
+	# now, and the handler below flashes for it, so leaving this in place for
+	# every kill would be two marks for one death. What is left is the two kills
+	# that report no damage and therefore emit no hit at all — a Bog you knocked
+	# into the void, and one that fell — which would otherwise have silently lost
+	# the only feedback they had.
+	#
+	# Still visual only: `MatchState` plays the hitmarker sound and shakes the
+	# camera on a kill, and a second of either from here would be two of each.
+	var environmental := cause == Bog.Cause.VOID or cause == Bog.Cause.FALL
+	if environmental and killer_id == Net.local_id() and victim_id != killer_id:
+		_crosshair.strike(Color(1, 1, 1), KILL_MARK, true)
 	_refresh_score()
+
+
+## Every landed hit, on every peer, including the ones that killed.
+##
+## Three things happen and all three are for the striker alone. The mark is on
+## every map: the sound has fired on every hit since D-062 and the picture had
+## never caught up, which was an omission rather than a decision. The floating
+## number and its distance are the practice range's only, because in a real
+## fight the honest gauge is the bar over the head and a screen of rising
+## integers is a different game.
+##
+## No sound here at all. `MatchState._do_damage` and `_apply_death` already play
+## `hitmarker.wav` for the local attacker, and a third would be a third.
+func _on_hit_landed(attacker_id: int, victim_id: int, amount: float, cause: int,
+		point: Vector3, _bone: String) -> void:
+	if attacker_id != Net.local_id() or attacker_id == victim_id:
+		return
+	# A hit the victim did not survive is the kill mark: white, held longer, and
+	# closed into a full X through the centre. It is worth a shape of its own
+	# (D-122) — every other mark in a fight means "again", and this one means
+	# "done", which is the one piece of feedback a player acts on immediately by
+	# turning to look for the next Bog.
+	if MatchState.is_alive(victim_id):
+		_crosshair.strike(UIPalette.BOG, HIT_MARK)
+	else:
+		_crosshair.strike(Color(1, 1, 1), KILL_MARK, true)
+
+	if not MatchState.config().is_practice():
+		return
+	var shot := RangeStats.shot_distance(attacker_id, point)
+	HitNumber.pop(_number_root(), point, "%d" % roundi(amount),
+		_cause_colour(cause), "" if shot < 0.0 else "%.0f m" % shot)
+
+
+## Flash the mark for something that is not a Bog — one of the range's boards,
+## its gong or an orb. Called through the `hud` group, so a target never holds a
+## reference to a HUD that is rebuilt with every match.
+##
+## The hit shape, never the kill shape, whatever the tint: a board is struck and
+## a board is not killed, and the X has to keep meaning exactly one thing.
+func flash_hit(tint: Color = UIPalette.AMBER) -> void:
+	_crosshair.strike(tint, HIT_MARK)
+
+
+## The colour a damage number is written in, by what did it. Four weapons, four
+## readings, so a number tells you which of your own shots landed when two are in
+## the air at once.
+func _cause_colour(cause: int) -> Color:
+	match cause:
+		Bog.Cause.SPEAR:
+			return UIPalette.BOG
+		Bog.Cause.ARROW:
+			return UIPalette.AMBER
+		Bog.Cause.SWORD:
+			return UIPalette.DANGER
+		Bog.Cause.LIGHTNING:
+			return Color(0.72, 0.84, 1.00)
+		_:
+			return UIPalette.TEXT
+
+
+## Numbers go in the arena's item container, which is where everything else with
+## its own life in the world goes, and fall back to the current scene in a
+## testbed that has no arena.
+func _number_root() -> Node:
+	var root := get_tree().get_first_node_in_group("spawned_items")
+	return root if root != null else get_tree().current_scene
+
+
+## The range's stats panel is on only in the range. It is a small corner readout
+## about a session that has no score, and in a real match the corner it sits in
+## is the one the eye uses for the health bar.
+func refresh_range_panel() -> void:
+	if _range_stats == null:
+		return
+	_range_stats.visible = MapCatalog.is_practice(Net.config.map)
+	if _range_stats.visible:
+		# Bind on the frame it is shown rather than on the panel's own half
+		# second poll, so walking into the range does not read "no shots yet"
+		# over a table that already has rows in it.
+		_range_stats.bind_now()
 
 
 ## Both letter signals carry a peer id and fire for everybody. Only your own

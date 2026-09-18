@@ -320,24 +320,30 @@ check "the torso tracks the crosshair" "spine PASS" \
 also "the torso tracks the crosshair" "bow PASS"
 also "the torso tracks the crosshair" "pitch PASS"
 also "the torso tracks the crosshair" "release PASS"
-# What the bow's carry tilt buys on its own (D-066, D-070). D-065 measured a
-# 1.71 m longbow ploughing `Run` by 0.158 m and said plainly that no lever on the
-# grip could raise it, because every one of them takes the string's V off the
-# drawing fingers. A tilt that only exists while the bow is *carried* meets no
-# string at all, and this is the table that says so: the worst limb tip over the
-# twelve clips a Bog carries a bow around in, which has to stay 0.15 m clear.
+# **A grip is still the grip its own clips solve for** (D-073), asked of the bow
+# — and this run has been able to ask it since D-065 and did not.
 #
-# **It stopped being the whole answer in D-070 and is kept because it is the
-# interesting half.** A carried bow wears a *pose* now, and what the game
-# composes is measured by `preview_carry` further down. This run is what says the
-# tilt still earns its keep underneath that pose — the great sword's equivalent
-# was deleted along with the tilt it swept, and why one survived and the other
-# did not is the argument in `HeldGear.CARRY_TILT`.
+# `preview_bow -- measure` solves six numbers out of the string and the draw
+# window: where the bow sits in the left fist at every charge level so the
+# string's V meets the drawing fingers, and where the arrow sits in the right
+# one. It prints them as six `const` lines for a human to paste, and until now
+# nothing compared the printout with what was actually pasted — which is exactly
+# how the great sword's scale shipped at `1.2586` against a solve that had been
+# printing `1.2585` for four steps. A rebuilt `bow.glb`, a re-timed `BowReload`
+# or a moved draw window all move this solve, and the bow would go on hanging in
+# the old one, silently.
 #
-# It runs the same `preview_bow -- measure` that solves the grip, so the same
-# run that would notice a grip going stale notices a carry going into the grass.
-# Headless — nothing is rendered, the PNG is thrown away.
-check "the bow's carry tilt earns it" "carry PASS" \
+# **What this check used to be, and why it is not that any more.** It was a floor
+# under the *bare-armed* carry — the bow on the locomotion's own arms, with no
+# carry layer over them, which the game composes for the fifth of a second the
+# layer takes to fade up and never otherwise. That floor and the bow's head
+# clearance are provably disjoint (`HeldGear.CARRY_TILT` has the map), and its
+# own motivating case — D-065's 1.71 m longbow ploughing `Run` by 0.158 m — no
+# longer reproduces on the rebuilt library: untilted measures +0.003 m now. The
+# table is still printed and the carry is judged where the game composes it, in
+# `preview_carry -- measure` further down. Headless — nothing is rendered, the
+# PNG is thrown away.
+check "the bow's grip is still the one its string solves for" "grip PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" --script tools/snapshot.gd -- \
     res://tools/preview_bow.tscn "$GODOT_LOG_DIR/bow_measure.png" 4 measure
 # The Elder's invincibility, asserted against a real spear rather than in logic
@@ -530,9 +536,10 @@ also "the great sword fits both fists" "blade PASS"
 # reads 0.000 for all 288 candidates cannot tell a shaft along a belly from one
 # through it. The spear has its own carry pose now (`SpearCarry`, D-103), so the
 # floor is back at D-074's 0.06 and `carry PASS` means the shaft clears the trunk
-# by it as well as clearing the grass. The bow still hangs beside a thigh at
-# 0.004 m on a pose nothing has changed, so its column is printed and decides
-# nothing. Both floors hold over twelve clips and twenty-four
+# by it as well as clearing the grass. The bow's trunk column is printed and
+# decides nothing — it reads 0.002 m for a bow leaning on a body and would read
+# the same for one inside it, which is the confusion the floor was disarmed over
+# in the first place. Both floors hold over twelve clips and twenty-four
 # samples of each, with the carry loop walked across its own length underneath so
 # that a row is the worst of two cycles beating rather than one frame held
 # against another. The trunk is the real mesh — every head- and torso-weighted
@@ -553,6 +560,18 @@ also "the great sword fits both fists" "blade PASS"
 check "every carried weapon clears the ground" "carry PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" --script tools/snapshot.gd -- \
     res://tools/preview_carry.tscn "$GODOT_LOG_DIR/carry_measure.png" 4 measure
+# And `head PASS`, which is the **bow's** floor and the one the three above could
+# not be. The owner, of the shipped carry: *the top limb passes through the
+# nose.* It did — and every number in this run said the bow was fine, because the
+# floor is about grass and the trunk column reads the same 0.002 m for a limb
+# leaning on a body as for one through a face. `HEAD_MIN` asks the half of the
+# body a leaning limb never touches: the nearest distance from the limb segment
+# to the head's own skinned vertices and to the `Neck`/`Head`/`HeadTop_End`
+# joints, 0.06 m, the spear's own `SKIN_MIN` one weapon over. D-110 is why it is
+# needed now rather than at D-066 — the carry layer used to turn the head 58 deg
+# away, so the face was out of the limb's path by accident, and `untwist` put it
+# back in. A clearance nobody measures is a clearance that gets spent.
+also "every carried weapon clears the ground" "head PASS"
 also "every carried weapon clears the ground" "derived PASS"
 # And `card PASS`, which is about a **third** number the grip carries. The letter
 # card rides `CARD_ALONG_SHAFT` along the shaft out of the spear hand, derived
@@ -746,6 +765,24 @@ check "bunny hops carry, up to a cap" "bhop PASS" \
 # ends. Twenty-odd seconds of real time is what the honest version costs.
 check "swings chain into the hop budget" "chain PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- chain
+# The feel round's movement, on a flat floor with two real Bogs (D-123). Four
+# claims, and each of them is a number the physics either produces or does not:
+# a full draw walks at WALK_SPEED x DRAW_SPEED_SCALE (1.15 m/s), crouch at run
+# speed with **no sprint** starts a slide and a jump out of it leaves at 1.2x
+# the slide along the slide's own heading with 1.12x the lift, a run-speed
+# landing with crouch held is sliding on the tick it touches down and plays
+# neither Land nor LandHard, and the slide jump's serial reaches a Bog this
+# machine does not own - copied field by field out of the replication config
+# `scenes/player/bog.tscn` ships, so a field left out of that config fails here
+# rather than in a match.
+#
+# Headless and `--fixed-fps 60`, like `bhop`: every one of these is counted in
+# physics ticks, and a slide is a second long.
+check "movement" "movement_check: PASS"     "$GODOT" --headless --fixed-fps 60 --path "$GODOT_ROOT" tools/movement_check.tscn
+also "movement" "movement_check: draw PASS"
+also "movement" "movement_check: slide_jump PASS"
+also "movement" "movement_check: landing PASS"
+also "movement" "movement_check: remote PASS"
 # Bogs in their team's colour (D-046), read off the material the renderer will
 # draw with rather than off what the script meant to set. One Bog per team has
 # to be in exactly its nameplate colour, a free-for-all Bog has to be back on the
@@ -860,6 +897,35 @@ also "camera stays out of the scenery" "calm PASS"
 # those is the absence of a call rather than a fault inside one.
 check "full playthrough" "playthrough: PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/playthrough.tscn
+# ---------------------------------------------------------------- combat ---
+# The feel round's fists, emote and sword, out of the run above rather than out
+# of a second one. They are `also` lines and not a `check` of their own on
+# purpose: every claim is about two Bogs standing on the arena's own floor after
+# the real menu, session, lobby and warmup, so the run that already walked all
+# of that is the run that can make them — and repeating it would be ten seconds
+# spent building an island twice to ask a different question of the same two
+# bodies.
+#
+# `fists` is the holster: a key that takes the weapon away, three gates that
+# answer no while it is gone, two empty fists, and the tenth of a metre a second
+# that buys (2.53 against 2.30, which is `FISTS_SPEED_SCALE` read out of
+# `target_speed` itself rather than off the constant).
+# `punch` is the attack that is left: 20 at 1.1 m inside a 50-degree front, and
+# **nothing at the same range behind**, which is the half that says a punch can
+# miss. `Bog.Cause.FIST` arrives on `hit_landed` with it and `RangeStats` has no
+# row for it, so the practice panel counts weapons and not hands.
+# `emote` is D-105's dance with its hands emptied, and the prop back in the fist
+# one frame after it ends — plus the holster refused mid-draw, which is the one
+# `can_holster` clause a player will actually meet.
+# `sword` is the chain: 50 + 50 kills at `sword_reach` plus the step, a third
+# click chains and a fourth is refused by the clip's own three windows, and the
+# same button at run speed still fires D-068's committed spin for the whole 100.
+also "full playthrough" "combat fists PASS"
+also "full playthrough" "combat punch PASS"
+also "full playthrough" "combat emote PASS"
+also "full playthrough" "combat sword PASS"
+also "full playthrough" "playthrough: combat PASS"
+# ------------------------------------------------------------ end combat ---
 # Capture B·O·G's bases and letters on this map (D-051), from the same run: two
 # bases on distinct pads well apart, each team with pads of its own, and three
 # letter points on a real floor with a Bog's head room, outside both bases and
@@ -916,6 +982,80 @@ check "quarry playthrough" "playthrough: PASS" \
 also "quarry playthrough" "arena: Twin Quarry built from"
 also "quarry playthrough" "playthrough: capture layout PASS"
 also "quarry playthrough" "capture layout on 'quarry' — declared bases"
+# And on Glowworm Grounds, the practice range (D-112). The same walk again, and
+# then a different ending: a practice map has no clock and no win check, so the
+# run swaps the kill loop and the results screen for a stage that proves what
+# unit 1 of the range actually built. The four `also` lines are the four claims
+# that could each be quietly wrong while the run still passed — the map brought
+# its dummy registry, a dummy is hidden from every roster-derived screen, the
+# host really is the peer publishing a dummy's transform (checked inside the
+# stage, because a host sees its own dummies move either way and only a client
+# would ever notice), and a map-placed pickup can be claimed.
+check "range playthrough" "playthrough: PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" tools/playthrough.tscn -- range
+also "range playthrough" "arena: Glowworm Grounds built from"
+also "range playthrough" "playthrough: practice PASS"
+also "range playthrough" "playthrough: the range brought a RangeDummies node"
+also "range playthrough" "playthrough: dummies are hidden from every roster screen"
+also "range playthrough" "playthrough: a placed pickup was claimed"
+# The eight dummy behaviours, the stats signboard and the parkour clock, on a
+# bare fixture and then on Glowworm Grounds itself. A dummy has no physics at
+# all — its Bog node is authored by a peer that does not exist, so
+# `move_and_slide` never runs on any machine — which means every brain is a
+# position as a function of time and every one of them can be wrong in a way a
+# screenshot would not show. The four `also` lines are the four that were: the
+# jumper's arc is solved rather than integrated (an integrated one sinks through
+# the floor over a session), the rusher drops a chase when its target walks out
+# of the zone rather than running at the inside of its own fence for six
+# seconds, the pop-up goes 2.6 m *under* the floor because crouching hides 20 cm
+# behind a 1.25 m wall, and a run that ends in the void is reported as negative
+# seconds rather than not at all.
+#
+# The `signboard` line replaces a `station` one. The six walk-in stations and
+# their behaviour rings are gone: a zone's mix is authored in the map and never
+# changes, so what is left to assert is that the one control still on the range
+# calls the counter and touches nobody's brain on the way past.
+check "dummy brains" "range_brains: PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" tools/range_brains.tscn
+also "dummy brains" "range_brains: jumper PASS"
+also "dummy brains" "range_brains: rusher PASS"
+also "dummy brains" "range_brains: popup PASS"
+also "dummy brains" "range_brains: signboard PASS"
+also "dummy brains" "range_brains: parkour PASS"
+# The wells, the refill stone and the weapon racks. The re-mint is the well's
+# whole behaviour and it has two ways to be silently dead — a stock that rots
+# after thirty seconds emits no `pickup_taken` and so never re-mints, and a
+# robe pedestal on the shield's four-second timer turns the ability yard into a
+# place where somebody is permanently unkillable — so both timers are asserted
+# rather than eyeballed. The rack's line is the one that matters most: a weapon
+# was fixed for the match by a *lobby* rule and never by the code, and the swap
+# has to land on the Bog, the hand and the roster row (so a respawn keeps it)
+# inside the overlap signal itself, which is how "within one frame" is proven.
+check "range items" "range_items: PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" tools/range_items.tscn -- all
+also "range items" "RangeItems: 4 wells, 3 racks, 1 refill stone(s)"
+also "range items" "range_items: a well re-minted 4.0 s after it was taken PASS"
+also "range items" "range_items: the refill stone raised 0/0/0 to 2/2/1 PASS"
+also "range items" "range_items: a full Bog got nothing and no chime PASS"
+also "range items" "range_items: a rack swapped spear to bow on the Bog, the hand and the roster within one frame PASS"
+# Boards, orbs and the gong: things to shoot that are not Bogs, reached through
+# `range_hit` rather than through the damage door, which stays keyed by peer id.
+# The board's rings, the gong at the spear's measured flat 28 m and an orb that
+# takes the shaft with it when it bursts are each a different answer to "what
+# becomes of the projectile", and the last `also` is the counter — a hit filed
+# under the weapon that threw it, which is the whole of what a stats board is.
+# This block is also where the bug that justified the tool was caught: every
+# target was first built with its collision shape nested under the swinging
+# hinge, which Godot ignores in silence, and the only check that noticed was the
+# one that threw a real spear through a real sweep.
+check "range targets" "range_targets: PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" tools/range_targets.tscn
+also "range targets" "range_targets: board scored 3, 2, 1 by ring"
+also "range targets" "range_targets: the gong rang at 28.0 m"
+also "range targets" "range_targets: an orb burst and left nothing behind"
+also "range targets" "range_targets: 1 throw, 1 hit, 1 kill, accuracy 100%"
+also "range targets" "range_targets: a board hit files under the weapon that threw it"
+also "range targets" "range_targets: reset zeroed every row"
 # A Capture G·U·B match standing up in the real arena (D-051): `arena.gd` draws
 # a ring per team, the host settles three cards onto the map once the physics
 # has stepped, and every Bog spawns on a pad of its own team's. The rules
@@ -1037,6 +1177,16 @@ check "the weapon tile follows the pick" "weapon_tiles PASS"     "$GODOT" --path
 check "spear reload timer on the tile" "reload_timer PASS" \
     "$GODOT" --path "$GODOT_ROOT" --resolution 640x360 --script tools/snapshot.gd -- \
     res://tools/hud_range.tscn "$GODOT_LOG_DIR/reload_timer.png" 270 reload_timer
+# The range's own corner of the HUD: three weapon rows, each with throws, hits,
+# accuracy, the longest hit and the current streak, over a hit marker caught
+# mid-flash. Not headless, like the two above and for the same reason — a
+# headless snapshot writes no PNG at all, so a `--headless` photo check would be
+# asserting a verdict over a picture nobody took. The panel is practice-only and
+# so is the damage number beside it; the *marker* is not, and that is the one
+# thing unit 5 changed about an ordinary match.
+check "the range panel" "hud_range: range PASS" \
+    "$GODOT" --path "$GODOT_ROOT" --resolution 1600x900 --script tools/snapshot.gd -- \
+    res://tools/hud_range.tscn "$GODOT_LOG_DIR/range.png" 110 range
 # The ability bar's tiles are photographs of the real props (D-076), and this is
 # the claim that makes seven of them a *set* rather than seven pictures: one
 # camera, one light rig, and one framing rule — the geometric mean of a
@@ -1185,6 +1335,41 @@ check "quarry parkour and ramps" "parkour_report: PASS" \
     "$GODOT" --path "$GODOT_ROOT" --resolution 1000x1000 --script tools/snapshot.gd -- \
     res://tools/parkour_report.tscn "$GODOT_LOG_DIR/quarry_parkour.png" 30 top \
     map=res://scenes/world/maps/quarry.tscn
+# Glowworm Grounds' eight pads, all of them on one lodge deck — which is what
+# makes `PAD_SEPARATION` the number the deck's 24 m width was derived from. Its
+# triangle floor is its own and the lowest but the quarry's: the whole range is
+# 2,640 triangles of slabs and posts, because a range is mostly empty ground.
+# The second `also` is the **marker contract** units 3, 4 and 5 code against —
+# the map prints its own census, so a marker dropped by a later edit fails here
+# rather than in a playtest.
+check "range spawns and collision" "preview_map: PASS" \
+    "$GODOT" --path "$GODOT_ROOT" --resolution 800x1200 --script tools/snapshot.gd -- \
+    res://tools/preview_map.tscn "$GODOT_LOG_DIR/range_top.png" 40 top \
+    map=res://scenes/world/maps/range.tscn min_triangles=1200
+# The eighth pad, named rather than counted: `preview_map`'s pad-count check
+# prints nothing when it passes, so an `also` on its wording would go green on a
+# map with one pad. This is the last of the two rows of four, and its height
+# says it is standing on the deck with the other seven.
+also "range spawns and collision" "pad 7  (9.75, 1.32, 44.00)"
+also "range spawns and collision" "27 dummies (27 live, 0 reserved), 4 wells, 3 racks, 1 signboard(s), 9 targets"
+# Where the sun actually ended up, read back out of the built scene rather than
+# taken from the comment that claims it. Every argument this map makes about
+# where a shadow falls is made from these two numbers, and they were sixty
+# degrees wrong for a whole pass: a `.tscn` stores a `Transform3D` as the
+# basis's three *rows* and the Sun had been written as its columns, which is a
+# transpose and therefore invisible on the due-north moon this map used to have.
+also "range spawns and collision" "sun 9.0 deg up, bearing 30.0 deg E of N (0.0 off design)"
+# And the range's own promises, which are about the jump arc rather than about
+# sightlines: every landing on the parkour course is reachable from the ground by
+# hops and leaps alone, the course offers the one-tick dive as a shortcut and
+# never as the only way, and nothing — not a hop, a leap or the dive — reaches
+# the lodge roof, the west bank or the south banks. Its `EXPECT` row turns the
+# sightline scan off and says at length why.
+check "range parkour and reaches" "parkour_report: PASS" \
+    "$GODOT" --path "$GODOT_ROOT" --resolution 1000x1000 --script tools/snapshot.gd -- \
+    res://tools/parkour_report.tscn "$GODOT_LOG_DIR/range_parkour.png" 40 top \
+    map=res://scenes/world/maps/range.tscn
+also "range parkour and reaches" "every landing is reachable from the ground (0 stranded)"
 # Walks the menu into a real match and asks Input.mouse_mode what happened. It
 # grabs the physical mouse for about a second on the way through, which is the
 # only way to prove the thing it proves: every other check here stands the arena

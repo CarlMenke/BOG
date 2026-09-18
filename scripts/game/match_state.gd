@@ -22,6 +22,25 @@ extends Node
 signal phase_changed(phase: Phase)
 signal scores_changed()
 signal player_killed(victim_id: int, killer_id: int, cause: int)
+## Every hit that actually took health off somebody, on every peer (D-116).
+##
+## `player_killed`'s sibling, and deliberately the *other* half of the same
+## story: that one fires when a Bog runs out, this one fires every time one is
+## hurt, including the hit that finished them. The practice range's hit marker,
+## its floating damage numbers and its accuracy counters all hang off this, and
+## none of them can be built out of `_do_damage` alone — that RPC is only sent
+## when the victim survives (see the split at the end of `report_damage`), so a
+## range built on it would score every kill as a miss.
+##
+## `amount` is **the damage actually dealt**, not the damage asked for: after
+## every refusal, and clamped to what the victim had left, so a 100-point spear
+## into a Bog on 30 health reports 30. That is the number a range is counting —
+## "how much did I take off them" — and the requested figure is a fact about the
+## weapon, which the caller already knows.
+##
+## `cause` is a `Bog.Cause` as an int, like `player_killed`'s.
+signal hit_landed(attacker_id: int, victim_id: int, amount: float, cause: int,
+	point: Vector3, bone: String)
 signal clock_changed(seconds_left: float)
 signal match_finished(summary: Dictionary)
 signal local_death(respawn_in: float)
@@ -48,6 +67,14 @@ signal letter_hold_changed(peer_id: int)
 ## walked over mid-hold start nothing, so neither fires it. `letter_banked`
 ## fires when a letter is actually awarded, which with a hold time of zero is
 ## the only one of the two a card produces. Both fire on every peer.
+## An item left the ground because somebody walked over it, on every peer
+## (D-115). `kind` is a `Pickup.Kind` as an int.
+##
+## What the practice range's item wells re-mint on. Deliberately not "a pickup
+## was spawned" as well — a well knows what it put down, because it is what put
+## it down; what it cannot see for itself is somebody else's Bog collecting it.
+signal pickup_taken(id: int, kind: int, by_peer: int)
+
 signal letter_picked_up(peer_id: int, letter: int)
 signal letter_banked(peer_id: int, letter: int)
 ## A card taken out of a team's vault by somebody who is not on that team
@@ -148,6 +175,10 @@ var _arena_ready_deadline: float = 0.0
 ## pickup_id -> Pickup, on every peer. The id is what the spawn and the
 ## collection messages address, because a spawned node's *path* is not something
 ## two machines agree on — see the header of `scripts/items/pickup.gd`.
+## peer id -> the `Transform3D` that peer respawns at, instead of a spawn pad.
+## Written by `set_respawn_anchor`; see `_next_spawn`.
+var _respawn_anchors: Dictionary = {}
+
 var _pickups: Dictionary = {}
 ## Host only. Never reused within a match, so a collect message can never land
 ## on the item that replaced the one it was about.
@@ -394,6 +425,9 @@ func reset() -> void:
 	# `claim_pickup` chase instance ids that no longer resolve.
 	_pickups.clear()
 	_next_pickup_id = 1
+	# The stations these name belong to the map being left, exactly as
+	# `_spawn_points` below does.
+	_respawn_anchors.clear()
 	_clear_letter_holds()
 	_clear_elders()
 	_capture.clear()
@@ -429,15 +463,20 @@ func _begin_warmup() -> void:
 	_team_letters.clear()
 	_capture.clear()
 	_capture_pending = is_capture()
-	for peer_id: int in Net.peer_ids():
+	# **People only.** A dummy left on the roster from a previous range session
+	# would otherwise be given a `stats` row here and spawned onto a spawn pad
+	# by the loop at the end of this function — a target standing in the middle
+	# of a real match. Dummies are put in the world by `RangeDummies` through
+	# `spawn_for`, at their stations, and never by the warmup (D-112).
+	for peer_id: int in Net.human_ids():
 		stats[peer_id] = _new_stats()
 	_finished = false
-	time_left = float(config().time_limit)
-	_phase_timer = config().warmup_time
+	time_left = float(config().effective_time_limit())
+	_phase_timer = config().effective_warmup_time()
 
 	_sync_phase.rpc(Phase.WARMUP, _phase_timer, time_left)
 	_sync_phase(Phase.WARMUP, _phase_timer, time_left)
-	for peer_id: int in Net.peer_ids():
+	for peer_id: int in Net.human_ids():
 		_spawn_bog(peer_id)
 	_push_scores()
 
@@ -498,7 +537,10 @@ func _process(delta: float) -> void:
 
 
 func _tick_clock(delta: float) -> void:
-	if config().time_limit <= 0:
+	# Zero is "no clock", and in the practice range that is what it always is
+	# — `effective_time_limit` says so rather than this function learning what a
+	# practice map is (D-112).
+	if config().effective_time_limit() <= 0:
 		return
 	time_left = maxf(0.0, time_left - delta)
 	# Broadcast about once a second rather than every frame; the clock is a
@@ -554,6 +596,18 @@ func _tick_void() -> void:
 # ------------------------------------------------------------------ spawns ---
 
 func _next_spawn(peer_id: int = 0) -> Transform3D:
+	# A Bog with an anchor comes back exactly where it was put, every time, and
+	# never touches the pad rotation. The practice range's dummies are the only
+	# thing that has one: a target that respawned on a spawn pad would leave its
+	# station empty and wander into somebody's throwing lane, and "it comes back
+	# where it stands" is what makes a station a station (D-112).
+	#
+	# Checked before the pool rather than as a branch inside it, so `_spawn_bog`
+	# and `_respawn` both honour it with no second code path — and stated as a
+	# plain table on `MatchState` rather than a call into the range, because
+	# this file must not know what a practice map is beyond `is_practice`.
+	if _respawn_anchors.has(peer_id):
+		return _respawn_anchors[peer_id]
 	var pool := _spawn_pool(peer_id)
 	if pool.is_empty():
 		return Transform3D.IDENTITY
@@ -602,6 +656,42 @@ func _spawn_bog(peer_id: int) -> void:
 	var life := _life_of(peer_id)
 	_create_bog.rpc(peer_id, spawn, life)
 	_create_bog(peer_id, spawn, life)
+
+
+## Host only. Put a Bog in the world for a roster row the warmup did not spawn,
+## at a transform of the caller's choosing, and make that transform where it
+## comes back to (D-112).
+##
+## The practice range's one way in. It is `_spawn_bog` with the pad rotation
+## taken out and an anchor put in, and it deliberately reuses `_create_bog`
+## rather than growing a spawn path of its own: a dummy has to be a Bog in every
+## respect that matters — hittable, ragdolling, replicated, nameplated — and the
+## cheapest way to guarantee that is for it to be built by the same function
+## every player's body is built by.
+##
+## Clients learn of the Bog from the `_create_bog` broadcast, and of the row
+## behind it from the roster broadcast `Net.add_bot` sent first. Both are
+## reliable on the default channel, so ENet delivers them in that order and no
+## peer can reach `_create_bog`'s `Net.player_name` before it has the row to
+## read — the same argument D-069 makes about the weapon and D-048 about teams.
+func spawn_for(peer_id: int, at: Transform3D) -> void:
+	if not Net.is_host or not _arena_is_standing():
+		return
+	set_respawn_anchor(peer_id, at)
+	var life := _life_of(peer_id)
+	_create_bog.rpc(peer_id, at, life)
+	_create_bog(peer_id, at, life)
+
+
+## Make `peer_id` respawn at `at` rather than on a spawn pad, until it is
+## cleared. Host-side bookkeeping only; nothing about it travels, because
+## `_respawn` puts the transform itself on the wire.
+func set_respawn_anchor(peer_id: int, at: Transform3D) -> void:
+	_respawn_anchors[peer_id] = at
+
+
+func clear_respawn_anchor(peer_id: int) -> void:
+	_respawn_anchors.erase(peer_id)
 
 
 ## Which life a Bog is about to begin, as the host counts it: its deaths so far.
@@ -663,6 +753,36 @@ func _create_bog(peer_id: int, spawn: Transform3D, life: int) -> void:
 	if combat != null:
 		combat.set_multiplayer_authority(1, false)
 
+	# ...and, for a practice dummy, one more node held back for the same reason
+	# and by the same means: **`Sync` belongs to the host** (D-112).
+	#
+	# A Bog's transform replicates from whoever owns its `MultiplayerSynchronizer`,
+	# and a dummy's `peer_id` is 900-something — a peer that does not exist and
+	# will never send a packet. So nothing publishes, `sync_position` never
+	# changes, and every copy of a dummy on every machine sits wherever
+	# `revive_at` seeded it. That is not a bug that was introduced here; it is
+	# why `tools/combat_range.gd:_stand_still` has had to hand-write
+	# `sync_grounded` since D-011, and why a dummy has never moved in this game.
+	#
+	# The obvious fix is to give the dummy to peer 1 outright, and it is wrong
+	# three times over, because `Bog.is_local()` is `is_multiplayer_authority()`:
+	# `_read_input` would drive every dummy off the host's own WASD, `BogCombat`
+	# would fire their abilities on the host's keys, and `BogCamera` would make
+	# each dummy's rig `current` — the last dummy spawned steals the host's
+	# viewport, which is precisely the failure the comment above is about.
+	#
+	# One node, non-recursively, is all it takes: the host publishes the
+	# transform, and on every peer — the host's own included — the dummy is
+	# still a *remote* Bog running `_follow_network`, which is the case that
+	# function's own comment already names. `reads_local_input` is belt and
+	# braces on top of that, so a dummy is inert even if something later makes
+	# `is_local()` true for it.
+	if Net.is_dummy(peer_id):
+		var sync := bog.get_node_or_null("Sync")
+		if sync != null:
+			sync.set_multiplayer_authority(1, false)
+		bog.reads_local_input = false
+
 	_players_root.add_child(bog)
 	# `revive_at` rather than assigning the transform: it also seeds the
 	# replicated fields, one by one and by hand. Without that, every other peer's
@@ -672,7 +792,7 @@ func _create_bog(peer_id: int, spawn: Transform3D, life: int) -> void:
 	# itself is permanently false and the owner's never changes, so ON_CHANGE
 	# replication has nothing to correct it with. See D-029.
 	bog.revive_at(spawn, life)
-	bog.grant_invulnerability(config().spawn_protection)
+	bog.grant_invulnerability(config().effective_spawn_protection())
 
 	var shown_team := bog.team if config().mode == MatchConfig.Mode.TEAMS \
 		else MatchConfig.TEAM_NONE
@@ -727,7 +847,7 @@ func _do_respawn(peer_id: int, spawn: Transform3D, life: int) -> void:
 		return
 	bog.visible = true
 	bog.revive_at(spawn, life)
-	bog.grant_invulnerability(config().spawn_protection)
+	bog.grant_invulnerability(config().effective_spawn_protection())
 	var combat := bog.get_node_or_null("Combat") as BogCombat
 	if combat != null:
 		combat.reset()
@@ -830,16 +950,48 @@ func report_damage(victim_id: int, attacker_id: int, amount: float,
 	# hundred still kills it, and anything less than a body's worth cannot
 	# whittle down a body that does not exist.
 	var victim: Bog = bogs.get(victim_id)
-	var left := Bog.MAX_HEALTH - amount
-	if is_instance_valid(victim):
-		left = victim.health - amount
+	var before := victim.health if is_instance_valid(victim) else Bog.MAX_HEALTH
+	var left := before - amount
+
+	# **What was actually taken**, which on a killing blow is not what was
+	# asked for: a spear is a whole body's worth (`Bog.MAX_HEALTH`) and a Bog
+	# already down to 30 loses 30, not 100. `hit_landed` is the range's
+	# accuracy and damage-number feed and it has to report the true figure —
+	# the requested one is a fact about the weapon, which every caller already
+	# knows about its own throw.
+	#
+	# Announced **here**, between the refusals and the split below, and that
+	# position is the whole reason it is an RPC of its own rather than two more
+	# arguments on `_do_damage`. `_do_damage` is sent only when `left > 0.0`;
+	# a killing hit goes down `_kill` instead and would never be announced. One
+	# call above the branch is one announcement per landed hit, kills included,
+	# on every peer — which is what units 4 and 5 hang their counters on.
+	var dealt := minf(amount, before)
+	_announce_hit.rpc(attacker_id, victim_id, dealt, cause, point, bone)
+	_announce_hit(attacker_id, victim_id, dealt, cause, point, bone)
+
 	if left > 0.0:
 		_do_damage.rpc(victim_id, attacker_id, left)
 		_do_damage(victim_id, attacker_id, left)
 		return amount
 
 	_kill(victim_id, attacker_id, cause, point, blow, bone)
+	# The requested amount, not `dealt`, and deliberately unchanged: this
+	# return is "how much did the attack ask for and get past the refusals",
+	# which is what `report_heal`'s mirror image means and what the potion and
+	# the bow read. The overkill belongs in the signal, not here.
 	return amount
+
+
+## One landed hit, told to everyone. See `hit_landed`.
+##
+## Reliable, like `_do_damage` beside it and for the same reason: a hit marker
+## that sometimes does not arrive is worse than no hit marker, because it
+## teaches the player to distrust the one they do get.
+@rpc("authority", "call_remote", "reliable")
+func _announce_hit(attacker_id: int, victim_id: int, amount: float, cause: int,
+		point: Vector3, bone: String) -> void:
+	hit_landed.emit(attacker_id, victim_id, amount, cause, point, bone)
 
 
 ## Host only. **The single place health is put back** (D-067), and the other
@@ -1041,7 +1193,7 @@ func _kill(victim_id: int, killer_id: int, cause: Bog.Cause,
 	var entry: Dictionary = stats[victim_id]
 	entry["alive"] = false
 	entry["deaths"] += 1
-	entry["respawn_at"] = _now() + config().respawn_delay
+	entry["respawn_at"] = _now() + config().effective_respawn_delay()
 	if config().win_condition == MatchConfig.WinCondition.LIVES:
 		entry["lives_left"] = maxi(0, entry["lives_left"] - 1)
 
@@ -1129,14 +1281,19 @@ func _apply_death(victim_id: int, killer_id: int, cause: Bog.Cause,
 
 	player_killed.emit(victim_id, killer_id, cause)
 	if victim_id == Net.local_id():
-		local_death.emit(config().respawn_delay)
+		local_death.emit(config().effective_respawn_delay())
 		_shake(victim, 1.4)
 	elif killer_id == Net.local_id():
 		# The hitmarker is the only confirmation a thrower gets that a spear
 		# landed: the victim may be sixty metres away and behind a tree, and the
 		# spear itself is gone. It is deliberately 2D — it is feedback about
 		# your own action, not a sound anyone else could hear.
-		AudioDirector.play_2d(AudioDirector.HITMARKER)
+		#
+		# The kill's own clip (D-122): the same tick with a low body under it,
+		# because a kill and the hit before it were previously the identical
+		# sound and the only way to tell them apart was to watch the health bar
+		# of a Bog who was already a ragdoll.
+		AudioDirector.play_2d(AudioDirector.HITMARKER_KILL)
 		_shake(bogs.get(killer_id), 0.35)
 
 
@@ -1249,12 +1406,42 @@ func _drop_loot(cause: Bog.Cause, point: Vector3) -> void:
 ## which is the whole reason it is its own function: a re-dropped letter has to
 ## be the same kind of object as a rolled one, indistinguishable to anybody who
 ## walks over it.
-func _spawn_drop(kind: Pickup.Kind, letter: int, spot: Vector3) -> int:
+## `keeps` exempts the item from `Pickup.LIFETIME`, for a drop that belongs to
+## the map rather than to a corpse. Defaulted off, because a corpse's loot
+## rotting after thirty seconds is the rule everything above this relies on.
+func _spawn_drop(kind: Pickup.Kind, letter: int, spot: Vector3,
+		keeps: bool = false) -> int:
 	var id := _next_pickup_id
 	_next_pickup_id += 1
-	_spawn_pickup.rpc(id, kind, letter, spot)
-	_spawn_pickup(id, kind, letter, spot)
+	_spawn_pickup.rpc(id, kind, letter, spot, keeps)
+	_spawn_pickup(id, kind, letter, spot, keeps)
 	return id
+
+
+## Host only. Put one item on the ground because the **map** says there is one
+## there, and return its id (D-115).
+##
+## The public face of `_spawn_drop`, for the practice range's item wells: a
+## pedestal that keeps a shield, a magnet, a potion or an Elder robe present and
+## re-mints it a few seconds after somebody takes it. Every pickup in the game
+## until now has been minted by a death, which is why the minting function was
+## private — "an item appears" was a consequence of a kill and never a thing a
+## caller asked for.
+##
+## `keeps` defaults **on** here and off in `_spawn_drop`, and the flip is the
+## difference between the two callers: a well's stock is not loot, it is
+## furniture, and a pedestal whose item quietly rotted after thirty seconds
+## would stand empty with nothing to re-mint on — `pickup_taken` only fires when
+## somebody collects one.
+##
+## No `letter` argument. A placed letter card would be a letter entering the
+## match from outside the drop table, which is D-033's economy and D-051's
+## three-card count both broken by a map; the range practises Capture with the
+## real cards through the real `Letters` markers.
+func place_pickup(kind: Pickup.Kind, spot: Vector3, keeps: bool = true) -> int:
+	if not Net.is_host:
+		return 0
+	return _spawn_drop(kind, 0, spot, keeps)
 
 
 ## Settle the death point onto the ground, or `Vector3.INF` if there is none
@@ -1317,7 +1504,8 @@ func _prune_pickups() -> void:
 
 ## Build one drop, on every peer, from the values the host rolled.
 @rpc("authority", "call_remote", "reliable")
-func _spawn_pickup(id: int, kind: int, letter: int, spot: Vector3) -> void:
+func _spawn_pickup(id: int, kind: int, letter: int, spot: Vector3,
+		keeps: bool = false) -> void:
 	var root := _spawn_root()
 	if root == null:
 		return
@@ -1325,7 +1513,7 @@ func _spawn_pickup(id: int, kind: int, letter: int, spot: Vector3) -> void:
 
 	var pickup := PICKUP_SCENE.instantiate() as Pickup
 	root.add_child(pickup)
-	pickup.drop(id, kind as Pickup.Kind, letter, spot)
+	pickup.drop(id, kind as Pickup.Kind, letter, spot, keeps)
 	_pickups[id] = pickup
 
 
@@ -1411,12 +1599,69 @@ func _grant_ability(peer_id: int, method: String) -> void:
 		combat.call(method, 1)
 
 
+## Host only. Change what a living Bog is carrying, on every peer, and remember
+## it for the next life (D-115). The practice range's weapon racks are the one
+## caller.
+##
+## **`Bog.weapon` was only ever fixed by a lobby rule, not by the code.** It is a
+## plain field that `BogCombat.carries()` re-reads every time it is asked,
+## `HeldGear` keeps all four models loaded and toggles their visibility, and
+## `BogCombat.refresh_hand()` has been public since D-070 for the lobby ring,
+## where the pick already moves under a standing Bog. So the swap is a write and
+## a call; what it needed was a way to say it to the other peers.
+##
+## Two halves, deliberately. `Net.set_weapon_of` writes the roster row, which is
+## what `_create_bog` reads on the next respawn — without it a rack would last
+## one life. `_do_set_weapon` reaches the body that is standing there now, which
+## a roster broadcast cannot: the field is seeded once when the Bog is built, and
+## having every peer re-equip every Bog on every `roster_changed` would be a
+## far larger hammer than one addressed message.
+func set_weapon(peer_id: int, weapon: int) -> void:
+	if not Net.is_host:
+		return
+	var wanted := Loadout.sanitize(weapon)
+	Net.set_weapon_of(peer_id, wanted)
+	_do_set_weapon.rpc(peer_id, wanted)
+	_do_set_weapon(peer_id, wanted)
+
+
+## The host's word on what a Bog is carrying, applied on every peer.
+##
+## Ordered behind the roster broadcast that `set_weapon` sends first, both being
+## reliable on the default channel — the argument D-048 and D-069 already make
+## about a row and the thing built from it.
+##
+## `clear_weapon_state` before `refresh_hand` and not after: the hand is drawn
+## from the gates, and a windup or a half-drawn bow left over from the old
+## weapon would put the wrong thing in the fist for the frames between the two
+## calls. Nothing is cleared that belongs to the Bog rather than to the weapon —
+## see that function's header.
+@rpc("authority", "call_remote", "reliable")
+func _do_set_weapon(peer_id: int, weapon: int) -> void:
+	var bog: Bog = bogs.get(peer_id)
+	if not is_instance_valid(bog):
+		return
+	bog.weapon = Loadout.sanitize(weapon)
+	var combat := bog.get_node_or_null("Combat") as BogCombat
+	if combat == null:
+		return
+	combat.clear_weapon_state()
+	combat.refresh_hand()
+
+
 @rpc("authority", "call_remote", "reliable")
 func _take_pickup(pickup_id: int, peer_id: int) -> void:
 	var pickup: Pickup = _pickups.get(pickup_id)
+	var kind := int(pickup.kind) if is_instance_valid(pickup) else -1
 	_pickups.erase(pickup_id)
 	if is_instance_valid(pickup):
 		pickup.take(peer_id)
+	# On every peer, because this RPC already runs on every peer — so an item
+	# well hears about its own stock being taken wherever it is standing, and
+	# only the host acts on it (D-115). `kind` rides along so a listener does
+	# not have to have kept an index of ids it minted.
+	if kind >= 0:
+		pickup_taken.emit(pickup_id, kind, peer_id)
 
 
 ## Take an item off the ground with nobody collecting it, on every peer. The
@@ -2265,7 +2510,16 @@ func team_score(team: int) -> int:
 ## results screen the moment the match they won ends. Kills stay the tiebreak
 ## under letters, and deaths stay the tiebreak under everything.
 func ranking() -> Array:
-	var ids := stats.keys()
+	# **The second and last place dummies are filtered out** (D-112), and it
+	# covers two screens rather than one: the scoreboard walks this list, and
+	# the results table is built from the copy of it carried in `_finish`'s
+	# summary. Filtering here rather than in each of them is what stops a range
+	# session putting "Dummy 4 — 0 kills, 31 deaths" at the bottom of somebody's
+	# scoreboard. `Net.human_ids` is the first place; see the note there.
+	var ids: Array = []
+	for peer_id: int in stats.keys():
+		if not Net.is_dummy(peer_id):
+			ids.append(peer_id)
 	var by_letters := MatchConfig.scores_letters(config().win_condition)
 	ids.sort_custom(func(a, b):
 		if by_letters and letter_count(a) != letter_count(b):
@@ -2279,6 +2533,17 @@ func ranking() -> Array:
 # ---------------------------------------------------------------- win check ---
 
 func _check_win() -> void:
+	# **Practice never ends** (D-112). Nothing is at stake in the range, so
+	# there is no score to reach and no results screen to open; the only way out
+	# is the pause menu's Leave, exactly as it is out of any other match.
+	#
+	# Returning here rather than filtering dummies out of every branch below is
+	# the point: a dummy has a `stats` row like everybody else, so under LIVES
+	# it would be one of the Bogs "still standing" and under KILL_LIMIT its
+	# deaths would feed somebody's total. One line above all of it answers every
+	# condition at once, including the ones added after this was written.
+	if config().is_practice():
+		return
 	match config().win_condition:
 		MatchConfig.WinCondition.KILL_LIMIT:
 			for peer_id: int in stats:

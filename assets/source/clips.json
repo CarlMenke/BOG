@@ -924,6 +924,30 @@
    "markers": {}
   },
   {
+   "file": "Punch",
+   "role": "Punch",
+   "suite": "combat",
+   "mixamo_name": null,
+   "mixamo_id": null,
+   "mixamo_query": "punch",
+   "in_place": false,
+   "loop": false,
+   "face": "hips",
+   "markers": {}
+  },
+  {
+   "file": "SlideJump",
+   "role": "SlideJump",
+   "suite": "air",
+   "mixamo_name": null,
+   "mixamo_id": null,
+   "mixamo_query": "flip",
+   "in_place": false,
+   "loop": false,
+   "face": "none",
+   "markers": {}
+  },
+  {
    "file": "Slide",
    "role": "Slide",
    "suite": "air",

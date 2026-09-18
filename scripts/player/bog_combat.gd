@@ -109,6 +109,25 @@ extends Node
 ## `_wants_bow` answer no, which is how a two-handed weapon stays inside "never
 ## more than one per hand" (D-065).
 ##
+## **The sword got a second attack, and the Bog got a way to have none** (the
+## feel round). Three additions, all of them on the machinery above rather than
+## beside it:
+##
+## * **The holster.** `Bog.sync_holstered` is a replicated bool the owner
+##   toggles with **H**. While it is true the three weapon gates answer no, so
+##   the fists are empty on every screen, and `target_speed()` pays a tenth more
+##   for it. What is left is a punch — a fifth outcome on the one release tick,
+##   with the sword's four-function relay around it, and a host that checks the
+##   attacker's own published holster before it will hurt anybody.
+## * **The chain.** The primary click is three slashes of `SwordCombo` at 50
+##   each, and the spin D-068 built is the **sprint attack**, fired by the same
+##   button at 0.8 of run speed. The chain is a sixth outcome on that same tick;
+##   the two clocks it needs live on `Bog` beside the spin's, for D-068's reason
+##   exactly — what they decide is what is in the fists and how fast the body
+##   travels, on eight machines.
+## * **The dance empties the hands.** `_bare_handed()` is the one sentence the
+##   holster and the emote share, and the five `_wants_*` ask it once each.
+##
 ## **The clip stopped being shared, and the windup did not** (D-064). Until step
 ## 5 of `docs/PLAN_COMBAT.md` the Elder played the spear's own `Throw` at
 ## whatever rate met the delay, which worked while the throw was a baseball
@@ -124,6 +143,18 @@ signal cooldowns_changed()
 ## different rates — the counts change a handful of times a match and the
 ## cooldowns change every frame the HUD asks.
 signal inventory_changed()
+## One committed use of a weapon: a spear thrown, an arrow loosed, a sword swung,
+## a bolt cast. Emitted from the four `_do_*` handlers, which is to say **after**
+## the host has accepted the action and on every peer that runs it — so on the
+## host it fires exactly once for every use anybody makes, which is what lets a
+## counter watch the whole session without a packet of its own.
+##
+## Deliberately not `Loadout.Weapon`. That enum's ordinal goes on the wire in a
+## roster row and its own comment forbids appending anything that is not a
+## player's chosen armament; the Elder's lightning is neither chosen nor in it.
+## A string also happens to be the key `RangeStats` files the row under, so
+## nothing in between has to own a translation table.
+signal weapon_launched(weapon: String)
 
 const SPEAR := preload("res://scripts/items/spear_projectile.gd")
 const ARROW := preload("res://scripts/items/arrow_projectile.gd")
@@ -287,6 +318,114 @@ const SWORD_IMPULSE := 60.0
 ## to be *behind* a swing and enough for an attacker to have chosen wrong.
 const SWORD_ARC := 75.0
 
+## What one slash of the chain does to a Bog (the feel round).
+##
+## **The first attack in this game that is not a one-shot, and that is the
+## point.** `SWORD_DAMAGE` is `Bog.MAX_HEALTH` and stays that way for the spin,
+## because a committed 1.867 s animation that sometimes leaves somebody alive is
+## a worse read than one that misses. A slash costs a quarter of a second and
+## keeps you moving, so it cannot be worth a body: at exactly half of
+## `Bog.MAX_HEALTH` two connected slashes kill and one does not, which is the
+## shortest sentence a player can learn about a new weapon.
+##
+## Written off `MAX_HEALTH` rather than as 50 for `SWORD_DAMAGE`'s reason one
+## step along: "two slashes kill" is the whole mechanic, and typing the number
+## would leave that promise true only until somebody changes what a full Bog is
+## worth.
+const SLASH_DAMAGE := Bog.MAX_HEALTH * 0.5
+
+## How much further than the dial a slash reaches, in metres, and how far it
+## carries you (the feel round). One number and not two: the reach is longer
+## *because* the body steps into the cut, so the metres the step buys are the
+## metres the sweep is allowed to claim, and a step that changed without the
+## reach following would be a blade that visibly arrives and does nothing.
+const SLASH_STEP := 0.35
+
+## How long after a slash's own window closes a second click still chains, in
+## seconds (the feel round). A sixth of a second is about a tenth of the whole
+## chain and is roughly a frame of human reaction either side of the beat: long
+## enough that a player who is trying to chain does, short enough that a chain
+## is a rhythm rather than a queue.
+const SLASH_CHAIN_GRACE := 0.15
+
+## How many slashes a chain may run to. `BogAnimator.SLASH_COUNT`, because the
+## clip is what decides: `SwordCombo` carries three, and a fourth click has
+## nothing to play.
+const SLASH_MAX := BogAnimator.SLASH_COUNT
+
+## How hard a slash throws the body, as the velocity handed to `report_damage`.
+##
+## Between the fist's and the spin's, and in the same proportion as the damage:
+## the spin's 60 arrives on the end of a whole revolution from a body that had
+## committed to it, and this is one arm's cut from a body that is still walking.
+## 36 is about 5.4 m/s of corpse, which is a stagger rather than a flight —
+## right for a blow that is meant to be followed by a second one, because a
+## victim thrown across the clearing by the first slash cannot be reached by it.
+const SLASH_IMPULSE := 36.0
+
+## How fast a Bog has to be going, as a fraction of `Bog.RUN_SPEED`, for a click
+## to fire the spin instead of a slash (the feel round).
+##
+## **The one branch in this file that is taken on a speed**, and it is taken on
+## a speed precisely so that it needs no key of its own. D-070's whole argument
+## is that a player has one weapon and should have one button; the great sword
+## now has two attacks, and the honest way to choose between them is the thing
+## the player is already doing with the other hand. 0.8 of run is over any walk,
+## over any crouch and over anything a Bog reaches by being shoved, so the only
+## way to reach it is to hold sprint and mean it.
+##
+## **The host does not check it**, and that is a decision rather than an
+## oversight. `_host_swing_sword` has never asked how fast the swinger was going
+## because the spin has never had a condition to check; what the host would have
+## to judge it against is `sync_velocity`, which is a tick or two old and was
+## sampled before the click, so an honest player whose packet was late would be
+## refused the attack they had already paid 1.867 s of animation for. What a
+## modified client gains by lying is the committed spin instead of the mobile
+## chain, at the same reach, having stood still — which is a worse attack
+## everywhere except against a victim who was standing still too.
+const SPRINT_ATTACK_SPEED := 0.8
+
+## What a punch does to a Bog (the feel round).
+##
+## **A fifth of a body, which is the only number in this file that is small on
+## purpose.** Fists are what a Bog has when it has put its weapon away, so what
+## they are worth has to be read against what putting it away costs: the spear,
+## the bow and the sword are all gone for as long as the weapon is down, and
+## what is bought is a tenth of a metre a second and a hand free to punch with.
+## Twenty means five punches to kill a full Bog and two to finish one a weapon
+## already hurt, which is the second half of a fight rather than a way to start
+## one.
+const PUNCH_DAMAGE := 20.0
+
+## How far a punch reaches, in metres from the puncher's body centre to the
+## *surface* of whatever it catches — `sword_reach`'s measurement on a much
+## shorter arm. 1.1 m is a fist at the end of a Bog's own reach and nothing
+## more: it is deliberately inside the great sword's 1.43 and inside the 1.78 a
+## slash gets, so that walking up to a swordsman with your hands up is a losing
+## trade at every distance.
+const PUNCH_REACH := 1.1
+
+## How wide a punch sweeps, in degrees either side of the fist. Narrower than
+## the sword's 75 for the reason the sword's is wide: a spinning blade genuinely
+## passes through every bearing, and a fist goes exactly where it is pointed.
+## Fifty degrees is a hundred-degree front, which is about what a Bog can see
+## without turning and is forgiving enough that a moving target does not slip
+## the punch on a rounding.
+const PUNCH_ARC := 50.0
+
+## The whole punch, click to click, in seconds — the wind-up you have committed
+## to plus what is left. **A constant and not a dial**, unlike every weapon's
+## recharge: the fist is not balance, it is what is left when the balance has
+## been put away, and a host who could tune it would be tuning the one thing in
+## the game that every loadout shares.
+const PUNCH_CYCLE := 0.5
+
+## How hard a punch throws the body. A quarter of the sword's, which is about
+## 1.4 m/s of corpse — a body that sits down rather than one that is knocked
+## anywhere. A punch that flung people would be a better tool for moving an
+## enemy than any weapon in the game.
+const PUNCH_IMPULSE := 15.0
+
 ## How hard a bolt throws the body, as the velocity handed to `report_damage`.
 ##
 ## The ragdoll turns a blow into motion at `BogRagdoll.IMPACT_TRANSFER` = 0.15,
@@ -339,6 +478,7 @@ var _config: MatchConfig
 var _spear_ready_at: float = 0.0
 var _bow_ready_at: float = 0.0
 var _sword_ready_at: float = 0.0
+var _punch_ready_at: float = 0.0
 var _lightning_ready_at: float = 0.0
 var _shield_ready_at: float = 0.0
 var _magnet_ready_at: float = 0.0
@@ -347,6 +487,7 @@ var _magnet_ready_at: float = 0.0
 var _server_spear_ready_at: float = 0.0
 var _server_bow_ready_at: float = 0.0
 var _server_sword_ready_at: float = 0.0
+var _server_punch_ready_at: float = 0.0
 var _server_lightning_ready_at: float = 0.0
 var _server_shield_ready_at: float = 0.0
 var _server_magnet_ready_at: float = 0.0
@@ -401,6 +542,32 @@ var _draw_started_at: float = 0.0
 ## peer reads is `Bog.is_spinning()`, which outlasts this by the length of the
 ## follow-through and is what the sword in the fists is drawn from.
 var _swinging: bool = false
+
+## Is the thing on its way out of this windup a **punch** (the feel round)?
+##
+## `_swinging`'s twin, and a sixth outcome on the one release tick rather than a
+## path of its own — the same argument D-025, D-038, D-064 and D-068 each made
+## in turn: one click, one deadline, one tick, one cancel path, and the branch
+## taken at the end of it.
+var _punching: bool = false
+
+## Which slash of the chain this Bog is in, 1-based, or 0 for "no chain open"
+## (the feel round).
+##
+## **The decision, not the clock.** The clocks are `Bog`'s — `is_slashing()` for
+## the window the blade is out in and `in_chain()` for the window a second click
+## is taken in — because both of those have to answer on eight machines, and
+## this is the one thing only the swinging client needs: which slash the *next*
+## click would be. It is cleared by `_tick_slash` when the body says the chain
+## has closed, which is the same tick the recharge starts counting from.
+var _slash_index: int = 0
+
+## Host-side, authoritative: the same two facts about the chain the host is
+## willing to believe. A client can ask for slash 3 whenever it likes; it gets
+## one only if the host saw slashes 1 and 2 and the window it opened is still
+## open.
+var _server_slash_index: int = 0
+var _server_slash_until: float = 0.0
 
 ## How far the string was back when it was let go, or **-1 for "no arrow on its
 ## way"**.
@@ -502,6 +669,11 @@ func _process(_delta: float) -> void:
 	# the one thing here that is *running* on seven machines that did not start
 	# it, and the arm has to come down on all of them.
 	_tick_channel()
+	# Before the hand and before the input poll below: closing a lapsed chain is
+	# what decides whether the next click is a fourth slash or a fresh first
+	# one, and what takes the great sword out of the fists on the frame the
+	# window shuts rather than on the next.
+	_tick_slash()
 	_tick_hand()
 	_tick_charge()
 	refresh_emote()
@@ -536,10 +708,18 @@ func _process(_delta: float) -> void:
 	# loadout that "one action, two meanings" seemed to need does not exist:
 	# **the gates are the branch**, in the place every other reason a weapon says
 	# no already lives, and this poll asks two questions where it asked four.
+	#
+	# Two more calls since the feel round and not one more branch: a holstered
+	# Bog's gates all say no, so `try_punch` is the fifth thing that refuses
+	# itself, and `try_sword_attack` is the great sword's two attacks choosing
+	# between themselves off the speed the body is already travelling at rather
+	# than off a second key. The property D-069 asked for — the poll asks
+	# everything unconditionally and the gates are the branch — is untouched.
 	if Input.is_action_just_pressed("primary_attack"):
 		try_throw_spear()
 		try_draw_bow()
-		try_swing_sword()
+		try_sword_attack()
+		try_punch()
 	# The release goes through `release_draw` rather than being read inside
 	# `_tick_windup`, so that a testbed can let go of a string without a keyboard
 	# (`tools/combat_range.gd`).
@@ -557,6 +737,11 @@ func _process(_delta: float) -> void:
 	# Every other way out of it is in `refresh_emote` and in `Bog._read_input`.
 	if Input.is_action_just_pressed("emote"):
 		toggle_emote()
+	# And so is the holster, for the emote's reason exactly: putting your weapon
+	# away is a state the player leaves when they decide to, not something with
+	# a duration, so the key that starts it is the key that ends it.
+	if Input.is_action_just_pressed("holster"):
+		toggle_holster()
 
 
 func spear_cooldown() -> float:
@@ -569,6 +754,12 @@ func lightning_cooldown() -> float:
 
 func bow_cooldown() -> float:
 	return maxf(0.0, _bow_ready_at - _now())
+
+
+## How long until the fists can throw another punch. The same shape as the three
+## above and the only one with no dial behind it — see `PUNCH_CYCLE`.
+func punch_cooldown() -> float:
+	return maxf(0.0, _punch_ready_at - _now())
 
 
 func sword_cooldown() -> float:
@@ -679,10 +870,18 @@ func has_potion() -> bool:
 ## Bog that chose a bow has no spear for the whole match, so this is a statement
 ## about what it brought and the other three are statements about what has since
 ## happened to it. `carries` carries the argument for why it is here.
+## The **fifth** is the holster (the feel round), and it is the clause that
+## finally makes this function's promise reversible: every other one of the four
+## is something that happened *to* this Bog, and this is the player choosing.
+## Here rather than only in `try_throw_spear` for the reason the drink is here —
+## so that the *hand* obeys it, and a Bog with its weapon away is a Bog with
+## nothing in its fists on eight screens rather than one whose throw quietly
+## does nothing.
 func has_spear() -> bool:
 	return carries(Loadout.Weapon.SPEAR) and not is_elder() \
 		and spear_cooldown() <= 0.0 \
-		and not is_holding_letter() and not is_channelling()
+		and not is_holding_letter() and not is_channelling() \
+		and not is_holstered()
 
 
 ## Whether there is a bow to draw, and the exact mirror of `has_spear()`
@@ -712,7 +911,8 @@ func has_spear() -> bool:
 func has_bow() -> bool:
 	return carries(Loadout.Weapon.BOW) and not is_elder() \
 		and bow_cooldown() <= 0.0 \
-		and not is_holding_letter() and not is_channelling()
+		and not is_holding_letter() and not is_channelling() \
+		and not is_holstered()
 
 
 ## Whether there is a great sword to swing, and the third mirror of `has_spear()`
@@ -737,9 +937,88 @@ func has_bow() -> bool:
 ## because a Bog that chose one has genuinely given up its spear, which is the
 ## exact condition D-068 said it did not have.
 func has_sword() -> bool:
+	return _sword_in_hand() and sword_cooldown() <= 0.0
+
+
+## Everything `has_sword()` asks except the recharge (the feel round).
+##
+## The chain is why this exists. A slash pushes `_sword_ready_at` out to the end
+## of the window the *next* click would be taken in, so that the recharge runs
+## between chains rather than between slashes — which means `has_sword()` is
+## false for the whole of a chain, and the second click cannot be gated on it.
+## Splitting the sentence in two is what keeps there being one list of reasons a
+## Bog has no sword: the chain asks this, a fresh attack asks this *and* the
+## clock, and neither carries a copy of the other's clauses.
+func _sword_in_hand() -> bool:
 	return carries(Loadout.Weapon.SWORD) and not is_elder() \
-		and sword_cooldown() <= 0.0 \
-		and not is_holding_letter() and not is_channelling()
+		and not is_holding_letter() and not is_channelling() \
+		and not is_holstered()
+
+
+## Has this Bog put its weapon away (the feel round)? Off the replicated bool on
+## the body, so one road for the Bog you are driving and the seven you watch.
+func is_holstered() -> bool:
+	return _bog != null and _bog.is_holstered()
+
+
+## May this Bog put its weapon away, or take it back out, right now?
+##
+## `can_emote()`'s shape and most of its list, because it is the same kind of
+## question — a state the player asks for, refused while the body is already in
+## the middle of something. Alive, not busy (a windup, a channel, a spin or a
+## chain), not drawing, not holding a card, not dancing.
+##
+## **The letter is the one that is not obvious.** A Bog holding a card already
+## has no weapon and no fists (D-035), so holstering would be a key that does
+## nothing visible and un-holstering a promise the hold is about to break. The
+## draw is the same sentence with a string in it.
+##
+## It is deliberately **not** a per-frame refresh the way `refresh_emote` is.
+## An emote is something you are doing and every reason it may not start is a
+## reason it may not continue; a holster is something you *are*, and a punch —
+## which makes `is_busy()` true for a quarter of a second — must not put the
+## weapon back in your hands half way through itself.
+func can_holster() -> bool:
+	return _bog != null and _bog.alive and not is_busy() \
+		and not _bog.is_drawing() and not is_holding_letter() \
+		and not is_emoting()
+
+
+## The key. A toggle, for the emote's reason: the player decides when the hands
+## come back up.
+##
+## The write is straight into the replicated field and it is the owner's alone —
+## `_bog.is_local()` rather than a `_relay_*` — which is the whole reason this
+## is a `sync_` bool and the emote is an event. There is nothing to cross-fade
+## between and nothing that is wrong for a sixtieth of a second: a late packet
+## arrives at the value the owner is still at, and a dropped one is corrected by
+## the next change rather than leaving somebody stuck.
+##
+## `refresh_hand()` and not `_refresh_hand()`: the shoulders move with the
+## fists. The carry pose is the pick's, and a Bog that put its sword away while
+## its shoulders stayed in a swordsman's stance is exactly the disagreement that
+## forwarder exists to prevent.
+func toggle_holster() -> void:
+	if _bog == null or not _bog.is_local() or not can_holster():
+		return
+	_bog.sync_holstered = not _bog.sync_holstered
+	refresh_hand()
+	cooldowns_changed.emit()
+
+
+## Should both fists be empty whatever this Bog is carrying (the feel round)?
+##
+## The one sentence the five `_wants_*` share, and the reason it is one function
+## rather than two clauses repeated five times: a holster and an emote are two
+## different decisions with exactly one consequence in common, and a sixth thing
+## that empties the hands should be one line here rather than five edits.
+##
+## The emote's half is D-105 finished: the dance is a whole-body pose and a
+## great sword hanging off a twerking Bog's fists was the one thing about it
+## that read as a bug rather than as a joke. The prop comes back when the dance
+## ends, off `_tick_hand`'s poll, without anything having to remember.
+func _bare_handed() -> bool:
+	return is_holstered() or is_emoting()
 
 
 ## Is this Bog in the middle of a swing? True on every peer for every Bog, which
@@ -754,6 +1033,19 @@ func has_sword() -> bool:
 ## the same one the hand is drawn from, and `_begin_swing` starts it everywhere.
 func is_swinging() -> bool:
 	return _bog != null and _bog.is_spinning()
+
+
+## Is a slash's blade actually out? The chain's `is_swinging()`, off the chain's
+## own clock on the body and true on every peer for the same reason.
+func is_slashing() -> bool:
+	return _bog != null and _bog.is_slashing()
+
+
+## Is a slash chain open — a blade out, or inside the grace a second click would
+## continue it in? The window `_wants_sword` keeps the great sword in the fists
+## for, and the window `is_busy()` refuses everything else during.
+func in_chain() -> bool:
+	return _bog != null and _bog.in_chain()
 
 
 ## Is this Bog the Elder? Asked of `MatchState` every time rather than mirrored
@@ -818,12 +1110,15 @@ func lightning_cycle() -> float:
 ## The whole sword cycle: the windup you have already committed to, plus the
 ## recharge that follows it (D-068).
 ##
-## Shaped like `spear_cycle()`, and the number it comes out at is the interesting
-## part. `BogAnimator.SWING_RELEASE_TIME` is 1.067 s and `sword_recharge` is
-## 0.800 by default, which is **exactly `BogAnimator.SWING_SECONDS`** — the
-## length of the clip. That is not a coincidence and it is not a constraint
-## either: it is where the dial's default was put, so that the earliest a second
-## swing can be asked for is the tick the first one's spin ends.
+## Shaped like `spear_cycle()`, and what it is the cycle **of** is now the spin
+## alone: a slash chain spends the recharge through `_open_slash`, from the end
+## of the chain rather than from a release. `BogAnimator.SWING_RELEASE_TIME` is
+## 1.067 s and `sword_recharge` is 0.500 since the feel round, so this comes out
+## at 1.567 against the clip's own 1.867 — under it, which means the spin's
+## earliest second click is still the tick the spin ends, gated by
+## `is_spinning()` rather than by the dial. The relationship the dial's default
+## used to encode (0.800, so that the two coincided exactly) is now the chain's
+## to hold, and the dial was dropped to fit it.
 ##
 ## Which is the whole of the chain. `Bog._tick_timers` opens `LANDING_GRACE` on
 ## the frame a spin finishes, so a player who clicks on that tick keeps the speed
@@ -899,8 +1194,15 @@ func is_winding_up() -> bool:
 ## to be refused for the whole of it. Otherwise a player buys a 1.867 s
 ## animation, gets the kill at 1.067, and spends the rest of it throwing spears
 ## out of a body that is visibly mid-spin.
+## It has a fourth term since the feel round, and it is the spin's argument at a
+## quarter of the scale: a slash chain is a window in which the great sword is
+## in the fists and a second slash is the only thing that may happen, so the
+## throw, the draw, the drink, the emote and the holster are all refused for the
+## whole of it. The chain's own follow-up click is asked *before* this function
+## (`try_sword_attack`), which is the same carve-out `_open_slash` needs and the
+## only one there is.
 func is_busy() -> bool:
-	return is_winding_up() or is_channelling() or is_swinging()
+	return is_winding_up() or is_channelling() or is_swinging() or in_chain()
 
 
 ## True while a *throw* is between its click and its release — the spear's or
@@ -912,7 +1214,8 @@ func is_busy() -> bool:
 ## in that fist and not a shaft, so answering yes for it would put two things in
 ## one hand — which is the rule this whole node exists to keep.
 func _is_throw_windup() -> bool:
-	return _windup_release_at > 0.0 and _loose_charge < 0.0 and not _swinging
+	return _windup_release_at > 0.0 and _loose_charge < 0.0 and not _swinging \
+		and not _punching and _slash_index == 0
 
 
 ## True from the moment the string starts back to the moment the arrow leaves.
@@ -1102,6 +1405,7 @@ func _tick_windup() -> void:
 			_spear_ready_at = 0.0
 			_bow_ready_at = 0.0
 			_sword_ready_at = 0.0
+			_punch_ready_at = 0.0
 			cooldowns_changed.emit()
 		_windup_release_at = 0.0
 		# A swing abandoned rather than landed, and the blade simply does not
@@ -1112,6 +1416,17 @@ func _tick_windup() -> void:
 		# animation and the physics disagreeing in the most visible way there
 		# is. What it loses is the kill, which is what a cancel is.
 		_swinging = false
+		# A slash abandoned rather than landed, and a punch likewise: the same
+		# sentence again, two outcomes further (the feel round). The chain's
+		# clocks on the body are deliberately left to run out on their own, for
+		# the spin's reason — `Bog` owns them, the animation is already playing
+		# on eight machines, and a blade that vanished mid-cut because its owner
+		# walked onto a letter card would be the drawing and the state
+		# disagreeing in the most visible way there is.
+		_punching = false
+		# A punch cancelled hands its cooldown back with the spear's, above:
+		# the host never saw one, so a spent local prediction would be this
+		# client alone believing in a recharge nothing else has.
 		# A draw abandoned rather than loosed, and the arrow is simply not
 		# there: the same sentence the spear's cancel has said since D-025, one
 		# field further. `_tick_draw` takes the charge off the body on the same
@@ -1148,6 +1463,37 @@ func _tick_windup() -> void:
 			_host_swing_sword(blade)
 		else:
 			_request_swing_sword.rpc_id(1, blade)
+		return
+
+	# **The fifth outcome and the sixth, and neither asks where the crosshair
+	# is either** (the feel round). Both are beside the swing rather than under
+	# it because they are the same kind of thing — a shape resolved in front of
+	# a body — and both are ahead of the degenerate-aim guard below for the
+	# reason the swing is: that guard is right for a thrown spear and would be a
+	# silently dropped melee attack here.
+	#
+	# What they do *not* share with the swing is where "in front" comes from.
+	# `SwordSpin` turns the body through a revolution inside its own skeleton,
+	# so its direction has to be read off the bone attachment; a slash and a
+	# punch are drawn going the way the body is already facing, and the player
+	# has had the stick and the camera all the way through. So the answer is
+	# `facing()` — read *here*, at the release, which is D-025's rule and means
+	# a Bog that turned during its own wind-up cuts where it is looking now.
+	if _slash_index > 0:
+		var index := _slash_index
+		var slash_aim := _bog.facing()
+		if Net.is_host:
+			_host_slash(index, slash_aim)
+		else:
+			_request_slash.rpc_id(1, index, slash_aim)
+		return
+	if _punching:
+		_punching = false
+		var fist := _bog.facing()
+		if Net.is_host:
+			_host_punch(fist)
+		else:
+			_request_punch.rpc_id(1, fist)
 		return
 
 	var origin := _throw_origin()
@@ -1419,6 +1765,7 @@ func _do_throw_spear(origin: Vector3, direction: Vector3) -> void:
 	var spear := SPEAR.launch(_spawn_root(), _bog, origin, direction, Net.is_host)
 	spear.struck_bog.connect(_on_spear_struck_bog.bind(spear))
 	_bog.threw_spear.emit(origin, direction)
+	weapon_launched.emit("spear")
 
 
 ## Put the spear back in the hand when the recharge ends — and take it away if
@@ -1525,7 +1872,8 @@ func _weapon_ready() -> bool:
 ## window — an Elder winding a bolt up must not be handed a shaft by it.
 func _wants_shaft() -> bool:
 	return not is_elder() and not is_holding_letter() and not _bog.is_drawing() \
-		and not is_swinging() and (has_spear() or _is_throw_windup())
+		and not is_swinging() and not _bare_handed() \
+		and (has_spear() or _is_throw_windup())
 
 
 # --------------------------------------------------------------------- bow ---
@@ -1716,6 +2064,7 @@ func _do_loose_arrow(origin: Vector3, direction: Vector3, charge: float) -> void
 	var arrow := ARROW.loose(_spawn_root(), _bog, origin, direction, charge,
 		_config, Net.is_host)
 	arrow.struck_bog.connect(_on_arrow_struck_bog.bind(arrow))
+	weapon_launched.emit("bow")
 
 
 func _on_arrow_struck_bog(victim: Bog, point: Vector3, bone: String,
@@ -1742,7 +2091,7 @@ func _on_arrow_struck_bog(victim: Bog, point: Vector3, bone: String,
 ## archer's.
 func _wants_bow() -> bool:
 	return not is_elder() and not is_holding_letter() and not is_swinging() \
-		and (has_bow() or _bog.is_drawing())
+		and not _bare_handed() and (has_bow() or _bog.is_drawing())
 
 
 ## Should the right fist have an arrow nocked in it?
@@ -1751,7 +2100,8 @@ func _wants_bow() -> bool:
 ## having: a Bog carrying a bow with no arrow on it is a Bog that cannot shoot
 ## you this second. Off the replicated draw, like the bow above.
 func _wants_arrow() -> bool:
-	return not is_elder() and not is_holding_letter() and _bog.is_drawing()
+	return not is_elder() and not is_holding_letter() and not _bare_handed() \
+		and _bog.is_drawing()
 
 
 ## Should the bow fist be holding a bottle right now (D-075)?
@@ -1772,7 +2122,8 @@ func _wants_arrow() -> bool:
 ## in a fist, and a fifth that quietly relied on somebody else having checked
 ## would be the one that is wrong the day the channel gate moves.
 func _wants_potion() -> bool:
-	return not is_elder() and not is_holding_letter() and is_channelling()
+	return not is_elder() and not is_holding_letter() and not _bare_handed() \
+		and is_channelling()
 
 
 ## Should the fists be holding a great sword right now (D-068, D-069)?
@@ -1805,9 +2156,16 @@ func _wants_potion() -> bool:
 ## the sword goes out of the fists on the same frame the blade stops connecting
 ## (`_tick_windup`) while the body goes on spinning, which is exactly the right
 ## three things to happen.
+## The chain adds `in_chain()` beside `is_swinging()` and it is the same
+## carve-out a third time (the feel round): a slash spends the recharge the
+## moment it starts, so `has_sword()` goes false for the whole chain and the
+## body's own chain clock is what keeps the blade in the fists — through the
+## slashes *and* through the grace between them, because a great sword that
+## blinked out for a sixth of a second while its owner decided whether to swing
+## again would be the hand disagreeing with the weapon once per click.
 func _wants_sword() -> bool:
-	return not is_elder() and not is_holding_letter() \
-		and (has_sword() or is_swinging())
+	return not is_elder() and not is_holding_letter() and not _bare_handed() \
+		and (has_sword() or is_swinging() or in_chain())
 
 
 # -------------------------------------------------------- the great sword ---
@@ -1827,6 +2185,14 @@ func _wants_sword() -> bool:
 ## windup — it is the *commitment*: the sword into the fists, the clip into the
 ## graph and the advance into the body, all three on every machine, all three off
 ## the same call.
+##
+## **Since the feel round this is the sprint attack rather than the click.** It
+## is reached from `try_sword_attack` when the body is already travelling at
+## `SPRINT_ATTACK_SPEED` of run, and a standing click gets the slash chain
+## instead. Nothing inside it changed, and the name did not either: the spin is
+## a whole mechanic with its reach fitted to its clip and three harness modes
+## asking for it by name, and renaming it would have been a rename dressed up as
+## a design.
 func try_swing_sword() -> void:
 	if not has_sword() or is_busy():
 		return
@@ -2008,6 +2374,57 @@ func _host_swing_sword(blade: Vector3) -> void:
 			Bog.Cause.SWORD, chest, aim * SWORD_IMPULSE,
 			SpearProjectile.nearest_bone(other, chest))
 
+	_swing_range_targets(centre, aim)
+
+
+## The practice range's boards and gong, caught by the same swing.
+##
+## **The one place a weapon reaches something that is not a Bog and has to be
+## told about it.** A spear or an arrow asks the question itself, off the
+## collider its own sweep returned, and needs nobody's help; the sword has no
+## projectile and its geometry is the host's alone (D-068), so this is the only
+## attack whose reaction has to travel.
+##
+## The two tests are `_sword_victims`' own, deliberately: the same `reach`, the
+## same `SWORD_ARC`, read from the same locals, so a board and a Bog standing in
+## the same place are both hit or both missed. What is added is the target's own
+## radius, because a 1.4 m plank is not a point and a swing that clipped its edge
+## should count. No line-of-sight test, unlike a Bog's: a board is not something
+## another board can hide behind, and the range has nothing to shield with.
+##
+## Guarded on the map rather than on the group being empty, so that outside a
+## practice map this is one boolean and not a tree walk per swing. Off `_config`
+## rather than `MatchState.config()`, because that is the copy the rest of this
+## function already reads its reach out of — one source, and no singleton hop on
+## a path that runs on every swing in the game.
+## The reach, the cause and the arc are handed in for `_sword_victims`' reason,
+## and the `cause` is what the board is told hit it: a plank knocked by a fist
+## should say so, and `RangeTarget` keeps no list of what may hit it.
+func _swing_range_targets(centre: Vector3, aim: Vector3, reach: float = -1.0,
+		cause: int = Bog.Cause.SWORD, arc: float = SWORD_ARC) -> void:
+	if _config == null or not _config.is_practice():
+		return
+	if reach < 0.0:
+		reach = maxf(_config.sword_reach, 0.01)
+	var limit := cos(deg_to_rad(arc))
+	for target: Node in get_tree().get_nodes_in_group("range_targets"):
+		var body := target as Node3D
+		if body == null or not body.has_method("range_hit"):
+			continue
+		var to := body.global_position - centre
+		var radius := 0.0
+		if body.has_method("hit_radius"):
+			radius = float(body.call("hit_radius"))
+		if to.length() > reach + radius:
+			continue
+		var flat := Vector3(to.x, 0.0, to.z)
+		if flat.length_squared() > 0.0001 and flat.normalized().dot(aim) < limit:
+			continue
+		# Broadcast and then run locally, the ordering every other host-decided
+		# reaction in this file keeps.
+		body.call("range_hit_broadcast", body.global_position, _bog.peer_id,
+			cause)
+
 
 ## Every living Bog the swing catches (D-068).
 ##
@@ -2027,10 +2444,18 @@ func _host_swing_sword(blade: Vector3) -> void:
 ## The swinger is excluded and so is every dead Bog: corpses keep their collision
 ## until they respawn (D-043), and a swing that killed a corpse would be three
 ## seconds of a weapon hitting things that are already down.
-func _sword_victims(blade: Vector3) -> Array[Bog]:
+## Since the feel round it takes the reach and the arc rather than reading the
+## dial itself, because there are three melee shapes now and only one geometry:
+## the spin at the dial, a slash at the dial plus its step, and a fist at 1.1 m
+## inside a narrower front. Three callers and one function, which is the whole
+## reason a slash cannot quietly acquire a different line-of-sight rule or a
+## different way of excluding corpses than the swing it came from.
+func _sword_victims(blade: Vector3, reach: float = -1.0,
+		arc: float = SWORD_ARC) -> Array[Bog]:
 	var out: Array[Bog] = []
-	var reach := maxf(_config.sword_reach, 0.01)
-	var limit := cos(deg_to_rad(SWORD_ARC))
+	if reach < 0.0:
+		reach = maxf(_config.sword_reach, 0.01)
+	var limit := cos(deg_to_rad(arc))
 	var centre := _bog.body_centre()
 	var space := _bog.get_world_3d().direct_space_state
 	for other: Bog in MatchState.bogs.values():
@@ -2076,6 +2501,366 @@ func _do_swing_sword(point: Vector3, _blade: Vector3, connected: bool) -> void:
 	cooldowns_changed.emit()
 	if connected:
 		AudioDirector.play_3d_varied(AudioDirector.SWORD_HIT_BODY, point)
+	# Here and not in `_begin_swing`, which is where a swing *starts*. The windup
+	# is deliberately ungated (`_host_swing_windup` says so) so that the tell
+	# plays even for a swing the host is about to refuse on the recharge, a
+	# letter hold or the Elder — and counting those would be counting shots that
+	# can never land. This is the accepted swing, which is what the other three
+	# `_do_*` handlers emit for as well.
+	weapon_launched.emit("sword")
+
+
+# ---------------------------------------------------------- the slash chain ---
+
+## The great sword's click, and the one place its two attacks choose between
+## themselves (the feel round).
+##
+## D-068 bought one attack with a 1.867 s commitment on it, and a season of
+## playing it said the same thing every time: the weapon is either a kill or a
+## second and a half of standing in the open having missed. So the click is now
+## a **chain of three slashes** — 50 each, a quarter of a second each, the stick
+## and the camera and the jump all still yours — and the spin it used to be is
+## still there, as the **sprint attack**: get to 0.8 of run speed and the same
+## button fires the same committed revolution for the same 100.
+##
+## **`try_swing_sword` is untouched below and is now the sprint attack's own
+## door.** That is deliberate and not an accident of refactoring: the spin is a
+## whole mechanic with a decision record, a reach fitted to its clip and three
+## harness modes measuring it, and every one of those asks for it by name.
+##
+## The chain's follow-up click is taken *before* `is_busy()`, which is the only
+## carve-out in this function: `in_chain()` is one of that function's own terms,
+## so a chained click would otherwise be refused by the very state it continues.
+## What it is not allowed to skip is the **wind-up** — a click before this
+## slash's blade has passed is refused, so a player cannot cancel their own hit
+## by being early, and the window a chain is actually taken in runs from the
+## connect to `end_N` plus `SLASH_CHAIN_GRACE`.
+func try_sword_attack() -> void:
+	if _bog == null or not _bog.alive:
+		return
+	if _slash_index > 0:
+		# Mid-chain. The three terms of `is_busy()` that are not the chain
+		# itself, asked one at a time rather than through it.
+		if is_winding_up() or is_channelling() or is_swinging():
+			return
+		if not _sword_in_hand() or not in_chain() or _slash_index >= SLASH_MAX:
+			return
+		_open_slash(_slash_index + 1)
+		return
+	if not has_sword() or is_busy():
+		return
+	if _bog.ground_speed() >= Bog.RUN_SPEED * SPRINT_ATTACK_SPEED:
+		try_swing_sword()
+		return
+	_open_slash(1)
+
+
+## Start slash `index` here and ask for it everywhere (the feel round).
+##
+## `try_swing_sword`'s shape with one number moved: the click spends the
+## recharge, and what it spends it *to* is the end of the chain rather than the
+## end of this slash. `_sword_ready_at` is pushed to the far side of the window
+## the next click would be taken in, so `has_sword()` is false for the whole
+## chain — which is exactly right, because inside a chain the only legal attack
+## is the next slash and `try_sword_attack` above asks a different question for
+## it. A chain that ends early simply leaves the deadline where the last slash
+## put it, so the recharge genuinely runs **between chains** and never between
+## slashes, which is what `sword_recharge`'s new default is sized for.
+func _open_slash(index: int) -> void:
+	_slash_index = index
+	_windup_release_at = _now() + BogAnimator.slash_release(index)
+	_sword_ready_at = _now() + BogAnimator.slash_seconds(index) \
+		+ SLASH_CHAIN_GRACE + _config.sword_recharge
+	cooldowns_changed.emit()
+
+	_begin_slash(index)
+	if Net.is_host:
+		_host_slash_windup(index)
+	else:
+		_request_slash_windup.rpc_id(1, index)
+
+
+## Put slash `index` on this machine: the clip, the two clocks and the step
+## (the feel round). `_begin_swing`'s twin, and it is relayed exactly as that
+## one is — **an event with the slash number on it, not a replicated field.**
+##
+## The alternative considered was a `sync_slash_serial` bumped per slash with
+## the index packed into it. It would work, and it is the wrong tool twice
+## over: the swing already relays its wind-up as an event because that is what a
+## cross-faded one-shot needs (D-105 makes the same argument about the emote),
+## and a chain is a *sequence of events* rather than a continuous quantity
+## anybody has to sample. A serial would be a second road carrying the same
+## news, and the index would have to be packed into an int to keep the two from
+## arriving apart. The relay is reliable and ordered, so slash 2 cannot land
+## before slash 1, which is the only ordering property this needs.
+##
+## `_refresh_hand` on this frame rather than on the next, for `_begin_swing`'s
+## reason: one frame, but the frame in which everybody watching would see a Bog
+## start a slash with a spear's carry pose still on its shoulders.
+func _begin_slash(index: int) -> void:
+	if _bog == null:
+		return
+	_bog.begin_slash(BogAnimator.slash_seconds(index),
+		BogAnimator.slash_seconds(index) + SLASH_CHAIN_GRACE, SLASH_STEP)
+	var animator := _bog.get_node_or_null("AnimationTree") as BogAnimator
+	if animator != null:
+		animator.play_slash(index)
+	# `play_3d_varied` where the spin uses `play_3d`, and the spin's own comment
+	# is why: its pitch is held because the whoosh is built to peak where the
+	# blade is, and three slashes inside a second with identical pitch would be
+	# the one place in this game a sound reads as a loop rather than as a fight.
+	AudioDirector.play_3d_varied(AudioDirector.SWORD_SWING, _bog.global_position)
+	_refresh_hand()
+	cooldowns_changed.emit()
+
+
+## Close the chain on the tick the body says it is over. The owner's
+## bookkeeping only: the clocks that matter to anybody else are `Bog`'s and run
+## out by themselves.
+func _tick_slash() -> void:
+	if _slash_index == 0 or in_chain():
+		return
+	_slash_index = 0
+	cooldowns_changed.emit()
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_slash_windup(index: int) -> void:
+	if not Net.is_host or multiplayer.get_remote_sender_id() != _bog.peer_id:
+		return
+	_host_slash_windup(index)
+
+
+## Ungated like the swing's wind-up and for its reason: this is the tell, and
+## hiding it from everybody would only mean a blade nobody saw coming for a hit
+## that is checked properly anyway.
+func _host_slash_windup(index: int) -> void:
+	if not _bog.alive:
+		return
+	var slash := clampi(index, 1, SLASH_MAX)
+	_do_slash_windup.rpc(slash)
+	_do_slash_windup(slash)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _do_slash_windup(index: int) -> void:
+	# The swinger already did this on its own click; doing it again half a round
+	# trip later would restart the clip mid-cut.
+	if _bog == null or _bog.is_local():
+		return
+	_begin_slash(clampi(index, 1, SLASH_MAX))
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_slash(index: int, aim: Vector3) -> void:
+	if not Net.is_host or multiplayer.get_remote_sender_id() != _bog.peer_id:
+		return
+	_host_slash(index, aim)
+
+
+## The slash's hit, decided on the host and nowhere else — `_host_swing_sword`
+## with three things different (the feel round).
+##
+## **The chain is checked and not believed.** A client sends which slash it
+## thinks it is on; the host keeps its own index and its own window, and accepts
+## a number only if it is the next one and the window it opened is still open.
+## So a modified client cannot send slash 3 three times, and cannot open a chain
+## it has not paid the recharge for. What it can do is choose *when* inside its
+## own window, which is the same slack `DRAW_CLAIM_GRACE` records for the bow.
+##
+## The reach is the dial **plus the step**, because the body moved: a slash that
+## measured its victims from where the Bog was standing when the clip started
+## would refuse the hit the animation visibly lands.
+func _host_slash(index: int, aim: Vector3) -> void:
+	# `_sword_in_hand()` rather than the two clauses `_host_swing_sword` spells
+	# out, because it is the same list and one more: the pick, the robe, the
+	# card, the bottle and the holster, off the host's own rows and the owner's
+	# own replicated bool, which are the only copies that can be trusted.
+	if not _bog.alive or not _sword_in_hand():
+		return
+	if not _host_chain_open(index):
+		return
+	var slash := clampi(index, 1, SLASH_MAX)
+	_server_slash_index = slash
+	_server_slash_until = _now() + BogAnimator.slash_seconds(slash) + SLASH_CHAIN_GRACE
+	_server_sword_ready_at = _server_slash_until + _config.sword_recharge
+
+	var blade := Vector3(aim.x, 0.0, aim.z)
+	if not blade.is_finite() or blade.length_squared() < 0.0001:
+		blade = _bog.facing()
+	blade = blade.normalized()
+
+	var centre := _bog.body_centre()
+	var reach := slash_reach()
+	var victims := _sword_victims(blade, reach)
+	# Broadcast before the damage is reported, the ordering every host-decided
+	# reaction in this file keeps.
+	_do_slash.rpc(centre, not victims.is_empty())
+	_do_slash(centre, not victims.is_empty())
+
+	for other: Bog in victims:
+		var chest := other.body_axis_nearest(centre)
+		MatchState.report_damage(other.peer_id, _bog.peer_id, SLASH_DAMAGE,
+			Bog.Cause.SWORD, chest, blade * SLASH_IMPULSE,
+			SpearProjectile.nearest_bone(other, chest))
+
+	_swing_range_targets(centre, blade, reach, Bog.Cause.SWORD)
+
+
+## May the host accept `index` as the next slash? The chain's gate, on the
+## host's own clocks. A lapsed window is cleared here rather than on a timer,
+## because nothing needs to know it lapsed until somebody asks.
+func _host_chain_open(index: int) -> bool:
+	if _now() > _server_slash_until:
+		_server_slash_index = 0
+	if _server_slash_index == 0:
+		return index == 1 and _now() >= _server_sword_ready_at
+	return index == _server_slash_index + 1 and index <= SLASH_MAX
+
+
+## How far a slash reaches: the dial plus the step it takes to get there. One
+## function so the host's geometry, the range targets and any harness reading it
+## all say the same number.
+func slash_reach() -> float:
+	return maxf(_config.sword_reach, 0.01) + SLASH_STEP
+
+
+## The slash landing, on every machine. No `play_slash` here: the clip started
+## `slash_release(index)` ago on every peer and firing it again would snap the
+## blade back to the start of the cut on the frame it goes through somebody.
+@rpc("authority", "call_remote", "reliable")
+func _do_slash(point: Vector3, connected: bool) -> void:
+	if connected:
+		AudioDirector.play_3d_varied(AudioDirector.SWORD_HIT_BODY, point)
+	weapon_launched.emit("sword")
+
+
+# ------------------------------------------------------------------- fists ---
+
+## The punch: a click with your weapon put away (the feel round).
+##
+## Shaped like `try_swing_sword` down to the order of the lines, because it is
+## the same machinery a sixth time — the click spends the cooldown whether or
+## not the fist finds anybody, the puncher plays its own feedback immediately,
+## and the host relays it because a client cannot address the other peers
+## (D-024).
+##
+## The gate is one clause and it is the holster: `is_holstered()` is already
+## everything this needs to ask, because holstering is refused while dead, mid
+## wind-up, drawing, dancing or holding a card, and every one of those would
+## have been a clause here. `is_busy()` is asked as well and only covers what
+## can *start* after the key: a punch already thrown.
+func try_punch() -> void:
+	if _bog == null or not _bog.alive or not is_holstered():
+		return
+	if is_busy() or punch_cooldown() > 0.0:
+		return
+
+	_windup_release_at = _now() + BogAnimator.PUNCH_RELEASE_TIME
+	_punching = true
+	_punch_ready_at = _now() + PUNCH_CYCLE
+	cooldowns_changed.emit()
+
+	_begin_punch()
+	if Net.is_host:
+		_host_punch_windup()
+	else:
+		_request_punch_windup.rpc_id(1)
+
+
+## The arm going, on this machine. There is no hand to repaint — a punching Bog
+## is holstered, so both fists are already empty and stay that way — and no
+## clock on the body either: the punch is an upper-body one-shot that ends when
+## the clip ends, which is the whole of what "you keep moving and turning at
+## full speed" means. So this is one line and a comment saying why it is one
+## line.
+func _begin_punch() -> void:
+	if _bog == null:
+		return
+	var animator := _bog.get_node_or_null("AnimationTree") as BogAnimator
+	if animator != null:
+		animator.play_punch()
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_punch_windup() -> void:
+	if not Net.is_host or multiplayer.get_remote_sender_id() != _bog.peer_id:
+		return
+	_host_punch_windup()
+
+
+func _host_punch_windup() -> void:
+	if not _bog.alive:
+		return
+	_do_punch_windup.rpc()
+	_do_punch_windup()
+
+
+@rpc("authority", "call_remote", "reliable")
+func _do_punch_windup() -> void:
+	if _bog == null or _bog.is_local():
+		return
+	_begin_punch()
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_punch(aim: Vector3) -> void:
+	if not Net.is_host or multiplayer.get_remote_sender_id() != _bog.peer_id:
+		return
+	_host_punch(aim)
+
+
+## The punch's hit, decided on the host and nowhere else.
+##
+## **The host checks that the attacker actually has its weapon away**, which is
+## the one gate this attack has and the only thing a client could lie about that
+## would be worth anything: a Bog that punched with its spear still out would be
+## a free 20 damage beside a weapon it had not spent. `sync_holstered` is the
+## owner's own replicated bool, so the host is reading the same field every
+## other peer draws the empty fists from, a tick or two old — which is slack in
+## the measuring and cannot be slack in the mechanic, because the value the host
+## reads is the value the *client* published rather than one it claims now.
+func _host_punch(aim: Vector3) -> void:
+	if not _bog.alive or is_holding_letter() or not is_holstered():
+		return
+	if _now() < _server_punch_ready_at:
+		return
+	_server_punch_ready_at = _now() + PUNCH_CYCLE
+
+	var fist := Vector3(aim.x, 0.0, aim.z)
+	if not fist.is_finite() or fist.length_squared() < 0.0001:
+		fist = _bog.facing()
+	fist = fist.normalized()
+
+	var centre := _bog.body_centre()
+	var victims := _sword_victims(fist, PUNCH_REACH, PUNCH_ARC)
+	_do_punch.rpc(centre, not victims.is_empty())
+	_do_punch(centre, not victims.is_empty())
+
+	for other: Bog in victims:
+		var chest := other.body_axis_nearest(centre)
+		MatchState.report_damage(other.peer_id, _bog.peer_id, PUNCH_DAMAGE,
+			Bog.Cause.FIST, chest, fist * PUNCH_IMPULSE,
+			SpearProjectile.nearest_bone(other, chest))
+
+	# A board, the gong and a dummy's target all answer `range_hit`, and a fist
+	# is a thing that hits them: the practice range should let you thump the
+	# gong with your hands (D-116). The *stats* panel ignores it, because
+	# `RangeStats.BY_CAUSE` has no row for a fist and `weapon_for` answers with
+	# nothing — which is the right way round, since what that panel counts is
+	# practice with a weapon.
+	_swing_range_targets(centre, fist, PUNCH_REACH, Bog.Cause.FIST, PUNCH_ARC)
+
+
+## The punch landing, on every machine.
+@rpc("authority", "call_remote", "reliable")
+func _do_punch(point: Vector3, connected: bool) -> void:
+	if connected:
+		AudioDirector.play_3d_varied(AudioDirector.SWORD_HIT_BODY, point)
+	# Its own name on the signal, so the range's launch/hit bookkeeping can tell
+	# a fist from a weapon — and `RangeStats.WEAPONS` deliberately has no "fist"
+	# row, so `record_launch` drops it on the floor.
+	weapon_launched.emit("fist")
 
 
 # --------------------------------------------------------------- lightning ---
@@ -2286,6 +3071,7 @@ func _do_cast_lightning(origin: Vector3, point: Vector3, normal: Vector3,
 	# The radius travels with the bolt rather than being read off each peer's
 	# own config, so the ring on every screen is the one the host killed with.
 	LightningBolt.strike(_spawn_root(), origin, point, normal, _bog, radius)
+	weapon_launched.emit("lightning")
 
 
 ## Put the crackle back when the cooldown ends — and take it away if something
@@ -3057,6 +3843,58 @@ func _spawn_root() -> Node:
 ## Runs on every peer, from `MatchState._do_respawn`, so the host's copies are
 ## zeroed by the same call that zeroes everyone's. No broadcast needed, and
 ## sending one would race the respawn that caused it.
+## Put down whatever the old weapon was half way through doing. Runs on every
+## peer, from `MatchState._do_set_weapon` when a range rack changes `Bog.weapon`
+## under a Bog that is still standing (D-115).
+##
+## **`reset()`'s weapon half, and deliberately not `reset()` itself.** That
+## function also zeroes `_shields`, `_magnets` and `_potions`, because it is the
+## death path and everything carried is lost on death (D-032). A rack is not a
+## death: a Bog that walked past one and found its pockets emptied would have
+## been punished for practising, which is the opposite of what the rack is for.
+## So this is the same list with the stock, the Elder's clock and the two
+## ability cooldowns left alone — those belong to the Bog, not to the weapon it
+## happens to be holding.
+##
+## It does **not** redraw the hand. The one caller asks `refresh_hand()` on the
+## next line, which repaints both fists *and* re-points the carry pose; doing
+## half of it here would be the second opinion about what is in a fist that
+## `_refresh_hand`'s header refuses to have.
+func clear_weapon_state() -> void:
+	# The spear, with the windup that may have been half way back. The shaft
+	# itself is put back by the `refresh_hand` that follows, off `has_spear()`.
+	_windup_release_at = 0.0
+	_spear_ready_at = 0.0
+	_server_spear_ready_at = 0.0
+	# The bow, with the draw. `_bog.draw` is cleared out of band for the reason
+	# `reset` gives one screen down: this runs on every peer, and a remote Bog
+	# whose owner has not published since would otherwise hold a half-drawn bow
+	# it no longer has.
+	_bow_ready_at = 0.0
+	_draw_started_at = 0.0
+	_loose_charge = -1.0
+	_server_bow_ready_at = 0.0
+	_server_draw_peak = 0.0
+	_server_drawing = false
+	# The sword, with the swing. `Bog.is_spinning()` runs itself out, so the
+	# flag is all there is to clear here — and the chain's two clocks run
+	# themselves out beside it, so the chain is its index and its deadlines.
+	_swinging = false
+	_sword_ready_at = 0.0
+	_server_sword_ready_at = 0.0
+	_slash_index = 0
+	_server_slash_index = 0
+	_server_slash_until = 0.0
+	# And the fists, which are the one thing here that survives a weapon
+	# changing under a Bog: a rack does not put your hands away.
+	_punching = false
+	_punch_ready_at = 0.0
+	_server_punch_ready_at = 0.0
+	if _bog != null:
+		_bog.draw = -1.0
+	cooldowns_changed.emit()
+
+
 func reset() -> void:
 	_windup_release_at = 0.0
 	_spear_ready_at = 0.0
@@ -3083,6 +3921,16 @@ func reset() -> void:
 	_swinging = false
 	_sword_ready_at = 0.0
 	_server_sword_ready_at = 0.0
+	# The chain and the fists go with them, and `Bog.revive_at` ends both of the
+	# chain's clocks on every peer for the reason it ends the spin's — a Bog
+	# that came back mid-chain would stand on a spawn pad at 0.85 speed with a
+	# blade in its fists (the feel round).
+	_slash_index = 0
+	_server_slash_index = 0
+	_server_slash_until = 0.0
+	_punching = false
+	_punch_ready_at = 0.0
+	_server_punch_ready_at = 0.0
 	_server_bow_ready_at = 0.0
 	_server_draw_peak = 0.0
 	_server_drawing = false

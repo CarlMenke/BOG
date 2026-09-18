@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://bgubmovechk01"]
+
+[ext_resource type="Script" path="res://tools/movement_check.gd" id="1"]
+
+[node name="MovementCheck" type="Node3D"]
+script = ExtResource("1")

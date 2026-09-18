@@ -39,19 +39,39 @@ const TICK := 8.0
 const THICKNESS := 2.0
 const DOT_RADIUS := 1.7
 
-## The hitmarker: four short diagonals that snap in on a kill and fade. Purely
-## visual — `MatchState` already plays the sound, and doubling it up would be
-## two hitmarkers for one kill. Deliberately untouched by the removal above: a
-## hitmarker is feedback for something that has already happened, not a gauge
-## for something that has not.
+## The hitmarker: four short diagonals that snap in on a landed hit and fade.
+## Purely visual — `MatchState` already plays the sound, and doubling it up
+## would be two hitmarkers for one hit. Deliberately untouched by the removal
+## above: a hitmarker is feedback for something that has already happened, not a
+## gauge for something that has not.
+##
+## **Made to land rather than made louder** (D-122). The first version was two
+## pixels wide, fading from the frame it appeared in, and in a fight it was
+## simply not seen. What was missing was never size or brightness: it was an
+## *arrival*. So the arms are three pixels, and the mark lands 40% oversize and
+## pulls to its true size over `MARK_SNAP`, at full alpha, before any of it
+## fades. Seventy milliseconds is two frames at 30 fps and ten at 144, which is
+## long enough to be a movement at any frame rate and short enough that nobody
+## can say what it did — the eye reports a snap, which is the point.
 const MARK_INNER := 9.0
 const MARK_OUTER := 17.0
-const MARK_FADE := 0.4
+const MARK_THICKNESS := 3.0
+const MARK_FADE := 0.45
+const MARK_SNAP := 0.07
+const MARK_SNAP_SCALE := 1.4
 
 ## Hidden entirely while dead or spectating. Set by the HUD.
 var armed: bool = true
 
 var _mark: float = 0.0
+## What the last `strike` asked for. Held rather than passed to `_draw`, which
+## takes no arguments, and reset by nothing: a finished mark is invisible, so a
+## stale tint cannot be seen.
+var _mark_tint: Color = Color(1, 1, 1)
+var _mark_life: float = MARK_FADE
+## Whether the last `strike` was a kill, which is the only thing that changes
+## the *shape*: the arms start at the centre instead of outside the gap.
+var _mark_kill: bool = false
 
 
 func _ready() -> void:
@@ -69,9 +89,34 @@ func set_state(is_armed: bool) -> void:
 	queue_redraw()
 
 
-## Flash the hitmarker. Called when this client's Bog gets a kill.
-func strike() -> void:
-	_mark = MARK_FADE
+## Flash the hitmarker.
+##
+## **Now called on every landed hit, not only on a kill** (D-116). The sound has
+## fired on every hit since D-062 — the victim may be sixty metres away and
+## behind a tree, still standing, and without it the only difference between a
+## hit and a miss is a bar four pixels tall — and the picture was the half that
+## never caught up. A hitmarker that fires in your ears and not in your eyes was
+## an omission rather than a design.
+##
+## The tint is what says *which*: the Bog's own yellow for a hit somebody walked
+## away from, white for one they did not, amber for one of the practice range's
+## boards. A range board and a hit on a Bog are the same shape, because they are
+## the same event with a different victim.
+##
+## A **kill is the one thing that changes the shape** (D-122), because it is the
+## one thing that is not just another hit: the four arms reach in through the
+## centre gap and meet, so the mark is a whole X rather than four corners of
+## one, and it is held 0.6 s rather than 0.45. Colour alone had to carry that
+## before, and colour alone is what a player looking at a Bog in front of a
+## sunset is least able to read. `kill` is a flag rather than a second function
+## so the one call site that is neither — `flash_hit`, for the range's boards —
+## keeps working by saying nothing.
+func strike(tint: Color = Color(1, 1, 1), life: float = MARK_FADE,
+		kill: bool = false) -> void:
+	_mark_tint = tint
+	_mark_life = maxf(life, 0.01)
+	_mark_kill = kill
+	_mark = _mark_life
 	set_process(true)
 	queue_redraw()
 
@@ -97,8 +142,20 @@ func _draw() -> void:
 		draw_circle(centre, DOT_RADIUS, tint)
 
 	if _mark > 0.0:
-		var alpha := _mark / MARK_FADE
-		var colour := UIPalette.faded(Color(1, 1, 1), alpha)
+		# Two animations, one after the other rather than mixed: the mark snaps
+		# to size at full alpha, and only then starts to go. Running the fade
+		# over the whole life instead would have the mark already dimming while
+		# it is still arriving, which is exactly how the first version managed
+		# to be invisible.
+		var elapsed := _mark_life - _mark
+		var burst := lerpf(MARK_SNAP_SCALE, 1.0,
+			clampf(elapsed / MARK_SNAP, 0.0, 1.0))
+		var alpha := minf(1.0, _mark / maxf(_mark_life - MARK_SNAP, 0.01))
+		var colour := UIPalette.faded(_mark_tint, alpha)
+		# A kill's arms start at the centre, so the four of them draw one X
+		# across the aim point; a hit's stand off it and leave the gap clear.
+		var inner := (0.0 if _mark_kill else MARK_INNER) * burst
+		var outer := MARK_OUTER * burst
 		for corner: Vector2 in [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)]:
-			draw_line(centre + corner * MARK_INNER, centre + corner * MARK_OUTER,
-				colour, 2.0)
+			draw_line(centre + corner * inner, centre + corner * outer,
+				colour, MARK_THICKNESS)

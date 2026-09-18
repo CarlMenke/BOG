@@ -29,6 +29,16 @@ extends Node3D
 ##   # ... and the same with a scale, a grip fraction and an outward offset
 ##   #     swept:  ... 25 drink fist 0.30 0.65 0.05
 ##
+##   # the bow's two carry angles as a map, which is how the tilt is solved
+##   Godot --headless --path . --script tools/snapshot.gd -- \
+##       res://tools/preview_carry.tscn out/none.png 4 probe 0 345 -90 90 15
+##
+##   # the front-and-side look, which is the judgement no table can make:
+##   # one weapon, its own lever, three columns each (D-103)
+##   Godot --path . --resolution 2400x1200 --script tools/snapshot.gd -- \
+##       res://tools/preview_carry.tscn out/carry_bow_face.png 25 \
+##       candidates bow 47.5,-34 47.5,-20 47.5,-6
+##
 ##   # the same three from overhead, which is where a bearing is an angle
 ##   Godot --path . --resolution 2400x900 --script tools/snapshot.gd -- \
 ##       res://tools/preview_carry.tscn out/carry_sword_bearings.png 25 \
@@ -100,12 +110,58 @@ const CARRY_MIN := 0.15
 ## **The spear only, like `LEVEL_MAX` and `PALM_MAX`**, and for the same reason
 ## rather than a new one: the spear is the weapon whose shaft passes the body,
 ## and it is the only one that got a carry pose built around the prop. The bow
-## still hangs off a fist beside the thigh and reads 0.004 m to the nearest skin
-## vertex in every clip, which is a bow resting against a leg and not a bow
+## hangs off a fist beside the thigh and reads 0.002 m to the nearest trunk
+## vertex in every clip, which is a bow resting against a body and not a bow
 ## inside one — the same measurement that could not tell the two apart before,
-## on a pose nothing has changed. Its column is printed and decides nothing.
+## on a pose nothing has changed. Its trunk column is printed and decides
+## nothing; what decides for the bow is `HEAD_MIN` below, which asks the one
+## part of that number a limb leaning on a belly cannot be confused with.
 ## `hilt`'s `carried` already asks the great sword the harder version of this.
 const SKIN_MIN := 0.06
+
+## How near a carried **bow** may come to the Bog's own head, in metres.
+##
+## The owner, of the shipped carry: *the top limb passes through the nose.* It
+## did, and every number in this file said the bow was fine — because the two
+## that could have seen it were both answering a different question. The floor
+## is about grass. `SKIN_MIN` is about the *trunk*, and the bow's trunk column
+## reads 0.002 m in all fifteen clips whatever the tilt does, because the bow
+## fist and the trunk are both bones the carry layer owns: the distance between
+## them is a constant of the pose, a bow lying **along** a belly and a bow
+## **through** a face score it identically, and that is exactly the confusion
+## D-099 disarmed `SKIN_MIN` over in the first place. So it is left disarmed for
+## this weapon and a **second** measurement decides, on the half of the body a
+## leaning limb never touches.
+##
+## D-110 is why it is needed now rather than at D-066. The carry layer was
+## turning the chest and head 58 deg to the Bog's left, so the face was out of
+## the limb's path by accident; `untwist` squared it and put it back in, and the
+## bow was re-solved against the floor alone because the floor was the only
+## thing that had a check. A clearance nobody measures is a clearance that gets
+## spent.
+##
+## 0.06, which is `SKIN_MIN`'s own number and D-074's before it, for the same
+## reason it is a floor rather than the measured best: six centimetres is
+## daylight a player can see between a limb and a cheek, and anything the pose
+## can spare above that is spare.
+const HEAD_MIN := 0.06
+
+## The head as three joints rather than as a cloud of vertices — the neck, the
+## skull and the tip of it.
+##
+## Measured **as well as** the skin and not instead of it, and the pair is the
+## point. The skin is the honest answer to "is there daylight" and is what the
+## verdict is taken from; the bones are the answer to "and is the limb on the
+## right side of the face", which a vertex cloud cannot give, because the
+## nearest vertex to a limb sweeping past a cheek and the nearest vertex to one
+## coming out of an ear are the same distance apart. A row whose skin figure is
+## small and whose bone figure is smaller still is a limb inside the head.
+##
+## `Neck` is in the list and is not in `HEAD_BONES`: the potion asks where the
+## *mouth* is and the neck is not the mouth, and a limb across the throat is as
+## much through the face as one across the nose.
+const HEAD_CLEAR_BONES := ["mixamorig_Neck", "mixamorig_Head",
+	"mixamorig_HeadTop_End"]
 
 ## How far off horizontal the **spear's** shaft may lie, in degrees, in any clip
 ## a Bog carries it through.
@@ -311,6 +367,14 @@ const FIST_FRAME := 0.55
 var _skin_rest: PackedVector3Array = PackedVector3Array()
 var _skin_bones: PackedInt32Array = PackedInt32Array()
 var _skin_weights: PackedFloat32Array = PackedFloat32Array()
+## Which of those trunk vertices are the **head**, one flag per vertex of
+## `_skin_rest`. A head vertex is a trunk vertex by construction — `HEAD_BONES`
+## is a subset of `TRUNK_BONES`, so anything half-weighted to the skull is at
+## least half-weighted to the trunk — so the head is a mask over the scan that
+## is already running rather than a second 6,000-vertex sweep beside it
+## (`HEAD_MIN`). `_head_rest` below is the same set kept separately for
+## `-- potion`, which skins it in a pose this scan is not running.
+var _skin_head: PackedByteArray = PackedByteArray()
 ## Bone influences per vertex, read off the mesh in `_build_skin`.
 var _stride := 4
 var _skin_binds: Array[Transform3D] = []
@@ -387,6 +451,10 @@ func _ready() -> void:
 	if mode == "candidates":
 		_candidates(args.slice(4))
 		return
+	if mode == "probe":
+		_probe(args.slice(4))
+		get_tree().quit()
+		return
 	if mode == "twist":
 		_twist()
 		get_tree().quit()
@@ -401,6 +469,123 @@ func _ready() -> void:
 
 # ------------------------------------------------------------- the numbers ---
 
+## The bow's carry tilt as a **map** rather than as two lines through a point:
+## every cell prints head clearance, layered floor and bare-armed floor.
+##
+##   # the whole of tilt space at 15 deg, which is what the bow was re-solved on
+##   Godot --headless --path . --script tools/snapshot.gd -- \
+##       res://tools/preview_carry.tscn out/none.png 4 probe 0 345 -90 90 15
+##
+##   # and the finalists, in full, with the bearing the sheet is judged on
+##   Godot --headless --path . --script tools/snapshot.gd -- \
+##       res://tools/preview_carry.tscn out/none.png 4 probe 47.5,-34 40,10
+##
+## **`-- sweep` walks one axis at a time and that is exactly how the bow ended
+## up through the face.** Two sweeps through the shipped tilt said the
+## neighbourhood was monotone in the floor and flat in everything else, and both
+## were true — the cell that fixes this is 60 deg away on one axis and 44 on the
+## other, and no line through the old point passes near it. A lever with two
+## angles wants a map; the spear's has three and a bearing you can reason about,
+## which is why `-- solve` can still be a band.
+##
+## Two forms, and the cheap one is the one that made the decision. A grid cell
+## skins the body only at the twelve carry moments, because the head clearance
+## is a fact about the **carry clip alone**: every bone between the head and the
+## bow fist is in `BogAnimator.UPPER_BODY_BONES`, so the locomotion underneath
+## moves the pair rigidly and cannot change the distance between them — which is
+## why `measure`'s head column reads the same number in all fifteen rows. The
+## floors are not: those are measured over every carried clip, with the layer on
+## and off, and they are what the grid's second and third figures are.
+func _probe(args: Array) -> void:
+	var bog := _bare_bog()
+	var skeleton := bog.find_child("Skeleton3D", true, false) as Skeleton3D
+	var player := bog.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	_build_skin(bog, skeleton)
+	if args.size() > 0 and String(args[0]).contains(","):
+		print("preview_carry: the bow's carry tilt, cell by cell")
+		print("      tilt         head   floor    bare   trunk  bearing  elev")
+		for arg: String in args:
+			var p := String(arg).split(",")
+			var tilt := Vector3(float(p[0]), float(p[1]), 0.0)
+			var cell := _bow_cell(bog, skeleton, player, tilt)
+			# The trunk and the bearing off `Idle` alone, for the reason the
+			# head is measured off the carry clip alone: the bow fist and the
+			# trunk are both the layer's, so this row is every row.
+			var idle := _clearance(bog, skeleton, player, "Idle",
+				Loadout.carry_clip(Loadout.Weapon.BOW), Loadout.Weapon.BOW, tilt)
+			print("  %6.1f,%-6.1f  %.3f  %+.3f  %+.3f   %.3f  %+7.0f  %+4.0f"
+				% [tilt.x, tilt.y, cell[0], cell[1], cell[2], idle[2], idle[4],
+					idle[1]])
+		return
+	var x0 := float(args[0]) if args.size() > 0 else 0.0
+	var x1 := float(args[1]) if args.size() > 1 else 345.0
+	var y0 := float(args[2]) if args.size() > 2 else -90.0
+	var y1 := float(args[3]) if args.size() > 3 else 90.0
+	var step := float(args[4]) if args.size() > 4 else 15.0
+	print("preview_carry: the bow's carry tilt, head / layered floor / "
+		+ "bare-armed floor, over %d carry moments and %d clips"
+		% [CARRY_SAMPLES, _carried_clips(player, false).size()])
+	var header := "      y:"
+	var yy := y0
+	while yy <= y1 + 0.01:
+		header += "%18.0f" % yy
+		yy += step
+	print(header)
+	var xx := x0
+	while xx <= x1 + 0.01:
+		var line := "x %5.0f:" % xx
+		yy = y0
+		while yy <= y1 + 0.01:
+			var cell := _bow_cell(bog, skeleton, player, Vector3(xx, yy, 0.0))
+			line += " %.3f/%+.2f/%+.2f" % [cell[0], cell[1], cell[2]]
+			yy += step
+		print(line)
+		xx += step
+
+
+## One cell of that map: `[head clearance, layered floor, bare-armed floor]`.
+##
+## The floors are the limb tips' own height and are taken without a skin scan,
+## which is the whole reason a 312-cell map is two and a half minutes rather
+## than an afternoon — `_clearance` would skin 7,042 vertices at every one of
+## the 720 poses a cell's floors cost, to answer a question about `y`.
+func _bow_cell(bog: Bog, skeleton: Skeleton3D, player: AnimationPlayer,
+		tilt: Vector3) -> Array:
+	var hand := skeleton.find_bone(HeldGear.BOW_HAND_BONE)
+	var carry := Loadout.carry_clip(Loadout.Weapon.BOW)
+	var length := player.get_animation(carry).length
+	var head := INF
+	var low := INF
+	var bare := INF
+	for i in CARRY_SAMPLES:
+		_pose(player, skeleton, "Idle", 0.0, carry,
+			length * float(i) / float(CARRY_SAMPLES))
+		var grip := bog.global_transform * skeleton.global_transform \
+			* skeleton.get_bone_global_pose(hand) \
+			* _prop_transform(Loadout.Weapon.BOW, tilt)
+		head = minf(head, _nearest_skin(bog, skeleton,
+			grip * Vector3(0.5, 0.0, 0.0), grip * Vector3(-0.5, 0.0, 0.0)).y)
+	for clip: String in _carried_clips(player, false):
+		var clip_length := player.get_animation(clip).length
+		for i in samples:
+			var carry_time := length \
+				* float(i % CARRY_SAMPLES) / float(CARRY_SAMPLES)
+			for layered in [true, false]:
+				_pose(player, skeleton, clip,
+					clip_length * float(i) / float(samples),
+					carry if layered else "", carry_time)
+				var grip := bog.global_transform * skeleton.global_transform \
+					* skeleton.get_bone_global_pose(hand) \
+					* _prop_transform(Loadout.Weapon.BOW, tilt)
+				var a: Vector3 = grip * Vector3(0.5, 0.0, 0.0)
+				var b: Vector3 = grip * Vector3(-0.5, 0.0, 0.0)
+				if layered:
+					low = minf(low, minf(a.y, b.y))
+				else:
+					bare = minf(bare, minf(a.y, b.y))
+	return [head, low, bare]
+
+
 func _measure(everything: bool) -> void:
 	var bog := _bare_bog()
 	var skeleton := bog.find_child("Skeleton3D", true, false) as Skeleton3D
@@ -410,6 +595,7 @@ func _measure(everything: bool) -> void:
 	var failures := 0
 
 	var spear_level := 0.0
+	var bow_head := INF
 	for weapon: int in [Loadout.Weapon.SPEAR, Loadout.Weapon.BOW,
 			Loadout.Weapon.SWORD]:
 		var row := _report(bog, skeleton, player,
@@ -417,6 +603,22 @@ func _measure(everything: bool) -> void:
 		failures += int(row[0])
 		if weapon == Loadout.Weapon.SPEAR:
 			spear_level = row[1]
+		if weapon == Loadout.Weapon.BOW:
+			bow_head = row[2]
+
+	# The bow off the face, said out loud rather than left to a column somebody
+	# has to notice (`HEAD_MIN`). The rows above have already counted any clip
+	# that is out; this is the sentence that names the number, in the place the
+	# gate greps.
+	if bow_head >= HEAD_MIN:
+		print("preview_carry: the carried bow's limbs pass no nearer than "
+			+ "%.3f m to the Bog's own head, against %.2f allowed — head PASS"
+			% [bow_head, HEAD_MIN])
+	else:
+		print("preview_carry: head FAIL — the carried bow's limbs come %.3f m "
+			% bow_head + "from the Bog's own head, against %.2f allowed. "
+			% HEAD_MIN + "Re-solve the carry with `-- sweep bow \"\" 6` and "
+			+ "look at `-- candidates bow` before pasting it.")
 
 	failures += _report_card(bog, skeleton, player, clips)
 	failures += _report_palm(skeleton, player)
@@ -464,7 +666,8 @@ func _measure(everything: bool) -> void:
 
 	if failures == 0:
 		print("preview_carry: every weapon clears %+.2f m of floor in every carried "
-			% CARRY_MIN + "clip, and the spear %+.2f m of trunk — carry PASS" % SKIN_MIN)
+			% CARRY_MIN + "clip, the spear %+.2f m of trunk and the bow "
+			% SKIN_MIN + "%+.2f m of head — carry PASS" % HEAD_MIN)
 	else:
 		print("preview_carry: carry FAIL — %d rows are out" % failures)
 
@@ -486,13 +689,20 @@ func _report(bog: Bog, skeleton: Skeleton3D, player: AnimationPlayer,
 	var carry := Loadout.carry_clip(weapon)
 	print("preview_carry: %s, carried over %s"
 		% [Loadout.weapon_name(weapon), "nothing" if carry.is_empty() else carry])
-	print("  %-16s %22s %22s %s"
-		% ["", "no carry layer", "as shipped", "nearest trunk"])
+	print("  %-16s %22s %22s %14s %20s"
+		% ["", "no carry layer", "as shipped", "nearest trunk",
+			"nearest head (bone)"])
 	var failures := 0
 	var skin_floor := SKIN_MIN if weapon == Loadout.Weapon.SPEAR else 0.0
+	# The bow's, and only the bow's (`HEAD_MIN`): the spear's shaft is already
+	# policed against the whole trunk, head included, and the great sword's
+	# blade is answered by `hilt`'s `carried`.
+	var head_floor := HEAD_MIN if weapon == Loadout.Weapon.BOW else 0.0
 	var worst_off := INF
 	var worst_on := INF
 	var skin := INF
+	var head := INF
+	var head_bone := INF
 	var level := 0.0
 	for clip: String in clips:
 		var off := _clearance(bog, skeleton, player, clip, "", weapon)
@@ -500,17 +710,20 @@ func _report(bog: Bog, skeleton: Skeleton3D, player: AnimationPlayer,
 		worst_off = minf(worst_off, off[0])
 		worst_on = minf(worst_on, on[0])
 		skin = minf(skin, on[2])
+		head = minf(head, on[5])
+		head_bone = minf(head_bone, on[6])
 		level = maxf(level, absf(on[1]))
-		var line := "  %-16s %+9.3f m %+7.0f deg %+9.3f m %+7.0f deg     %.3f m" \
-			% [clip, off[0], off[1], on[0], on[1], on[2]]
-		if on[0] < CARRY_MIN or on[2] < skin_floor:
+		var line := "  %-16s %+9.3f m %+7.0f deg %+9.3f m %+7.0f deg     %.3f m        %.3f m (%.3f)" \
+			% [clip, off[0], off[1], on[0], on[1], on[2], on[5], on[6]]
+		if on[0] < CARRY_MIN or on[2] < skin_floor or on[5] < head_floor:
 			line += "  <-- out"
 			failures += 1
 		print(line)
 	print("  worst lowest end %+.3f m as shipped, %+.3f m without the layer; "
-		% [worst_on, worst_off] + "nearest trunk %.3f m; furthest off "
-		% skin + "horizontal %.0f deg" % level)
-	return [failures, level]
+		% [worst_on, worst_off] + "nearest trunk %.3f m; nearest head %.3f m "
+		% [skin, head] + "(%.3f m of joint); furthest off horizontal %.0f deg"
+		% [head_bone, level])
+	return [failures, level, head]
 
 
 ## The letter card, which rides the spear's grip and therefore moved when the
@@ -743,8 +956,9 @@ func _nearest_head(skeleton: Skeleton3D, p: Vector3) -> float:
 	return nearest
 
 ## The lowest end of `weapon`'s prop above the floor through one locomotion
-## clip, the mean elevation of its long axis, and how near it gets to the Bog's
-## own skin — as `[metres, degrees, metres]`.
+## clip, the mean elevation of its long axis, how near it gets to the Bog's own
+## skin, how near the off hand comes to it, where it points, and how near it
+## comes to the Bog's own **head** — in skin and in joints (`HEAD_MIN`).
 ##
 ## `carry` empty means the layer is off, which is the pose the game shipped
 ## before D-070 and is the left-hand column of every table above.
@@ -758,8 +972,17 @@ func _clearance(bog: Bog, skeleton: Skeleton3D, player: AnimationPlayer,
 		carry_length = player.get_animation(carry).length
 	var off_hand := skeleton.find_bone(HeldGear.BOW_HAND_BONE
 		if weapon != Loadout.Weapon.BOW else HeldGear.HAND_BONE)
+	# The three joints of the head, resolved once: `find_bone` is a string
+	# search and this loop runs it 24 times a clip already.
+	var head_bones: Array[int] = []
+	for name: String in HEAD_CLEAR_BONES:
+		var idx := skeleton.find_bone(name)
+		if idx >= 0:
+			head_bones.append(idx)
 	var lowest := INF
 	var nearest := INF
+	var head_skin := INF
+	var head_bone := INF
 	var reach := INF
 	var elevation := 0.0
 	# Where the business end points round the Bog, summed as a **vector** rather
@@ -788,14 +1011,24 @@ func _clearance(bog: Bog, skeleton: Skeleton3D, player: AnimationPlayer,
 			/ maxf(a.distance_to(b), 0.0001), -1.0, 1.0)))
 		bearing += Vector2(b.x - a.x, b.z - a.z).normalized()
 		count += 1
-		nearest = minf(nearest, _nearest_skin(bog, skeleton, ba, bb))
+		var skin := _nearest_skin(bog, skeleton, ba, bb)
+		nearest = minf(nearest, skin.x)
+		head_skin = minf(head_skin, skin.y)
+		# The same segment against the three joints, which is the question the
+		# vertex cloud cannot answer — see `HEAD_CLEAR_BONES`. The body the
+		# prop has to miss, not the two ends: a bow's tip is one end of the
+		# limb pair and the middle of it is what rides the cheek.
+		var to_world := bog.global_transform * skeleton.global_transform
+		for idx: int in head_bones:
+			head_bone = minf(head_bone, _point_to_segment(
+				to_world * skeleton.get_bone_global_pose(idx).origin, ba, bb))
 		# How near the *other* fist comes to the weapon, which is the question
 		# "does this pose look like it is holding the thing": a two-handed carry
 		# whose second hand closes on air is worse than no carry pose at all.
 		var second := bog.global_transform * skeleton.global_transform 			* skeleton.get_bone_global_pose(off_hand)
 		reach = minf(reach, _point_to_segment(second.origin, a, b))
 	return [lowest, elevation / float(maxi(count, 1)), nearest, reach,
-		rad_to_deg(atan2(bearing.x, -bearing.y))]
+		rad_to_deg(atan2(bearing.x, -bearing.y)), head_skin, head_bone]
 
 
 ## Where this weapon's prop sits in its hand, and which two points of it can
@@ -959,8 +1192,8 @@ func _sweep(weapon_name: String, carry_override: String = "",
 	print("preview_carry: sweeping %s over %d carried clips, layer %s"
 		% [Loadout.weapon_name(weapon), clips.size(),
 			"off" if carry.is_empty() else "on (%s)" % carry])
-	print("  each cell: worst lowest end / worst trunk / Idle elevation / "
-		+ "Idle off-hand reach")
+	print("  each cell: worst lowest end / worst trunk / worst head / "
+		+ "Idle elevation / Idle off-hand reach")
 	for axis in 3:
 		if weapon != Loadout.Weapon.SPEAR and axis == 2:
 			continue
@@ -971,14 +1204,17 @@ func _sweep(weapon_name: String, carry_override: String = "",
 			tune[axis] += nudge
 			var worst := INF
 			var skin := INF
+			var head := INF
 			for clip: String in clips:
 				var row := _clearance(bog, skeleton, player, clip, carry,
 					weapon, tune)
 				worst = minf(worst, row[0])
 				skin = minf(skin, row[2])
+				head = minf(head, row[5])
 			var idle := _clearance(bog, skeleton, player, "Idle", carry,
 				weapon, tune)
-			line += " %+6.3f/%.2f/%+04.0f/%.2f" % [worst, skin, idle[1], idle[3]]
+			line += " %+6.3f/%.2f/%.3f/%+04.0f/%.2f" \
+				% [worst, skin, head, idle[1], idle[3]]
 		var reach := float((SWEEP_STEPS - 1) / 2) * span
 		print("  axis %d, %+.0f to %+.0f in %.0fs:%s"
 			% [axis, base[axis] - reach, base[axis] + reach, span, line])
@@ -1537,6 +1773,7 @@ func _build_skin(bog: Bog, skeleton: Skeleton3D) -> void:
 		if share < TRUNK_SHARE:
 			continue
 		_skin_rest.append(rest[v])
+		_skin_head.append(1 if in_head >= TRUNK_SHARE else 0)
 		for j in _stride:
 			_skin_bones.append(bones[v * _stride + j])
 			_skin_weights.append(weights[v * _stride + j])
@@ -1553,9 +1790,15 @@ func _build_skin(bog: Bog, skeleton: Skeleton3D) -> void:
 ## every clip in the game. It is also the only honest answer: a Bog's head is a
 ## 0.5 m blob and the three ellipsoids the first pass of D-065 stood in for it
 ## with are precisely what under-measured it.
-func _nearest_skin(bog: Bog, skeleton: Skeleton3D, a: Vector3, b: Vector3) -> float:
+## Returns `[the trunk, the head]`, because the head is a mask over the same
+## scan (`_skin_head`) and asking it separately would be a second pass over a
+## body that is already being skinned a vertex at a time. The trunk figure
+## includes the head; the two are not exclusive and are not meant to be —
+## `SKIN_MIN` polices one prop against the whole body and `HEAD_MIN` polices
+## another against the half of it that cannot be leaned on.
+func _nearest_skin(bog: Bog, skeleton: Skeleton3D, a: Vector3, b: Vector3) -> Vector2:
 	if _skin_rest.is_empty() or _skin_binds.is_empty():
-		return INF
+		return Vector2(INF, INF)
 	var bones: Array[Transform3D] = []
 	for i in _skin_binds.size():
 		var bone := _skin_bone_of_bind[i]
@@ -1565,6 +1808,7 @@ func _nearest_skin(bog: Bog, skeleton: Skeleton3D, a: Vector3, b: Vector3) -> fl
 			bones.append(skeleton.get_bone_global_pose(bone) * _skin_binds[i])
 	var to_world := bog.global_transform * skeleton.global_transform
 	var nearest := INF
+	var head := INF
 	for v in _skin_rest.size():
 		var rest := _skin_rest[v]
 		var out := Vector3.ZERO
@@ -1577,8 +1821,11 @@ func _nearest_skin(bog: Bog, skeleton: Skeleton3D, a: Vector3, b: Vector3) -> fl
 				continue
 			out += (bones[bind] * rest) * w
 		var p := to_world * out
-		nearest = minf(nearest, _point_to_segment(p, a, b))
-	return nearest
+		var d := _point_to_segment(p, a, b)
+		nearest = minf(nearest, d)
+		if _skin_head[v] != 0:
+			head = minf(head, d)
+	return Vector2(nearest, head)
 
 
 static func _point_to_segment(p: Vector3, a: Vector3, b: Vector3) -> float:
@@ -1632,7 +1879,11 @@ func _sheet(weapon_name: String, carry_override: String = "",
 	var tune := Vector3.INF
 	if not tune_text.is_empty():
 		var parts := tune_text.split(",")
-		tune = Vector3(float(parts[0]), float(parts[1]), float(parts[2]))
+		# Two numbers is a bow tilt, three a grip rotation — `_candidates`
+		# reads its arguments the same way and for the same reason.
+		if parts.size() >= 2:
+			tune = Vector3(float(parts[0]), float(parts[1]),
+				float(parts[2]) if parts.size() > 2 else 0.0)
 	var azimuth := deg_to_rad(VIEW_AZIMUTH)
 	var elevation := deg_to_rad(VIEW_ELEVATION)
 	var eye := Vector3(sin(azimuth) * cos(elevation), sin(elevation),
@@ -1661,8 +1912,7 @@ func _sheet(weapon_name: String, carry_override: String = "",
 		var at := _worst_moment(bog, skeleton, player, clip,
 			carry if layered else "", weapon, tune)
 		_pose(player, skeleton, clip, at[0], carry if layered else "", at[1])
-		if tune != Vector3.INF and weapon == Loadout.Weapon.SPEAR:
-			bog.held_gear.set_grip(HeldGear.grip_offset(tune), tune)
+		_tune_prop(bog, weapon, tune)
 
 		var stamp := Label3D.new()
 		stamp.text = "%s%s" % [clip, "  + carry" if layered else ""]
@@ -1675,10 +1925,43 @@ func _sheet(weapon_name: String, carry_override: String = "",
 	_build_stage(eye)
 
 
-## Three candidate spear grips, from the front and from the side, over the three
-## clips a carried shaft is seen in most.
+## Hang `tune` on the prop that is actually rendered, so a sheet shows the
+## candidate the tables scored rather than the shipped constants.
 ##
-##   Godot --path . --resolution 2400x1200 --script tools/snapshot.gd -- ##       res://tools/preview_carry.tscn out/candidates.png 25 candidates ##       16.35,0,40.11 16.51,0,33.73 16.01,0,27.54
+## `_prop_transform` composes the measured pose out of the same two statics the
+## game does, but a **picture** comes out of `HeldGear`, and the two props park
+## their lever in different places: the spear's is `GRIP_ROTATION`, which
+## `set_grip` takes, and the bow's is a `CARRY_TILT` that `_orient_bow` reads
+## off a `const` and no setter reaches. So the bow's is composed here instead —
+## the tilt folded into the grip rotation by `bow_basis`, which is what the
+## tilt *is*, and the carry weight then dropped to zero so the shipped constant
+## is not applied a second time on top of it. The prop that renders is then the
+## prop `_clearance` measured, to the last degree, without `HeldGear` growing a
+## setter for the benefit of a development tool.
+func _tune_prop(bog: Bog, weapon: int, tune: Vector3) -> void:
+	if tune == Vector3.INF:
+		return
+	if weapon == Loadout.Weapon.SPEAR:
+		bog.held_gear.set_grip(HeldGear.grip_offset(tune), tune)
+	elif weapon == Loadout.Weapon.BOW:
+		bog.held_gear.set_carry(0.0)
+		bog.held_gear.set_bow_grip(HeldGear.BOW_SCALE, HeldGear.BOW_GRIP_OFFSET,
+			HeldGear.bow_basis(Vector2(tune.x, tune.y)).get_euler()
+			* (180.0 / PI))
+
+
+## Three candidate grips for one weapon, from the front and from the side, over
+## the three clips a carried prop is seen in most.
+##
+##   Godot --path . --resolution 2400x1200 --script tools/snapshot.gd -- ##       res://tools/preview_carry.tscn out/candidates.png 25 candidates ##       spear 16.35,0,40.11 16.51,0,33.73 16.01,0,27.54
+##
+## The weapon is the first argument and what follows it is that weapon's own
+## lever, in the shape `-- sweep` sweeps it: three numbers of grip rotation for
+## the spear, two of carry tilt for the bow (`-- candidates bow 47.5,-34`).
+## Both props need this picture and for the same reason — the spear's was a
+## shaft beside the head that read as a walking stick, the bow's a limb through
+## the nose — and one mode that knows which prop it is holding is better than
+## two that each know one.
 ##
 ## **The picture the numbers cannot take.** `-- solve` scores a bearing on three
 ## clearances and `-- measure` asserts them, and a grip can pass all three and
@@ -1696,19 +1979,31 @@ func _sheet(weapon_name: String, carry_override: String = "",
 ## Feet off the floor is a lie this sheet can afford, because every clearance
 ## that is measured against the floor is measured in `-- measure` and not here.
 func _candidates(args: Array) -> void:
-	var tunes: Array[Vector3] = []
-	for arg: String in args:
-		var parts := arg.split(",")
-		if parts.size() == 3:
-			tunes.append(Vector3(float(parts[0]), float(parts[1]), float(parts[2])))
-	if tunes.is_empty():
-		tunes.append(HeldGear.GRIP_ROTATION)
+	# The weapon first, and the rest of the line is its lever. A bare list of
+	# triples still means the spear, which is how every invocation of this mode
+	# written before the bow needed it reads.
 	var weapon := Loadout.Weapon.SPEAR
+	var rest: Array = args
+	if args.size() > 0 and not String(args[0]).contains(","):
+		weapon = Loadout.sanitize(Loadout.from_name(String(args[0])))
+		rest = args.slice(1)
+	var tunes: Array[Vector3] = []
+	for arg: String in rest:
+		var parts := arg.split(",")
+		# Two numbers is a bow tilt and three a grip rotation; the third
+		# component of a tilt is unused, so a short row is padded rather than
+		# refused (`_base_tune` says which weapon means which).
+		if parts.size() >= 2:
+			tunes.append(Vector3(float(parts[0]), float(parts[1]),
+				float(parts[2]) if parts.size() > 2 else 0.0))
+	if tunes.is_empty():
+		tunes.append(_base_tune(weapon))
 	var carry := Loadout.carry_clip(weapon)
 	var clips: Array[String] = [carry, "Walk", "Run"]
 	var columns := tunes.size() * clips.size()
 	_sheet_width = float(columns) * CANDIDATE_SPREAD
 	_sheet_centre = CANDIDATE_LIFT * 0.5
+	_sheet_height = CANDIDATE_LIFT + FRAME_HIGH
 
 	for band in 2:
 		for i in columns:
@@ -1729,11 +2024,12 @@ func _candidates(args: Array) -> void:
 			_show(bog, weapon)
 			var at := _worst_moment(bog, skeleton, player, clip, carry, weapon, tune)
 			_pose(player, skeleton, clip, at[0], carry, at[1])
-			bog.held_gear.set_grip(HeldGear.grip_offset(tune), tune)
+			_tune_prop(bog, weapon, tune)
 
 			var stamp := Label3D.new()
-			stamp.text = "%s  %s
-%.2f, %.2f, %.2f" 				% ["side" if band == 1 else "front", clip, tune.x, tune.y, tune.z]
+			stamp.text = "%s  %s\n%s" % ["side" if band == 1 else "front", clip,
+				("%.1f, %.1f" % [tune.x, tune.y]) if weapon == Loadout.Weapon.BOW
+				else ("%.2f, %.2f, %.2f" % [tune.x, tune.y, tune.z])]
 			stamp.font_size = 40
 			stamp.pixel_size = 0.0016
 			stamp.position = Vector3(0.0, 2.10, 0.0)
@@ -1945,10 +2241,25 @@ var _sheet_columns: int = 0
 ## shot.
 var _sheet_centre: float = 0.0
 
+## How tall the content is, for a sheet that stacks two bands — the lift plus a
+## Bog plus its stamp. Zero means "the width decides", which is every sheet in
+## this file but `_candidates`.
+var _sheet_height: float = 0.0
 
-## The moment in `clip` at which this weapon hangs lowest, as
-## `[clip second, carry-clip second]` — so the sheet shows the frame the table's
-## number came from.
+
+## The worst moment of `clip` for this weapon, as `[clip second, carry-clip
+## second]` — so the sheet shows the frame the table's number came from.
+##
+## **Which number, depends on the weapon, because the binding floor does.** For
+## a spear and a great sword it is the lowest end: those are props that plough
+## grass, and every sheet in this file was built to show one at its lowest. The
+## bow's floor has 2 cm of margin and its *head* clearance has millimetres
+## (`HEAD_MIN`), so the frame worth a picture is the one where a limb is
+## nearest the face — a sheet that kept picking the lowest frame would be a
+## sheet of the question that is not in doubt. Measured against the three head
+## joints rather than the skin: this runs at every sample of every column of
+## every sheet, and the joints answer "which frame" as well as 6,000 vertices
+## would for a hundredth of the cost.
 func _worst_moment(bog: Bog, skeleton: Skeleton3D, player: AnimationPlayer,
 		clip: String, carry: String, weapon: int,
 		tune: Vector3 = Vector3.INF) -> Array:
@@ -1957,6 +2268,12 @@ func _worst_moment(bog: Bog, skeleton: Skeleton3D, player: AnimationPlayer,
 	var carry_length := 0.0
 	if not carry.is_empty():
 		carry_length = player.get_animation(carry).length
+	var head_bones: Array[int] = []
+	if weapon == Loadout.Weapon.BOW:
+		for name: String in HEAD_CLEAR_BONES:
+			var idx := skeleton.find_bone(name)
+			if idx >= 0:
+				head_bones.append(idx)
 	var lowest := INF
 	var best := [0.0, 0.0]
 	for i in samples:
@@ -1968,6 +2285,18 @@ func _worst_moment(bog: Bog, skeleton: Skeleton3D, player: AnimationPlayer,
 		_pose(player, skeleton, clip, time, carry, carry_time)
 		var grip := bog.global_transform * skeleton.global_transform \
 			* skeleton.get_bone_global_pose(hand) * _prop_transform(weapon, tune)
+		if not head_bones.is_empty():
+			var body := _prop_body(weapon)
+			var ba: Vector3 = grip * body[0]
+			var bb: Vector3 = grip * body[1]
+			var to_world := bog.global_transform * skeleton.global_transform
+			for idx: int in head_bones:
+				var d := _point_to_segment(
+					to_world * skeleton.get_bone_global_pose(idx).origin, ba, bb)
+				if d < lowest:
+					lowest = d
+					best = [time, carry_time]
+			continue
 		for end: Vector3 in _prop_ends(weapon):
 			var p: Vector3 = grip * end
 			if p.y < lowest:
@@ -2020,6 +2349,16 @@ func _build_stage(eye: Vector3, up: Vector3 = Vector3.UP) -> void:
 	# comparison's six-plus-a-gap nor the elevation row's wide slots (D-075).
 	if _sheet_width > 0.0:
 		width = _sheet_width
+	# A sheet with two **bands** is framed by its height as well, and only the
+	# viewport knows which of the two is binding. `_candidates` at three grips is
+	# wider than it is tall and this changes nothing; at one grip it is a third
+	# as wide, and without this the lower band is simply off the bottom of the
+	# picture — which it was, silently, on the first bow sheet that asked for a
+	# close look at a single candidate.
+	if _sheet_height > 0.0:
+		var view := get_viewport().get_visible_rect().size
+		var aspect := view.y / maxf(view.x, 1.0)
+		width = maxf(width, (_sheet_height + FRAME_MARGIN) / maxf(aspect, 0.01))
 	var camera := Camera3D.new()
 	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
 	camera.keep_aspect = Camera3D.KEEP_WIDTH

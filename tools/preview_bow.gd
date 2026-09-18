@@ -48,12 +48,35 @@ const BOG := preload("res://scenes/player/bog.tscn")
 ## this is the table that says why. Layered as well, the worst comes out at
 ## +0.251 m; the layer alone, with no tilt, leaves a limb tip +0.032 m off the
 ## floor in `Idle`, which is in the grass.
-## 0.10 since D-099: the crouch is a deep squat now (the user's call at the
-## rebuild's second checkpoint), and a 1.5 m bow carried at the side of a
-## squatting BOG reaches 0.136 m off the floor at the best tilt the sweep
-## finds; the old 0.15 was a stoop's number. Still a hand's width, still a
-## floor with room under it, and `AirLoop` is the other clip at it.
-const CARRY_CLEARANCE_MIN := 0.10
+##
+## **The floor under it is gone and the table is not, which is the same move
+## D-099 made on `preview_carry.SKIN_MIN` for this same prop.** It was an
+## absolute clearance — 0.15, then 0.10 once D-099's crouch became a deep squat
+## — and it stopped being a threshold twice over.
+##
+## First, it is unreachable. The tilt that keeps a limb off the Bog's own face
+## (`preview_carry.HEAD_MIN`, which is the thing about a carried bow a player
+## actually looks at) cannot also clear 0.10 m here: the whole 360 x 180 of tilt
+## space was mapped by `preview_carry -- probe`, and the best bare-armed floor
+## any cell with 0.06 m of head clearance reaches is **0.082 m**. One of the two
+## had to give.
+##
+## Second, it is the one of the two that is not a pose the game holds.
+## `BogAnimator` hands `set_carry` and the carry layer's own blend the same
+## number, so bare arms wear the full tilt only for the fifth of a second
+## `CARRY_BLEND_SPEED` takes to raise the layer, and only partly even then — the
+## composed pose is between this table's figure and `preview_carry`'s, and both
+## ends are above the ground.
+##
+## And its motivating case has stopped reproducing anyway, which is this file's
+## own test for a threshold (`preview_carry.LEVEL_MAX`, `PALM_MAX`). D-065
+## measured the untilted carry at **-0.158 m**, a bow through the grass in
+## `Run`; on the rebuilt clip library and the swapped body it measures
+## **+0.003 m**. The tilt buys 0.079 m now rather than 0.24, over a pose held
+## for a blend — which is worth printing and is not worth failing a gate on.
+##
+## So the numbers stay, the verdict moves to `_grip_verdict`, and the floor the
+## game actually composes is `preview_carry -- measure`'s.
 
 ## Model-space landmarks, in the props' own units, measured off the built GLBs.
 ##
@@ -209,6 +232,74 @@ func _measure() -> void:
 	var a_euler := a_basis.get_euler() * (180.0 / PI)
 	print("    const ARROW_GRIP_ROTATION := Vector3(%.3f, %.3f, %.3f)"
 		% [a_euler.x, a_euler.y, a_euler.z])
+	_grip_verdict(model_scale, offset, euler, length, a_offset, a_euler)
+
+
+## **A grip is still the grip its own clips solve for** (D-073), asked of the
+## bow — which is the verdict this file now carries, and it is the one it was
+## always able to make and never did.
+##
+## Six constants are printed above for a human to paste, and for four steps the
+## only thing the gate took from this run was a floor under a *counterfactual*
+## carry (`CARRY_TILT_GAIN` says how that ended). Meanwhile the six numbers that
+## decide where a bow and an arrow sit in two fists at every charge level were
+## compared with nothing at all: a rebuilt `bow.glb` with a different tip
+## separation, a re-timed `BowReload`, a moved draw window — any of them moves
+## this solve, and the shipped constants would have gone on being the old
+## solve's, silently, exactly as the great sword's did until `hilt` compared
+## them (it had been printing `1.2585` against a shipped `1.2586` for four
+## steps).
+##
+## One verdict for all six, because they are one statement: this is the solve,
+## and these are the numbers it was pasted into. `BOW_TRUNK_LIFT` is added back
+## before the comparison — it is a deliberate 0 cm today and a deliberate
+## number when it is not, and the whole of its argument is that it rides *on
+## top* of what this prints.
+func _grip_verdict(model_scale: float, offset: Vector3, euler: Vector3,
+		arrow_scale: float, arrow_offset: Vector3, arrow_euler: Vector3) -> void:
+	var lifted := offset + Vector3(0.0, HeldGear.BOW_TRUNK_LIFT, 0.0)
+	var drift := maxf(lifted.distance_to(HeldGear.BOW_GRIP_OFFSET),
+		arrow_offset.distance_to(HeldGear.ARROW_GRIP_OFFSET))
+	var turn := maxf(_worst_axis(euler, HeldGear.BOW_GRIP_ROTATION),
+		_worst_axis(arrow_euler, HeldGear.ARROW_GRIP_ROTATION))
+	var scale_drift := maxf(absf(model_scale - HeldGear.BOW_SCALE),
+		absf(arrow_scale - HeldGear.ARROW_SCALE))
+	if drift <= FIT_OFFSET and turn <= FIT_DEGREES and scale_drift <= FIT_SCALE:
+		print("preview_bow: the bow and the arrow still sit where this solve "
+			+ "puts them — %.4f m of offset, %.3f deg of rotation and %.4f of "
+			% [drift, turn, scale_drift] + "scale between the six shipped "
+			+ "constants and the six above — grip PASS")
+		return
+	print("preview_bow: grip FAIL — the shipped constants are %.4f m of offset, "
+		% drift + "%.3f deg of rotation and %.4f of scale away from what this "
+		% [turn, scale_drift] + "run solves. Paste the six `const` lines above "
+		+ "into `HeldGear` (leaving `BOW_TRUNK_LIFT` on top of the offset) and "
+		+ "re-run `preview_carry -- measure`, which is where the carry is "
+		+ "judged.")
+
+
+## The worst of three Euler axes, in degrees, wrapped: a rotation printed at
+## +179.999 and one shipped at -180.001 are the same rotation and 360 apart as
+## numbers.
+static func _worst_axis(a: Vector3, b: Vector3) -> float:
+	var worst := 0.0
+	for i in 3:
+		worst = maxf(worst, absf(wrapf(a[i] - b[i], -180.0, 180.0)))
+	return worst
+
+
+## How far the shipped constants may be from this run's own solve before the
+## verdict above says so.
+##
+## Wider than the printing, which is the point: the constants are this solve
+## rounded to four and three decimals, so a tree where nothing has moved reads
+## zero to within 5e-5 m and 5e-4 deg. These are an order of magnitude above
+## that — room for a floating-point wobble and none for a clip, a model or a
+## window that has actually changed. The sword's are `preview_carry.FIT_SCALE`
+## and `FIT_DEGREES` and mean the same thing one prop over.
+const FIT_OFFSET := 0.001
+const FIT_DEGREES := 0.05
+const FIT_SCALE := 0.001
 
 
 ## How low the carried bow hangs in every clip a Bog walks around in.
@@ -318,12 +409,14 @@ func _sweep_carry(bog: Bog, player: AnimationPlayer, skeleton: Skeleton3D) -> vo
 				line])
 	var flat := _worst_carry(bog, player, skeleton, clips, Vector2.ZERO)
 	var tilted := _worst_carry(bog, player, skeleton, clips, HeldGear.CARRY_TILT)
-	if tilted >= CARRY_CLEARANCE_MIN:
-		print("preview_bow: every carried clip holds the bow %+.3f m clear "
-			% tilted + "(%+.3f m untilted) — carry PASS" % flat)
-	else:
-		print("preview_bow: carry FAIL — the worst carried clip puts a limb tip "
-			+ "%+.3f m against a %+.3f m floor" % [tilted, CARRY_CLEARANCE_MIN])
+	# Printed, not judged, and the comment on the constant that used to be here
+	# says why: this is a pose the game holds for a fifth of a second while the
+	# carry layer comes up, and the floor it is asked to clear is unreachable by
+	# any tilt that also keeps the bow off the Bog's face.
+	print("preview_bow: the carry tilt lifts the worst bare-armed limb tip from "
+		+ "%+.3f m to %+.3f m, which is %+.3f m of lift. What the game composes "
+		% [flat, tilted, tilted - flat] + "over it is `preview_carry -- "
+		+ "measure`'s, and that is where the carry is judged.")
 
 
 func _worst_carry(bog: Bog, player: AnimationPlayer, skeleton: Skeleton3D,

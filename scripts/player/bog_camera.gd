@@ -24,8 +24,14 @@ extends Node3D
 const PITCH_MIN := -1.20   # ~-69 degrees, looking down
 const PITCH_MAX := 0.95    # ~54 degrees, looking up
 
-const DISTANCE_DEFAULT := 3.6
-const DISTANCE_AIMING := 2.4
+## How far back the lens sits, and how far back it sits with a bow up. Both came
+## in half a metre in the feel round: at 3.6 m the Bog was a figure in a
+## landscape and the thing the player is actually aiming — the shoulder and the
+## weapon in front of it — was small enough that a fight read as two dots
+## meeting. The shoulders are unchanged, so the Bog keeps the same share of the
+## frame off the crosshair while the world behind it gets closer.
+const DISTANCE_DEFAULT := 3.1
+const DISTANCE_AIMING := 2.15
 const SHOULDER_DEFAULT := 0.62
 const SHOULDER_AIMING := 0.48
 const FOV_AIM_SCALE := 0.82
@@ -78,7 +84,7 @@ const PROBE_MARGIN := 0.05
 const PULL_SPEED := 4.0
 ## Going out is an exponential, because it should decelerate into place rather
 ## than arrive at speed and stop, but it is capped at a speed for the same reason
-## `PULL_SPEED` is one — 3.6 m of exponential at `RETURN_RATE` starts at 15 m/s.
+## `PULL_SPEED` is one — 3.1 m of exponential at `RETURN_RATE` starts at 13 m/s.
 const RETURN_RATE := 5.0
 const RETURN_SPEED := 3.0
 ## Cinemachine's `SmoothingTime`. After any pull-in the camera holds where it got
@@ -364,7 +370,7 @@ func _place_camera(delta: float) -> void:
 
 	# Out to the shoulder from where the boom got to, rather than from the pivot,
 	# because that is the depth the lens is actually at: a sweep taken at the
-	# Bog's head is a test of the scenery 3.6 m from the thing it is placing.
+	# Bog's head is a test of the scenery 3.1 m from the thing it is placing.
 	var shoulder := _shoulder * _boom_clear / maxf(_distance, 0.001)
 	var boom_point := pivot + basis.z * _boom_clear
 	# The shoulder is carried as a fraction (D-083), so its speeds have to be

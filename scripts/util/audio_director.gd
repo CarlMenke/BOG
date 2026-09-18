@@ -41,7 +41,49 @@ const MAGNET_ARM := preload("res://audio/sfx/magnet_arm.wav")
 const MAGNET_FIRE := preload("res://audio/sfx/magnet_fire.wav")
 const DEATH := preload("res://audio/sfx/death.wav")
 const RESPAWN := preload("res://audio/sfx/respawn.wav")
+## The two confirmations of your own aim, and the only 2D clips in the library
+## that are not UI: a hit and the hit that finished somebody. `HITMARKER_KILL`
+## is the same tick with a short low drop under it, so a kill is heard as the
+## end of the string of hits it ends rather than as an unrelated noise.
 const HITMARKER := preload("res://audio/sfx/hitmarker.wav")
+const HITMARKER_KILL := preload("res://audio/sfx/hitmarker_kill.wav")
+
+## The practice range's three non-Bog targets. They are here rather than in the
+## range's own files for the reason everything else here is: a caller names a
+## sound and never a path, and a sound that lives somewhere else is a second
+## place to look.
+##
+## `RANGE_GONG` is the only clip in the library played at a pitch the caller
+## chooses — `Gong` shifts it by how far the shot came from, which is the thing
+## a gong at the spear's flat band exists to teach — so it is written to stay
+## clean over about a fifth either side of unity.
+const RANGE_BOARD := preload("res://audio/sfx/range_board.wav")
+const RANGE_GONG := preload("res://audio/sfx/range_gong.wav")
+const RANGE_ORB := preload("res://audio/sfx/range_orb.wav")
+
+## The practice range's two furniture sounds: the refill stone filling somebody
+## up, and a weapon coming off a rack.
+##
+## Beside the targets above and for their reason. Both are played in 3D at the
+## thing that made them, on every peer — the stone's because the counts it
+## changed are already replicated, the rack's because the weapon swap is (D-115)
+## — so neither is a cue for one player the way `SPEAR_READY` is.
+const REFILL_CHIME := preload("res://audio/sfx/refill_chime.wav")
+const RACK_SWAP := preload("res://audio/sfx/rack_swap.wav")
+
+## The range's one remaining control: a parkour timing plate being crossed.
+## Here beside the furniture above for its reason.
+##
+## `RANGE_CHIME` stood beside it and is gone with the stations. It was a struck
+## bowl played at `2 ** (step / 12)` — an inharmonic partial stack, so that
+## transposing it by a semitone gave the same object struck rather than a
+## different note of the same instrument — and the pitch was the *message*:
+## which note you heard was which behaviour a station had just stepped its zone
+## to. With a zone's behaviour authored in the map and never changing there is
+## no step to report, and the stats signboard that replaced the last station
+## makes no sound at all: its feedback is the HUD panel going to zero, which is
+## what you were looking at when you reset it.
+const RANGE_PLATE := preload("res://audio/sfx/range_plate.wav")
 ## The Elder's bolt, in two voices rather than one (D-038). The crack is the
 ## strike and the roll is what follows it half a second later, and they are
 ## separate clips because the balance between them is what decides whether a

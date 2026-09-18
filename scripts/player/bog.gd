@@ -35,8 +35,10 @@ signal threw_spear(origin: Vector3, direction: Vector3)
 ## **Appended, never inserted.** These travel on the wire and are written into
 ## `stats` rows, so a value added in the middle would silently turn every death
 ## already in flight into a different kind of death — the same warning
-## `Pickup.Kind` carries and for the same reason. SWORD is D-068's.
-enum Cause { SPEAR, FALL, VOID, UNKNOWN, LIGHTNING, ARROW, SWORD }
+## `Pickup.Kind` carries and for the same reason. SWORD is D-068's, and FIST is
+## the feel round's: a Bog with its weapon put away still has two of them, and a
+## punch is the one kind of damage in this game that no weapon did.
+enum Cause { SPEAR, FALL, VOID, UNKNOWN, LIGHTNING, ARROW, SWORD, FIST }
 
 ## Full health, and the unit every damage number in the game is written in
 ## (D-062). A Bog starts each life on exactly this and is dead at zero.
@@ -76,6 +78,51 @@ const BACK_SPEED_SCALE := 0.6
 ## six times their speed; a walk while aiming is also the convention of every
 ## third-person shooter this game borrows from. Applied in `target_speed`.
 const AIM_WALKS := true
+
+## And a BOG at **full** draw creeps (the feel round). `AIM_WALKS` takes the
+## archer down to a walk the moment the string moves, which is a rule about the
+## clips; this is the rule about the fight — a full draw is the shot that can
+## kill in one, and the price of holding it is that you cannot also be moving
+## like somebody who is not. Scaled continuously by `draw_fraction()`, so the
+## cost arrives with the charge rather than at a threshold nobody can see: 2.3
+## m/s at brace, 1.72 at half, **1.15 at full**.
+##
+## It works on every screen for free, because `draw_fraction()` answers off the
+## replicated `sync_draw` on a Bog this machine does not own (D-065) and
+## `target_speed()` is the one place every stance already comes out of.
+##
+## Below `WALK_SPEED` the aim plane has nothing between the walk ring and its
+## idle, so a creeping archer blends toward `BowAim` — which is the pose a
+## drawn bow moving that slowly should be in anyway.
+const DRAW_SPEED_SCALE := 0.5
+
+## What a Bog with its weapon put away travels at, as a factor on every stance
+## (the feel round).
+##
+## **The only scale in `target_speed` that is above 1.0**, and that is the whole
+## point of the key. Holstering costs you the weapon — `has_spear`, `has_bow`
+## and `has_sword` all answer no for as long as it is away, and what is left is
+## a 20-damage punch — so the thing it has to buy is the thing a player with
+## nothing to shoot at actually wants, which is to get somewhere. A tenth is
+## small enough that it is not a second sprint and large enough to be worth the
+## press across a map: 5.94 m/s against 5.40 running, which is the length of
+## Lantern Wharf about half a second sooner.
+##
+## It works on every screen for free, for `DRAW_SPEED_SCALE`'s reason:
+## `is_holstered()` answers off a replicated bool on a Bog this machine does not
+## own, and this is the one place every stance already comes out of.
+const FISTS_SPEED_SCALE := 1.10
+
+## What a Bog travels at while a sword slash is playing (the feel round).
+##
+## The sword's *commitment* used to be total — `is_spinning()` drops the stick
+## entirely for 1.867 s — and the slash chain is the opposite trade: you keep
+## the stick, you keep the camera, you keep the jump, and what the swing costs
+## is a sixth of your speed while the blade is out. Applied here rather than in
+## `_handle_movement` so that it composes with the crouch, the Elder's boost and
+## the carrier's tax the way every other scale does, and so a remote Bog's
+## animator sees the same slowed locomotion plane its owner does.
+const SLASH_SPEED_SCALE := 0.85
 
 ## How fast the Bog actually moves. Chosen for how the game plays, not for what
 ## the clips were made at: walking is brisk, sprinting is nearly twice that, and
@@ -189,8 +236,31 @@ const SLIDE_DURATION := 1.0
 const SLIDE_FRICTION := 2.8
 ## Sliding has to be worth doing and worth stopping: you must already be moving
 ## near a run to enter one, and you cannot re-enter immediately.
+##
+## **Sprint is not part of the entry** (the feel round). It used to be, and the
+## effect of asking for both keys was that nobody ever slid: the sprint key is
+## held all the time and the crouch key is the one a player presses on purpose,
+## so the move looked like it needed a chord. What actually makes a slide a
+## decision is the speed floor and the cooldown, both of which are still here —
+## crouch under `SLIDE_ENTRY_SPEED` is a crouch, crouch over it is a slide, and
+## a walking Bog cannot slide at all.
 const SLIDE_ENTRY_SPEED := RUN_SPEED * 0.7
 const SLIDE_COOLDOWN := 0.9
+
+## Jumping out of a slide is its own move, not a jump that happens to interrupt
+## one (the feel round). The slide is already a commitment — a fixed direction,
+## a fixed duration, a cooldown — and paying all of that to arrive at an
+## ordinary hop is why the slide was worth nothing but its hitbox. The exchange
+## is a fifth again of horizontal speed along the way the slide was already
+## going, and a little more lift so the extra speed has somewhere to go.
+##
+## The horizontal is taken from `max(current, SLIDE_SPEED)` rather than from
+## the velocity alone: `SLIDE_FRICTION` has been eating the slide since it
+## started, so a jump at the end of a long one would otherwise be worth less
+## than a jump at the start of it and the move would have a right moment that
+## nobody could see.
+const SLIDE_JUMP_SPEED_SCALE := 1.2
+const SLIDE_JUMP_IMPULSE_SCALE := 1.12
 
 ## After landing from a dive the Bog is committed to its roll: movement input is
 ## ignored for this long, nothing but ROLL_FRICTION acts on the horizontal
@@ -330,6 +400,43 @@ const LAYER_DEPLOYABLE := 8
 ## Bog whose grounded flag is a tick late still starts its airtime on the frame
 ## the jump happened.
 @export var sync_jump_serial: int = 0
+## Bumped once per **slide** jump, in the same tick as `sync_jump_serial` and
+## never on its own (the feel round).
+##
+## A second counter rather than a flag beside the first, for exactly D-098's
+## reason: a bool that went true and false again inside one replication tick
+## would arrive as no change at all, and two slide jumps in a row have to be two
+## slide jumps on every screen. A second counter rather than a *kind* packed
+## into the first, because the jump serial is the news that an airtime opened
+## and nothing else in this game should have to know how it is encoded to read
+## it; the animator reads this one beside it and picks the leap clip.
+##
+## ON_CHANGE and in the same replication config as the jump serial, so the two
+## arrive in one packet and the animator never sees an airtime open without
+## knowing which kind it was.
+@export var sync_slide_jump_serial: int = 0
+## Whether this Bog has put its weapon away (the feel round).
+##
+## **Written by the owner and read by everybody, including the owner**, which is
+## what makes it one field rather than a local flag beside a replicated one the
+## way the draw is (`draw` / `sync_draw`). The draw needs both because the
+## charge is a continuous quantity the owner computes every frame and everyone
+## else samples; this is a toggle the player presses, so the owner writing
+## straight into the replicated field and reading it back is one source of truth
+## rather than two that could disagree for a tick.
+##
+## ON_CHANGE, beside `sync_draw` and for its reasons: a Bog that never presses H
+## sends nothing, and the one packet a press costs is a bool. There is no "true
+## and false again inside one tick" hazard that would want a serial instead
+## (D-098) — the two edges are a player's two keypresses and cannot land on one
+## frame.
+##
+## What reads it: `has_spear`/`has_bow`/`has_sword` and the five `_wants_*` in
+## `BogCombat`, so the prop leaves both fists on every screen; `target_speed`
+## below, for `FISTS_SPEED_SCALE`; and the HUD's weapon tile, which greys the
+## photograph and puts H on the cap. `BogCombat` owns the *decision* — when the
+## toggle may be made — exactly as it owns the emote's.
+@export var sync_holstered: bool = false
 ## Which life of this Bog the snapshot it rides in was taken in. See `life`.
 ##
 ## Replicated ALWAYS, in the same packet as `sync_position`, and that is the
@@ -399,6 +506,15 @@ var team: int = MatchConfig.TEAM_NONE
 ## would have nothing to find for the very Bogs this feature is most visible on.
 ## It is therefore `team`'s kind of value and gets `team`'s treatment: set once,
 ## beside the plate and the tint, from the row the peer already has.
+##
+## **"Cannot change" is a rule of the lobby, not of this field** (D-115). The
+## practice range's weapon racks write it mid-match and repaint the hand in the
+## same frame, because nothing here forbids it: `carries()` re-reads it every
+## time it is asked and `HeldGear` preloads all four models. What stays locked
+## is the *client's* route to it — `Net.set_weapon` is still refused while
+## `match_running`, which is what D-069 actually bought. A rack is the host
+## deciding, through `MatchState.set_weapon`, and it writes the roster row too
+## so a respawn keeps what you picked up.
 var weapon: int = Loadout.DEFAULT
 ## The body's own skinned mesh out of `BOG.fbx`, found once in `_ready` before
 ## anything else is hung off the skeleton — so never the spear, and never the
@@ -458,6 +574,9 @@ var _landing_grace: float = 0.0
 ## worth rolling out of — see ROLL_MIN_AIRTIME.
 var _airtime: float = 0.0
 var _crouch_blend: float = 0.0
+## How crouched the *pose* is, which is the same number on the ground and is
+## allowed to rise in the air. See `_handle_crouch` and `crouch_pose`.
+var _crouch_pose: float = 0.0
 ## How prone the body is, on top of the crouch blend. See `pose_height`.
 var _slide_blend: float = 0.0
 var _was_grounded: bool = true
@@ -494,6 +613,18 @@ var _magnet_until: float = 0.0
 var _spin_until: float = 0.0
 var _spin_direction: Vector3 = Vector3.ZERO
 var _spin_speed: float = 0.0
+## The slash chain's two clocks, both run on **every** peer for the spin's
+## reason (D-068): what they decide is what is in the fists and how fast the
+## body travels, and both of those have to be the same answer on eight screens.
+##
+## Two and not one because they answer two different questions. `_slash_until`
+## is the clip — the window between `swing_N` and `end_N` — and it is what
+## `SLASH_SPEED_SCALE` and the animator's own timing hang off. `_chain_until` is
+## that plus the grace a second click is still accepted in, and it is what keeps
+## the great sword in the fists *between* two slashes: without it the blade
+## would blink out for the 0.15 s a player is deciding whether to swing again.
+var _slash_until: float = 0.0
+var _chain_until: float = 0.0
 ## Whether the spin was still running last tick, so the frame it *ends* can open
 ## the landing grace. See `_tick_timers`.
 var _was_spinning: bool = false
@@ -840,11 +971,31 @@ func _apply_gravity(delta: float) -> void:
 	velocity.y = maxf(velocity.y, -60.0)
 
 
+## The crouch, in two numbers that agree on the ground and part company in the
+## air (the feel round).
+##
+## `_crouch_blend` is the **rule**: the capsule, `is_crouching()`, the speed and
+## the headroom, and it is grounded-only exactly as it always was — a crouch
+## pressed in mid-air must not shrink the hitbox, must not drop the camera into
+## the body and must not turn air control down to `CROUCH_SPEED`.
+##
+## `_crouch_pose` is only what the body **looks like**, and that is allowed to
+## tuck in the air, because it is the pre-arm half of a landing slide: while
+## airborne the animator's stance blend carries no weight at all (the air branch
+## has it), so the whole of what this buys is the tenth of a second after
+## touchdown in which the airborne blend is falling. Held crouched already, the
+## body comes out of the air into a crouch and the slide's own one-shot fades
+## over that; ramping from standing put one upright frame between the landing
+## and the slide, which is precisely the frame that made a landing slide read as
+## a stumble.
 func _handle_crouch(delta: float) -> void:
-	var target := 1.0 if (wants_crouch or is_sliding()) and is_on_floor() else 0.0
+	var held := wants_crouch or is_sliding()
+	var target := 1.0 if held and is_on_floor() else 0.0
 	if target < 0.5 and _crouch_blend > 0.0 and not _has_headroom():
 		target = 1.0  # something overhead; stay down
 	_crouch_blend = move_toward(_crouch_blend, target, CROUCH_TRANSITION * delta)
+	_crouch_pose = move_toward(_crouch_pose, 1.0 if (held or target > 0.5) else 0.0,
+		CROUCH_TRANSITION * delta)
 	_slide_blend = move_toward(_slide_blend, 1.0 if is_sliding() else 0.0,
 		CROUCH_TRANSITION * delta)
 	_apply_capsule(pose_height())
@@ -861,14 +1012,23 @@ func _handle_slide(delta: float) -> void:
 			_end_slide()
 		return
 
-	# Not while rolling out of a dive: a dive lands well above SLIDE_ENTRY_SPEED,
-	# so without this a held crouch turns every dive landing into a slide, on top
-	# of a roll that is already playing.
-	var can_slide := wants_crouch and wants_sprint and is_on_floor() \
+	if _can_slide():
+		_begin_slide()
+
+
+## Whether crouch held right now starts a slide. Its own function because it is
+## asked from two places and they have to answer alike: here, on any tick the
+## key is down, and from `_detect_landing`, on the tick the feet arrive — and a
+## landing slide that used a second copy of this list would be the same move
+## with two sets of rules.
+##
+## Not while rolling out of a dive: a dive lands well above SLIDE_ENTRY_SPEED,
+## so without that a held crouch turns every dive landing into a slide, on top
+## of a roll that is already playing.
+func _can_slide() -> bool:
+	return wants_crouch and not is_sliding() and is_on_floor() \
 		and _slide_cooldown <= 0.0 and not is_rolling() \
 		and Vector3(velocity.x, 0.0, velocity.z).length() >= SLIDE_ENTRY_SPEED
-	if can_slide:
-		_begin_slide()
 
 
 func _begin_slide() -> void:
@@ -934,6 +1094,19 @@ func aim_pitch() -> float:
 
 func is_crouching() -> bool:
 	return _crouch_blend > 0.5
+
+
+## How crouched this Bog's pose is, 0 to 1 — the animator's stance blend, and
+## the *only* thing that reads the pre-armed crouch (see `_handle_crouch`).
+## `is_crouching()` stays the question everything else asks, because everything
+## else is a rule and the rules did not change: this is what the body looks
+## like, not what it is allowed to do.
+##
+## One code path for the Bog you are driving and the seven you are watching, as
+## `is_sliding` and `draw_fraction` are: `_follow_network` moves it toward the
+## replicated crouch flag, so a remote Bog's pose is as crouched as its capsule.
+func crouch_pose() -> float:
+	return _crouch_pose
 
 
 ## Vertical speed, in metres per second, for anything that reads the arc rather
@@ -1125,6 +1298,83 @@ func end_spin() -> void:
 	_spin_until = 0.0
 
 
+## Start one slash of the sword chain (the feel round). `begin_spin`'s sibling,
+## and the interesting part is everything it does *not* do.
+##
+## The spin latches a direction, drops the stick and holds a speed for 1.867 s.
+## A slash latches nothing: the body keeps its input, keeps its turning and
+## keeps its jump, and all this leaves behind is two deadlines and a nudge. That
+## is the whole of "less committing" expressed as code — there is no
+## `_slash_direction` for `_handle_movement` to force the body along and no
+## clause in `_face` to refuse a turn, because a slash has nothing to commit to.
+##
+## `seconds` is the clip's own window between `swing_N` and `end_N` and
+## `chain_seconds` is that plus the grace a follow-up click is taken in; both
+## are `BogAnimator`'s, handed in for `begin_spin`'s reason — the numbers are
+## the animation's and this file carries no clip time.
+##
+## `step` is the metres the slash carries you forward, and it is an **impulse
+## rather than a lock**: the speed it asks for is what covers `step` over the
+## slash, added to whatever the body already had and clamped to the same
+## `hop_speed_cap()` everything else in this file is clamped to (D-052), after
+## which ordinary acceleration and friction have it back. So a slash from a
+## standstill steps; a slash at a run adds nothing it was not already going to
+## have; and neither is a free reposition. Owner only, because movement is
+## client-authoritative (D-004) — every other peer sees the metres arrive
+## through `sync_velocity` like all the rest.
+func begin_slash(seconds: float, chain_seconds: float, step: float) -> void:
+	var now := Time.get_ticks_msec() * 0.001
+	_slash_until = now + maxf(seconds, 0.01)
+	_chain_until = now + maxf(chain_seconds, seconds)
+	if not is_local():
+		return
+	var step_speed := step / maxf(seconds, 0.01)
+	var horizontal := Vector3(velocity.x, 0.0, velocity.z) + facing() * step_speed
+	var cap := maxf(hop_speed_cap(), step_speed)
+	if horizontal.length() > cap:
+		horizontal = horizontal.normalized() * cap
+	velocity.x = horizontal.x
+	velocity.z = horizontal.z
+
+
+## Is a slash's clip actually playing? True on every peer, which is why
+## `target_speed` may read it: `SLASH_SPEED_SCALE` has to slow the locomotion
+## plane on the seven machines watching as well as on the one swinging.
+func is_slashing() -> bool:
+	return _slash_until > 0.0 and Time.get_ticks_msec() * 0.001 < _slash_until
+
+
+## Is a slash chain open — a slash playing, or inside the window a second click
+## would continue it in? What `BogCombat._wants_sword` asks, so the blade stays
+## in the fists across the whole chain instead of blinking out between slashes.
+func in_chain() -> bool:
+	return _chain_until > 0.0 and Time.get_ticks_msec() * 0.001 < _chain_until
+
+
+## Drop both slash clocks. A death, a respawn or a round reset, exactly like
+## `end_spin`.
+func end_slash() -> void:
+	_slash_until = 0.0
+	_chain_until = 0.0
+
+
+## Is this Bog holstered — its weapon put away and its fists up (the feel
+## round)? Off the replicated bool, so one road for the Bog you are driving and
+## the seven you are watching.
+func is_holstered() -> bool:
+	return sync_holstered
+
+
+## How fast this Bog is travelling over the ground, in m/s. Off `velocity` on
+## the copy that simulates it and off `sync_velocity` everywhere else, which is
+## `vertical_speed()`'s rule one axis further — and it exists because the host
+## has to be able to ask it about a Bog it does not own, when a client claims
+## the sword's sprint attack.
+func ground_speed() -> float:
+	var v := velocity if is_local() else sync_velocity
+	return Vector2(v.x, v.z).length()
+
+
 ## Called on the caught Bog's own client, because movement is client-authoritative
 ## and the host cannot simply move the body itself.
 func apply_magnet(centre: Vector3, strength: float, duration: float) -> void:
@@ -1206,7 +1456,15 @@ func target_speed() -> float:
 	var sprinting := wants_sprint and not (AIM_WALKS and is_drawing())
 	var speed := CROUCH_SPEED if is_crouching() \
 		else (RUN_SPEED if sprinting else WALK_SPEED)
-	return speed * elder_scale(Net.config.elder_speed_multiplier) * carrier_scale()
+	# The draw's cost is a scale like the Elder's and the carrier's, and it is
+	# applied here for the same reason they are: one place, every stance. The
+	# fists' gain and the slash's cost join the same product and cannot both
+	# apply — a holstered Bog has no sword to slash with — so the two are two
+	# factors rather than a branch (the feel round).
+	return speed * elder_scale(Net.config.elder_speed_multiplier) * carrier_scale() \
+		* lerpf(1.0, DRAW_SPEED_SCALE, draw_fraction()) \
+		* (FISTS_SPEED_SCALE if is_holstered() else 1.0) \
+		* (SLASH_SPEED_SCALE if is_slashing() else 1.0)
 
 
 ## `capture_carrier_speed` while this Bog carries a letter in Capture B·O·G, and
@@ -1312,17 +1570,42 @@ func _handle_jump() -> void:
 		return
 	_jump_buffered = 0.0
 	_coyote = 0.0
-	if is_sliding():
+	var from_slide := is_sliding()
+	if from_slide:
 		_end_slide()
-	if _landing_grace > 0.0:
+		_slide_jump()
+	elif _landing_grace > 0.0:
+		# The hop's gain and the slide's are the same kind of reward and a Bog
+		# may not have both: a slide begun on a landing tick opens the grace as
+		# well (`_detect_landing`), and stacking them would make the strongest
+		# move in the game a crouch pressed on touchdown.
 		_hop_gain()
 	_landing_grace = 0.0
-	velocity.y = jump_velocity()
+	velocity.y = jump_velocity() * (SLIDE_JUMP_IMPULSE_SCALE if from_slide else 1.0)
 	# Before the emit, so anything listening already sees the new value. The
 	# animator does not use the signal — it is local-only — but it does watch
 	# this counter, on every peer.
 	sync_jump_serial += 1
+	# And a second counter for the kind of take-off, bumped in the same tick as
+	# the first and read beside it: the leap clip a slide jump scrubs is not the
+	# one a running jump scrubs, and which of the two it is has to reach the
+	# seven animators that did not run this function (D-098's serial pattern).
+	if from_slide:
+		sync_slide_jump_serial += 1
 	jumped.emit()
+
+
+## The horizontal half of a slide jump. Along the way the slide was already
+## going — the slide committed to that direction when it started, and
+## `SLIDE_FRICTION` has only shortened the vector since, never turned it — so
+## this is a boost and not a steer, and a player who wants to go somewhere else
+## has to end the slide and turn like everybody else.
+func _slide_jump() -> void:
+	var horizontal := Vector3(velocity.x, 0.0, velocity.z)
+	var direction := horizontal.normalized() if horizontal.length() > 0.01 else facing()
+	var speed := maxf(horizontal.length(), SLIDE_SPEED) * SLIDE_JUMP_SPEED_SCALE
+	velocity.x = direction.x * speed
+	velocity.z = direction.z * speed
 
 
 func _detect_landing(grounded_before: bool) -> void:
@@ -1344,6 +1627,19 @@ func _detect_landing(grounded_before: bool) -> void:
 	if grounded_now and not grounded_before and _airtime >= HOP_MIN_AIRTIME \
 			and not is_rolling():
 		_landing_grace = LANDING_GRACE
+	# A landing with crouch held is a slide, and it has to begin on **this**
+	# tick (the feel round). `_handle_slide` would start it on the next one,
+	# which is a physics tick later than the animator's first look at a
+	# grounded Bog — so the landing one-shot would have already been fired and
+	# the slide would fade in over the top of a stumble it was supposed to
+	# replace. Started here, `BogAnimator._close_airtime` finds a Bog that is
+	# already sliding and declines to land it at all.
+	#
+	# After the roll and the grace deliberately: a dive landing is a roll and
+	# `_can_slide` refuses one, and the grace that opens here is the grace
+	# `_handle_jump` will not pay out on a slide jump.
+	if grounded_now and not grounded_before and _can_slide():
+		_begin_slide()
 	# Touching anything at all gives the dive back, including a ledge caught on
 	# the way down. Tying it to `landed` instead would leave a Bog that stepped
 	# gently off a rock unable to dive for the rest of the match.
@@ -1495,6 +1791,12 @@ func _follow_network(delta: float) -> void:
 	_model_root.rotation.y = body_yaw
 	_crouch_blend = move_toward(_crouch_blend, 1.0 if sync_crouching else 0.0,
 		CROUCH_TRANSITION * delta)
+	# The pose follows the same flag on a Bog this machine does not own. The
+	# pre-arm is not replicated and does not need to be: what it buys is the
+	# frames between touchdown and a slide, and a remote Bog's slide arrives on
+	# `sync_sliding` with the animator's own fade under it either way.
+	_crouch_pose = move_toward(_crouch_pose, 1.0 if sync_crouching else 0.0,
+		CROUCH_TRANSITION * delta)
 	# The same two blends the owner runs, off the replicated flags, so a remote
 	# Bog is as hittable as the one whose screen it is being played on. The
 	# combat range's dummies are remote Bogs.
@@ -1632,6 +1934,7 @@ func revive_at(spawn: Transform3D, life_number: int = -1) -> void:
 	_model_root.rotation.y = body_yaw
 	_slide_time = 0.0
 	_crouch_blend = 0.0
+	_crouch_pose = 0.0
 	_slide_blend = 0.0
 	_magnet_until = 0.0
 	_air_jump_spent = false
@@ -1645,6 +1948,10 @@ func revive_at(spawn: Transform3D, life_number: int = -1) -> void:
 	# at a speed it earned in its last life.
 	end_spin()
 	_was_spinning = false
+	# And the chain, for the same sentence one weapon-state further (the feel
+	# round): a Bog that respawned mid-chain would come back at 0.85 speed with
+	# a sword in its fists that `has_sword()` says it does not have.
+	end_slash()
 	_apply_capsule(STAND_HEIGHT)
 	# The replicated fields are seeded here, field by field, and deliberately
 	# *not* by calling `_publish()`. `_publish` ends with
@@ -1668,5 +1975,11 @@ func revive_at(spawn: Transform3D, life_number: int = -1) -> void:
 	# owner's first snapshot arrived.
 	draw = -1.0
 	sync_draw = -1.0
+	# And a respawning Bog has its weapon back out. Seeded here with the draw
+	# and for its reason — a remote copy that came back holstered would stand on
+	# a spawn pad empty-handed until its owner's first snapshot arrived — and
+	# written on every peer rather than only the owner, because every peer runs
+	# `revive_at` and they all reach the same answer (the feel round).
+	sync_holstered = false
 	sync_life = life
 	respawned.emit()

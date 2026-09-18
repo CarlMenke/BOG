@@ -45,6 +45,12 @@ properties/9/replication_mode = 2
 properties/10/path = NodePath(".:sync_aim_pitch")
 properties/10/spawn = true
 properties/10/replication_mode = 2
+properties/11/path = NodePath(".:sync_slide_jump_serial")
+properties/11/spawn = true
+properties/11/replication_mode = 2
+properties/12/path = NodePath(".:sync_holstered")
+properties/12/spawn = true
+properties/12/replication_mode = 2
 
 [node name="Bog" type="CharacterBody3D"]
 collision_layer = 2
@@ -72,7 +78,7 @@ script = ExtResource("4_cam")
 [node name="Boom" type="Node3D" parent="CameraRig"]
 
 [node name="Camera3D" type="Camera3D" parent="CameraRig/Boom"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.62, 0, 3.6)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.62, 0, 3.1)
 fov = 75.0
 near = 0.05
 far = 400.0

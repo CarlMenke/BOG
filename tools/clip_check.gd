@@ -17,6 +17,7 @@ extends SceneTree
 const BODY := "res://art/bog/BOG.fbx"
 const LIBRARY := "res://art/generated/bog_clips.res"
 const TABLE := "res://assets/source/clips.json"
+const ANIMS := "res://assets/source/anims"
 const HEIGHT := 1.80
 const BONES := 49
 const HIPS := "mixamorig_Hips"
@@ -39,6 +40,8 @@ const REQUIRED_MARKERS := {
 	"SwordJumpAttack": ["hit", "land"],
 	"JumpStart": ["lift"], "Land": ["absorb"], "LandHard": ["absorb", "up"],
 	"Roll": ["dive", "apex", "land", "up"], "Slide": ["down", "up"],
+	"SlideJump": ["lift", "apex", "land"],
+	"Punch": ["hit"],
 	"Drink": ["raise", "done"], "Death": ["fall"],
 	"SwordDraw": ["swap"], "SwordSheathe": ["swap"], "BowEquip": ["swap"], "BowUnequip": ["swap"], "BowReload": ["nock"],
 }
@@ -83,14 +86,29 @@ func _initialize() -> void:
 	var by_file := {}
 	for key in lib.get_animation_list():
 		by_file[lib.get_animation(key).resource_name] = key
+	# A row whose FBX has not been fetched yet is skipped rather than failed.
+	# The table is also the fetch list — a move can be designed, wired and
+	# shipped with a `mixamo_query` before anybody has picked the take that
+	# draws it, and the animator plays a named stand-in until they do
+	# (`BogAnimator.clip_or`). What must still fail here is a row whose clip was
+	# fetched and did not reach the library, which is every other row.
+	var fetched := DirAccess.get_files_at(ANIMS)
+	var pending := PackedStringArray()
 	for row in table:
+		if not _row_fetched(fetched, row):
+			pending.append(row.file)
+			continue
 		var present := by_file.has(row.file)
 		if row.has("mixamo_query"):
 			for f in by_file:
 				present = present or f.begins_with(row.file + "-")
 		_want("table row %s is in the library" % row.file, present)
-	_want("library has one clip per row (%d of %d)" % [lib.get_animation_list().size(), table.size()],
-		lib.get_animation_list().size() == table.size())
+	if not pending.is_empty():
+		print("clip_check: %d row(s) with no FBX yet, skipped: %s"
+			% [pending.size(), ", ".join(pending)])
+	_want("library has one clip per fetched row (%d of %d)"
+		% [lib.get_animation_list().size(), table.size() - pending.size()],
+		lib.get_animation_list().size() == table.size() - pending.size())
 
 	player.remove_animation_library("")
 	player.add_animation_library("", lib)
@@ -233,6 +251,17 @@ static func _hips_track(anim: Animation) -> int:
 				and String(anim.track_get_path(t)).ends_with(":" + HIPS):
 			return t
 	return -1
+
+
+## Whether anything in `assets/source/anims` could have produced this row. The
+## exact name for an ordinary row, and the `<file>-<Name>` prefix a
+## `mixamo_query` row's candidates land under.
+static func _row_fetched(files: PackedStringArray, row: Dictionary) -> bool:
+	var file: String = row.file
+	for name in files:
+		if name == file + ".fbx" or name.begins_with(file + "-"):
+			return true
+	return false
 
 
 static func _read_table() -> Array:
