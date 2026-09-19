@@ -203,6 +203,7 @@ TARGETS = {
     "beam_staff":     ("assets/source/props/BEAM_STAFF.glb", 4000, 1024),
     "throwing_star":  ("assets/source/props/THROWING_STAR.glb", 1200, 512),
     "dynamite":       ("assets/source/props/DYNAMITE.glb", 6000, 512),
+    "campfire_v2":    ("assets/source/props/CAMPFIRE_V2.glb", 10000, 1024),
 }
 
 # The seven that arrived on 2026-09-19 are downloads waiting on their tickets,
@@ -261,7 +262,27 @@ AFTER_DECIMATION = {
 # it on the material as an emission map.
 AFTER_TEXTURES = {
     "campfire": flame_glow.add_emission,
+    "campfire_v2": flame_glow.add_emission,
 }
+
+# `campfire_v2` is a second download of the same prop (BOG-43) and takes the
+# campfire's 10000/1024 unchanged: the argument was never about this sculpt, it
+# was about there being exactly one of it, stood close to, in the middle of the
+# first picture anybody sees of this game.
+#
+# Two things differ from the first campfire and neither changes the numbers. It
+# arrives at 11,121 triangles rather than a photogrammetry half-million, so the
+# 10000 is barely a reduction — it is here for the texture cut and the repack,
+# the letters' case. And it carries a roughness-metallic and a normal map of its
+# own, where the first carried neither. What it still does *not* carry is an
+# emission map, so it keeps the `flame_glow` hook: the flame is painted into the
+# base colour here too, and the menu's glow pass needs a mask cut out of it
+# (D-138).
+#
+# Its units are not the others'. The mesh runs 99 x 36 in its own space where
+# every other prop here is roughly one unit tall, so whatever places it carries
+# a scale about a hundredth of the first campfire's. That is a number for
+# `bog_backdrop.gd` to find by looking, not a thing this table can fix.
 
 
 def log(msg):
