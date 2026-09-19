@@ -48,6 +48,10 @@ const CONTROL_REFERENCE: Array[Array] = [
 	["Aim", "aim"],
 	["Plant shield", "place_shield"],
 	["Throw magnet", "throw_magnet"],
+	# Between the things you do with a weapon and the things you do with the
+	# screen, because it is both: it is pressed from a death screen, and what it
+	# changes is what you are holding when you come back.
+	["Change class", "change_class"],
 	["Scoreboard", "scoreboard"],
 	["Chat", "chat"],
 	["Pause", "pause"],

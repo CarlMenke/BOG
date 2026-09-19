@@ -652,10 +652,42 @@ func _spawn_pool(peer_id: int) -> Array[Transform3D]:
 
 
 func _spawn_bog(peer_id: int) -> void:
+	# Before the body is built, not after, because `_create_bog` reads the row
+	# this may have just rewritten (D-069's successor). A pick queued in the
+	# pause menu of the match that just ended, or in the seconds before a
+	# rematch's arena stood up, is cashed in here and the Bog is simply built
+	# carrying it — no second message, because there is no body yet to correct.
+	_cash_pending_weapon(peer_id)
 	var spawn := _next_spawn(peer_id)
 	var life := _life_of(peer_id)
 	_create_bog.rpc(peer_id, spawn, life)
 	_create_bog(peer_id, spawn, life)
+
+
+## Host only. Turn a queued class change into the weapon this player is about to
+## come back carrying, if there is one.
+##
+## **The one instant a weapon may change**, and it is this one because it is the
+## only instant at which nobody is holding anything: a Bog is either being built
+## or being revived, its combat node is about to be `reset`, and no throw, draw
+## or swing can be interrupted by the swap because none is in flight. Every
+## other moment is somebody mid-fight.
+##
+## `set_weapon` and not a bare row write, because a respawn revives a body that
+## already exists — `_do_respawn` does not rebuild it — so the roster alone
+## would leave every peer's copy of that Bog holding the old model. That
+## function is the pair that already exists for exactly this (D-112): the row,
+## for the life after this one, and one addressed message for the body standing
+## here now. Sent *before* `_do_respawn`, so the weapon and the revival arrive in
+## that order on every peer and no frame is drawn of a live Bog with the wrong
+## thing in its fist.
+func _cash_pending_weapon(peer_id: int) -> void:
+	if not Net.is_host:
+		return
+	var want := Net.take_pending_weapon(peer_id)
+	if want == Net.NO_PENDING:
+		return
+	set_weapon(peer_id, want)
 
 
 ## Host only. Put a Bog in the world for a roster row the warmup did not spawn,
@@ -834,6 +866,8 @@ func _respawn(peer_id: int) -> void:
 	# trusted. Through `_end_elder`, before the respawn goes out, so the row and
 	# the cloth come off together on every peer and in that order.
 	_end_elder(peer_id)
+	# The class change lands here, one beat before the body comes back up.
+	_cash_pending_weapon(peer_id)
 	var life := _life_of(peer_id)
 	_do_respawn.rpc(peer_id, spawn, life)
 	_do_respawn(peer_id, spawn, life)

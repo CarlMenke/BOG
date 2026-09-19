@@ -13,6 +13,11 @@ extends Control
 
 signal resumed()
 signal left_match()
+## "CHANGE CLASS" was pressed. The picker itself is not a child of this menu —
+## it is a sibling under the HUD, because the death screen opens the same one
+## with no pause menu anywhere near it, and two instances of one picker would be
+## two answers to "what have I queued". So this asks and the HUD opens it.
+signal change_class_requested()
 
 ## Named holds, so closing this while the scoreboard is also up does not hand
 ## capture back to a game the player is still reading a table over.
@@ -20,6 +25,7 @@ const CURSOR_REASON := "pause"
 
 @onready var _resume: Button = %ResumeButton
 @onready var _settings_button: Button = %SettingsButton
+@onready var _change_class: Button = %ChangeClassButton
 @onready var _leave: Button = %LeaveButton
 @onready var _settings: SettingsPanel = %Settings
 @onready var _session: Label = %SessionLine
@@ -29,6 +35,7 @@ func _ready() -> void:
 	visible = false
 	_resume.pressed.connect(close)
 	_settings_button.pressed.connect(_settings.open)
+	_change_class.pressed.connect(change_class_requested.emit)
 	_leave.pressed.connect(_on_leave)
 
 
@@ -37,6 +44,10 @@ func open() -> void:
 		return
 	visible = true
 	_session.text = _describe_session()
+	# Only while there is a Bog to come back as. In the practice range and in the
+	# lobby's own pause menu there is a picker with more room a click away, and
+	# a "change class" that did nothing would be worse than none at all.
+	_change_class.visible = Net.match_running
 	SceneFlow.release_cursor(CURSOR_REASON)
 	_resume.grab_focus()
 

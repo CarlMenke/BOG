@@ -113,6 +113,10 @@ func _ready() -> void:
 	_chat.submitted.connect(Net.send_chat)
 	_pause.resumed.connect(_on_resumed)
 	_pause.left_match.connect(_on_leave_match)
+	# The picker draws *over* the pause menu rather than replacing it, so Escape
+	# still backs out exactly one layer wherever the player is — the same rule
+	# the settings panel already follows.
+	_pause.change_class_requested.connect(_class_picker.open)
 	_results.return_to_lobby.connect(_on_back_to_lobby)
 	_results.rematch.connect(_on_rematch_pressed)
 
@@ -176,11 +180,33 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _chat.is_typing():
 		return
 
+	# The class picker is a menu over everything, the pause menu it may have been
+	# opened from included, so it answers Escape first and swallows the rest.
+	# Swallowing is the point: a picker left open over a dead Bog must not be
+	# eating — or passing through — the keys that spectate, chat or respawn
+	# around it, and the respawn itself is the host's clock rather than anything
+	# this player presses, so nothing is lost by holding the keyboard here.
+	if _class_picker.visible:
+		if event.is_action_pressed("pause"):
+			get_viewport().set_input_as_handled()
+			_class_picker.close()
+		return
+
 	if event.is_action_pressed("pause"):
 		get_viewport().set_input_as_handled()
 		_toggle_pause()
 		return
 	if _pause.visible or _results.visible:
+		return
+	# One key to the same picker, because the moment a player wants it is the
+	# moment they have just been killed by something they have no answer to —
+	# and that is the one moment a menu three presses deep is the wrong shape.
+	# Guarded on `match_running` rather than on being dead: the prompt only
+	# appears on the death screen, but a player who learns the key there should
+	# find it still works the next time they want it.
+	if event.is_action_pressed("change_class") and Net.match_running:
+		get_viewport().set_input_as_handled()
+		_class_picker.open()
 		return
 	# Dead players have no weapon to swing, so the attack and aim buttons are
 	# free and are the two most obvious things to press. They step the spectator
@@ -875,11 +901,24 @@ func _on_local_death(respawn_in: float) -> void:
 		return
 	_respawn_clock = maxf(0.1, respawn_in)
 	_show_banner("YOU DIED", "Back in %d" % ceili(_respawn_clock), UIPalette.DANGER)
+	# The one place the class change advertises itself, and the one place it is
+	# obviously useful: a player who has just been killed by the third bow in a
+	# row is the player who wants this, and the seconds they are staring at this
+	# banner are the seconds in which a pick still lands on *this* respawn.
+	#
+	# Off the input map rather than a hard-coded "B", the way the ability slots'
+	# caps are, so a rebound key is right here without anybody remembering to
+	# change a string. Not shown to somebody who is out for good: there is no
+	# next respawn to apply it to, and offering one would be a lie.
+	_death_prompt.text = "Press [%s] to change class" \
+		% SettingsPanel.primary_key("change_class")
+	_death_prompt.visible = true
 
 
 func _on_local_respawn() -> void:
 	_respawn_clock = 0.0
 	_banner.visible = false
+	_death_prompt.visible = false
 	_end_spectating()
 
 
@@ -951,6 +990,10 @@ func _on_match_finished(summary: Dictionary) -> void:
 	_banner.visible = false
 	_scoreboard.close()
 	_pause.close()
+	# Whatever was queued is settled by the host on the way back to the lobby
+	# (`Net._settle_pending_weapons`), so a picker left standing over the results
+	# screen would be showing a question that has already been answered.
+	_class_picker.close()
 	_end_spectating()
 	# The gameplay HUD goes away entirely rather than being dimmed behind the
 	# scrim. A crosshair, a live ability bar and a counting clock over a table of
@@ -1018,4 +1061,8 @@ func _show_banner(title: String, subtitle: String, colour: Color) -> void:
 	_banner_title.text = title
 	_banner_title.add_theme_color_override("font_color", colour)
 	_banner_sub.text = subtitle
+	# The prompt belongs to a death and nothing else the banner is used for — a
+	# warmup countdown, a phase call, a kill flash — so every other banner clears
+	# it and the one that wants it turns it back on.
+	_death_prompt.visible = false
 	_banner.visible = true

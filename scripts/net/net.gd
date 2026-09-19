@@ -50,13 +50,23 @@ signal return_to_lobby_requested()
 ## The host wants the same match again, same roster, same settings.
 signal rematch_requested()
 
-## peer_id -> {name: String, team: int, ready: bool, weapon: int, skin: int}
+## peer_id -> {name: String, team: int, ready: bool, weapon: int,
+## next_weapon: int, skin: int}
 ##
 ## `weapon` is a `Loadout.Weapon` ordinal and is one more key here rather than a
 ## channel of its own (D-069). It has exactly `team`'s lifecycle — seeded by
 ## `_make_player`, changed by a request the host validates, carried on every
 ## rebroadcast, kept across a rematch and forgotten when the peer goes — which is
 ## the whole of why it needed no new plumbing.
+##
+## `next_weapon` is the same key once more, and it is the **pending** pick: what
+## this player has asked to carry from their next spawn onward, or `NO_PENDING`
+## when they have asked for nothing. It is a key on the row rather than a
+## dictionary of the host's for the reason `weapon` is: it must reach the picker
+## on the *player's* machine so it can show what is already queued, and a roster
+## row is the one thing that already travels to everybody whole, in order, and
+## dies with the peer. See `_request_weapon` for why a mid-match pick queues
+## rather than lands.
 ##
 ## `skin` is the same key again, and it is **the free-for-all pick**: the body
 ## this player wears when they are only answerable for their own. In Teams the
@@ -302,6 +312,71 @@ func player_weapon(peer_id: int) -> int:
 	return Loadout.sanitize(info.get("weapon", Loadout.DEFAULT))
 
 
+## What a row's `next_weapon` holds when nothing is queued.
+##
+## Out of range on purpose, because `Loadout.sanitize` maps everything out of
+## range onto the spear: "nothing pending" and "a spear pending" have to be
+## different answers, and a sentinel that sanitizes to a real weapon would make
+## every row look like a player who had just asked for a spear. -1 is also what
+## a row written before this existed reads as, through the defaulted `get`
+## below, which is the correct answer for such a row.
+const NO_PENDING := -1
+
+## Which weapon this player has queued for their next spawn, or `NO_PENDING`.
+##
+## `player_weapon`'s shape with the sentinel added, and the same argument about
+## harness rows and rows off the wire: anything that is not one of the three
+## ordinals is "nothing queued", so there is one rule rather than two.
+func pending_weapon(peer_id: int) -> int:
+	var info: Dictionary = players.get(peer_id, {})
+	var want: Variant = info.get("next_weapon", NO_PENDING)
+	if want is not int and want is not float:
+		return NO_PENDING
+	var index := int(want)
+	if index < 0 or index >= Loadout.NAMES.size():
+		return NO_PENDING
+	return index
+
+
+## Host only. Read a queued pick and forget it, in one move.
+##
+## Called from `MatchState` at the moment a Bog is (re)built, which is the
+## moment the queue is supposed to empty: taking and clearing together is what
+## makes "you get it on the *next* respawn, once" true rather than "every
+## respawn from here on". Returns `NO_PENDING` when there was nothing, so a
+## caller can do the whole thing in an `if`.
+##
+## No broadcast of its own. Every caller writes the row's `weapon` immediately
+## afterwards — through `set_weapon_of` or `MatchState.set_weapon` — and that
+## rebroadcasts the row this just edited. Two broadcasts for one change would be
+## a roster that is briefly wearing neither pick.
+func take_pending_weapon(peer_id: int) -> int:
+	if not is_host or not players.has(peer_id):
+		return NO_PENDING
+	var want := pending_weapon(peer_id)
+	players[peer_id]["next_weapon"] = NO_PENDING
+	return want
+
+
+## Host only. Fold every outstanding queued pick into the row it belongs to.
+##
+## The end of a match is the last chance a pick has to mean anything, and the
+## player who asked for a bow and then survived to the final whistle should walk
+## back into the lobby holding a bow — that is what they last chose, it is what
+## their own `Settings` already says (`set_weapon` writes it on the way out, win
+## or lose), and a lobby picker disagreeing with the settings file that fed it
+## would be the one place this feature could lie. So the queue is settled on the
+## way home rather than dropped.
+func _settle_pending_weapons() -> void:
+	if not is_host:
+		return
+	for peer_id: int in players:
+		var want := pending_weapon(peer_id)
+		players[peer_id]["next_weapon"] = NO_PENDING
+		if want != NO_PENDING:
+			players[peer_id]["weapon"] = want
+
+
 ## The skin this player picked **for themselves**, as a `Skins` index.
 ##
 ## `player_weapon`'s shape exactly, defaulted `get` and all, and for its reasons:
@@ -464,7 +539,8 @@ func can_start_match() -> bool:
 func _make_player(display_name: String, team: int,
 		weapon: int = Loadout.DEFAULT, skin: int = Skins.DEFAULT) -> Dictionary:
 	return {"name": display_name, "team": team, "ready": false,
-		"weapon": Loadout.sanitize(weapon), "skin": Skins.sanitize(skin)}
+		"weapon": Loadout.sanitize(weapon), "next_weapon": NO_PENDING,
+		"skin": Skins.sanitize(skin)}
 
 
 ## Host only. Give every team a skin, and **no two teams the same one**.
@@ -768,6 +844,14 @@ func _request_team(team: int) -> void:
 ## host. It is also saved locally, which `set_team` does not do and
 ## `set_name_local` does — a team belongs to the lobby you are in, and a weapon
 ## is a preference you bring with you.
+##
+## One function for both rooms, deliberately: the lobby strip and the pause
+## menu's class picker send the same request and the host decides what it means
+## — a weapon now, or a weapon queued for the next spawn — off `match_running`.
+## The `Settings` write is unconditional for the same reason it always was. It
+## records what this player *chose*, which is true the moment they press the
+## button whether or not they are alive to hold it yet, and it is what the next
+## lobby they walk into is seeded from.
 func set_weapon(weapon: int) -> void:
 	Settings.set_value("weapon", Loadout.sanitize(weapon))
 	if not in_session:
@@ -787,23 +871,55 @@ func _request_weapon(weapon: int) -> void:
 		peer_id = 1
 	if not players.has(peer_id):
 		return
-	# **The lock-in** (D-069). A pick is free to change for as long as people are
-	# still arriving and is fixed the moment the host presses Start, alongside
-	# the map and the teams — so this is refused exactly while `match_running`,
-	# which `_begin_match` sets and `_return_to_lobby` clears. A rematch keeps it
-	# set, which is what makes "a rematch is the same match again" true of the
-	# weapons as well as of the teams (D-048).
+	# Nothing to check but the ordinal. All three weapons are always available to
+	# everyone — there is no host dial gating them and so no failure mode where a
+	# player cannot have one and is not told why — which leaves `sanitize` as the
+	# whole of the validation, and it is the only thing a lying client could
+	# reach.
+	var want := Loadout.sanitize(weapon)
+
+	# **The lock-in, which is now a queue** (D-069, reversed).
 	#
-	# Refused rather than queued. A request that took effect a match later would
-	# be a player who picked a bow, played a spear, and then found a bow in their
-	# hands in a match they never asked for it in.
+	# D-069 refused this outright while `match_running`, on the argument that a
+	# request taking effect a match later would be a player who picked a bow,
+	# played a spear, and found a bow in their hands in a match they never asked
+	# for it in. That argument was about a pick that crossed a *match* boundary
+	# and was silently still there on the other side. It was never an argument
+	# against changing class inside one match — and refusing outright cost the
+	# thing the owner has now asked for, which is that a player who brought the
+	# wrong weapon to this map or this team is not stuck with it for ten minutes.
+	#
+	# What is kept is the half of the lock-in that was actually load-bearing:
+	# **the weapon in your hands never changes while you are holding it.** A
+	# player losing a fight cannot swap out of it mid-swing, the Bog everyone
+	# else is aiming at keeps carrying what it was carrying a frame ago, and no
+	# cooldown, draw or windup is ever interrupted by a menu. So a pick made
+	# during a match is *queued*, in `next_weapon`, and `MatchState` cashes it in
+	# at the one instant a body is being built or revived anyway — see
+	# `take_pending_weapon`. Pick while alive and it lands on the death after
+	# this one; pick while dead and it lands on the respawn you are waiting for;
+	# pick a half-second too late and it lands on the one after. The picker says
+	# exactly that, so none of those three is a surprise.
+	#
+	# The old boundary problem is answered by `_settle_pending_weapons` rather
+	# than by a refusal: the queue is folded into the row when the match ends, so
+	# what a player carries into the lobby is the last thing they chose and is
+	# what their own `Settings` already says.
 	if match_running:
+		# Asking for what you are already holding cancels a queued change rather
+		# than queueing a no-op — it is the only way back out of the picker once
+		# you have pressed something, and the picker offers no other.
+		players[peer_id]["next_weapon"] = NO_PENDING if want == player_weapon(peer_id) else want
+		_broadcast_roster()
+		roster_changed.emit()
 		return
-	# Nothing else to check. All three weapons are always available to everyone —
-	# there is no host dial gating them and so no failure mode where a player
-	# cannot have one and is not told why — which leaves `sanitize` as the whole
-	# of the validation, and it is the only thing a lying client could reach.
-	players[peer_id]["weapon"] = Loadout.sanitize(weapon)
+
+	# In the lobby it is still one key and one write. Any queue left over from
+	# the match that has just ended is cleared with it: the lobby picker is the
+	# player saying what they want plainly, and a pick that silently overrode it
+	# on their first respawn would be the same bug D-069 was worried about.
+	players[peer_id]["weapon"] = want
+	players[peer_id]["next_weapon"] = NO_PENDING
 	_broadcast_roster()
 	roster_changed.emit()
 
@@ -813,13 +929,16 @@ func _request_weapon(weapon: int) -> void:
 ##
 ## `_request_weapon`'s sibling, and the difference between them is the whole
 ## reason this exists rather than being a flag on that one. That function is a
-## client asking, and it is refused while `match_running` — the lock-in D-069
-## describes, which stops a player swapping weapons in the middle of a fight
-## they are losing. This one is the host acting on something that happened in
-## the world: a Bog walked into a weapon rack in the practice range, and the
-## host is recording what it is now carrying. Weakening the refusal to let the
-## rack through would have opened the lobby's route at the same time, for every
-## map, which is the one thing D-069 is about.
+## client asking, and during a match what it can do is *queue* a weapon for the
+## asker's next spawn — the hands never change while they are full. This one is
+## the host acting on something that happened in the world: a Bog walked into a
+## weapon rack in the practice range, and the host is recording what it is now
+## carrying, this instant, body and all.
+##
+## A queued pick is left alone here on purpose. The rack changed what you are
+## holding; it did not answer the question "what do you want to come back as",
+## and a rack that quietly cancelled a pick made in the pause menu would be one
+## more invisible rule in a room full of them.
 ##
 ## The row and not the body. `MatchState.set_weapon` calls this for the roster —
 ## so a respawn, which reads `Net.player_weapon` in `_create_bog`, comes back
@@ -868,9 +987,13 @@ func _request_skin(skin: int) -> void:
 		peer_id = 1
 	if not players.has(peer_id):
 		return
-	# Locked at Start, exactly as the weapon is and for exactly its reason
-	# (D-069): the body a player walks into the arena wearing must be the body
-	# they were looking at when they readied up.
+	# Locked at Start, which the weapon no longer is, and the difference is the
+	# point. A weapon can be queued for a respawn because a respawn rebuilds the
+	# thing that carries it; a skin is worn by a body that is standing there for
+	# the whole match, and swapping it is the one change that would leave the
+	# other seven players aiming at somebody they no longer recognise. D-069's
+	# original reason survives here unchanged: the body a player walks into the
+	# arena wearing must be the body they were looking at when they readied up.
 	if match_running:
 		return
 	var want := Skins.sanitize(skin)
@@ -1019,6 +1142,12 @@ func request_return_to_lobby() -> void:
 	if not is_host:
 		return
 	match_running = false
+	# Before the navigation and before the flag reaches anybody else, so that the
+	# roster a client redraws its lobby from already holds the settled pick and
+	# no picker is ever drawn off a row that is one broadcast out of date.
+	_settle_pending_weapons()
+	_broadcast_roster()
+	roster_changed.emit()
 	_return_to_lobby.rpc()
 	_return_to_lobby()
 

@@ -15393,3 +15393,41 @@ is no keypress left to predict from. The `drink_potion` action, its HUD tile
 and its reference row are retired. `RefillStone` still stocks one in the range,
 reachable only by the tools — kept as the way back if a carried spare is ever
 wanted again.
+
+## D-133 — You may pick again mid-match, and only the next Bog you get hears about it
+The owner: *"Ingame you can hit escape then change class to change your
+loadout. Once you die there is also a popup on your screen to press a key to
+quickly get to the change class screen to swap; if you don't change fast enough
+your kit/loadout will change the next time you die."* **Supersedes D-069's
+lock-in.**
+
+D-069 refused a mid-match pick outright, on the argument that a request taking
+effect a match later would be a player who picked a bow, played a spear, and
+found a bow in a match they never asked for it in. That was an argument about a
+pick crossing a *match* boundary silently, never one against changing class
+inside a match. What survives of the lock is the half that was load-bearing:
+**the weapon in your hands never changes while you are holding it.** A pick made
+while `match_running` is queued in one more key of the roster row,
+`next_weapon` (`Net.NO_PENDING`, -1, is out of range on purpose so "nothing
+queued" and "a spear queued" stay distinct) — a key rather than host-side state
+because the picker on the player's own machine has to show what is queued, and
+a row already travels whole, in order, and dies with the peer.
+`MatchState._cash_pending_weapon` takes and clears it at the single instant
+nobody is holding anything — `_spawn_bog` before the row is read, `_respawn`
+before `_do_respawn` — through D-112's existing pair of a row write and one
+addressed per-Bog message, so held gear, the gates, the HUD tile and the carry
+pose follow with nothing new branching on the weapon. Asking for what you
+already carry cancels the queue. The old boundary problem is answered by
+`_settle_pending_weapons` on the way back to the lobby rather than by a refusal,
+so what a player carries back agrees with the `Settings` file that seeds their
+next lobby; a rematch keeps the queue and spends it on the first spawn.
+
+`ClassPicker` is one scene reached two ways: CHANGE CLASS in the pause menu
+(shown only in a running match; Escape backs out one layer) and the
+`change_class` action, **B**, advertised by a prompt on the death screen that
+reads its key from `SettingsPanel.primary_key` and goes away on respawn. There
+is no rebind UI in this project (D-016), so it has a reference row and nothing
+else. The skin stays locked at Start, and the difference is the reason: a
+respawn rebuilds the thing that carries a weapon, while a body stands there all
+match and swapping it would leave seven players aiming at somebody they no
+longer recognise.

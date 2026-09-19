@@ -1045,6 +1045,43 @@ func _run_loadout() -> void:
 	_check("the sword comes back when the bottle goes down",
 		swordsman.has_sword(), true)
 
+	# **Changing class mid-match** (D-069's successor), end to end and on a real
+	# Bog rather than on a roster row: the pick is queued, the hands do not move,
+	# and the respawn is what cashes it in. Peer 1 is used because it is the one
+	# of the three this scenario has not already dressed in a robe or handed a
+	# card — a Bog whose weapon is exactly what it was spawned with.
+	# `_begin` stands an arena up without going through the lobby's Start button,
+	# so the flag the host branches on has to be said here. It is the whole of
+	# the difference between the two answers `_request_weapon` can give.
+	Net.match_running = true
+	var changer := _combat(1)
+	if changer != null:
+		Net.set_weapon(Loadout.Weapon.BOW)
+		_check("the queue took the bow", Net.pending_weapon(1),
+			Loadout.Weapon.BOW)
+		_check("the row still says spear", Net.player_weapon(1),
+			Loadout.Weapon.SPEAR)
+		# The promise the picker makes out loud, and the only one that matters
+		# while a fight is on.
+		_check("and the fist still holds one", _hand(1).is_carried(), true)
+		_check("with no bow anywhere near it", changer.has_bow(), false)
+
+		MatchState._respawn(1)
+		_check("the respawn cashed the queue in", Net.player_weapon(1),
+			Loadout.Weapon.BOW)
+		_check("and emptied it", Net.pending_weapon(1), Net.NO_PENDING)
+		_check("the Bog that came back is an archer", changer.has_bow(), true)
+		_check("with a bow in its hand", _hand(1).has_bow(), true)
+		_check("and no spear left over", changer.has_spear(), false)
+		_check("nor a shaft in the fist", _hand(1).is_carried(), false)
+		# Once, not every respawn from here on.
+		MatchState._respawn(1)
+		_check("a second respawn changes nothing", Net.player_weapon(1),
+			Loadout.Weapon.BOW)
+	# Put the flag back the way `_begin` left it, so the scenario below — and
+	# every one after it — is still the lobby-shaped world it was written in.
+	Net.match_running = false
+
 	# And the default: a row that never touched the picker plays the match it
 	# always played. This is the promise the whole step rests on.
 	_begin(2, func(c: MatchConfig) -> void:

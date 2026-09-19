@@ -201,7 +201,7 @@ func _run_roster() -> void:
 
 
 func _run_lock() -> void:
-	_scenario("the pick locks at Start and survives a rematch")
+	_scenario("a mid-match pick queues for the next spawn and survives a rematch")
 	var before := _failures
 	_begin()
 
@@ -216,14 +216,33 @@ func _run_lock() -> void:
 	Net.request_match_start()
 	_check("the match is running", Net.match_running, true)
 
+	# **The lock-in is a queue now** (D-069's successor). What survives of it is
+	# that the weapon in a living Bog's hands never moves: a pick sent during a
+	# match lands in `next_weapon` and is cashed in by `MatchState` at the next
+	# spawn. Both halves are asserted, because a queue that quietly wrote through
+	# to `weapon` would look exactly like a pass until somebody watched a sword
+	# turn into a spear mid-swing.
 	Net.set_weapon(Loadout.Weapon.SPEAR)
-	_check("a pick sent after Start is refused",
+	_check("a pick sent after Start leaves the hands alone",
 		Net.player_weapon(1), Loadout.Weapon.SWORD)
+	_check("and queues instead", Net.pending_weapon(1), Loadout.Weapon.SPEAR)
 	# And through the RPC handler directly, which is the door a client's packet
 	# actually arrives at — `set_weapon` above is the local half.
 	Net._request_weapon(Loadout.Weapon.BOW)
-	_check("including one that arrives as a request",
+	_check("a later pick replaces the queued one",
+		Net.pending_weapon(1), Loadout.Weapon.BOW)
+	_check("still without touching the hands",
 		Net.player_weapon(1), Loadout.Weapon.SWORD)
+	# Asking for what you are already holding is the way back out, and it is the
+	# host that knows it.
+	Net._request_weapon(Loadout.Weapon.SWORD)
+	_check("asking for the held weapon cancels the queue",
+		Net.pending_weapon(1), Net.NO_PENDING)
+	# A bogus ordinal is still a spear, queued rather than held.
+	Net._request_weapon(99)
+	_check("a bogus mid-match ordinal queues the default",
+		Net.pending_weapon(1), Loadout.Weapon.SPEAR)
+	Net._request_weapon(Loadout.Weapon.BOW)
 
 	# A rematch is the same match again — same roster, same teams (D-048), and
 	# for the same reason the same weapons. It deals nothing and changes nothing.
@@ -233,16 +252,25 @@ func _run_lock() -> void:
 			Net.player_weapon(1), Loadout.Weapon.SWORD)
 		_check("rematch %d keeps the other Bog's bow" % (round_number + 1),
 			Net.player_weapon(951), Loadout.Weapon.BOW)
-		_check("and is still locked", Net.match_running, true)
+		_check("and the match is still running", Net.match_running, true)
+		_check("and the queued bow is still queued",
+			Net.pending_weapon(1), Loadout.Weapon.BOW)
 
-	# Everybody home. The lobby is where picks are made, so this is what unlocks
-	# them — and what was picked is still what is on the rows.
+	# Everybody home. A queue that never got a respawn to land on is settled on
+	# the way back rather than dropped, so what a player carries into the lobby
+	# is the last thing they actually chose.
 	Net.request_return_to_lobby()
-	_check("back in the lobby, the pick is free again", Net.match_running, false)
-	_check("and it is still what it was", Net.player_weapon(1),
-		Loadout.Weapon.SWORD)
-	Net.set_weapon(Loadout.Weapon.BOW)
-	_check("so it can be changed", Net.player_weapon(1), Loadout.Weapon.BOW)
+	_check("back in the lobby, nothing is queued any more",
+		Net.pending_weapon(1), Net.NO_PENDING)
+	_check("and the pick they never lived to use is the one on the row",
+		Net.player_weapon(1), Loadout.Weapon.BOW)
+	_check("and the other Bog, who queued nothing, kept its bow",
+		Net.player_weapon(951), Loadout.Weapon.BOW)
+	Net.set_weapon(Loadout.Weapon.SWORD)
+	_check("a lobby pick lands on the row at once",
+		Net.player_weapon(1), Loadout.Weapon.SWORD)
+	_check("and clears any queue with it", Net.pending_weapon(1),
+		Net.NO_PENDING)
 	print("weapon_select: lock %s" % ("PASS" if _failures == before else "FAIL"))
 
 

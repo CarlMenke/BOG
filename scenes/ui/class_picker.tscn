@@ -1,0 +1,83 @@
+[gd_scene load_steps=2 format=3 uid="uid://gubclasspicker01"]
+
+[ext_resource type="Script" path="res://scripts/ui/class_picker.gd" id="1_script"]
+
+[node name="ClassPicker" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_script")
+
+[node name="Scrim" type="PanelContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_type_variation = &"ScrimPanel"
+
+[node name="Center" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Stack" type="VBoxContainer" parent="Center"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Title" type="Label" parent="Center/Stack"]
+layout_mode = 2
+theme_type_variation = &"DisplayLabel"
+theme_override_font_sizes/font_size = 46
+theme_override_colors/font_color = Color(0.9, 0.94, 0.98, 1)
+text = "CHANGE CLASS"
+horizontal_alignment = 1
+
+[node name="Caption" type="Label" parent="Center/Stack"]
+layout_mode = 2
+theme_type_variation = &"SmallLabel"
+text = "Applies next time you respawn — never to the weapon in your hands."
+horizontal_alignment = 1
+
+[node name="Gap" type="Control" parent="Center/Stack"]
+custom_minimum_size = Vector2(0, 24)
+layout_mode = 2
+
+[node name="Strip" type="HBoxContainer" parent="Center/Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 8
+
+[node name="Blurb" type="Label" parent="Center/Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SmallLabel"
+text = "One throw, one kill. Lead your target."
+horizontal_alignment = 1
+
+[node name="Pending" type="Label" parent="Center/Stack"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SmallLabel"
+text = "Carrying the spear."
+horizontal_alignment = 1
+
+[node name="Gap2" type="Control" parent="Center/Stack"]
+custom_minimum_size = Vector2(0, 18)
+layout_mode = 2
+
+[node name="CloseButton" type="Button" parent="Center/Stack"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(380, 0)
+layout_mode = 2
+theme_type_variation = &"NavButton"
+text = "BACK"
+alignment = 0
