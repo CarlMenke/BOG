@@ -17,8 +17,22 @@ Linear"**. The short form:
   it to In Progress; when it is on `main` with the gate green, to In Review with
   the commit and D-record in a comment; to Done when a person has confirmed it
   in play, or there was nothing to confirm.
+- **Feedback becomes a ticket, and then Claude asks.** Anything Carl says in a
+  Claude Code session that amounts to a want — a change, a fix, an addition,
+  however small it sounds — goes to Linear *first*, never straight into the
+  code. Scope it fully: read the code it touches, weigh it against every open
+  ticket and the D-records so it is not a duplicate or a contradiction, write
+  the complete ticket (what, the numbers, done-when, what a person has to
+  confirm in play, any `FETCH` line), set area, priority and labels, and leave
+  it in **Todo**. Then say what the ticket is in one line and **ask whether to
+  build it now**. Building starts on Carl's yes, not on the feedback. Carl,
+  2026-09-19: *"when feedback comes in through Claude Code in this project, it
+  should go to Linear first, fully scoped and vetted against all other work, and
+  a complete ticket made, then you should ask if you want me to complete the
+  ticket you have made."*
 - **Quick changes stay quick.** Trying something, looking at it, keeping or
-  throwing it away needs no ticket. Over an hour, more than a couple of files,
+  throwing it away needs no ticket — a quick change is Claude's own experiment,
+  never a piece of Carl's feedback. Over an hour, more than a couple of files,
   or something someone will later ask "why" about: ticket first.
 - **Ideas are weighed, not built.** Carl thinks out loud. Take it in, weigh it
   against what is already in Linear and in the D-records, and place it. Always
@@ -72,6 +86,13 @@ repo.
   never files anything into the repo by hand unless he chooses to. Only if
   the ask names another place (a shared drive, a URL) does Claude look
   elsewhere.
+- **Mid-build counts too.** The moment a ticket in progress turns out to need a
+  mesh, a clip, a texture or a sound that is not in the repo, the work stops
+  there and the ask goes out in the same message, in the `FETCH` shape above.
+  The ticket takes **Needs a human** and an `Open:` line and goes back to Todo;
+  everything in it that does not depend on the missing asset is finished and
+  pushed first. What never happens is a ticket closed on a stand-in, or a
+  half-built feature handed back without the one line saying what to fetch.
 - **The route in.** Meshes: `assets/source/props/` through
   `tools/decimate_assets.py`. Clips: `assets/source/anims/` as skinless FBX
   through the Godot-native import (D-095..D-101). Skins and garments:

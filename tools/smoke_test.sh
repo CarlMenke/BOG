@@ -840,6 +840,7 @@ also "movement" "movement_check: draw PASS"
 also "movement" "movement_check: slide_jump PASS"
 also "movement" "movement_check: landing PASS"
 also "movement" "movement_check: jump_chain PASS"
+also "movement" "movement_check: jump_hold PASS"
 also "movement" "movement_check: remote PASS"
 # Bogs in their team's colour (D-046), read off the material the renderer will
 # draw with rather than off what the script meant to set. One Bog per team has

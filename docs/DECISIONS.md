@@ -18504,3 +18504,55 @@ Not exercised: another peer watching the squared punch (reasoned off `sync_yaw`;
 `net_test.sh` has no punch round), slashes 2 and 3 (their releases are longer, so
 they are strictly easier than the one that is thrown), and how the snap reads in
 play, which is the one thing a number cannot answer. (BOG-61, for D-177.)
+## D-179 — A held jump buys height by lightening gravity, not by leaving the ground faster
+The jump key had one thing to say. A tap and a hold left the ground at the same
+9.0 m/s and came back down the same arc, so the only variable in a jump was
+where the Bog was standing when it took one. Carl, 2026-09-19: *"there should be
+a very small variance to jump height based on if the user just barely taps jump,
+and if the user holds jump... im okay with letting them jump a good bit
+higher"*.
+
+**The obvious implementation is the wrong one.** Scaling the take-off velocity
+by how long the key has been down is how most engines do this, and here it would
+break three things that all read `Bog.jump_velocity()` and all mean *the* jump:
+`BogAnimator` scrubs the leap clip by where the body is between that launch
+speed and the floor (D-040), so a tap would start the clip halfway through;
+the lobby's Match panel shows an apex computed from it (`apex_for`); and every
+map's parkour and reach report is measured against it. A variable launch makes
+all three describe a jump the player may not have taken.
+
+**So the launch is fixed and the *pull* varies.** While the key is still down,
+the Bog is still rising, and the take-off is less than `JUMP_HOLD_TIME` old,
+`_apply_gravity` multiplies gravity by `JUMP_HOLD_GRAVITY_SCALE`. Everything
+downstream still reads `velocity.y` falling from 9.0 to zero exactly as it did —
+the leap clip scrubs right, `arc_time` is unchanged — the rise simply takes
+longer to be taken back. The top of the ladder stays where it was (a tap is
+still the 1.69 m the seven maps are built to) and the extra height is added
+above it.
+
+0.14 s at 0.55 gravity, which the gate measures tick by tick as **1.764 m
+tapped and 2.304 m held** — half a metre, about 31%, with airtime going from
+0.70 s to roughly 0.85 s. The window is deliberately shorter than a press a
+player would call a tap: eight or nine ticks, about one `JUMP_BUFFER`, so the
+decision is made at the take-off rather than during the flight.
+
+**What it does not disturb.** The hold is a fraction of whatever the take-off
+was worth, not a flat addition, so jump fatigue (D-156) still costs its 15% and
+30% and the slide jump (D-123) is still the tallest thing in the game — the
+shapes are kept and the ceiling moves. Any one of the three conditions failing
+ends the hold for that airtime rather than pausing it, so letting go at the top
+and pressing again is not a second lift. `_dive` zeroes it too: the dive is
+pressed with the key already down from the jump that opened the airtime, and
+`DIVE_UP_VELOCITY` is tuned to cross a gap, not to clear a treeline. The hold is
+read off `wants_jump_hold`, a field beside `wants_crouch` rather than a direct
+`Input` call, so a harness can hold the key — and so every harness that does not
+set it still measures the tap, which is why the `jump_chain` leg and
+`range_brains`' 1.69 m are untouched.
+
+`tools/movement_check.tscn` gains a `jump_hold` leg (four checks, in the gate):
+the tap, the full hold, the size of the gap between them, and a hold begun after
+the rise is over, which is worth nothing.
+
+Not exercised: how the spread reads under a real hand, and whether 2.2 m puts a
+Bog somewhere a map meant to be out of reach — both are for the play queue.
+(BOG-74.)

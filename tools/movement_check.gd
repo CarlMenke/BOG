@@ -23,7 +23,7 @@ extends Node3D
 ## keyboard, and everything downstream of those three fields is the shipping
 ## code.
 ##
-## The six verdicts:
+## The seven verdicts:
 ##
 ##   draw        a full draw walks at WALK_SPEED * DRAW_SPEED_SCALE
 ##   air_draw    a full draw carried into a jump keeps pointing where the body
@@ -35,6 +35,8 @@ extends Node3D
 ##   jump_chain  four hops taken the tick after each landing: the first two are
 ##               full, the third and fourth come up short, and a rest on the
 ##               ground gives the whole jump back
+##   jump_hold   a tapped jump reaches 1.69 m and a held one about 2.20 m, and
+##               a hold that starts after the rise is over is worth nothing
 ##   remote      the slide jump's serial reaches a Bog this machine does not
 ##               own, through the replication config that ships in bog.tscn,
 ##               and its animator picks the slide jump's leap
@@ -109,6 +111,7 @@ func _ready() -> void:
 	await _check_slide_jump()
 	await _check_landing()
 	await _check_jump_chain()
+	await _check_jump_hold()
 	await _check_remote()
 
 	print("movement_check: %d checks, %d failures" % [_checks, _failures])
@@ -179,6 +182,7 @@ func _ticks(count: int) -> void:
 ## slide cooldown and the landing grace run out.
 func _reset() -> void:
 	_drive(0.0, false, false)
+	_bog.wants_jump_hold = false
 	_bog.revive_at(Transform3D(Basis.IDENTITY, SPAWN))
 	_bog.set_view_basis(Basis.IDENTITY)
 	await _ticks(REST_TICKS)
@@ -625,6 +629,80 @@ func _check_jump_chain() -> void:
 	_ok("a rest gives the whole jump back (%.3f)" % rested,
 		absf(rested - _tick_apex(launch)) < HEIGHT_TOLERANCE)
 	print("movement_check: jump_chain %s" % _verdict())
+
+
+# -------------------------------------------------------------- jump hold ---
+
+## The held jump (D-179): a tap reaches the 1.69 m every map is built to, a
+## press held through `Bog.JUMP_HOLD_TIME` reaches about half a metre more, and
+## a hold that arrives after the rise is over is worth nothing.
+func _check_jump_hold() -> void:
+	await _reset()
+	await _ticks(CHAIN_REST_TICKS)
+	var launch := _bog.jump_velocity()
+	var tapped := await _hop_held(0)
+	await _ticks(CHAIN_REST_TICKS)
+	var held := await _hop_held(HOP_TICKS)
+	await _ticks(CHAIN_REST_TICKS)
+	var late := await _hop_held(-1)
+
+	var want_tap := _tick_apex(launch)
+	var want_held := _tick_apex_held(launch, Bog.JUMP_HOLD_TIME)
+	print("movement_check: a tap reaches %.3f m and a full hold %.3f m (want %.3f, %.3f)"
+		% [tapped, held, want_tap, want_held])
+	_ok("a tap is the jump the maps are built to (%.3f)" % tapped,
+		absf(tapped - want_tap) < HEIGHT_TOLERANCE)
+	_ok("a full hold reaches the held apex (%.3f)" % held,
+		absf(held - want_held) < HEIGHT_TOLERANCE)
+	_ok("the hold is worth a good bit but not a second jump (%.3f m more)" % (held - tapped),
+		held - tapped > 0.3 and held - tapped < 0.8)
+	_ok("holding after the rise is over is worth nothing (%.3f)" % late,
+		absf(late - want_tap) < HEIGHT_TOLERANCE)
+	print("movement_check: jump_hold %s" % _verdict())
+
+
+## One jump with the key held down for `hold` ticks after the press, and how
+## high it got. `hold` of -1 is the late hold: nothing held at the take-off, the
+## key pressed once the Bog is already falling.
+func _hop_held(hold: int) -> float:
+	var floor_y := _bog.global_position.y
+	_bog.wants_jump_hold = hold > 0
+	_bog.request_jump()
+	var top := 0.0
+	var airborne := false
+	for i in HOP_TICKS:
+		await get_tree().physics_frame
+		if hold >= 0 and i >= hold:
+			_bog.wants_jump_hold = false
+		elif hold < 0 and _bog.velocity.y < 0.0:
+			_bog.wants_jump_hold = true
+		top = maxf(top, _bog.global_position.y - floor_y)
+		if not _bog.is_on_floor():
+			airborne = true
+		elif airborne:
+			break
+	_bog.wants_jump_hold = false
+	return top
+
+
+## `_tick_apex` with `hold` seconds of `Bog.JUMP_HOLD_GRAVITY_SCALE` gravity at
+## the start of the rise, integrated tick by tick the same way.
+static func _tick_apex_held(launch: float, hold: float) -> float:
+	var gravity := float(ProjectSettings.get_setting("physics/3d/default_gravity", 24.0))
+	var tick := 1.0 / float(Engine.physics_ticks_per_second)
+	var left := hold
+	var vy := launch
+	var y := vy * tick
+	var top := y
+	while vy > 0.0:
+		var g := gravity
+		if left > 0.0:
+			left = maxf(0.0, left - tick)
+			g *= Bog.JUMP_HOLD_GRAVITY_SCALE
+		vy -= g * tick
+		y += vy * tick
+		top = maxf(top, y)
+	return top
 
 
 ## One jump from where the Bog is standing, and how high above that floor it

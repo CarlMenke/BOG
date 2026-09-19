@@ -28,7 +28,7 @@ bash tools/smoke_test.sh        # ~10 minutes, all green; finds Godot by itself.
 bash tools/net_test.sh          # two processes, one socket; ~100 s, run by hand
 ```
 
-`smoke_test.sh` is the gate; it is at **220 of 220** (D-148..D-178, 2026-09-19), and this is the
+`smoke_test.sh` is the gate; it is at **221 of 221** (D-148..D-179, 2026-09-19), and this is the
 only place in this file that says so — the run's own last line, `smoke: N checks, 0
 failures`, is the source, and a number written down anywhere else drifts. `net_test.sh` is kept out
 of it to keep the gate fast; run it by hand after touching networking, the lobby

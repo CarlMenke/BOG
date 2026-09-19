@@ -164,6 +164,28 @@ const JUMP_VELOCITY := 9.0
 ## it gets back to the floor it left.
 const FALL_GRAVITY_SCALE := 1.35
 
+## The held jump (D-179). A tap and a hold used to leave the ground at the same
+## speed and come back down on the same arc, so the jump key had one thing to
+## say; now how long it is held is worth up to half a metre of apex. Held, and
+## still rising, and inside JUMP_HOLD_TIME of the take-off, gravity is only
+## this much of itself — so the rise is the same rise, just slower to be taken
+## back, and everything downstream keeps working off `velocity.y` as before.
+##
+## **The launch speed is untouched on purpose.** `jump_velocity()` is what the
+## animator scrubs the leap clip by (D-040), what the lobby's apex readout
+## means, and what every map's parkour report is measured against — a variable
+## take-off speed would make all three lie about a jump a player might not have
+## taken. A variable *pull* leaves the top of the ladder where it was (a tap is
+## still 1.69 m, which is the height maps are built to) and adds the extra above
+## it: a full hold reaches about 2.20 m, and the airtime goes from 0.70 s to
+## about 0.85 s.
+##
+## The window is short because the decision has to be made at the take-off and
+## not during the flight: 0.14 s is eight or nine ticks, about as long as
+## JUMP_BUFFER, and a press a player would call a tap never fills it.
+const JUMP_HOLD_TIME := 0.14
+const JUMP_HOLD_GRAVITY_SCALE := 0.55
+
 const GROUND_ACCELERATION := 48.0
 const GROUND_FRICTION := 42.0
 ## Air control is real but weak: enough to adjust a jump, not enough to make
@@ -673,6 +695,13 @@ var invulnerable_until: float = 0.0
 var input_direction: Vector2 = Vector2.ZERO
 var wants_sprint: bool = false
 var wants_crouch: bool = false
+## Is the jump button still down this frame? The *press* is an edge and goes
+## through `request_jump`; this is the hold that the height is bought with
+## (D-179), and it is a field beside the other three so that a harness driving a
+## Bog without a keyboard can hold the key the same way it can hold crouch. It
+## stays false in every harness that does not set it, which is why every jump
+## the gate measures is still a tap.
+var wants_jump_hold: bool = false
 ## Is the aim button down this frame? `BogCamera` reads the same key and answers
 ## `is_aiming()` off it, and this is deliberately a second read rather than a
 ## call into the rig: `_face` wants it on the same tick as `input_direction`, it
@@ -704,6 +733,11 @@ var _animator: BogAnimator
 
 var _coyote: float = 0.0
 var _jump_buffered: float = 0.0
+## How much of the held jump's lighter gravity this take-off has left, in
+## seconds (D-179). Set to JUMP_HOLD_TIME by `_handle_jump`, spent by
+## `_apply_gravity`, and thrown away the moment the key comes up or the Bog
+## starts falling — a hold is not a thing you can save for the way down.
+var _jump_hold: float = 0.0
 ## Spent by the dive, returned by touching the ground.
 var _air_jump_spent: bool = false
 var _slide_time: float = 0.0
@@ -1135,12 +1169,14 @@ func _read_input() -> void:
 		wants_sprint = false
 		wants_crouch = false
 		wants_aim = false
+		wants_jump_hold = false
 		return
 	input_direction = Input.get_vector("move_left", "move_right",
 		"move_forward", "move_back")
 	wants_sprint = Input.is_action_pressed("sprint")
 	wants_crouch = Input.is_action_pressed("crouch")
 	wants_aim = Input.is_action_pressed("aim")
+	wants_jump_hold = Input.is_action_pressed("jump")
 	var jumping := Input.is_action_just_pressed("jump")
 	# **The half of the emote's stop list that is made of movement**, and it is
 	# here because this is where movement is read: walking, jumping or crouching
@@ -1162,6 +1198,7 @@ func _read_input() -> void:
 			wants_sprint = false
 			wants_crouch = false
 			wants_aim = false
+			wants_jump_hold = false
 			return
 	if jumping:
 		request_jump()
@@ -1226,8 +1263,19 @@ func _tick_timers(delta: float) -> void:
 
 func _apply_gravity(delta: float) -> void:
 	if is_on_floor():
+		_jump_hold = 0.0
 		return
 	var gravity := float(ProjectSettings.get_setting("physics/3d/default_gravity", 24.0))
+	# The held jump's lighter pull, while the key is still down, the Bog is
+	# still rising and the window has not run out (D-179). Any one of those
+	# failing ends it for this take-off rather than pausing it: letting go and
+	# pressing again at the top would otherwise be a second, free lift.
+	if _jump_hold > 0.0:
+		if wants_jump_hold and velocity.y > 0.0:
+			_jump_hold = maxf(0.0, _jump_hold - delta)
+			gravity *= JUMP_HOLD_GRAVITY_SCALE
+		else:
+			_jump_hold = 0.0
 	# Falling faster than rising makes a jump feel decisive rather than floaty.
 	if velocity.y < 0.0:
 		gravity *= FALL_GRAVITY_SCALE
@@ -1837,6 +1885,11 @@ func _can_dive() -> bool:
 func _dive() -> void:
 	_air_jump_spent = true
 	_jump_buffered = 0.0
+	# The dive is pressed with the key still down from the jump that opened the
+	# airtime, and DIVE_UP_VELOCITY is tuned to carry you across a gap and not
+	# over the treeline — so the hold ends here rather than lightening the
+	# gravity under a leap it was never measured with (D-179).
+	_jump_hold = 0.0
 	# Where you are asking to go, or where you are looking if you are asking for
 	# nothing. A dive with no direction at all would be a very expensive hop.
 	var direction := _wish_direction()
@@ -1882,6 +1935,12 @@ func _handle_jump() -> void:
 		_jump_chain += 1
 	velocity.y = jump_velocity() * jump_chain_scale() \
 		* (SLIDE_JUMP_IMPULSE_SCALE if from_slide else 1.0)
+	# And the window the hold can buy height in opens here, on every kind of
+	# ground take-off (D-179). A short jump and a tired one get the same deal a
+	# full one gets — the hold is a fraction of whatever this take-off was
+	# worth, so fatigue still costs what it costs and the slide jump is still
+	# the tallest thing in the game.
+	_jump_hold = JUMP_HOLD_TIME
 	# Before the emit, so anything listening already sees the new value. The
 	# animator does not use the signal — it is local-only — but it does watch
 	# this counter, on every peer.
