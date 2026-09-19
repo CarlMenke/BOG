@@ -17933,3 +17933,142 @@ open on that fetch.
   paid for with legs cycling at 41% of the body's speed.
 - **Mirroring in the rest hip plane** (D-071's line). 0.8° off the chest on a
   clip whose chest is the line the gate holds square. (BOG-16.)
+
+## D-167 — The guide line's links are built when the map will answer, not a frame before
+Every jump and drop link on every map was wrong, and the gate was green the
+whole time. `JumpLinks._try_jump` asks `NavigationServer3D.map_get_closest_point`
+where the ground across a gap is, and an unsynced navigation map answers
+`Vector3.ZERO` — not an error, not an empty value, a plausible-looking
+`Vector3` at the world origin. The `LAND_SNAP_XZ` test then passed for exactly
+those probes that happened to fall within 40 cm of the origin, so Kopje
+Crossing baked fourteen links that all ended at (0, 0, 0) and Lantern Wharf,
+whose origin is not walkable, baked none. Seven maps, twenty-eight links, all
+twenty-eight ends at the origin. The census printed "14 links" and nobody had
+reason to doubt it.
+
+**The fix is a question, not a longer wait.** D-130 already knew the map had to
+be synced: `_finish` waited a physics frame and then called `map_force_update`.
+That is one attempt, and every map in the game needs two — the frame flushes
+the server's command queue, where the region's new mesh is still sitting, and
+only the forced update *after* that builds an iteration with polygons in it. A
+guess that is one frame short on all seven maps is indistinguishable from a
+guess that works, which is why `NavBake._map_answers` no longer guesses: it
+takes a vertex of the mesh it just assigned, and loops frame-and-force until
+the map's nearest walkable point to that vertex *is* that vertex, give or take
+a cell. Twenty frames of budget, then a warning and no links rather than a
+match that hangs waiting for a drawing.
+
+**And the height gate was measuring one jump and allowing another.**
+`_reachable` took its distance from `JumpArc.leap_reach` — the jump with the
+dive spent at the apex — and its height from `JumpArc.apex()`, the plain jump
+with no dive in it. So no rise between 1.69 m and 2.30 m could be linked at
+all, which is exactly the band D-160 built Kopje Crossing's two flank climbs
+in: rungs of 1.9 and 2.1 m, named as dives in that record. The map's newest way
+to the top was the one thing the link builder refused. `leap_reach` already
+returns -1.0 above the dive's apex, so it is the only gate needed. Both climbs
+are now covered end to end and every rung is two-way.
+
+**A correct generator makes a thousand links, and most of them are not routes.**
+Every navmesh here is eroded by the agent's radius, so every rock, barrel and
+lamp post stands in a hole of its own with a border all the way round it — and
+each of those borders reads to the sampler as a gap with ground on the far
+side, because it is one. Jumping a barrel is not wrong; it is just not a route.
+So `_is_shortcut` asks the map what the *walk* between a candidate's two ends
+costs before the leap is kept, and keeps it only if it saves four metres or if
+the walk cannot get there at all. One short path query per candidate, and the
+only honest test there is: whether hopping a kerb helps depends entirely on how
+far away the ramp is, and nothing in the geometry of the kerb says. `DEDUPE`
+went to 2.0 with it, wider than `SAMPLE_STEP`, so a long kerb gets a way up
+every three metres rather than one per sample. Wharf and quarry had been
+hitting the 800 cap, which is worse than it sounds: a bake that reaches the cap
+has stopped part way through the border edges, so which half of the map got
+links is whatever order they came out of a dictionary in.
+
+**What it cost and what it bought.** 28 links across seven maps becomes 1920;
+the worst map is Lantern Wharf at 492, well under the cap. A pad-to-pad path
+query is 0.02 to 0.08 ms, unchanged in any way a client can feel. The bake
+roughly doubles — Twin Quarry 179 to 554 ms, the yacht 101 to 137 — and nothing
+waits on it: the bake is asynchronous, per peer, and the only thing later is
+the line being drawn. The routes are shorter as well as more numerous: Kopje
+Crossing's pad 1 to pad 8 went from 74.3 m walking round to 42.9 m over seven
+jumps, and Twin Quarry's from 45.1 m to 40.1 m over three — which is also the
+whole of BOG-20, whose kerbs were never conservative, only blind.
+
+**The check now says it out loud.** `nav_check` asserts per map that no link
+end sits at the world origin, that at least eight links were found, and that
+the cap was not reached, and prints one summary line — `7 maps, 1920 links, 0
+at the world origin` — for the gate to grep, because a thing that is only
+asserted when it fails is a thing that goes quiet the day it breaks. It also
+prints what a path query costs, since the links are what make one expensive.
+
+**And a picture, because counting was what missed this.**
+`tools/nav_render.tscn` stands one map up in the real arena and draws a plan of
+it: the walkable wash, every link amber for a leap and blue for a drop with a
+pip on the end it arrives at, and the first spawn pad to the last put through
+`GuidePath` so it is the polyline a player is actually shown. Fourteen links
+all ending at one point is invisible in a census and obvious in a drawing.
+
+Not done here: nobody has watched the drawn ribbon in a match, and the claim
+that the bake cannot differ between peers is structural, not measured on two
+machines.
+
+### Rejected
+
+- **Raising `MAX_LINKS` instead of thinning.** The cap is a ceiling, not a
+  budget, and it was hiding a generator that could not tell a route from the
+  outline of a barrel.
+- **Baking the links off the navmesh's own polygons rather than the map.**
+  It would sidestep the sync entirely, and it would also mean two pieces of
+  code that answer "where is the nearest walkable point".
+- **A fixed number of frames to wait.** That is what was there. It was one
+  short, on every map. (BOG-57; BOG-20 is the same bug.)
+
+## D-175 — A map that is rebuilt and not re-photographed fails the gate, and the baker is the host of what it photographs
+`tools/map_thumbs.gd` bakes the lobby carousel's seven photographs (D-162) and
+nothing noticed when a map moved and its picture did not. Baking in the gate was
+never the answer: seven arenas is the best part of a minute and it needs a real
+window, which is the one thing a gate cannot have. So the baker **stamps** each
+picture instead — a SHA-256 of what the shot was of, written into
+`art/generated/map_thumbs/stamps.json` beside the pictures — and
+`tools/thumb_check.tscn` recomputes those seven hashes headless in under a
+second and fails, naming the map and printing the one-argument run that fixes
+it. The complaint comes with the command because a gate line that says only
+"stale" is a line somebody has to open a tool's header to act on.
+
+**What a map's inputs are is the whole design, and it is narrow on purpose.** A
+static map is its scene, the `.gd` and `.tres` that scene's `ext_resource` lines
+name — its script and its environment — and anything beside that script called
+`<id>_*.gd`, which is how a map that grows a second file is covered without
+anybody adding it to a list. Plus the catalog's answers about it: the *resolved*
+`thumb_camera` row, so an edit to `MapCatalog.THUMB_CAMERA` itself moves every
+map that leans on the default, and the row's `kind` and `scene`. Deliberately
+**not** `arena.gd`, `static_map.gd`, the Bog, the theme or the `.glb`s: those are
+touched most weeks, and a check that goes red every second commit is one people
+re-bake past without looking at. What is left out is what a photograph of a map
+does not show. The hollow has no scene at all, so it is the generation code —
+`arena.gd`, `island_generator.gd`, `landmarks.gd`, `prop_scatter.gd`,
+`ambience.gd` — and the seed it is baked from (D-007); `arena.gd` is on that one
+row alone, because for a static map all it does is instance a scene and putting
+it on all seven would turn every arena edit into seven red lines.
+
+Text is hashed with CRLF folded to LF and the edges stripped, because several
+files here flip line endings depending on which tool last wrote them and that is
+not a change to a map. A **comment-only edit to a map script does** turn the
+line red. That is accepted and not worked around: the cure is one command, and
+the alternative is parsing GDScript to decide which of its bytes matter.
+
+**The baker is now the host of the match it photographs.** Offline it built each
+arena from outside any session, so `MatchState`'s arena-ready path took its
+client branch and Godot logged `RPC '_report_arena_ready' on yourself is not
+allowed` once per map. The client branch is right; the tool standing outside a
+session was wrong. `Net.start_offline()` — `tools/playthrough.gd`'s first line,
+for its reason — and the log is clean. It has a cost, which is the rest of the
+fix: as host, `MatchState` really runs a match on each map, and freeing the
+arena out from under it left it ticking a void check over Bogs that no longer
+existed. `MatchState.reset()` goes before the free, the line `capture_preview`
+already had. Seven thumbs were re-baked to stamp them.
+
+The same sweep put `tools/capture_preview.tscn` in the gate on the three maps
+that declare their own bases — Lantern Wharf, Halcyon Wake and Twin Quarry —
+where it had run only on Kopje Crossing, the one static map with none (BOG-59;
+no record of its own, it runs an existing tool on three more maps). (BOG-58.)

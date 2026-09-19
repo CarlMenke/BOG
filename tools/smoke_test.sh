@@ -1148,6 +1148,22 @@ also "range targets" "range_targets: reset zeroed every row"
 #         res://tools/capture_preview.tscn out/capture_base.png 150 safari
 check "capture match on a real map" "capture_preview: PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/capture_preview.tscn -- safari
+# And the same match on the three maps that declare their own bases. Kopje
+# Crossing above is the one static map with none — its bases are solved from the
+# spawn ring — so until now the gate had never rendered a capture on a map where
+# a person placed the base markers by hand. `playthrough` asserts those layouts
+# are sound; this is the arena standing up in the mode around them. Twin Quarry
+# is mid-remake (BOG-52) and passes on what is on disk; its needle is the
+# verdict and the map's name, so a remake cannot make it lie.
+check "capture on the wharf" "capture_preview: PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" tools/capture_preview.tscn -- wharf
+also "capture on the wharf" "capture_preview: arena for 'wharf' is up"
+check "capture on the yacht" "capture_preview: PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" tools/capture_preview.tscn -- yacht
+also "capture on the yacht" "capture_preview: arena for 'yacht' is up"
+check "capture in the quarry" "capture_preview: PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" tools/capture_preview.tscn -- quarry
+also "capture in the quarry" "capture_preview: arena for 'quarry' is up"
 # Every map bakes a navmesh the guide line can be drawn on, and you can get from
 # the first spawn pad to the last over it (the letters round). The line is local
 # and cosmetic, so nothing here is a rule — but a bake that collapses to nothing
@@ -1156,6 +1172,27 @@ check "capture match on a real map" "capture_preview: PASS" \
 check "navmesh on every map" "nav_check: PASS"     "$GODOT" --headless --path "$GODOT_ROOT" tools/nav_check.tscn
 also "navmesh on every map" "nav_check: hollow"
 also "navmesh on every map" "nav_check: range"
+# D-167. The per-map assertions only speak when they fail, and "every link ends
+# at the world origin" was a thing that failed silently while the census printed
+# a plausible number. One line, said out loud, every run.
+also "navmesh on every map" "0 at the world origin"
+# The plan of one map: walkable wash, every jump and drop link, and the pad-to-
+# pad route as `GuidePath` hands it to the ribbon (D-167). Kopje Crossing
+# because it is the parkour map and the one the links matter most on. Needs a
+# window; the picture is the point, so look at it after a layout change.
+check "the guide line's plan" "nav_render: safari" \
+    "$GODOT" --path "$GODOT_ROOT" --resolution 1000x1000 --script tools/snapshot.gd -- \
+    res://tools/nav_render.tscn "$GODOT_LOG_DIR/nav_plan.png" 300 safari
+# Every map in the lobby's carousel is still a picture of that map (D-175). The
+# thumbs are baked by hand — seven arenas and a real window, which is not a
+# thing a gate can do — so this checks the stamp each bake leaves instead: a
+# hash of the map's scene, script(s), environment and catalog row against what
+# is on disk now. Red means somebody rebuilt a map and left its photograph
+# behind, and the log says which map and the one command that fixes it. Headless
+# and instant: it reads files and renders nothing.
+check "map thumbs are current" "thumb_check: PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" tools/thumb_check.tscn
+also "map thumbs are current" "thumb_check: 7 maps, 0 stale"
 # The capture performance, measured on one Bog (the letters round). Four
 # structural claims out of one run, and each of them is a thing three files have
 # to agree about: the pouch is in the left fist (`HeldGear`), the card is *not*
