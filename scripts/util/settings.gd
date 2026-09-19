@@ -51,6 +51,10 @@ const DEFAULTS := {
 	"quality": 2,  # 0 low, 1 medium, 2 high
 	"vsync": true,
 	"fullscreen": false,
+	# The frame-rate readout in the top-left corner (D-148). A display choice
+	# like the two above it, and off by default: it is a diagnostic somebody
+	# turns on to answer a question, not part of what the game looks like.
+	"show_fps": false,
 	# tutorial — whether the B·O·G how-to-play cards have been through once on
 	# this machine. Local rather than per-lobby and per-account, because what it
 	# records is "this person has read it", and the person is the machine here:

@@ -16351,3 +16351,86 @@ itself rather than a typed 5.5 m, so a widened sweep cannot quietly bring the
 solver solves in 2D, so a pad on a slope reads a few centimetres further than it
 was allowed to be — the assertion can only be conservative, never a false pass.
 (BOG-6.)
+
+## D-148 — A frame-rate readout, off by default, hung off SceneFlow, and never in a render
+BOG-50: *"a small frame-rate readout in a corner of the HUD, off by default,
+toggled in Settings and saved in settings.cfg."*
+
+**It is `SceneFlow`'s child, not the HUD's.** The question it answers — is this
+machine keeping up — is asked on the menu, in the lobby and in a match, and
+`SceneFlow` is the only node on screen for all three: `layer = 128`,
+`PROCESS_MODE_ALWAYS`, and it survives every scene change. One counter, in one
+place, that can only be wrong once; on the HUD it would have been one of three
+copies. It is added before the fade and the loading card so both draw over it —
+a readout is something you look past, not something a transition works around.
+Top left, the one corner a match leaves empty (clock centred, minimap top right,
+kill feed and chat bottom left, ability bar bottom right), dim white with a
+one-pixel shadow rather than a plate, because it sits over sky, grass and menu
+glass in turn. Rewritten twice a second (`REFRESH 0.5`): a number that changes
+sixty times a second cannot be read, and half a second still shows a stutter as
+a dip.
+
+**`show_fps` in `settings.cfg`, off by default**, beside V-Sync and Fullscreen
+as one more per-machine display choice, with a `CheckButton` in the panel's
+Video section. Nothing applies it — the readout watches the setting itself, so
+there is no third place to forget — and "Reset to defaults" clears it with
+everything else. It is asked every frame rather than wired to `Settings.changed`
+because the suppression below is a second answer that no signal carries.
+
+**No render carries it, whatever this machine's settings say.** A preview or
+gate shot has to look the same everywhere and `settings.cfg` is the one input to
+a render that is not in the repository, so `tools/snapshot.gd` sets
+`Engine.set_meta("bog_no_fps_readout", true)` before it instances anything.
+Metadata, and the string written out again rather than read off
+`FpsCounter.SUPPRESS_META`, for a trap this found the hard way: a `--script`
+main loop is compiled **before the autoloads are registered**, so naming
+`FpsCounter` in `snapshot.gd` pulled `Settings` into that compile, the whole
+tool failed to load, and it went on to render `snapshot.png` into the repository
+root while ignoring the arguments it was given — every gate render, silently
+wrong. Autoloads do exist at *runtime* in those runs, which is exactly why the
+trap is invisible until something names one at compile time.
+
+**Checked rather than looked at.** `tools/fps_readout.tscn` — a scene and not a
+`--script`, for `grip_poses.gd`'s reason — asserts the four things the ticket
+asks for: off out of the box, a counter wherever `SceneFlow` is, following the
+setting in both directions with a real frame rate in the label and surviving a
+reload of `settings.cfg`, and hidden under the render tools' flag even with the
+setting on. It puts back the value it found, because `Settings` saves on every
+change and there is no way to move a setting without moving the file.
+
+## D-149 — The fist gets a clip and a glyph of its own, because borrowing the sword's made it sound like one
+D-124 gave the punch everything but a voice. It landed on
+`AudioDirector.SWORD_HIT_BODY` — a metre of steel, 0.40 s with four bending
+modes ringing in it — and it drew the default `⟶` in the kill feed, which is
+the mark for a thing that flew at you. Both were placeholders nobody had gone
+back for, and between them they told the player two lies about the same blow:
+that it was worth what a sword is worth, and that somebody had speared them
+while holding nothing at all.
+
+**`fist_hit` is the smallest impact in the library and is built to say so.**
+Two layers and no third: a mid-band `slap`, `range_plate`'s band-split noise
+taken down to knuckles and gone in twenty milliseconds, which is what makes it
+read as skin rather than as anything with an edge; and a `thump` running 205
+down to 105 Hz where `spear_hit_body` runs 150 down to 62 — higher at the top
+and, the part that matters, higher at the bottom, because a light thing
+stopping in flesh never reaches the floor a heavy one does. No ring, which is
+the whole of the difference from the sword: nothing about a fist is stiff
+enough to ring. No tail either, because nothing follows through — the arm is
+back on `BogCombat.PUNCH_CYCLE`. 0.16 s, the second-shortest clip in the file
+after `range_plate`, and short for that clip's reason as well as for honesty:
+five punches kill at two a second, so this is heard ten times in a fist fight
+and anything longer would overlap itself.
+
+**`✊` in the feed, for `⚔`'s argument one step further in.** The sword got a
+mark instead of an arrow because nothing flew and the feed is where a player
+finds out somebody got that close; a fist is that and also the one kill in
+this game that took five blows and no weapon. The kit still has no icon font,
+so this is the theme's `SystemFont` falling through to the platform's emoji
+face — it draws in colour rather than in the feed's amber, which is the one
+respect in which it is unlike its four neighbours, and it is near enough the
+amber to sit quietly beside them. `tools/hud_range.gd`'s `killfeed` mode
+stages a fist kill as its fifth row — `KillFeed.MAX_ROWS` exactly — so the
+reference shot carries it.
+
+Nothing else moved. `Bog.Cause.FIST`, `RangeStats` having no row for it, and
+the `"fist"` on `weapon_launched` are all D-124's and all untouched. (BOG-7.)

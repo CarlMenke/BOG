@@ -30,6 +30,18 @@ func _initialize() -> void:
 	Engine.max_fps = int(ProjectSettings.get_setting(
 		"physics/common/physics_ticks_per_second", 60))
 
+	# No preview or gate render carries the frame-rate readout, whatever this
+	# machine happens to have switched on in Settings (D-148). A shot has to look
+	# the same everywhere, and `settings.cfg` is the one input to a render that
+	# is not in the repository.
+	#
+	# Engine metadata rather than a call on `FpsCounter`, and the string written
+	# out rather than its constant: a `--script` main loop is compiled *before*
+	# the autoloads are registered, so naming that class here would pull
+	# `Settings` into this compile and fail the whole tool — which is exactly
+	# what the first version of this line did.
+	Engine.set_meta("bog_no_fps_readout", true)
+
 	var args := OS.get_cmdline_user_args()
 	if args.size() < 2:
 		push_error("snapshot.gd: expected <scene.tscn> <out.png> [warmup_physics_ticks]")

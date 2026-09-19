@@ -28,6 +28,10 @@ signal scene_ready(path: String)
 var current_scene_path: String = ""
 
 var _fade: ColorRect
+## The frame-rate readout (D-148). It lives here because this is the only node
+## that is on screen in the menu, in the lobby and in a match alike; `SceneFlow`
+## does not otherwise talk to it.
+var _fps: FpsCounter
 var _loading: Control
 var _loading_title: Label
 var _loading_hint: Label
@@ -42,6 +46,12 @@ var _cursor_holds: Dictionary = {}
 func _ready() -> void:
 	layer = 128
 	process_mode = Node.PROCESS_MODE_ALWAYS
+
+	# First, so the fade and the loading card are drawn over it: a frame-rate
+	# readout is something you look past, not something a transition has to work
+	# around (D-148).
+	_fps = FpsCounter.new()
+	add_child(_fps)
 
 	_fade = ColorRect.new()
 	_fade.color = Color(0.016, 0.02, 0.031, 1.0)

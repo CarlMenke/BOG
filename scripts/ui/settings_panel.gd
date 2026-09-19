@@ -175,6 +175,9 @@ func _build() -> void:
 	_choice_row("Quality", "quality", ["Low", "Medium", "High"])
 	_toggle_row("V-Sync", "vsync")
 	_toggle_row("Fullscreen", "fullscreen")
+	# The readout itself is `SceneFlow`'s child and watches the setting, so there
+	# is nothing to apply here (D-148).
+	_toggle_row("FPS counter", "show_fps")
 
 	_section("Network")
 	_text_row("Public address", "public_address", "name.at.ply.gg:41235")
