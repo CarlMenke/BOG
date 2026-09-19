@@ -28,17 +28,36 @@
 ; the pads at eye height — read back by eye, in `rust_env.tres`'s tradition.
 ;
 ;   * **ALL ambient still comes from the sky** (`ambient_light_source = 3`,
-;     contribution 1.0). **1.15, up from the dusk pass's 0.62 and a long way from
-;     the night's 8.0.** The 8.0 was a multiplier on a night sky whose radiance
-;     cubemap averages near-black; 0.62 was that number made honest under an
-;     apricot skyline; 1.15 is it made honest again under a blue one, which
-;     carries less energy near the horizon than a sunset does and therefore needs
-;     more of this knob, not less. The
+;     contribution 1.0). **1.36, up from 1.15, and up from the dusk pass's 0.62
+;     and a long way from the night's 8.0.** The 8.0 was a multiplier on a night
+;     sky whose radiance cubemap averages near-black; 0.62 was that number made
+;     honest under an apricot skyline; 1.15 is it made honest again under a blue
+;     one, which carries less energy near the horizon than a sunset does and
+;     therefore needs more of this knob, not less. The
 ;     ambient is no longer most of what the peat is lit by — that is the real
 ;     change of the hour. A key at 32 degrees lands sin(32) = 53.0% of itself on
 ;     a horizontal surface against sin(9)'s 15.6%, so the sun does the ground now
 ;     and the ambient does the shaded faces, which is the right way round and is
 ;     what makes a 1.25 m block read as a block.
+;
+;     **1.36 is D-169's, and it is the one knob that reaches a surface facing
+;     *down*.** The key lights tops and north-north-east faces; `range.tscn`'s
+;     `Clouds` fill lights everything facing up or south-south-west; the
+;     underside of the lodge roof over the eight spawn pads faces neither, and
+;     this dome — specifically its lower hemisphere, which `range_sky.tres`
+;     lifted and cooled in the same pass — is all it has ever had. Measured in the
+;     hall (`tools/range_views -- hall`, the frame the rack move is judged on):
+;     the share of it at literal black went **6.6% to 0.0%** and its median 30 to
+;     44 of 255, with the share blown out unchanged at 0.1%. The key came down
+;     3.0 → 2.25 at the same time, so this is not a brighter picture with the
+;     same shape in it: it is the same total light with less of it arriving warm
+;     and from one direction.
+;
+;     `ambient_light_color` is (0.78, 0.8, 0.9) and **is not used**, because
+;     `ambient_light_sky_contribution` is 1.0 and the sky is therefore 100% of
+;     it. It is kept in step with the fill anyway — it is what this environment
+;     would fall back to if anyone ever dialled the contribution off the dome,
+;     and a stale value there is a trap laid for whoever does.
 ;   * **Volumetric fog 0.0025, down from the dusk pass's 0.0035 and the night's
 ;     0.010.** Thinner again for the reason it was thinned the first time: there
 ;     is more light in the air to pick it up, and a range you cannot see the far
@@ -77,7 +96,7 @@
 ;     casts a 2.0 m shadow of its own, so the contact darkening can stand back
 ;     and let the real shadow do it. At 2.2 it was taking the unlit underside of
 ;     the lodge roof to literal zero over the eight spawn pads; see
-;     `range.tscn`'s `Bounce` for the other half of that fix.
+;     `range.tscn`'s `Clouds` for the other half of that fix.
 ;   * `adjustment_saturation` back to 1.0 from 1.1. The night needed a push; a
 ;     lit sky through an ACES tonemap does not, and at 1.1 the peat went magenta
 ;     under the sunset and goes orange under this one.
@@ -92,9 +111,9 @@ background_mode = 2
 sky = ExtResource("1_range_sky")
 background_energy_multiplier = 1.0
 ambient_light_source = 3
-ambient_light_color = Color(0.7, 0.76, 0.86, 1)
+ambient_light_color = Color(0.78, 0.8, 0.9, 1)
 ambient_light_sky_contribution = 1.0
-ambient_light_energy = 1.15
+ambient_light_energy = 1.36
 reflected_light_source = 2
 tonemap_mode = 3
 tonemap_exposure = 1.0

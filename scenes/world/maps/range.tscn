@@ -31,7 +31,7 @@
 ;                (`range_env.tres`). See that file for what each knob did at
 ;                dusk and where it went when the sun came up.
 ;   Sun          **thirty-two degrees up and north-north-east** — thirty degrees
-;                east of north — at 3.0 energy in a pale warm white. The sky's
+;                east of north — at 2.25 energy in a near-white. The sky's
 ;                disc follows this node (`sun_follow_light` in `range_sky.tres`),
 ;                so what you can see in the sky and where the shadows point can
 ;                never disagree. Serialised ROW-major, as every `.tscn` stores a
@@ -55,20 +55,33 @@
 ;                not move with it**, and the section below is why: it is the
 ;                number with the argument under it.
 ;
-;                **3.0 and not 4.2.** Elevation did most of this, not energy: a
-;                key lands sin(elevation) of itself on a horizontal surface and
-;                this whole map is horizontal surface, so nine degrees put 15.6%
-;                of 4.2 down (0.66) and thirty-two puts 53.0% of 3.0 down (1.59).
-;                That is **2.4 times the key light on the peat off a lamp a third
-;                smaller**, and the top-down render says the same thing from the
-;                other end: the open peat's median luminance went 27 to 58 of 255
-;                and the west lanes' 27 to 66. It sits a third over Kopje
-;                Crossing's noon (1.3 at 64 degrees, 1.17), which is right rather
-;                than greedy — Kopje is pale sand and this is wet peat at 0.21
-;                albedo, and the same light off a floor a third as reflective is
-;                not the same picture. Left at 4.2 the bog blew chalky.
-;   Bounce       a second, shadowless directional light from the south-south-west
-;                at -6 degrees, and now at a third of what it was. See the node.
+;                **2.25, and it was 3.0 and 4.2 before that.** Elevation did most
+;                of the work when the sun came up, not energy: a key lands
+;                sin(elevation) of itself on a horizontal surface and this whole
+;                map is horizontal surface, so nine degrees put 15.6% of 4.2 down
+;                (0.66) and thirty-two puts 53.0% of 3.0 down (1.59) — 2.4 times
+;                the key on the peat off a lamp a third smaller. 3.0 was then too
+;                much of a good thing: the owner played it and said *"the suns
+;                lights is too strong and too powerful … the whole scene reads
+;                orange"* (D-169). It is 2.25 now — a quarter off — and 53.0% of
+;                that is 1.19 on the peat. What replaces the missing 0.40 is the
+;                `Clouds` fill below and a sixth more sky ambient, which is the
+;                half of the complaint that is about colour rather than about
+;                strength: the same light on the ground, less of it arriving warm
+;                and from one direction. The colour came off the amber with the
+;                energy: (1, 0.91, 0.78) is a low sun seen through six airmasses,
+;                and a sun thirty-two degrees up is barely reddened at all, so it
+;                is (1, 0.945, 0.88). Kopje Crossing's noon is 1.3 at 64 degrees
+;                (1.17 on the flat) over pale sand; this is wet peat at 0.21
+;                albedo, so 1.19 off a floor a third as reflective is the same
+;                picture, not a darker one — and the top-down render agrees, with
+;                the open peat's median at 59.8 of 255 against the 58.5 a 3.0 sun
+;                left it at.
+;   Clouds       a second, shadowless directional light from the south-south-west
+;                — the same bearing the old `Bounce` came from, swung from six
+;                degrees **under** the horizon to twenty-four **over** it, in a
+;                near-white with a purple-blue cast at 0.68. It was a bounce off
+;                the peat and it is light off the cloud deck. See the node.
 ;
 ;   Spawns       filled by the script: eight pads on the lodge deck, two rows of
 ;                four, all facing north up the range. The deck is 24 m wide
@@ -167,8 +180,8 @@ environment = ExtResource("2_range_env")
 
 [node name="Sun" type="DirectionalLight3D" parent="."]
 transform = Transform3D(-0.866025, -0.26496, 0.424024, 0, 0.848048, 0.529919, -0.5, 0.458924, -0.734431, 0, 40, 0)
-light_color = Color(1, 0.91, 0.78, 1)
-light_energy = 3.0
+light_color = Color(1, 0.945, 0.88, 1)
+light_energy = 2.25
 light_specular = 0.3
 light_volumetric_fog_energy = 0.25
 shadow_enabled = true
@@ -177,39 +190,70 @@ directional_shadow_mode = 1
 directional_shadow_max_distance = 120.0
 directional_shadow_blend_splits = true
 
-; The bounce, still load-bearing and now doing a third of the work it did. The
-; key light reaches exactly two kinds of surface at any elevation: the tops of
-; things and their north-north-east faces. Everything else on the map — every
-; south face a shooter at a firing line is looking at, the underside of the
-; lodge roof the eight pads stand under, the inside of the melee pit, the
-; shaded half of every 1.25 m block — is lit by the sky ambient alone, and at
-; nine degrees the first eye-height renders came back with eleven to sixteen per
-; cent of the two back pads' frames at literal black. Kopje Crossing made the
-; same argument for the same reason under a *noon* sun over pale sand (D-061)
-; and the answer is the same one: a shadowless directional light almost
-; anti-parallel to the Sun, warm, at a fraction of its energy.
+; The fill, and it is now **the thing the owner asked for by name** (D-169):
+; *"there is a purple blue ish coming from the clouds to counter the orange …
+; it should be gentle and mostly white, but it should be as if the sun light is
+; coming off the clouds in that cooler color."* It was called `Bounce` for two
+; passes because that is what it modelled — light off ninety metres of wet peat,
+; arriving from *under* the horizon behind you, warm because peat is warm. That
+; is a real thing and it was the wrong thing to lean on here: a warm fill under
+; a warm key is why the whole scene read orange, and a bounce off brown ground
+; can only ever make more brown.
 ;
-; **0.15 rather than 0.45**, because the sky that feeds the ambient is now a lit
-; day dome rather than a sunset and `range_env.tres`'s ambient went 0.62 to 1.15
-; with it. A bounce sized against a night's fill is a second sun under a day's,
-; and a second sun flattens the very silhouette the off-axis key is bought for.
-; What it is still here for is the one surface the sky cannot reach: the
-; underside of the lodge roof over the eight spawn pads.
+; The job it does has not changed, and it is the reason a fill exists at all.
+; The key reaches exactly two kinds of surface at any elevation: the tops of
+; things and their north-north-east faces. Everything else on the map — every
+; south face a shooter at a firing line is looking at, the deck the eight pads
+; stand on under the lodge roof, the inside of the melee pit, the shaded half of
+; every 1.25 m block — is lit by fill alone, and at nine degrees the first
+; eye-height renders came back with eleven to sixteen per cent of the two back
+; pads' frames at literal black. Kopje Crossing made the same argument under a
+; *noon* sun over pale sand (D-061). The answer is still a shadowless
+; directional almost anti-parallel to the Sun at a fraction of its energy; what
+; changed is **where it comes from and what colour it is**.
+;
+; **Twenty-four degrees up, not six down.** Same bearing — south-south-west,
+; 210 degrees, dead opposite the key, which is what puts it on every face the
+; key misses — swung 30 degrees up through the horizon. A cloud deck is
+; overhead, so light off one arrives from above; and because this light casts no
+; shadow, from above it also lands on the lodge deck, which the roof holds in the
+; key's shadow all day. That is what took the hall out of being a black box cut
+; into a bright field (D-169's measurements are in the record).
+;
+; **(0.84, 0.82, 1.0) at 0.68.** Mostly white, with rather more blue than red and
+; a shade more red than green, which is the "purple blue ish" of the ask rather
+; than a cyan one: a violet cast subtracts from the peat's orange where a cyan
+; one would subtract from its red and turn it grey. 0.68 is 30% of the key's
+; 2.25, and both numbers were found together by rendering: at 0.55 against a 2.1
+; key the picture was right and the ground had lost three points of median, so
+; the pair came up until the top-down render put the open peat back over D-135's
+; 58 of 255 (it reads 59.8). What the colour bought at the same time, measured
+; on a body 15 m down the middle lane: red and blue went 114/31 to 145/51 — a
+; third more light on it and half the cast off it, which is the difference
+; between a target that reads as amber and one that reads as lit. It is a fill
+; and not a second sun because the key is more than three times it and casts
+; every shadow on the map; this one casts none and has `light_specular = 0`, so
+; it adds no second highlight to anything.
 ;
 ; **`sky_mode = 1` (LIGHT_ONLY) is not optional.** `range_sky.gdshader` follows
 ; LIGHT0 for the sun disc and the glory (`sun_follow_light`), and a second light
 ; that reaches the sky can take LIGHT0 — the disc would jump to the
 ; south-south-west and disagree with every shadow on the map. D-061 records the
-; same trap.
+; same trap. It matters more now than it did: a fill above the horizon is a far
+; more plausible LIGHT0 than one below it was.
 ;
-; It comes from the south-south-west at **-6 degrees**, which is to say from
-; under the horizon behind you: bounce off ninety metres of wet peat arrives
-; from below, and a light at +6 would be a second sun. 0.15 against the key's
-; 3.0.
-[node name="Bounce" type="DirectionalLight3D" parent="."]
-transform = Transform3D(0.8659, -0.05042, -0.4977, 0, 0.99492, -0.1008, 0.5002, 0.08728, 0.8615, 0, 30, 0)
-light_color = Color(1, 0.78, 0.62, 1)
-light_energy = 0.15
+; Serialised ROW-major like every `.tscn` `Transform3D`, and for once that is
+; checked rather than asserted: `range_map._check_sun_and_sky` prints this
+; node's elevation and bearing out of the built scene beside the Sun's, because
+; the transpose bug that put the Sun 59.6 degrees from where it was meant to be
+; is exactly the bug a hand-written basis invites. The light's own -Z — where
+; the light *goes* — is (+0.457, -0.407, -0.791), so it comes from
+; (-0.457, +0.407, +0.791): 24.0 degrees up on a bearing 210.0 degrees east of
+; north.
+[node name="Clouds" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866025, 0.203369, -0.456773, 0, 0.913564, 0.406737, 0.5, -0.352244, 0.791175, 0, 30, 0)
+light_color = Color(0.84, 0.82, 1, 1)
+light_energy = 0.68
 light_specular = 0.0
 shadow_enabled = false
 sky_mode = 1

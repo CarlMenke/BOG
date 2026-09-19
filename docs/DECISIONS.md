@@ -18072,3 +18072,103 @@ The same sweep put `tools/capture_preview.tscn` in the gate on the three maps
 that declare their own bases — Lantern Wharf, Halcyon Wake and Twin Quarry —
 where it had run only on Kopje Crossing, the one static map with none (BOG-59;
 no record of its own, it runs an existing tool on three more maps). (BOG-58.)
+
+## D-169 — The range's sun comes down a quarter and its fill swings up over the horizon, purple-blue, off the clouds
+The owner, after playing the range by day: *"in the practice range, the suns
+lights is too strong and too powerful. the lighting should be adjusted so that
+the suns light is reduced, and there is a purple blue ish coming from the
+clouds to counter the orange feeling ... it should be gentle and mostly white,
+but it should be as if the sun light is coming off the clouds in that cooler
+color."*
+
+**Two complaints in one sentence, and only one of them is about strength.** The
+key came down **3.0 → 2.25** (sin 32° of it on the flat: 1.59 → 1.19) and off
+the amber, **(1, 0.91, 0.78) → (1, 0.945, 0.88)** — a low sun is seen through
+six airmasses and one thirty-two degrees up through about two, so the old
+colour was a sunset's borrowed by a morning. The disc and its glory came down
+with it in `range_sky.tres`: `sun_energy` **18 → 14**, `sun_aureole_energy`
+**0.85 → 0.70**. D-135's **32° on a bearing 30° east of north did not move**,
+because that number is the one with the argument under it — every lane runs due
+north and the disc has to stay out of the archer's sight picture.
+
+**The other complaint was the fill, and the fill was the orange.** The map had a
+`Bounce`: a shadowless `LIGHT_ONLY` directional from the south-south-west at
+**-6 degrees**, warm, modelling light off ninety metres of wet peat arriving
+from under the horizon behind you. That is a real thing and it was the wrong
+thing to lean on, for the reason the owner is describing without naming it — a
+warm fill under a warm key can only make more brown, and it was arriving on
+exactly the surfaces that had nothing else. It is now `Clouds`: **the same
+bearing, 210°, swung 30 degrees up through the horizon to +24**, in
+**(0.84, 0.82, 1.0) at 0.68**. Mostly white, more blue than red and a shade
+more red than green — a violet cast subtracts from the peat's orange where a
+cyan one would subtract from its red and turn it grey. 210° is not a taste: it
+is dead opposite the key, so the light lands on every face the key misses,
+which is every face a shooter at a firing line is looking at. `sky_mode = 1`
+stays and matters more than it did — a fill above the horizon is a far more
+plausible `LIGHT0` for `sun_follow_light` to steal than one below it was.
+
+**The sky had to agree, because the fill is now said to come off it.** Ambient
+still comes 100% off the dome and went **1.15 → 1.36**; the clouds went
+brighter (`puff_body_color` (0.93, 0.94, 1.0), `puff_energy` 1.35 → 1.45) and
+their shadow side went properly violet, **(0.38, 0.44, 0.60) → (0.55, 0.53,
+0.70)** — it is the *shadow* colour that governs what a sky looks like from the
+ground, because `puff_belly` 1.0 mixes the whole underside toward it and a
+standing Bog sees mostly undersides. The first attempt at (0.47, 0.46, 0.68)
+came back a lavender sky rather than a white one with a lavender cast; this is
+the paler number. The dome's lower hemisphere — which is not scenery, it is the
+only light reaching anything facing down — went from peat brown
+((0.62, 0.52, 0.42) over (0.40, 0.33, 0.28)) to **(0.64, 0.61, 0.64) over
+(0.50, 0.48, 0.55)**: lifted and neutral, so the hall's ceiling stopped being
+both the darkest thing in frame and the orangest.
+
+**Every number was found by rendering, at four cameras a player actually
+stands at**, and `tools/range_light.gd` is the tool that stands them up —
+`range_views` only photographs the deck, and the complaint is about the open
+bog. Medians out of 255 over a fixed patch, before → after: the open peat in
+the top-down render **58.5 → 59.8**, which is the floor D-135 set and the
+reason the pair came up from a first pass at a 2.1 key and a 0.55 fill that had
+lost three points of it; a body 15 m down the middle lane **114/64/31 →
+145/90/51**, a third more light on it with half the cast off it; a body at 45 m
+106 → 123 against peat that stayed at 55, which is D-119's question answered
+better than it was; the west bank's shaded face 29 → 39.
+
+**And the lodge, which the rack move (D-161) made a room.** With the racks and
+the wells indoors the hall is the one enclosed space on the map, and a room lit
+by ambient alone under a brightened sky is a black box cut into a white field.
+It was: the deck in the roof's shadow read **16 of 255** and the rafters 8.
+Because `Clouds` casts no shadow, aiming it from above puts it on the deck the
+roof holds in the key's shadow all day — deck **16 → 25**, rafters **8 → 16**,
+and on the whole `range_views -- hall` frame the share of pixels at literal
+black went **6.6% → 0.0%** with the share blown out unchanged at 0.1%. The
+wells' omnis are not touched and are not blown.
+
+**The fill's basis is checked, not asserted.** `range_map._check_sun_and_sky`
+gained `_check_fill`, printing `fill 24.0 deg up, bearing 210.0 deg E of N
+(0.0 off design)` out of the built scene beside the sun's line. One
+`Transform3D` typed by hand into a `.tscn` — which stores the basis's three
+*rows* — is exactly the bug that put this map's Sun 59.6 degrees from where it
+was meant to be for a whole pass, and a fill aimed wrong would look plausible
+and be wrong.
+
+Not looked at under the new fill: the melee pit's interior, the parkour course,
+the ability yard and the gallery.
+
+### Rejected
+
+- **Doing it with ambient alone.** Ambient reaches every surface at every
+  normal, so it lifts the shaded faces and the lit ones together and flattens
+  the very silhouette the off-axis key is bought for. The directional half is
+  what makes a south face read as a *lit* south face rather than as a brighter
+  hole.
+- **Keeping the fill under the horizon and only recolouring it.** A cool bounce
+  off brown peat is a lie about where the light came from, and it would have
+  left the lodge deck exactly as dark as it was — a light at -6 degrees misses
+  every up-facing surface on the map.
+- **Taking the key to 2.1.** The picture was right and the open peat's median
+  came back 55.8, under D-135's 58, which is the number that says the ground
+  has not gone back to being dark. The key and the fill came up together until
+  it cleared.
+- **`adjustment_saturation` below 1.0.** It would have taken the orange out of
+  the peat in one move and taken it out of the torches, the letter cards and
+  the red MegaKit dressing with it. The complaint is about the light, so the
+  fix is in the lights. (BOG-26.)

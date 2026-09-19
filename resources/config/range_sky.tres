@@ -20,6 +20,14 @@
 ; blazing sunward rim is a low-sun feature: at thirty-two degrees you see a
 ; cloud's lit *top*, not its edge.
 ;
+; **Then the owner played it and said the whole scene read orange** (D-169), and
+; the answer to that is half here and half in `range.tscn`. The half here: the
+; disc and its glory came down with the key, the clouds went brighter and their
+; shadow side went properly violet, the haze went a shade cooler, and the lower
+; hemisphere — which is the map's fill on everything facing down — stopped being
+; peat brown. The map's fill is now *said* to come off these clouds, so the
+; clouds have to look like something that could have cast it.
+;
 ; The shader is `range_sky.gdshader`. Its header carries the argument for why
 ; the clouds are a **stylised 2D field on the dome** rather than the marched
 ; heightfield Kopje uses; the short of it is that a slab seen edge-on from eye
@@ -42,10 +50,22 @@
 ;                         through about six times the air a noon one is and
 ;                         wanted a wide aureole; a thirty-two-degree sun is seen
 ;                         through about two, so the glory tightens toward the
-;                         noon map's. 0.85 energy either way.
-;   the disc              `sun_energy` 18.0, up from the dusk pass's 9.0 and
-;                         still under Kopje's 22: a sun this high is barely
-;                         reddened by what it comes through.
+;                         noon map's. `sun_aureole_energy` **0.70, down from
+;                         0.85** with the key (D-169): the glory is how big the
+;                         sun *looks*, and a softer sun that still burned a hole
+;                         in the sky around itself would be a softer sun nobody
+;                         believed.
+;   the disc              `sun_energy` **14.0, down from 18.0** and now well
+;                         under Kopje's 22. This is the one number in the file
+;                         the owner can see directly — *"the suns lights is too
+;                         strong"* is a sentence about a picture, and the
+;                         picture has the disc in the top-right corner of it. It
+;                         is still four times the glow threshold, so it still
+;                         blooms; it no longer blooms across a sixth of the
+;                         frame. `sun_color` and `sun_aureole_color` came off
+;                         the amber with `range.tscn`'s `Sun` and for the same
+;                         reason — a sun thirty-two degrees up is seen through
+;                         about two airmasses and is barely reddened at all.
 ;                         `sun_angular_size` **0.016 rather than 0.021** — a low
 ;                         sun reads bigger than it is and a high one does not, so
 ;                         this is Kopje's number now.
@@ -84,6 +104,29 @@
 ;                         sunward edge of a cloud was most of what you saw of
 ;                         it; at thirty-two it is the top, so the rim steps back
 ;                         and `puff_light` does the work.
+;   their colour          and this is D-169's, because the map's fill is now
+;                         said to come *off* these clouds (`range.tscn`'s
+;                         `Clouds`) and a fill has to come off something that
+;                         looks like it could have cast it. `puff_body_color`
+;                         (0.93, 0.94, 1.0) and `puff_energy` **1.45 from
+;                         1.35**: a cumulus lit from above at midday is the
+;                         brightest thing in a landscape after the sun, and at
+;                         1.35 in a faintly blue white these read as pale smoke.
+;                         `puff_shadow_color` **(0.55, 0.53, 0.70) from
+;                         (0.38, 0.44, 0.60)** — brighter, and violet rather
+;                         than slate: red now leads green by a hair, which is
+;                         the difference between a shadow that reads purple-blue
+;                         and one that reads teal. It is the shadow side and not
+;                         the body that governs what the sky looks like from the
+;                         ground, because `puff_belly` 1.0 mixes the whole
+;                         underside toward it and a standing Bog sees mostly
+;                         undersides — which is why the first pass at
+;                         (0.47, 0.46, 0.68) came back with a lavender sky
+;                         instead of a white one with a lavender cast, and why
+;                         this is the paler number. That colour is the answer to
+;                         *"a purple blue ish coming from the clouds"* in the
+;                         sky itself, and the directional fill is the same
+;                         colour arriving on the ground.
 ;   the second layer      the same field at `puff2_scale` 1.6 and its own patch,
 ;                         at 0.6 opacity: the small fair-weather cumulus between
 ;                         and under the big ones. One layer at any coverage is
@@ -101,7 +144,18 @@
 ;                         100% of its ambient from this dome, so the bottom half
 ;                         of it is the only light reaching anything that faces
 ;                         down — the lodge roof over the eight spawn pads most
-;                         of all. It was lifted twice for exactly that.
+;                         of all. It was lifted twice for exactly that, and a
+;                         third time in D-169: **(0.64, 0.61, 0.64) over
+;                         (0.50, 0.48, 0.55)**, from a saturated peat brown
+;                         ((0.62, 0.52, 0.42) over (0.40, 0.33, 0.28)). Brown
+;                         was the honest colour of light off ninety metres of
+;                         wet peat and it was also the last warm fill on the
+;                         map, arriving on precisely the surfaces that had
+;                         nothing else — so the hall's ceiling was both the
+;                         darkest thing in frame and the orangest. Lifted and
+;                         swung to a neutral grey with a violet floor it is the
+;                         same light, a third more of it, agreeing with the
+;                         `Clouds` fill instead of fighting it.
 ;
 ; INCREMENTAL, like every sky here: nothing in it moves fast enough for one
 ; radiance mip a frame to be visible.
@@ -117,28 +171,28 @@ shader_parameter/mid_color = Color(0.72, 0.79, 0.88, 1)
 shader_parameter/mid_height = 0.38
 shader_parameter/mid_width = 0.5
 shader_parameter/mid_energy = 0.12
-shader_parameter/ground_horizon_color = Color(0.62, 0.52, 0.42, 1)
-shader_parameter/ground_bottom_color = Color(0.4, 0.33, 0.28, 1)
+shader_parameter/ground_horizon_color = Color(0.64, 0.61, 0.64, 1)
+shader_parameter/ground_bottom_color = Color(0.5, 0.48, 0.55, 1)
 shader_parameter/ground_falloff = 0.16
 shader_parameter/sky_energy = 1.0
-shader_parameter/haze_color = Color(0.92, 0.93, 0.92, 1)
+shader_parameter/haze_color = Color(0.91, 0.92, 0.95, 1)
 shader_parameter/haze_energy = 0.22
 shader_parameter/haze_band = 0.11
 shader_parameter/haze_power = 2.4
 shader_parameter/sun_direction = Vector3(0.424024, 0.529919, -0.734431)
 shader_parameter/sun_follow_light = true
-shader_parameter/sun_color = Color(1, 0.94, 0.84, 1)
-shader_parameter/sun_energy = 18.0
+shader_parameter/sun_color = Color(1, 0.96, 0.9, 1)
+shader_parameter/sun_energy = 14.0
 shader_parameter/sun_angular_size = 0.016
-shader_parameter/sun_aureole_color = Color(1, 0.93, 0.8, 1)
-shader_parameter/sun_aureole_energy = 0.85
+shader_parameter/sun_aureole_color = Color(1, 0.95, 0.87, 1)
+shader_parameter/sun_aureole_energy = 0.7
 shader_parameter/sun_aureole_falloff = 170.0
 shader_parameter/sun_wash = 0.22
 shader_parameter/puff_sun_color = Color(1, 0.98, 0.94, 1)
-shader_parameter/puff_body_color = Color(0.9, 0.92, 0.96, 1)
-shader_parameter/puff_shadow_color = Color(0.38, 0.44, 0.6, 1)
-shader_parameter/puff_rim_color = Color(1, 0.97, 0.91, 1)
-shader_parameter/puff_energy = 1.35
+shader_parameter/puff_body_color = Color(0.93, 0.94, 1, 1)
+shader_parameter/puff_shadow_color = Color(0.55, 0.53, 0.7, 1)
+shader_parameter/puff_rim_color = Color(1, 0.97, 0.94, 1)
+shader_parameter/puff_energy = 1.45
 shader_parameter/puff_coverage = 0.68
 shader_parameter/puff_softness = 0.045
 shader_parameter/puff_scale = 1.5

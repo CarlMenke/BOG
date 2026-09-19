@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://cq7vw8rangelight1"]
+
+[ext_resource type="Script" path="res://tools/range_light.gd" id="1"]
+
+[node name="RangeLight" type="Node3D"]
+script = ExtResource("1")

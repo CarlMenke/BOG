@@ -611,8 +611,22 @@ func _ready() -> void:
 ## rather than being trusted: `SUN_ELEVATION` and `SUN_BEARING` are what the
 ## transform is derived from, this reads the transform back, and the gate greps
 ## the line.
+##
+## **And the fill is read back the same way now** (D-169). It used to be a
+## `Bounce` six degrees under the horizon, where a basis written wrong would have
+## shown up as a slightly odd picture and nothing more. It is a `Clouds` light
+## twenty-four degrees *over* it at nearly four times the energy, doing the work
+## that stops the hall being a black box, and a transposed basis there would aim
+## it somewhere plausible-looking and wrong — which is the exact shape of the bug
+## this function was written for. One `Transform3D` typed by hand deserves one
+## line of arithmetic read back out of the scene.
 const SUN_ELEVATION := 32.0
 const SUN_BEARING := 30.0
+## Where the fill comes from, and it is not a free choice: 210 is dead opposite
+## `SUN_BEARING`, so the light lands on every face the key misses, and 24 up is
+## a cloud deck rather than a bounce off the peat.
+const FILL_ELEVATION := 24.0
+const FILL_BEARING := 210.0
 
 func _check_sun_and_sky() -> void:
 	var sun := get_node_or_null("Sun") as DirectionalLight3D
@@ -626,6 +640,7 @@ func _check_sun_and_sky() -> void:
 	var off := absf(elevation - SUN_ELEVATION) + absf(bearing - SUN_BEARING)
 	print("%s: sun %.1f deg up, bearing %.1f deg E of N (%.1f off design)"
 		% [name, elevation, bearing, off])
+	_check_fill()
 
 	# And the sky's fallback direction, which is what gets used if this scene is
 	# ever opened without its light. It is kept equal to the Sun's own +Z.
@@ -639,6 +654,24 @@ func _check_sun_and_sky() -> void:
 	if stated is Vector3:
 		print("%s: sky fallback %.1f deg from the Sun" % [
 			name, rad_to_deg(toward.angle_to((stated as Vector3).normalized()))])
+
+
+## The same arithmetic on the fill, on its own line so the gate can grep either.
+##
+## The bearing is wrapped into 0..360 rather than left as `atan2`'s -180..180,
+## because the fill's is 210 and the raw answer would be -150 — a number that
+## reads as a mistake beside the sun's 30 and would have to be converted in the
+## head of everyone who ever looks at the log.
+func _check_fill() -> void:
+	var fill := get_node_or_null("Clouds") as DirectionalLight3D
+	if fill == null:
+		return
+	var toward := fill.global_transform.basis.z.normalized()
+	var elevation := rad_to_deg(asin(clampf(toward.y, -1.0, 1.0)))
+	var bearing := fposmod(rad_to_deg(atan2(toward.x, -toward.z)), 360.0)
+	var off := absf(elevation - FILL_ELEVATION) + absf(bearing - FILL_BEARING)
+	print("%s: fill %.1f deg up, bearing %.1f deg E of N (%.1f off design)"
+		% [name, elevation, bearing, off])
 
 
 # ------------------------------------------------------------------ ground ---
