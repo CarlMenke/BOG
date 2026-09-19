@@ -77,6 +77,7 @@ static func spawn_from(source: Bog, parent: Node, blow: Vector3,
 	corpse._adopt(source)
 	corpse._collapse(blow, hit_bone)
 	corpse._adopt_spears(source)
+	corpse._adopt_held_spear(source)
 	return corpse
 
 
@@ -220,6 +221,56 @@ func _adopt_spears(source: Bog) -> void:
 		spear.global_transform = world
 		if spear.has_method("mark_embedded"):
 			spear.call("mark_embedded")
+
+
+## Put the shaft the Bog was *holding* into the corpse's fist, so a Bog killed
+## mid-carry falls over with its weapon instead of having it blink out of the
+## world at the moment of the kill.
+##
+## **The corpse keeps it rather than dropping it**, and there is nothing to
+## weigh: a spear is a recharge and not a stock (`BogCombat._spear_ready_at`),
+## so there is no count anywhere for a dropped one to go back into, and nothing
+## in this game is picked up off the ground but a letter, a potion and the
+## Elder's robe. A shaft left lying in the grass would be a thing players walk
+## up to and cannot take. In the fist it is what it was a tick ago — the read on
+## what that Bog was carrying — and it goes when the corpse goes.
+##
+## A **fresh** shaft off `HeldGear.MODEL` rather than the live one re-parented,
+## which is the whole difference between this and `_adopt_spears` above. An
+## embedded projectile is a real node in the world that had to end up somewhere;
+## the carried one is a prop on a bone attachment that the Bog owning it is
+## coming back with (`_equip_spear` builds it once a life and `set_carried` only
+## ever hides it), so taking it would leave a respawned Bog empty-handed.
+##
+## Placed off the **corpse's** hand bone and not copied off the live Bog's
+## model, because the corpse's own bodies were snapped from those same
+## `get_bone_global_pose` readings (`RagdollBuilder.snap_to_pose`): the shaft
+## sits in the fist the physics is about to throw about rather than in the one a
+## `BoneAttachment3D` drew a frame earlier through `BogAim`'s modifier (D-066).
+func _adopt_held_spear(source: Bog) -> void:
+	if _skeleton == null or source.held_gear == null \
+			or not source.held_gear.is_carried():
+		return
+	var hand := _skeleton.find_bone(HeldGear.HAND_BONE)
+	if hand < 0:
+		return
+	# The fist has no rigid body of its own — thirteen bones is the whole table
+	# and the hand is not in it (D-006) — so the shaft rides the nearest bone
+	# that does, which is the forearm. That costs nothing: the hand link is
+	# undriven, so it keeps the pose it died in relative to the forearm and the
+	# spear stays exactly where the fist is.
+	var body: PhysicalBone3D = null
+	var carrier := hand
+	while carrier >= 0 and body == null:
+		body = _find_bone_body(_skeleton.get_bone_name(carrier))
+		carrier = _skeleton.get_bone_parent(carrier)
+	if body == null:
+		return
+	var world := _skeleton.global_transform \
+		* _skeleton.get_bone_global_pose(hand) * HeldGear.spear_transform()
+	var shaft := HeldGear.MODEL.instantiate() as Node3D
+	body.add_child(shaft)
+	shaft.global_transform = world
 
 
 func _find_bone_body(bone_name: String) -> PhysicalBone3D:
