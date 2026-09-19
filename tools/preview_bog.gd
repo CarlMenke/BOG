@@ -14,7 +14,9 @@ extends Node3D
 ## as rows. `from`/`to` narrow every row to a window of the clip in seconds.
 ## A trailing `skin=<name>` dresses every BOG in `art/skins/<name>/basecolor.png`
 ## (D-100), with the folder's `roughness.png` and `emission.png` if it has them
-## (D-154).
+## (D-154) and its `garment.glb` if it has one (D-163) — which is what makes
+## this the proof that clothes follow a clip: one row per pose, the body poking
+## through or not.
 ##
 ## This is `preview_bog.gd` for the rebuilt body: the body is
 ## `art/bog/BOG.fbx` and the clips come from `art/generated/bog_clips.res`,
@@ -37,16 +39,21 @@ func _ready() -> void:
 	var skin: Texture2D = null
 	var skin_roughness: Texture2D = null
 	var skin_emission: Texture2D = null
+	var skin_garment: PackedScene = null
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("skin="):
 			var folder := "res://art/skins/%s/" % a.trim_prefix("skin=")
-			skin = load(folder + "basecolor.png")
+			# The paint is optional too now: a garment skin is the plain body
+			# wearing clothes and its folder holds no `basecolor.png` at all.
+			skin = _optional(folder + "basecolor.png")
 			# The optional maps, whichever the folder holds (D-154). This is a
 			# skin folder read the way the game reads one, not through `Skins`,
 			# because a skin worth looking at here is often one not yet in
 			# `Skins.NAMES` — the parked eleven, a fresh download.
 			skin_roughness = _optional(folder + "roughness.png")
 			skin_emission = _optional(folder + "emission.png")
+			skin_garment = load(folder + "garment.glb") as PackedScene \
+				if ResourceLoader.exists(folder + "garment.glb") else null
 		else:
 			args.append(a)
 	var keys: PackedStringArray = args[3].split(",", false) if args.size() >= 4 else PackedStringArray(["Idle"])
@@ -90,6 +97,11 @@ func _ready() -> void:
 				if skin_emission != null:
 					worn.emission_texture = skin_emission
 				body.set_surface_override_material(0, worn)
+			if skin_garment != null:
+				# Through `SkinGarment.attach`, which is the attach the game
+				# uses: a garment judged here has to be the garment that ships.
+				SkinGarment.attach(
+					n.find_child("Skeleton3D", true, false) as Skeleton3D, skin_garment)
 			ap.play(key)
 			ap.seek(from + step * float(i), true)
 			ap.pause()

@@ -535,18 +535,27 @@ func _run_lobby() -> void:
 	# rather than the 40 px swatch it was when it lived over the ring (D-109).
 	_check("in three columns", skins.columns, 3)
 	_check("one cell per pickable skin", skins.get_child_count(), Skins.NAMES.size())
-	# Fourteen: the plain body and the thirteen of D-108. The eleven of D-126
-	# are parked (D-128) and must stay out until their downloads are redone on
-	# the body's own mesh. The number is pinned so that a name added or dropped
-	# by accident is a red gate, not a quiet change to the grid.
-	_check("fourteen of them", Skins.NAMES.size(), 14)
+	# Fifteen: the plain body, the thirteen of D-108 and the shirt, which is the
+	# fourteenth pick and the first garment one (D-163). The eleven of D-126 are
+	# parked (D-128) and must stay out until their downloads are redone on the
+	# body's own mesh. The number is pinned so that a name added or dropped by
+	# accident is a red gate, not a quiet change to the grid.
+	_check("fifteen of them", Skins.NAMES.size(), 15)
+	# And the shirt is the one with no paint at all: its folder holds
+	# `garment.glb` and nothing else, so what the picker offers is the plain body
+	# wearing clothes.
+	var shirt := Skins.NAMES.find("shirt")
+	_check("the shirt is a pick", shirt >= 0, true)
+	_check("and it is clothes, not paint", Skins.garment_of(shirt) != null, true)
+	_check("with no basecolor of its own", Skins.texture_of(shirt), null)
+	_check("while a recolour has no clothes",
+		Skins.garment_of(Skins.NAMES.find("muck")), null)
 	# The folders under `art/skins/` that are not a pick: the worked example,
-	# the Elder's robe, the shirt on its way and the parked batch. A list that
-	# grew one of those by accident would put a garment on a strip of bodies,
-	# or a registered face back on the ring.
+	# the Elder's robe and the parked batch. A list that grew one of those by
+	# accident would put the Elder's tell on a strip of bodies, or a registered
+	# face back on the ring.
 	_check("and the worked example is not one of them",
 		Skins.NAMES.has("example"), false)
-	_check("nor the shirt", Skins.NAMES.has("shirt"), false)
 	for parked: String in Skins.PARKED:
 		_check("nor the parked %s" % parked, Skins.NAMES.has(parked), false)
 	_check("nor is the Elder's robe", Skins.NAMES.has("elder"), false)
@@ -580,6 +589,20 @@ func _run_lobby() -> void:
 			_worn(ring_bogs[0]), Skins.texture_of(muck))
 		_check("and the Bog beside it does not",
 			_worn(ring_bogs[1]) == Skins.texture_of(muck), false)
+		# And the garment skin goes on the ring the same way (D-163), which is
+		# the half `_worn` cannot see: the shirt is clothes on the rig, not a
+		# texture on the body. Picked and then picked away again, because a
+		# garment that never comes off is one a player is stuck in.
+		_skin_tile(skins, shirt).pressed.emit()
+		await get_tree().process_frame
+		_check("a garment skin dresses the ring's Bog",
+			_ring_cloth(ring_bogs[0]) != null, true)
+		_check("and leaves the one beside it bare",
+			_ring_cloth(ring_bogs[1]) != null, false)
+		_skin_tile(skins, muck).pressed.emit()
+		await get_tree().process_frame
+		_check("and picking a recolour takes the clothes off again",
+			_ring_cloth(ring_bogs[0]) != null, false)
 
 	# Teams. The same strip, a different owner.
 	var teamed := Net.config.duplicate_config()
@@ -650,8 +673,8 @@ func _run_lobby() -> void:
 		Net.skin_for(1), muck)
 	_check("and the caption is back to yours", caption.text, "YOUR SKIN · MUCK")
 
-	# **The names live in the caption now**, because fourteen of them under
-	# fourteen swatches was fourteen lines of type across the Bogs' faces. So a
+	# **The names live in the caption now**, because fifteen of them under
+	# fifteen swatches was fifteen lines of type across the Bogs' faces. So a
 	# swatch has no label of its own, and pointing at one — or arrowing onto it —
 	# is how its name is read. Naming is not picking: the roster must not move.
 	for swatch: Node in skins.get_children():
@@ -886,6 +909,16 @@ func _carry_pose(bog: Bog) -> String:
 ## thing this file can ask.
 func _skin_tile(grid: Container, skin: int) -> Button:
 	return grid.get_child(skin) as Button
+
+
+## The clothes on a ring Bog's skeleton, or null (D-163). Asked of the rig
+## rather than of `Bog.skin_garment`, `_worn`'s rule: what is drawn is the
+## claim, and the interesting bug is the one where the two disagree.
+func _ring_cloth(bog: Bog) -> MeshInstance3D:
+	var skeleton := bog.find_child("Skeleton3D", true, false) as Skeleton3D
+	if skeleton == null:
+		return null
+	return skeleton.get_node_or_null(SkinGarment.MESH_NAME) as MeshInstance3D
 
 
 ## The texture a Bog's body is actually drawn with, read off the material the

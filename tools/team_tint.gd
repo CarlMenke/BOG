@@ -21,7 +21,10 @@ extends Node3D
 ##   robe     — the Elder's robe is on its own purple material, while the body
 ##              under it stays in the team colour.
 ##   corpse   — a ragdoll of a tinted Bog is still in that colour, and a ragdoll
-##              of a yellow one is still yellow.
+##              of a yellow one is still yellow — clothes and all.
+##   garment  — a skin's clothes (D-163) go on the rig, come off again when the
+##              skin changes, take the team's colour unlike the robe, and are on
+##              the corpse of the Bog that died in them.
 ##   lobby    — `BogBackdrop.set_roster` repaints a Bog whose team changed, the
 ##              path a player switching team in the lobby takes. Headless only:
 ##              the backdrop brings its own camera and glade.
@@ -31,6 +34,11 @@ const TEAMS := 8
 const SPACING := 1.05
 const CHECK_TICK := 12
 const ELDER_TEAM := 0
+## The skin whose folder holds clothes (D-163), and the team the Bog wearing
+## them stands on. Found by name rather than typed as an index, because
+## `Skins.NAMES` is appended to.
+const GARMENT_SKIN := "shirt"
+const GARMENT_TEAM := 2
 
 ## Whisperbloom and Rust, from the same shipped resources `preview_elder.gd`
 ## renders its robe under, so the colours are judged in the maps' own light.
@@ -41,6 +49,7 @@ var _light: String = "studio"
 var _team_bogs: Array[Bog] = []
 var _ffa_bog: Bog
 var _elder: Bog
+var _dressed: Bog
 var _ticks: int = 0
 var _failed: bool = false
 
@@ -52,7 +61,7 @@ func _ready() -> void:
 	_build_light()
 	_ground()
 
-	var count := TEAMS + 2
+	var count := TEAMS + 3
 	var x := -SPACING * float(count - 1) * 0.5
 	for team in TEAMS:
 		var bog := _make_bog("Team %d" % (team + 1), x)
@@ -68,13 +77,22 @@ func _ready() -> void:
 	_elder = _make_bog("Elder, Team %d" % (ELDER_TEAM + 1), x)
 	_elder.set_team_tint(ELDER_TEAM)
 	_elder.set_elder(true)
+	x += SPACING
+	# The garment skin, dressed and *then* tinted, which is the order both call
+	# sites do it in (`MatchState._create_bog`, `BogBackdrop._apply_slot`) and
+	# therefore the order the clothes have to pick the colour up in.
+	_dressed = _make_bog("Shirt, Team %d" % (GARMENT_TEAM + 1), x)
+	_wear(_dressed, GARMENT_SKIN)
+	_dressed.set_team_tint(GARMENT_TEAM)
 
 	var cam := Camera3D.new()
 	cam.fov = 24.0
 	cam.near = 0.05
 	cam.far = 300.0
 	add_child(cam)
-	cam.look_at_from_position(Vector3(0.0, 1.3, 11.5), Vector3(0.0, 0.95, 0.0), Vector3.UP)
+	# Half a metre further back than it stood for ten, because the lineup gained
+	# the dressed Bog and the one on each end was touching the frame.
+	cam.look_at_from_position(Vector3(0.0, 1.3, 12.6), Vector3(0.0, 0.95, 0.0), Vector3.UP)
 	cam.make_current()
 
 
@@ -103,6 +121,7 @@ func _physics_process(_delta: float) -> void:
 	_check_teams()
 	_check_ffa()
 	_check_robe()
+	_check_garment()
 	_check_corpses()
 	if DisplayServer.get_name() == "headless":
 		_check_lobby()
@@ -146,6 +165,61 @@ func _check_robe() -> void:
 		"robe material %s, body tint %s" % [robe_material, body])
 
 
+## A skin's clothes: on the rig, in the team's colour, off again when the skin
+## changes, and on the corpse.
+##
+## The robe's check above is the same shape with the opposite verdict on the
+## colour, and the pair is the point: the Elder's purple is a rule about a Bog
+## and must never take a team's colour, while a shirt is that player's body and
+## must.
+func _check_garment() -> void:
+	var cloth := _cloth_of(_dressed)
+	if cloth == null or _dressed.skin_garment == null \
+			or not _dressed.skin_garment.is_worn():
+		_verdict("garment", false, "the shirt is not on the rig")
+		return
+	var got: Variant = Bog.tint_of(cloth)
+	var tinted := got is Color \
+		and (got as Color).is_equal_approx(Nameplate.colour_for_team(GARMENT_TEAM))
+
+	# Picked again (D-144), out of shot: the old clothes have to come off, and
+	# they have to come off the *skeleton*, not merely be forgotten by the Bog.
+	var changer := _make_bog("Changer", 0.0)
+	# Stood well behind the lineup rather than nudged out of it afterwards: a
+	# Bog is placed by `revive_at`, which writes `sync_position` too, and a
+	# position set over the top of that is a position the next tick undoes.
+	changer.revive_at(Transform3D(Basis(), Vector3(0.0, 0.0, -60.0)))
+	_wear(changer, GARMENT_SKIN)
+	var dressed_first := _cloth_of(changer) != null
+	_wear(changer, "muck")
+	# The rig is bare in the *same frame*, not on a queued free a frame later:
+	# see `SkinGarment.doff`.
+	var bare := changer.skin_garment == null
+	var stripped := _cloth_of(changer) == null
+
+	_verdict("garment", tinted and cloth != _dressed.body_mesh \
+		and dressed_first and bare and stripped,
+		"cloth tint %s, dressed on pick %s, undressed on the next %s/%s"
+			% [got, dressed_first, bare, stripped])
+
+
+## The garment mesh on a Bog's skeleton, or null if there is none on it.
+## Asked of the rig rather than of `Bog.skin_garment` on purpose: what the two
+## disagree about is the bug.
+func _cloth_of(bog: Bog) -> MeshInstance3D:
+	var skeleton := bog.find_child("Skeleton3D", true, false) as Skeleton3D
+	if skeleton == null:
+		return null
+	return skeleton.get_node_or_null(SkinGarment.MESH_NAME) as MeshInstance3D
+
+
+## One skin onto one Bog, the way `MatchState._create_bog` does it.
+func _wear(bog: Bog, skin_name: String) -> void:
+	var skin := Skins.NAMES.find(skin_name)
+	bog.wear_skin(Skins.texture_of(skin), Skins.roughness_of(skin),
+		Skins.emission_of(skin), Skins.garment_of(skin))
+
+
 func _check_corpses() -> void:
 	var team := 5
 	var source := _team_bogs[team]
@@ -159,17 +233,33 @@ func _check_corpses() -> void:
 	var yellow := plain_body != null and Bog.tint_of(plain_body) == null \
 		and plain_body.get_active_material(0) is BaseMaterial3D
 
+	# And a corpse of the Bog in the shirt keeps the shirt (D-163), in the colour
+	# it died in. The clothes are a second copy off the same scene rather than
+	# the live mesh re-parented, so what is checked is that the corpse has one at
+	# all and that it is painted like the body beside it.
+	var dead_dressed := BogRagdoll.spawn_from(_dressed, self, Vector3(0.0, 0.0, -2.0),
+		"mixamorig_Spine1")
+	var shroud := _corpse_mesh(dead_dressed, SkinGarment.MESH_NAME)
+	var shroud_tint: Variant = Bog.tint_of(shroud)
+	var clothed := shroud != null and shroud_tint is Color \
+		and (shroud_tint as Color).is_equal_approx(Nameplate.colour_for_team(GARMENT_TEAM))
+
 	# Out of the picture: they are the proof, not the subject.
 	corpse.position.z -= 40.0
 	plain.position.z -= 40.0
-	_verdict("corpse", tinted and yellow,
-		"tinted corpse %s, plain corpse %s" % [got,
-			plain_body.get_active_material(0) if plain_body else null])
+	dead_dressed.position.z -= 40.0
+	_verdict("corpse", tinted and yellow and clothed,
+		"tinted corpse %s, plain corpse %s, dressed corpse %s" % [got,
+			plain_body.get_active_material(0) if plain_body else null, shroud_tint])
 
 
 func _corpse_body(corpse: BogRagdoll) -> MeshInstance3D:
+	return _corpse_mesh(corpse, Bog.BODY_MESH_NAME)
+
+
+func _corpse_mesh(corpse: BogRagdoll, mesh_name: String) -> MeshInstance3D:
 	for mesh in corpse.find_children("*", "MeshInstance3D", true, false):
-		if mesh.name == Bog.BODY_MESH_NAME:
+		if mesh.name == mesh_name:
 			return mesh
 	return null
 

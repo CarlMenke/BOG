@@ -16920,3 +16920,80 @@ punch wants `is_holstered()` and a holster is refused while a string is back,
 so it can no more play under a draw than a spin can. Not proved by any check:
 that the running branch keeps the legs, and how the full-body punch composes on
 another peer's copy. (BOG-27.)
+
+## D-163 — A skin folder can hold clothes, and the shirt is the fifteenth pick
+`tools/fit_garment.py` had been producing `art/skins/shirt/garment.glb` since
+the Route 3 spike — a mesh skinned to the body's own 49 `mixamorig_*` bones, so
+it inherits every clip in `art/generated/bog_clips.res` without a refit — and
+nothing in Godot could put it on. `Skins` loaded a texture and two maps and
+refused to look at a `.glb`; the one garment in the game was the Elder's robe,
+compiled in, worn by being the Elder.
+
+**A skin folder may now hold `garment.glb` beside the paint or instead of it**,
+and D-154's rule carries over whole: *the file being there is the whole of the
+record.* No list of which skins are dressed, no flag on a name.
+`Skins.garment_of` answers a `PackedScene` or null, `Bog.wear_skin` takes it as
+a fourth defaulted argument, and **every call takes the old garment off first** —
+a player may pick again mid-match (D-144), and two shirts on one skeleton is
+what a second entry point would eventually leave behind. `SkinGarment.doff`
+takes the cloth off the skeleton *now* rather than on a queued free, which is
+its one departure from `ElderRobe.doff`: the next garment goes on in the same
+call, and anything asking the rig what it is wearing in that frame would
+otherwise get both answers.
+
+**`SkinGarment` is `ElderRobe` with a different reason for being worn**, and the
+attach is line for line the same three details — the mesh keeps its `skin` and
+its `skeleton` NodePath stays at `".."`, its transform is cleared, its `owner`
+is nulled. `SkinGarment.attach` is static and is the **only** attach in the
+project: the game, the corpse and the two render tools all go through it, for
+`ElderRobe`'s own stated reason — a second, subtly different re-parent in a tool
+would mean the thing that is looked at and the thing that ships are not the same
+thing. The corpse gets a *fresh instance* off the same scene rather than the
+live mesh re-parented (`_adopt_held_spear`'s reason: the Bog that died is coming
+back wearing it), attached before the material loop so it is matched to the live
+cloth by name like every other mesh and fades with the body.
+
+**The garment takes the team's colour and the robe does not**, which is the one
+place the two part company. Purple is a rule about a Bog; a shirt is that
+player's body, and a team-coloured Bog in a team-neutral shirt would be the one
+part of it that belongs to nobody. It is the same shader on a second material
+built from the *garment's* imported one, because the shader copies roughness,
+specular and emission off what it is given and cloth is not skin. What it
+recolours is the same narrow band of yellow it finds on a body (D-046), so a
+shirt that is not yellow keeps every thread of its own colour.
+
+**SHIRT is the fifteenth pickable skin**, appended after `void` like every other
+name, and it is the first folder with no `basecolor.png` at all: what the picker
+offers is the plain body wearing clothes. `Skins.texture_of` answers null for it
+— which is already `wear_skin`'s word for "put the imported texture back" — so
+nothing special happens anywhere for a skin that is only cloth. The alternative
+was to ship `garment_of` with nobody calling it, the way D-100 shipped
+`wear_skin`; there is a real garment on disk this time and a capability with no
+route to it is a capability nobody would find the bug in. The gate's pin moves
+with it: `weapon_select` asserts fifteen, that the shirt is clothes and not
+paint, and that a recolour has no clothes.
+
+**Proved.** `team_tint` gains a `garment` verdict — the cloth is on the rig, in
+the team's colour, off again in the same frame when the skin changes — and its
+`corpse` verdict now asserts a ragdoll of the Bog that died in it carries the
+garment in the colour it died in. `weapon_select` is 228 checks and green,
+three of them the lobby ring dressing and undressing through the real tile.
+`preview_bog.tscn ... skin=shirt` over Idle, Walk, CrouchWalk, Roll and
+SwordSpin shows the cloth following every clip, and `preview_ragdoll.gd` takes
+the same `skin=` so the corpse is a picture rather than an assertion.
+
+### Rejected
+
+- **Generalising `ElderRobe` to carry both.** One class taking a `PackedScene`
+  would have saved sixty lines and merged two lifecycles that have nothing in
+  common: a robe is consumed (D-038), a garment is swapped, and a Bog can be
+  wearing both at once.
+- **Tinting the garment from the body's material.** One material instead of two,
+  and every shirt would have been lit like skin.
+- **Remembering the team in `Bog` so the garment could be painted from it.**
+  Both call sites pass `TEAM_NONE` for a Bog wearing a picked skin, and a
+  remembered team here would be a second opinion about that. `_paint_garment`
+  reads whether the body is tinted off the material the renderer will use, and
+  takes the colour off that material's own parameter.
+- **Keeping SHIRT unpickable and shipping the capability alone.** See above.
+  (BOG-14.)

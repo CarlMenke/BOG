@@ -8,6 +8,13 @@ the rig or the clip library.
 - `garment.glb` — the mesh, skinned to the Mixamo rig by bone name. Godot
   turns the exporter's `mixamorig:` into `mixamorig_`, which is what the
   game's `Skeleton3D` uses, so `wear` re-parents it and nothing else.
+- `thumb.png` — the picker's tile, rendered with the shirt on
+  (`tools/skin_thumbs.gd`).
+
+Since D-163 this is a **pickable skin**, the fifteenth in `Skins.NAMES`, and
+the first with no `basecolor.png` at all: what the picker offers is the plain
+body wearing clothes. `Bog.wear_skin` dons it through `SkinGarment`, the corpse
+keeps it, and it takes its team's colour with the body.
 
 ## How it was made
 

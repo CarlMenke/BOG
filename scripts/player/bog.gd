@@ -631,6 +631,10 @@ var body_mesh: MeshInstance3D
 ## This Bog's copy of the team-colour material, made the first time it is
 ## tinted and reused after that. Null on a Bog that has never been on a team.
 var _tint_material: ShaderMaterial
+## The same thing for the garment's own material (D-163), and a second one
+## rather than the body's because the shader copies the imported material it is
+## built from and cloth is lit nothing like skin. Thrown away with the clothes.
+var _garment_tint: ShaderMaterial
 ## The recolour skin this Bog wears, if any (D-100): the texture, and the plain
 ## material carrying it for a Bog with no team colour.
 var _skin_texture: Texture2D
@@ -638,6 +642,11 @@ var _skin_material: Material
 ## The skin's optional roughness and emissive maps, null for most skins (D-154).
 var _skin_roughness: Texture2D
 var _skin_emission: Texture2D
+## The clothes this skin carries, if it carries any (D-163), and null the rest
+## of the time. Beside `elder_robe` rather than inside it: the robe is a garment
+## a Bog wears for what it *is* and this is one it wears for what its player
+## *picked*, and a Bog can be both at once.
+var skin_garment: SkinGarment
 var alive: bool = true
 ## What is left of this Bog, from `MAX_HEALTH` down to zero (D-062).
 ##
@@ -827,9 +836,12 @@ func _find_body_mesh() -> MeshInstance3D:
 ## uses. The colour is `Nameplate.colour_for_team`, the one the plate, the
 ## lobby stripe, the scoreboard and the kill feed already share.
 ##
-## Only the body mesh. The robe is a second mesh on the same skeleton and is
-## never touched: "that is an Elder" and "that is my team" are two reads, and the
-## purple is the first of them.
+## Not the robe. It is a second mesh on the same skeleton and is never touched:
+## "that is an Elder" and "that is my team" are two reads, and the purple is the
+## first of them. **A skin's garment is the opposite case** (D-163) and takes
+## the colour with the body: clothes a player picked are that player's body,
+## not a rule about them, and a team-coloured Bog in a team-neutral shirt would
+## be the one part of it that does not belong to anybody.
 ##
 ## Safe to call as often as a lobby roster changes; the material is made once
 ## per Bog and only its colour moves after that.
@@ -838,6 +850,7 @@ func set_team_tint(new_team: int) -> void:
 		return
 	if new_team < 0:
 		body_mesh.set_surface_override_material(0, _skin_material)
+		_paint_garment()
 		return
 	if _tint_material == null:
 		_tint_material = make_tint_material(body_mesh.mesh.surface_get_material(0))
@@ -850,6 +863,7 @@ func set_team_tint(new_team: int) -> void:
 		_tint_material.set_shader_parameter("emission_texture", _skin_emission)
 	_tint_material.set_shader_parameter("team_colour", Nameplate.colour_for_team(new_team))
 	body_mesh.set_surface_override_material(0, _tint_material)
+	_paint_garment()
 
 
 ## A recolour skin: a texture in the body's own layout, through the team-tint
@@ -862,12 +876,27 @@ func set_team_tint(new_team: int) -> void:
 ## for most skins and for the plain body. They go on both materials, because a
 ## Bog is drawn through the plain one in free-for-all and through the shader on
 ## a team, and a glaze that only shows on blue is not a glaze.
+##
+## `garment` is the folder's `garment.glb`, for a skin that has clothes (D-163)
+## and null for every skin that does not. It is donned here rather than by a
+## call of its own for the reason it is a *defaulted* argument like the two maps
+## above: a skin is one pick and one call, and **the old garment comes off on
+## every call** — a player may pick again mid-match (D-144), and two shirts on
+## one skeleton is what a second entry point would eventually leave behind.
 func wear_skin(texture: Texture2D, roughness: Texture2D = null,
-		emission: Texture2D = null) -> void:
+		emission: Texture2D = null, garment: PackedScene = null) -> void:
 	_skin_texture = texture
 	_skin_roughness = roughness
 	_skin_emission = emission
 	_skin_material = null
+	# Undressed first and unconditionally, so "this Bog wears what this call
+	# said" is true of the clothes as well as of the paint.
+	if skin_garment != null:
+		skin_garment.doff()
+		skin_garment = null
+		_garment_tint = null
+	if garment != null:
+		skin_garment = SkinGarment.don(self, garment)
 	if body_mesh == null:
 		return
 	if texture != null:
@@ -900,6 +929,38 @@ func wear_skin(texture: Texture2D, roughness: Texture2D = null,
 	if _tint_material == null \
 			or body_mesh.get_surface_override_material(0) != _tint_material:
 		body_mesh.set_surface_override_material(0, _skin_material)
+	_paint_garment()
+
+
+## Put the team's colour on the clothes, or take it off them — called from both
+## ends, because a garment can arrive on a Bog that is already tinted
+## (`wear_skin` after `set_team_tint`) and a tint can arrive on a Bog that is
+## already dressed (the two call sites do it in that order).
+##
+## Whether the body is tinted is read off the **material the renderer will
+## use**, not off a remembered team: `set_team_tint(TEAM_NONE)` is what both
+## call sites pass for a Bog wearing a picked skin, and a second copy of that
+## decision here would be a second opinion about it. The colour comes off the
+## body's own shader parameter for the same reason.
+func _paint_garment() -> void:
+	var cloth := skin_garment.mesh() if skin_garment != null else null
+	if cloth == null:
+		return
+	var tinted := _tint_material != null and body_mesh != null \
+		and body_mesh.get_surface_override_material(0) == _tint_material
+	if not tinted:
+		cloth.set_surface_override_material(0, null)
+		return
+	if _garment_tint == null:
+		# Built from the *garment's* imported material, not the body's: the
+		# shader copies roughness, specular and emission off what it is given,
+		# and cloth is not skin. What it recolours is the same narrow band of
+		# yellow it finds on a body (D-046), so a shirt that is not yellow keeps
+		# every thread of its own colour and a yellow one joins the team.
+		_garment_tint = make_tint_material(cloth.mesh.surface_get_material(0))
+	_garment_tint.set_shader_parameter("team_colour",
+		_tint_material.get_shader_parameter("team_colour"))
+	cloth.set_surface_override_material(0, _garment_tint)
 
 
 ## The team-colour shader, carrying over what the imported body material sets so

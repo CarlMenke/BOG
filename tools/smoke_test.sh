@@ -848,6 +848,7 @@ also "movement" "movement_check: remote PASS"
 check "team colours on the body" "team_tint: teams PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/team_tint.tscn
 also "team colours on the body" "team_tint: robe PASS"
+also "team colours on the body" "team_tint: garment PASS"
 also "team colours on the body" "team_tint: corpse PASS"
 also "team colours on the body" "team_tint: PASS"
 # Which side you are on, said plainly (D-047). A player: "it should be obvious

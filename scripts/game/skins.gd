@@ -16,9 +16,11 @@ extends RefCounted
 ## the body's own UV layout, worn through `Bog.wear_skin`, and
 ## `art/skins/<name>/thumb.png` is the 128² head-and-shoulders the picker shows.
 ## It **may** also hold `roughness.png` and `emission.png`, whichever its Tripo
-## download carried (D-154), which is what lets a skin be glossy or glow.
-## Nothing here loads a `.glb`, a material or a mesh — a skin that is a *garment*
-## (the Elder's robe) is the other kind and is not pickable.
+## download carried (D-154), which is what lets a skin be glossy or glow — and
+## it **may** hold `garment.glb`, clothes bound to the body's own bones
+## (D-163), beside the paint or instead of it. The Elder's robe is the same kind
+## of file and is not a skin: it is worn by being the Elder (D-038), not by
+## being picked.
 
 ## The pickable skins, in the order the picker shows them.
 ##
@@ -34,14 +36,18 @@ extends RefCounted
 ## thumb and no `basecolor.png`, because "the body's own" is a real answer to
 ## "which skin" and the picker needs a tile for it.
 ##
+## `shirt` is the fifteenth and the first of its kind (D-163): a folder with no
+## `basecolor.png` at all, holding only `garment.glb`. It is the plain body
+## wearing clothes, which is a pick like any other — and it is appended at the
+## end like any other, so every index before it is the index it always was.
+##
 ## The folders under `art/skins/` that are **not** here are not oversights:
 ## `example` is D-100's worked example of how a recolour is made, `elder` is a
-## garment worn by being the Elder (D-038), `shirt` is a garment still on its
-## way (docs/SKIN_PIPELINE.md), and the eleven in `PARKED` below are a second
-## batch waiting on a redo of their downloads (D-128). None is a thing a player
-## picks today.
+## garment worn by being the Elder (D-038) rather than picked, and the eleven in
+## `PARKED` below are a second batch waiting on a redo of their downloads
+## (D-128). None is a thing a player picks today.
 const NAMES := ["bog", "bogina", "boo", "clank", "crag", "gilt", "glub", "gum",
-	"muck", "rime", "roar", "slag", "toad", "void"]
+	"muck", "rime", "roar", "slag", "toad", "void", "shirt"]
 
 ## The second batch, **parked** (D-128): bloom, buzz, chip, crack, dash, fudge,
 ## gourd, koi, ooze, volt, wrap. Their folders under `art/skins/` are complete
@@ -65,6 +71,12 @@ const DEFAULT := 0
 ## `texture_path` refuses to answer for.
 const TEXTURE_PATH := "res://art/skins/%s/basecolor.png"
 
+## The clothes, for a skin folder that has any (D-163). The same rule the two
+## maps below are read by: **the file being there is the whole of the record**,
+## so `shirt` needs no flag anywhere saying it is dressed and a folder without
+## one is the ordinary case.
+const GARMENT_PATH := "res://art/skins/%s/garment.glb"
+
 ## The two optional maps beside the paint (D-154). Tripo ships a
 ## metallic-roughness with a retexture and can ship an emissive;
 ## `tools/extract_skins.py` writes whichever the download carried and nothing
@@ -87,6 +99,10 @@ const THUMB_PATH := "res://art/skins/%s/thumb.png"
 ## — which is the point: the skins in the ring are the skins in the arena.
 static var _textures: Dictionary = {}
 static var _thumbs: Dictionary = {}
+## The garment scenes, cached for the same reason and rather harder: a
+## `PackedScene` is instantiated once per Bog that wears it, and the ring
+## re-dresses eight of them on every roster change.
+static var _garments: Dictionary = {}
 ## The optional maps, cached the same way and with the same entry for "this skin
 ## has none" as for "this skin has one": a null in the dictionary is an answer,
 ## so the folder is looked at once per skin rather than once per `wear_skin`.
@@ -128,22 +144,45 @@ static func all() -> Array[int]:
 	return out
 
 
-## Where this skin's texture lives, or "" for the plain body.
+## Where this skin's texture lives, or "" for a skin that has no paint — the
+## plain body, and a garment-only folder like `shirt` (D-163).
 static func texture_path(skin: Variant) -> String:
 	var index := sanitize(skin)
-	return "" if index == DEFAULT else TEXTURE_PATH % NAMES[index]
+	var path := TEXTURE_PATH % NAMES[index]
+	return "" if index == DEFAULT or not ResourceLoader.exists(path) else path
 
 
-## The texture to hand `Bog.wear_skin`, or **null for the plain body** — which
-## is `wear_skin`'s own word for "put the imported texture back", so the default
-## costs nothing and loads nothing.
+## The texture to hand `Bog.wear_skin`, or **null for a skin with no paint** —
+## which is `wear_skin`'s own word for "put the imported texture back", so the
+## plain body costs nothing and loads nothing, and `shirt` is the imported
+## yellow under its clothes.
 static func texture_of(skin: Variant) -> Texture2D:
 	var index := sanitize(skin)
 	if index == DEFAULT:
 		return null
 	if not _textures.has(index):
-		_textures[index] = ResourceLoader.load(TEXTURE_PATH % NAMES[index]) as Texture2D
+		var path := TEXTURE_PATH % NAMES[index]
+		_textures[index] = ResourceLoader.load(path) as Texture2D \
+			if ResourceLoader.exists(path) else null
 	return _textures[index]
+
+
+## The clothes to hand `Bog.wear_skin`, or **null for a skin that is only
+## paint** — which is every skin but `shirt` today, and is `wear_skin`'s word
+## for "wear nothing over the body".
+##
+## A `PackedScene`, not a mesh: the garment ships as a `.glb` whose
+## `MeshInstance3D` carries the `Skin` that binds it to the rig by bone name,
+## and `SkinGarment.attach` takes the mesh out of an instance of it. Not
+## `_optional` below, which is typed to `Texture2D` and answers for two maps
+## that are read the same way; this is the same *rule* with a different type.
+static func garment_of(skin: Variant) -> PackedScene:
+	var index := sanitize(skin)
+	if not _garments.has(index):
+		var path := GARMENT_PATH % NAMES[index]
+		_garments[index] = ResourceLoader.load(path) as PackedScene \
+			if ResourceLoader.exists(path) else null
+	return _garments[index]
 
 
 ## The skin's roughness map, or **null** when its folder has none — which is
@@ -189,7 +228,7 @@ static func thumb_of(skin: Variant) -> Texture2D:
 ## Team 0 is the plain body and every team after it takes the next name in the
 ## list, which is a rule rather than a table because the only thing it has to
 ## guarantee is that no two teams start on the same one. The modulo cannot
-## actually wrap — `MatchConfig` allows eight teams and there are fourteen
+## actually wrap — `MatchConfig` allows eight teams and there are fifteen
 ## skins — but it is there so that adding a ninth team is a bad default rather
 ## than an index error.
 static func default_for_team(team: int) -> int:

@@ -648,7 +648,7 @@ func _apply_slot(index: int) -> void:
 	# changing at once, which is exactly what the ring is on screen to show.
 	var worn := Skins.sanitize(entry.get("skin", Skins.DEFAULT))
 	bog.wear_skin(Skins.texture_of(worn), Skins.roughness_of(worn),
-		Skins.emission_of(worn))
+		Skins.emission_of(worn), Skins.garment_of(worn))
 	# **A skin and a team recolour are two answers to one question**, so a Bog
 	# that has been dressed is not also repainted: in Teams the skin *is* the
 	# team's identity on the body, and the plate below keeps the team's colour to

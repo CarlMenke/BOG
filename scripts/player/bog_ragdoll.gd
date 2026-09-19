@@ -131,6 +131,19 @@ func _adopt(source: Bog) -> void:
 	if player != null:
 		player.queue_free()
 
+	# The clothes the dead Bog was wearing (D-163), put on **before** the
+	# material loop below so the corpse's garment is matched to the live one by
+	# name like every other mesh and fades with the rest of the body. A fresh
+	# instance rather than the live one re-parented, `_adopt_held_spear`'s
+	# reason: the Bog that died is coming back wearing it.
+	#
+	# Before `_collapse` too, and that is safe rather than lucky:
+	# `RagdollBuilder.girths` measures the *first* skinned mesh under the
+	# skeleton, which is the body out of `BOG.fbx`, and this is appended after
+	# it.
+	if source.skin_garment != null and source.skin_garment.is_worn():
+		SkinGarment.attach(_skeleton, source.skin_garment.scene())
+
 	for node in _find_meshes(model):
 		# Corpses need their own copy of the material so the fade does not
 		# dissolve every living Bog sharing the imported one. The copies are made

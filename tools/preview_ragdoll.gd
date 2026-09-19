@@ -3,7 +3,12 @@ extends Node3D
 ## watched from the side, which is the only way to tell a good tumble from a
 ## broken one. Development tool, not shipped.
 ##
-## Godot --path . --script tools/snapshot.gd -- res://tools/preview_ragdoll.tscn out.png <frame> [impulse]
+## Godot --path . --script tools/snapshot.gd -- res://tools/preview_ragdoll.tscn out.png <frame> [impulse] [skin=<name>]
+##
+## A trailing `skin=<name>` dresses the Bog before it dies, which is how the
+## corpse is looked at wearing a skin's paint and its `garment.glb` (D-163) —
+## the clothes are a second copy off the same scene, so whether they landed on
+## the ragdoll is a thing only a picture answers.
 
 const BOG := preload("res://scenes/player/bog.tscn")
 
@@ -16,7 +21,11 @@ var _killed: bool = false
 
 func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
-	if args.size() >= 4:
+	var skin := -1
+	for a in args:
+		if a.begins_with("skin="):
+			skin = Skins.NAMES.find(a.trim_prefix("skin="))
+	if args.size() >= 4 and not args[3].begins_with("skin="):
 		_impulse = float(args[3])
 
 	_ground()
@@ -29,6 +38,10 @@ func _ready() -> void:
 	# The rig's camera would take over the viewport; this preview supplies its own.
 	(_bog.get_node("CameraRig") as Node3D).queue_free()
 	(_bog.get_node("Nameplate") as Node3D).queue_free()
+	if skin >= 0:
+		# The four arguments `MatchState._create_bog` hands it.
+		_bog.wear_skin(Skins.texture_of(skin), Skins.roughness_of(skin),
+			Skins.emission_of(skin), Skins.garment_of(skin))
 
 	# Close enough to judge, aimed down the middle of the corpse's path rather
 	# than at where it starts: the impulse below sends it a couple of metres

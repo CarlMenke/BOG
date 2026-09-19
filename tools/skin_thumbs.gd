@@ -168,8 +168,17 @@ func _run() -> void:
 		quit(1)
 		return
 
+	var skeleton: Skeleton3D = stage["skeleton"]
 	var written := 0
 	for skin: int in wanted:
+		# The clothes, if this skin has any (D-163), through the same
+		# `SkinGarment.attach` the game dons them with — so a garment skin's tile
+		# is a picture of the thing the picker is offering rather than of the
+		# naked body underneath it. Hung on and taken off inside the loop: one
+		# run writes every tile, and a shirt left on would dress every skin after
+		# it in the list.
+		var garment := Skins.garment_of(skin)
+		var cloth := SkinGarment.attach(skeleton, garment) if garment != null else null
 		var texture := Skins.texture_of(skin)
 		# The same few lines `Bog.wear_skin` runs: a duplicate of the imported
 		# material with the skin in its albedo slot, or the imported material
@@ -203,8 +212,14 @@ func _run() -> void:
 			push_error("skin_thumbs: could not write %s (error %d)" % [path, err])
 			quit(1)
 			return
-		print("skin_thumbs: %-8s -> %s" % [Skins.NAMES[skin], path])
+		print("skin_thumbs: %-8s -> %s%s"
+			% [Skins.NAMES[skin], path, " (dressed)" if cloth != null else ""])
 		written += 1
+		if cloth != null:
+			# `free`, not `queue_free`: the next tile is photographed on the very
+			# next frame and a queued node is still on the rig for it.
+			cloth.get_parent().remove_child(cloth)
+			cloth.free()
 
 	print("skin_thumbs: wrote %d of %d tiles at %d px" % [written, Skins.NAMES.size(), OUT_SIZE])
 	quit(0)
@@ -238,7 +253,7 @@ func _stage() -> Dictionary:
 	# Its own square, transparent viewport. `own_world_3d` so the lights and the
 	# environment below belong to it and to nothing else, and `UPDATE_ALWAYS`
 	# because the run draws a frame per skin and a viewport set to update once
-	# would hand back the same picture fourteen times.
+	# would hand back the same picture fifteen times.
 	var shot := SubViewport.new()
 	shot.size = Vector2i(SHOT_SIZE, SHOT_SIZE)
 	shot.transparent_bg = true
@@ -298,8 +313,8 @@ func _stage() -> Dictionary:
 	shot.add_child(world)
 
 	# Orthographic and level, `preview_bog.gd`'s rule: every tile is the same
-	# projection from the same angle, so fourteen of them in a row read as one
-	# set rather than as fourteen photographs.
+	# projection from the same angle, so fifteen of them in a row read as one
+	# set rather than as fifteen photographs.
 	var cam := Camera3D.new()
 	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
 	cam.keep_aspect = Camera3D.KEEP_HEIGHT
@@ -311,7 +326,8 @@ func _stage() -> Dictionary:
 	cam.position = Vector3(head.x, PROBE_CENTRE, head.z + 12.0)
 	shot.add_child(cam)
 	cam.make_current()
-	return {"mesh": mesh, "viewport": shot, "camera": cam, "waist": waist.y}
+	return {"mesh": mesh, "skeleton": skeleton, "viewport": shot, "camera": cam,
+		"waist": waist.y}
 
 
 ## Take the probe shot, read the Bog's silhouette out of it, and set the camera
@@ -379,7 +395,7 @@ func _bone_origin(skeleton: Skeleton3D, bone_name: String) -> Variant:
 ## The `SubViewport` is already square, so the crop is a no-op and what is left
 ## is the resize — it is kept as a crop anyway because the camera keeps its
 ## *height*, and the day somebody gives the viewport a wider shape this is the
-## line that stops fourteen tiles from being framed two different ways.
+## line that stops fifteen tiles from being framed two different ways.
 func _square(shot: Image) -> Image:
 	var side := mini(shot.get_width(), shot.get_height())
 	var cut := shot.get_region(Rect2i(

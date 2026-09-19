@@ -103,10 +103,11 @@ Not all of them, and the list is not this directory. `scripts/game/skins.gd`
 (`Skins.NAMES`) is the pickable set, in the order the lobby's strip shows it:
 
     bog  bogina  boo  clank  crag  gilt  glub  gum
-    muck  rime  roar  slag  toad  void
+    muck  rime  roar  slag  toad  void  shirt
 
-Fourteen: the thirteen recolours plus **`bog`, the plain body**, which is a
-skin called "no texture at all" and is the default. The second batch —
+Fifteen: the thirteen recolours, **`bog`, the plain body**, which is a skin
+called "no texture at all" and is the default, and **`shirt`**, which is the
+other way round again -- no paint at all, only clothes (D-163). The second batch —
 `bloom`, `buzz`, `chip`, `crack`, `dash`, `fudge`, `gourd`, `koi`, `ooze`,
 `volt`, `wrap` — is **parked** in `Skins.PARKED` (D-128): complete folders,
 not pickable, for the reason the next section ends on. `art/skins/bog/` is a folder
@@ -120,7 +121,6 @@ The folders that are **not** pickable are not oversights:
   anyone wears.
 - `elder/` is a garment, and it is worn by being the Elder (D-038). A robe is
   not a body, and the picker is a strip of bodies.
-- `shirt/` is a garment on its way (`docs/SKIN_PIPELINE.md`), not yet worn.
 
 `NAMES` is **appended to, never reordered**: the index is what travels on the
 wire, sits in a roster row and sits in `Net.team_skins`, so moving a name would
@@ -149,4 +149,6 @@ when the picker's look does.
 **A new skin is four things**: the folder, its `basecolor.png`, its `thumb.png`,
 and its name appended to `Skins.NAMES` (plus whichever of `roughness.png` and
 `emission.png` its download carried). Miss the last and nothing can pick it;
-miss the thumb and its tile is an empty square.
+miss the thumb and its tile is an empty square. A **garment** skin swaps the
+second for a `garment.glb` (D-163) and is otherwise the same four things --
+`shirt/` holds no `basecolor.png` at all.

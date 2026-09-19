@@ -115,16 +115,27 @@ which Godot reads as `mixamorig_*` and binds by name with no refit.
 
 ---
 
-## Godot side (to be built once, then free)
+## Godot side (built — D-163)
 
 - A skin folder may hold `garment.glb` beside (or instead of) `basecolor.png`.
-- `Skins` gains `garment_of(skin)`; `Bog.wear_skin` dons it the way
-  `ElderRobe.don` does: re-parent the mesh under `Skeleton3D`, `skeleton = ".."`.
-- `tools/skin_thumbs.gd` dons the garment before photographing.
-- The corpse keeps the garment on the ragdoll.
-- Team tint: garment material gets the same tint shader or its own colour.
-- Proof: `preview_bog.tscn` over `Idle`, `Walk`, `Crouch`, `DiveRoll`,
-  `SwordSpin` — look for the body poking through.
+  **The file being there is the whole of the record**: nothing lists which
+  skins are dressed. `shirt` is the first, and it has no `basecolor.png` at all.
+- `Skins.garment_of(skin)` answers the `PackedScene` or null;
+  `Bog.wear_skin(texture, roughness, emission, garment)` dons it through
+  `SkinGarment`, which is `ElderRobe.don`'s three lines — re-parent the mesh
+  under `Skeleton3D`, clear its transform, leave `skeleton` at `".."`. Every
+  call takes the old garment off first.
+- `SkinGarment.attach` is the only attach in the project: the game, the corpse
+  (`BogRagdoll._adopt`, a second copy off the same scene) and the two render
+  tools all go through it.
+- `tools/skin_thumbs.gd` dons the garment before photographing, and takes it
+  off again before the next tile.
+- Team tint: the garment takes the **same** shader and the same colour as the
+  body, unlike the Elder's robe. Clothes a player picked are that player's
+  body; the robe is a rule about a Bog.
+- Proof: `preview_bog.tscn` over `Idle`, `Walk`, `CrouchWalk`, `Roll`,
+  `SwordSpin` with a trailing `skin=<name>` — look for the body poking
+  through. `tools/preview_ragdoll.gd` takes the same `skin=` for the corpse.
 
 ---
 
