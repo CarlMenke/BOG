@@ -106,3 +106,9 @@ out/
 # builds the material on a texture that loads.
 art/bog/BOG_0.png
 art/bog/BOG_0.png.import
+
+# Voice memos dropped in for triage: big audio, not game content. Kept out of
+# the repo (GitHub caps single files at 100 MB) and out of the export by the
+# .gdignore beside them.
+memos/*
+!memos/.gdignore
