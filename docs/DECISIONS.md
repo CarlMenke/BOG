@@ -15885,6 +15885,118 @@ out of an arm, and a player who binds their cancel key away has no cancel key.
 - **Binding the mouse wheel is left possible.** An armed row takes any mouse
   button, wheel included; it displays as WH+/WH- and a right-click undoes it.
 
+## D-138 — The campfire is a model with its glow cut out of its own paint
+The owner: *"improve the fire place used in the menu and in the lobby, it
+should be all the same lighting and stuff, just the model itself should be
+completely redone. It should still be that lower poly chill feel, just right
+now it's only a cone and some beams. Make it more thought out and in place."*
+An hour later, while a hand-built replacement was being modelled: *"I just
+found one I want to use, it's in my downloads folder, go ahead and use that."*
+
+**What was there.** `BogBackdrop._build_fire` built a fire out of primitives —
+five `BoxMesh` logs leaned in from a 0.24 m ring and two `CylinderMesh` cones
+with `SHADING_MODE_UNSHADED` and `emission_energy_multiplier` 2.2 and 3.4. That
+is not a shortcut anybody took; it is what a fire looks like when there is no
+fire to download. There is one now, so the pit is a prop like every other
+placed thing in this game and this function's whole job is to put it down.
+
+**Through the pipeline, at the shield's numbers.** `CAMPFIRE.glb` is 956,464
+triangles of Tripo with base colour, roughness-metallic and normal at 4096, and
+it goes into `assets/source/props/` and through `tools/decimate_assets.py` at
+**10000 triangles and 1024 textures** — the shield's row, on the shield's
+argument. There is exactly one of it, it is placed rather than spawned, and it
+is looked at closely: the menu lens sits 5.7 m from it and the lobby's 11.7 m,
+with the wordmark hovering directly over it, which is to say it is in the middle
+of the first picture anybody ever sees of this game. It is also doubly curved
+nearly everywhere — a ring of river stones, five logs, a tongue of flame — with
+none of the long flat planes that made the great sword's blade cheap. Out the
+far side: 10,000 triangles and 1.9 MB from 28.8.
+
+**The glow had to be manufactured, and it is manufactured in the asset.** A
+Tripo download emits nothing: its flame is modelled geometry painted orange. The
+environment's glow threshold is **1.45** (`arena_env.tres`), set just over a
+torch-lit Bog so that only real light sources bloom, and base colour tops out
+under 1.0 in linear light — a painted flame can never reach it. So
+`tools/flame_glow.py` cuts a mask out of the model's own base colour: a texel is
+flame if its hue is within 0..65° or past 345° (wrapping red through orange to
+yellow, stopping short of the moss), its saturation is at least **0.62** and its
+value at least **0.68**. That keeps **15.8%** of the atlas. The thresholds are
+what separate flame from *warm stone* — this atlas is full of tan and salmon
+rock faces at hue 25-35 sitting at half the saturation of the paint on the fire
+— and rather than trust that, the mask is checked against the geometry: it
+lights nothing below 10 cm, 12% of the 12-24 cm band, 64% of 24-36 cm and
+everything above, on a 92 cm model whose stone ring is the bottom quarter. That
+is the flame column, found by colour and confirmed by height.
+
+The mask is blurred 2 px before it multiplies, because the glow pass is the one
+thing that makes a hard edge obvious — bloom that stops dead on a texel boundary
+reads as cut out with scissors, and 2 px at 1024 is a millimetre and a half on
+the model. The result ships as an `emissiveTexture` with
+`KHR_materials_emissive_strength` **2.6**, between the old cones' 2.2 and 3.4,
+which is the amount of bloom this menu was framed around. Godot 4.7 imports that
+as `emission_enabled`, `emission_texture` and `emission_energy_multiplier`
+2.5999999 — the same three fields the cones set by hand, off an asset instead of
+off a script.
+
+**Two hook tables, and the order is the point.** `AFTER_DECIMATION` (the bow's
+string) must run after `fast_simplification` and before everything else, because
+a morph target authored earlier comes out pointing at vertices that no longer
+exist. `AFTER_TEXTURES` (this) must run after the texture loop, because that loop
+walks the *builder's* `images` and re-reads each one's `bufferView` **out of the
+source file**: an image appended before it gets the builder's fresh view index
+looked up in the source's buffer views and comes back as unrelated bytes,
+silently, since a view is an offset and a length and both documents have plenty
+of both.
+
+**Placed at 0.88, turned to 212 degrees.** The model is 1.00 m across and 0.92 m
+tall, and the thing its height has to clear is the wordmark: `MenuLetters` puts
+the bottom of a glyph at 0.875 m at the lowest point of its bob, and the cones
+topped out at 0.66, so the letters have always been read against 0.215 m of air.
+At scale 1.0 the tip stands at 0.92 and comes up through the O — rendered, not
+guessed. `FIRE_MODEL_SCALE` **0.88** puts the tip at 0.813 m and the pit at
+0.88 m across: 0.062 m of air under the lowest glyph, a flame a quarter again
+taller than the cones', and still the metre-wide ring anybody would build. The
+air is thinner than it was, and that is the trade a modelled fire costs — a
+cone's tip could be put wherever it was convenient. One uniform number, because
+a fire that has been squashed reads as a fire nobody modelled. `FIRE_YAW_DEGREES` **212** is measured off the menu camera rather than
+picked: that lens is on bearing `atan2(3.90, 6.15)` = 32°, and 180° of model
+past that is the face with both flame tongues broadside and the logs crossing in
+front of them. The lobby's lens is on bearing 0 and sees the same face thirty
+degrees round, near enough that one constant serves both screens.
+
+**Nothing about the light moved.** The `OmniLight3D` is the key for the whole
+glade and for every Bog in the ring, and its numbers were measured against faces
+rather than against the flame — the moon is a third of it by a reading taken off
+a Bog's belly (D-136), the 11 m range is what makes the treeline fall away into
+night, the 2.0 volumetric energy is D-009's. Changing what is *drawn* in the
+middle of the glade is no reason to relight it. The stones stand closer to that
+light than the old black-barked boxes did and come up pale for it; that is the
+fire's own light on pale stone and not a material to be argued with. The
+imported material is left exactly as it arrives: the roughness map is already
+0.97 and the metallic 0.008, so there was no plastic sheen to take off it, and
+the normal map is flat enough to be a no-op.
+
+### Rejected
+
+- **Keeping the cones.** They were a placeholder that had outlived the moment,
+  and the owner asked for the model to be redone by name.
+- **A hand-built low-poly fire in Blender.** Started, and dropped mid-model when
+  the download turned up. The download is better than what was being built, and
+  an hour of modelling is not a reason to ship the worse fire.
+- **Overriding the material in GDScript to make it glow.** One line in
+  `_build_fire` and the one thing that makes a fire a fire lives in a menu
+  script, where nobody would look for it, on a prop whose every other surface
+  property comes from its file. Every other asset in `art/generated` carries its
+  own shading; this one now does too, and if the bloom is ever wrong it is wrong
+  in the pipeline.
+- **`GPUParticles3D` for the flame.** This is scenery in a menu that nobody will
+  ever stand next to. The glow pass over a modelled tongue of fire buys the
+  read for a fraction of the cost, which is the same argument the cones were
+  built on and the only part of them worth keeping.
+- **Instancing the 956k-triangle source.** A million triangles in the main menu
+  for a prop 0.9 m across, and a 28.8 MB file in the build, to gain detail no
+  lens in this game is close enough to resolve.
+
 ## D-139 — The lobby ring stands in two rows, spaced on the screen
 The owner: *"the bogs in the lobby are too close together, maybe stagger them
 just a bit? because you can move them apart a bit but you have to make sure

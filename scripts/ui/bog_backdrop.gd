@@ -25,6 +25,9 @@ const BACKDROP_PEER_BASE := 8100
 
 const BOG_SCENE := preload("res://scenes/player/bog.tscn")
 const KIT := "res://assets/Stylized_Nature_MegaKitStandard/glTF/"
+## The fire itself, a downloaded prop through the decimate pipeline like every
+## other placed thing in this game (D-138).
+const FIRE_MODEL := preload("res://art/generated/campfire.glb")
 
 ## How the Bogs are arranged and where the camera sits.
 ##
@@ -399,6 +402,40 @@ const CAMERA_CLEARANCE := 6.0
 ## quite repeats, which is what stops a flicker reading as a pulsing loop.
 const FIRE_ENERGY := 3.0
 const FIRE_FLICKER := 0.22
+
+## How big the campfire model is built, uniformly.
+##
+## The model arrives 1.00 m across and 0.92 m tall, which is a real fire pit's
+## width and rather more than a campfire's height. The height is what settles
+## this, and the thing it has to clear is the wordmark: `MenuLetters` puts the
+## bottom of a glyph at `HOVER_HEIGHT - 0.425 - BOB_HEIGHT` = **0.875 m** at the
+## lowest point of its bob, and the two cones topped out at 0.66, so the letters
+## have always been read against 0.215 m of air. At scale 1.0 the flame tip
+## stands at 0.92 and comes up *through* the O — rendered, not guessed.
+##
+## 0.88 puts the tip at 0.813 m and the pit at 0.88 m across: 0.062 m of air
+## under the lowest glyph, a flame a quarter again taller than the cones', and
+## still the metre-wide ring anybody would build. The air is thinner than it
+## was and that is the trade — a modelled fire is a taller object than a cone
+## whose tip was chosen to stay out of the way. It is one uniform number rather
+## than a squash, because a fire that has been flattened reads as a fire nobody
+## modelled.
+const FIRE_MODEL_SCALE := 0.88
+
+## Which way the model is turned, in degrees.
+##
+## It is not a symmetrical prop: five logs lean into the stones from one side
+## and the flame splits into two tongues that lie in a plane. Turned wrong, the
+## menu looks at the tongues edge-on and at the back of the log pile, and a fire
+## with no visible fuel is a lamp.
+##
+## 212 is measured off the menu camera rather than chosen: that lens sits on the
+## bearing `atan2(3.90, 6.15)` = 32 degrees from the pit, and 180 degrees of
+## model past that is the face with both tongues broadside and the logs crossing
+## in front of them. The lobby's lens is on bearing 0, so it sees the same face
+## thirty degrees round — near enough that one constant serves both screens,
+## which is what keeps the two shots of this glade the same glade.
+const FIRE_YAW_DEGREES := 212.0
 
 ## **The moon, over the viewer's shoulder.** The owner: *"for the lobby and the
 ## main menu, there should be some faint moon lighting coming from above the
@@ -1155,35 +1192,47 @@ func _place(parent: Node3D, model: String, spot: Vector3, yaw: float,
 
 ## The campfire everyone is standing around: the key light, and the only warm
 ## thing on screen.
+##
+## **A model, not a diagram.** This was five `BoxMesh` logs leaned in from a ring
+## and two unshaded cones for the flame — a fire assembled out of primitives
+## because there was no fire to download. There is one now, so the pit comes
+## through `tools/decimate_assets.py` like the spear, the shield and the letters
+## do (D-138), and this function's whole job is to place it. The owner's words
+## when the download turned up: *"I just found one I want to use, it's in my
+## downloads folder, go ahead and use that."*
+##
+## **The glow is in the asset.** A Tripo download has base colour, roughness and
+## a normal map and nothing that emits, so a flame painted orange sits under the
+## environment's 1.45 glow threshold and simply does not bloom. Rather than
+## reach in here and override the imported material — which would put the one
+## thing that makes a fire a fire in a menu script, where nobody would look for
+## it — `tools/flame_glow.py` cuts a glow mask out of the model's own base
+## colour and ships it in the GLB as an emission texture. The importer turns
+## that into `emission_enabled` and `emission_energy_multiplier` 2.6, which are
+## the same two fields the cones used to set by hand. If the bloom is ever
+## wrong, it is wrong in the pipeline.
+##
+## **The light did not move.** The `OmniLight3D` below is the key light for the
+## whole glade and for every Bog standing in the ring, and its numbers were
+## measured against faces rather than against the flame: the moon is a third of
+## it by a reading taken off a Bog's belly (`MOON_ENERGY`), the 11 m range is
+## what makes the treeline fall away into night, and the volumetric energy is
+## D-009's. Changing the thing that is *drawn* at the centre of the glade is no
+## reason to relight it, so nothing here but the mesh is different.
 func _build_fire() -> void:
 	var pit := Node3D.new()
 	pit.name = "Fire"
 	add_child(pit)
 
-	var bark := StandardMaterial3D.new()
-	bark.albedo_color = Color(0.09, 0.066, 0.05)
-	bark.roughness = 1.0
-	for i in 5:
-		var log_mesh := MeshInstance3D.new()
-		var box := BoxMesh.new()
-		box.size = Vector3(0.10, 0.10, 0.74)
-		box.material = bark
-		log_mesh.mesh = box
-		# Leaned in from a ring rather than crossed at the centre. Stacked at
-		# the origin they read as a black star behind the flame instead of as
-		# a fire someone built.
-		var angle := TAU * float(i) / 5.0 + 0.4
-		log_mesh.transform = Transform3D(
-			Basis(Vector3.UP, angle) * Basis(Vector3.RIGHT, deg_to_rad(34.0)),
-			Vector3(sin(angle) * 0.24, 0.12, cos(angle) * 0.24))
-		pit.add_child(log_mesh)
-
-	# The flame is two unshaded cones rather than particles: it is scenery in a
-	# menu, and the environment's glow pass turns an emissive cone into a
-	# believable fire for a fraction of the cost of a GPUParticles system that
-	# nobody will ever stand next to.
-	_add_flame_cone(pit, 0.26, 0.72, 0.30, Color(1.0, 0.55, 0.26), 2.2)
-	_add_flame_cone(pit, 0.13, 0.46, 0.38, Color(1.0, 0.85, 0.52), 3.4)
+	var model := FIRE_MODEL.instantiate() as Node3D
+	model.name = "Campfire"
+	# Scaled and turned on the way in rather than in the importer, so both
+	# numbers are readable from the scene that uses them.
+	model.transform = Transform3D(
+		Basis(Vector3.UP, deg_to_rad(FIRE_YAW_DEGREES)).scaled(
+			Vector3.ONE * FIRE_MODEL_SCALE),
+		Vector3.ZERO)
+	pit.add_child(model)
 
 	_fire = OmniLight3D.new()
 	_fire.light_color = Color(1.0, 0.73, 0.47)
@@ -1239,26 +1288,3 @@ func letters_leave() -> void:
 	if _letters == null:
 		return
 	await _letters.leave()
-
-
-func _add_flame_cone(parent: Node3D, radius: float, height: float, centre_y: float,
-		tint: Color, energy: float) -> void:
-	var cone := CylinderMesh.new()
-	cone.top_radius = 0.0
-	cone.bottom_radius = radius
-	cone.height = height
-	cone.radial_segments = 7
-	cone.rings = 1
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.albedo_color = tint
-	mat.emission_enabled = true
-	mat.emission = tint
-	# Comfortably above the environment's 1.45 glow threshold, which was set
-	# just over a torch-lit Bog so that only real light sources bloom.
-	mat.emission_energy_multiplier = energy
-	cone.material = mat
-	var mesh := MeshInstance3D.new()
-	mesh.mesh = cone
-	mesh.position.y = centre_y
-	parent.add_child(mesh)

@@ -48,10 +48,14 @@ const LETTER_GAP := 0.25
 ## **1.35 is where two constraints meet**, and they come from different
 ## screens:
 ##
-##   the floor — the flame cones top out at 0.66 m. The bottom of a glyph sits
-##     at `1.35 - 0.425 - 0.05` = 0.875 m, a quarter of a letter's height of
-##     air over the tallest flame, which is close enough to read as hovering
-##     over the fire and far enough that the bob never dips into it.
+##   the floor — the flame tops out at 0.813 m: the campfire model at
+##     `BogBackdrop.FIRE_MODEL_SCALE`, and 0.66 m before D-138, while the flame
+##     was two cones whose tips were chosen to stay out of the way. The bottom
+##     of a glyph sits at `1.35 - 0.425 - 0.05` = 0.875 m, which is 0.062 m of
+##     air over the tallest flame at the lowest point of the bob — close enough
+##     to read as hovering over the fire and still clear of it. It was a
+##     quarter of a letter's height under the cones, and the model is what
+##     spent it; the scale is the constant that gives it back.
 ##   the ceiling — the **lobby** is the binding one, and it binds the other
 ##     way round from what you would guess. That camera is pitched 17 degrees
 ##     down and the ring stands 3.5 m *behind* the fire, so a ring Bog's face
