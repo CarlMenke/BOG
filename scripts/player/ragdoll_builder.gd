@@ -117,7 +117,7 @@ extends RefCounted
 ##
 ## A corpse is snapped to the pose it died in, so every one of those numbers
 ## above a span is a joint that starts *outside* its limit. Soft joints
-## (softness 0.92, bias 0.25 below) absorb that and relax it over a few ticks —
+## (softness 0.92, bias 0.10 below) absorb that and relax it over a few ticks —
 ## which is why the limbs survive being 60 degrees past their span — but the
 ## margin is finite: a 30 degree neck starting 8 degrees out in `Idle` alone was
 ## enough for `ragdoll_stability` to hit 137 m/s by tick 43. Stiffening the
@@ -272,7 +272,44 @@ static func _make_bone(skeleton: Skeleton3D, bone: int, tip: int,
 	# Soft, slack joints: the Bog is a rubbery cartoon blob, not a skeleton.
 	physical.set("joint_constraints/softness", 0.92)
 	physical.set("joint_constraints/relaxation", 0.6)
-	physical.set("joint_constraints/bias", 0.25)
+	# **How hard a limit pushes back, and the answer is: gently** (D-153). This
+	# was 0.25, and 0.25 is what stretched a limb.
+	#
+	# The stretch is an elbow coming apart. Measured over eight drops — a spear's
+	# full 42 m/s into eight different bones from eight directions — the forearm's
+	# joint pulled **0.171 m** away from the upper arm's, on a link that is 0.127 m
+	# long, about twenty ticks in and always at the first ground contact; the head
+	# pulled 0.104 m off the chest. That is what the skin is drawn over, so what a
+	# player sees is an arm with no elbow, half a second long.
+	#
+	# It is D-013's own mechanism, one step further along: a cone-twist driven past
+	# its limit does not clamp, it pushes, and the push does not only add spin — it
+	# is applied at the joint, so it tears the two bodies apart before the point
+	# constraint can pull them back. Which means the two obvious dials are the
+	# wrong way round. **Tightening the spans is worse** (a 70 degree elbow reaches
+	# 0.485 m of separation and 35 m/s), **widening them buys little** (0.134 m at
+	# a 110 degree shoulder and a 115 degree elbow, and it costs peak speed
+	# elsewhere), and raising this number is a detonation: at 0.5 two bodies 0.31 m
+	# apart end up 23 m apart, and at 1.0 the corpse leaves the map. Lowering it is
+	# the whole fix, and it costs nothing anywhere else:
+	#
+	#   bias   worst joint gap   settled speed   spread   head to chest
+	#   0.25       0.171 m          2.28 m/s     0.57 m      0.377 m
+	#   0.15       0.084 m          0.92 m/s     0.65 m      —
+	#   0.10     **0.081 m**      **0.95 m/s**   0.62 m    **0.382 m**
+	#   0.05       0.073 m          0.95 m/s     0.69 m      —
+	#
+	# Every column improves at once, which is the tell that the limit was adding
+	# energy rather than holding anything together: `ragdoll_stability`'s own peak
+	# speed over one drop goes 20.5 m/s to 8.3 for a corpse thrown at 6.3, and its
+	# peak spread 1.19 m to 0.69.
+	#
+	# 0.10 rather than 0.05 because the limit still has a job. D-029 tightened the
+	# neck to 35 degrees so a head that is a third of the character could not fold
+	# into the chest, and a bias of zero is that span with nothing behind it; at
+	# 0.10 the settled head sits 0.382 m off the chest, which is D-029's number and
+	# then some. Below 0.10 the table stops moving anyway.
+	physical.set("joint_constraints/bias", 0.10)
 
 	var shape := CollisionShape3D.new()
 	var capsule := CapsuleShape3D.new()

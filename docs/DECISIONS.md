@@ -16624,3 +16624,94 @@ since D-130 landed with nobody running this file. The hit is at
 `body_centre()` now, the one point on a Bog that is nowhere near the head
 sphere in any stance. The emote adds four checks to the gate; the socket run
 is 225 + 41. (BOG-21.)
+
+## D-152 — A corpse keeps the spear it was holding, and it is a fresh one
+`BogRagdoll._adopt_spears` adopted the shafts *standing in* a Bog — the spear
+that killed it — and nothing adopted the one in its fist, so a Bog killed
+mid-carry dropped its weapon out of the world at the moment of the kill. The
+corpse carried the spear that killed it and not the one it was holding.
+
+**It keeps it rather than dropping it**, and there is nothing to weigh. A spear
+is a recharge and not a stock (`BogCombat._spear_ready_at`), so there is no
+count anywhere for a dropped one to go back into; and nothing in this game is
+picked up off the ground but a letter, a potion and the Elder's robe, so a shaft
+lying in the grass would be a thing players walk up to and cannot take. In the
+fist it is what it was a tick ago — the read on what that Bog was carrying — and
+it goes when the corpse goes.
+
+**A fresh shaft off `HeldGear.MODEL`, not the live one re-parented**, which is
+the whole difference between this and `_adopt_spears` beside it. An embedded
+projectile is a real node in the world that had to end up somewhere; the carried
+one is a prop on a bone attachment that the Bog owning it is coming back with —
+`_equip_spear` builds it once a life and `set_carried` only ever hides it — so
+taking it would leave a respawned Bog empty-handed. Nothing is duplicated and
+nothing is lost.
+
+It hangs off the **forearm**, because the fist has no rigid body: thirteen bones
+is the whole of `RagdollBuilder.SEGMENTS` and the hand is not in it (D-006).
+That costs nothing — the hand link is undriven, so it keeps the pose it died in
+relative to the forearm and the spear stays exactly where the fist is. And it is
+placed off the *corpse's* own hand bone rather than copied off the live Bog's
+model, because the corpse's bodies were snapped from those same
+`get_bone_global_pose` readings (`snap_to_pose`): the shaft sits in the fist the
+physics is about to throw about, not in the one a `BoneAttachment3D` drew a frame
+earlier through `BogAim`'s modifier (D-066).
+
+On every peer by construction, reasoned and not run over a socket:
+`MatchState._apply_death` runs everywhere and builds the corpse there, and
+`held_gear.is_carried()` is written only by `BogCombat._refresh_hand` off the
+replicated gate `has_spear()` — which has not run again for this death when the
+corpse is built, so every peer reads the same answer. `combat_range -- embed`,
+`-- respawn` and `-- health` are unchanged. (BOG-9.)
+
+## D-153 — A limb stretched because the joint limit pushed too hard, not because it was too tight
+At high impact energy a limb stretched during the tumble — an arm with no elbow,
+half a second long, always settling afterwards. Measured rather than watched: a
+probe dropped the `ragdoll_stability` corpse eight times, a spear's full 42 m/s
+into eight different bones from eight directions, and recorded every tick how far
+each joint's two bodies pulled apart against the rest distance between the bones
+they carry. The elbow pulled **0.171 m** apart on a link that is 0.127 m long,
+about twenty ticks in and always at the first ground contact; the head pulled
+0.104 m off the chest. The skin is drawn over that, which is the stretch.
+
+**It is D-013's mechanism one step further along.** A cone-twist driven past its
+limit does not clamp, it pushes — and the push is applied *at the joint*, so it
+pulls the two bodies apart before the point constraint can bring them back. Which
+puts the two obvious dials the wrong way round. Tightening the spans is much
+worse (a 70 degree elbow reaches 0.485 m of separation and 35 m/s). Widening them,
+which is what STATUS had recorded as the lever that worked, buys little (0.134 m
+at a 110 degree shoulder and a 115 degree elbow, and it costs peak speed
+elsewhere). `IMPACT_TRANSFER` at 0.7 of itself buys 0.041 m and costs the flight,
+which is the whole feedback for a kill. And more solver iterations make it worse,
+not better — at 32 and at 64 the corpse detonates — which is why the project's 12
+is not a saving.
+
+The dial is `joint_constraints/bias`, how hard a limit pushes back, and it goes
+**down**, 0.25 to 0.10:
+
+    bias   worst joint gap   settled speed   spread   head to chest
+    0.25       0.171 m          2.28 m/s     0.57 m      0.377 m
+    0.15       0.084 m          0.92 m/s     0.65 m      —
+    0.10     **0.081 m**      **0.95 m/s**   0.62 m    **0.382 m**
+    0.05       0.073 m          0.95 m/s     0.69 m      —
+
+Every column improves at once, which is the tell that the limit was adding energy
+rather than holding anything together: `ragdoll_stability`'s peak speed over one
+drop goes **20.5 m/s to 8.3** for a corpse thrown at 6.3, and its peak spread
+1.19 m to 0.69. Raising the number instead is a detonation — at 0.5 two bodies
+0.31 m apart end up 23 m apart, at 1.0 the corpse leaves the map.
+
+0.10 and not 0.05 because the limit still has a job: D-029 tightened the neck to
+35 degrees so a head that is a third of the character could not fold into the
+chest, and a bias of zero is that span with nothing behind it. At 0.10 the settled
+head sits 0.382 m off the chest, which is D-029's own number and then some, and
+below 0.10 the table stops moving anyway.
+
+**What is left.** The elbow still separates 0.081 m at its worst, twenty ticks
+into the hardest drop — no longer legible on a body at combat range, but not a
+zero. The real fix for the remaining part is the one D-006 already names: more
+bodies, so the shoulder and the neck are driven rather than frozen. And
+`ragdoll_stability`'s settled-speed reading is 1.45 m/s against its own 1.5 limit
+at this bias, which is chaos rather than a trend (0.12 reads 0.82, 0.08 reads
+1.07) — the run is deterministic, so it passes, but it is the number to watch if
+anything near the ragdoll moves next. (BOG-12.)
