@@ -236,6 +236,16 @@ func _ready() -> void:
 	_chat.add_system("Welcome to the hollow. Say hello.")
 	_refresh()
 
+	# **A lobby that opens into a match already under way is a late joiner's**
+	# (D-164), and it does not stop here. The host answers a mid-match join with
+	# `_begin_match`, which lands while the menu is still fading into this scene
+	# — the signal connected above reaches nobody, because nobody is here yet —
+	# so the one-shot it sets is read instead, and cleared. See
+	# `Net.late_join_pending` for why `match_running` is not that flag.
+	if Net.late_join_pending:
+		Net.late_join_pending = false
+		_on_match_start()
+
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not event.is_action_pressed("pause"):

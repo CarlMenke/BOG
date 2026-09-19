@@ -107,6 +107,17 @@ var is_offline: bool = false
 ## Set by MatchState; the host refuses new joiners into a running match unless
 ## they are joining as spectators.
 var match_running: bool = false
+## **One-shot, on a peer that has just joined a match already being played**
+## (D-164). The host answers such a join with `_begin_match`, and the signal that
+## message carries reaches nobody: this peer is still in the main menu, fading
+## into a lobby that does not exist yet. So the flag is what the lobby reads in
+## its own `_ready`, and it clears it.
+##
+## `match_running` is not that flag and cannot be. A client that presses BACK TO
+## LOBBY on a results screen walks itself home with `match_running` still true —
+## only the host clears it, on the broadcast that ends the match for everybody —
+## so a lobby keyed on that would throw them straight back into the arena.
+var late_join_pending: bool = false
 
 var _bound_port: int = 0
 var _connect_timer: SceneTreeTimer = null
@@ -266,6 +277,7 @@ func leave_lobby(reason: Leave = Leave.LOCAL_REQUEST, message: String = "",
 	in_session = false
 	is_offline = false
 	match_running = false
+	late_join_pending = false
 	_clear_public_address()
 	players.clear()
 	# The teams' bodies go with the lobby they belonged to. A lobby's skins are
@@ -661,10 +673,13 @@ func _on_peer_connected(peer_id: int) -> void:
 	if players.size() >= config.max_players:
 		_reject.rpc_id(peer_id, Leave.LOBBY_FULL, "This lobby is full.")
 		return
-	if match_running:
-		_reject.rpc_id(peer_id, Leave.MATCH_IN_PROGRESS,
-			"That match has already started.")
-		return
+	# A match already running is **no longer a refusal** (D-164). It was one for
+	# as long as there was nothing to hand a newcomer: `MatchState._create_bog`
+	# is broadcast once, at spawn time, so a peer that arrived after it would
+	# have stood in an empty arena. There is a world-state-on-join message now,
+	# and a late joiner watches the rest of the round instead of being turned
+	# away. `Leave.MATCH_IN_PROGRESS` stays in the enum — the ordinals travel —
+	# and nothing sends it.
 
 
 func _on_peer_disconnected(peer_id: int) -> void:
@@ -750,6 +765,14 @@ func _request_join(desired_name: String, weapon: int = Loadout.DEFAULT,
 	players[peer_id] = _make_player(clean, _smallest_team(), weapon, skin)
 	_broadcast_roster()
 	roster_changed.emit()
+	# ...and if there is a match on, send them after it (D-164). The same message
+	# the Start button broadcasts, addressed to one peer: it raises their
+	# `match_running` and takes them to the arena, where `MatchState` is waiting
+	# for their ready report with the world to hand them. After the roster, both
+	# reliable on one channel, for the reason D-048 and D-069 give — they have to
+	# know who is in this match before they load it.
+	if match_running:
+		_begin_match.rpc_id(peer_id, true)
 
 
 @rpc("authority", "call_remote", "reliable")
@@ -1127,8 +1150,10 @@ func request_match_start() -> void:
 
 
 @rpc("authority", "call_remote", "reliable")
-func _begin_match() -> void:
+func _begin_match(late: bool = false) -> void:
 	match_running = true
+	# Assigned either way, so the flag cannot survive the match it belonged to.
+	late_join_pending = late
 	match_start_requested.emit()
 
 

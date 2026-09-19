@@ -163,6 +163,12 @@ var pickup_id: int = 0
 var kind: Kind = Kind.SHIELD
 ## Which letter, as one of `MatchState.LETTER_B/O/G`. Zero for the other kinds.
 var letter: int = 0
+## The point on the ground this was dropped at — `drop`'s own argument, kept
+## rather than recovered from `global_position`, which carries `HOVER` and the
+## robe's offset on top of it. The host re-sends it verbatim to a peer that
+## joins mid-match (D-164), and a spot worked backwards out of the body's
+## position would be a second opinion about `drop`'s own arithmetic.
+var spot: Vector3 = Vector3.ZERO
 
 var _model: Node3D
 var _light: OmniLight3D
@@ -185,9 +191,10 @@ var _retry_in: float = POTION_RETRY
 ## than to a corpse, and is therefore exempt from `LIFETIME` — the practice
 ## range's item wells (D-115). It is OR-ed with the capture rule below rather
 ## than replacing it: a Capture card never rots whoever asked for it.
-func drop(id: int, of_kind: Kind, of_letter: int, spot: Vector3,
+func drop(id: int, of_kind: Kind, of_letter: int, at: Vector3,
 		keeps: bool = false) -> void:
 	pickup_id = id
+	spot = at
 	# Clamped rather than trusted, like every other value that arrives off the
 	# wire (see the header of `match_config.gd`). Only the host can send this
 	# one, but a kind outside the enum would leave `_build_visual` with no model
@@ -206,7 +213,7 @@ func drop(id: int, of_kind: Kind, of_letter: int, spot: Vector3,
 	# The robe sits lower than the others — see ROBE_DROP. The catch volume is
 	# built off HOVER regardless, so a drop that hangs differently is still
 	# collected by walking over the same patch of ground as every other one.
-	global_position = spot + Vector3.UP * (
+	global_position = at + Vector3.UP * (
 		HOVER - (ROBE_DROP if kind == Kind.ELDER_ROBE else 0.0))
 	_phase = randf() * TAU
 
@@ -479,6 +486,13 @@ func _on_body_entered(body: Node3D) -> void:
 
 func is_taken() -> bool:
 	return _taken
+
+
+## Whether this item is exempt from `LIFETIME`. Read by the host when it
+## re-sends the ground to a peer that joined mid-match (D-164), so a well's
+## stock arrives there as furniture and a corpse's loot arrives as loot.
+func keeps() -> bool:
+	return _keeps
 
 
 ## The host has ruled that `peer_id` got this. Runs on every peer.

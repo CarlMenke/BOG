@@ -45,6 +45,15 @@ signal clock_changed(seconds_left: float)
 signal match_finished(summary: Dictionary)
 signal local_death(respawn_in: float)
 signal local_respawn()
+## This peer walked into a match that was already running and is watching the
+## rest of it (D-164).
+##
+## `local_death`'s sibling rather than `local_death` itself, because the one
+## thing a HUD does with that signal it must not do here is promise a respawn:
+## a late joiner is not coming back in three seconds, they are in on the next
+## match. What the two share — the spectator camera — is the same call in both
+## handlers.
+signal local_spectate()
 ## One player's letter set changed. Carries the peer rather than the mask,
 ## because the mask is already in `stats` by the time this fires and a signal
 ## that carries state is a second copy of it waiting to disagree.
@@ -185,6 +194,10 @@ var _phase_timer: float = 0.0
 var _finished: bool = false
 ## peer_id -> true once that peer has built its island and can be spawned into.
 var _arena_ready: Dictionary = {}
+## Host only. The peers this match's world has actually been handed to: everyone
+## who was on the socket when the warmup began, plus each late joiner once it
+## has been given the Bogs (D-164). Read by `_peer_has_world` and nothing else.
+var _has_world: Dictionary = {}
 var _arena_ready_deadline: float = 0.0
 
 ## pickup_id -> Pickup, on every peer. The id is what the spawn and the
@@ -374,7 +387,15 @@ func _report_arena_ready() -> void:
 	if peer_id == 0:
 		peer_id = Net.local_id()
 	_arena_ready[peer_id] = true
-	_try_begin_warmup()
+	# Before the match, this is a peer the warmup is waiting for. After it has
+	# begun, the same report means something else entirely — somebody has just
+	# finished building the arena for a match that is already being played — and
+	# `_try_begin_warmup` would return on its first line and leave them standing
+	# in an empty world. That was the whole of the bug (D-164).
+	if phase == Phase.IDLE:
+		_try_begin_warmup()
+	else:
+		_admit_late_joiner(peer_id)
 
 
 ## Begin once everyone is ready — or once we have waited long enough that a peer
@@ -408,6 +429,167 @@ func _try_begin_warmup() -> void:
 
 func _arena_is_standing() -> bool:
 	return is_instance_valid(_players_root) and _players_root.is_inside_tree()
+
+
+# ------------------------------------------------------------- a late joiner ---
+#
+# **The world, on join** (D-164). Everything in this file is told to every peer
+# at the moment it happens and never again: `_create_bog` is sent once, at spawn
+# time, `_spawn_pickup` once, at the drop. That is the right shape for a lobby
+# that walks into a match together, and it is exactly why a peer who arrives in
+# the middle of one used to be refused at the door.
+#
+# So there is one message that is not an event: this one, sent to a single peer,
+# carrying what the match already is. It is assembled out of the same RPCs the
+# events use rather than out of a snapshot format of its own — one `_create_bog`
+# per Bog, one `_spawn_pickup` per item, one `_do_begin_hold` per carrier — so
+# there is no second description of a Bog to keep in step with the first, and a
+# field added to any of them is carried to a late joiner without anybody
+# remembering to. What cannot be said that way gets `_restore_bog`, which is the
+# one thing an event never had to say: not *this just happened* but *this is how
+# it already stands*.
+#
+# **A late joiner watches; it does not play.** They are given the eliminated
+# player's row — not alive, with no respawn due — so `_tick_respawns` never
+# brings them in, and the next `_begin_warmup` (a rematch, or the next match out
+# of the lobby) rebuilds `stats` from the roster and they are in it like anybody
+# else. Nothing new is remembered anywhere to make that true.
+
+
+## The visibility filter every host-owned Bog carries. See `_create_bog`.
+##
+## Total and cheap: the engine asks it per peer whenever it works out who a
+## synchronizer is talking to, so it has to be a dictionary lookup and nothing
+## else. A peer it has never heard of is a peer that has not been given the
+## world, which is the right answer both for a joiner mid-build and for a peer
+## the host somehow has no record of.
+func _peer_has_world(peer_id: int) -> bool:
+	return _has_world.has(peer_id)
+
+
+## Host only. `peer_id` has just finished building the arena for a match that is
+## already running. Hand them the match.
+func _admit_late_joiner(peer_id: int) -> void:
+	# POST_MATCH is not admitted: the match is over, the results are already on
+	# everyone's screen, and `_return_to_lobby` or `_rematch` is the next thing
+	# this peer will hear. A warmup is admitted the same as PLAYING — the Bogs
+	# are already standing by then, and a rule that spawned them into the
+	# countdown and not a second later would be one rule with two answers.
+	if phase != Phase.WARMUP and phase != Phase.PLAYING:
+		return
+	if not _arena_is_standing():
+		return
+
+	# The spectator's row, which is the eliminated player's row exactly: no
+	# lives, not alive, and no respawn due. Written before anything is sent, so
+	# the `_push_scores` at the end of this carries it to everybody.
+	var row := _new_stats()
+	row["alive"] = false
+	row["respawn_at"] = 0.0
+	row["lives_left"] = 0
+	stats[peer_id] = row
+
+	# The phase and both clocks, so the HUD counts the match's seconds down and
+	# not a fresh warmup's.
+	_sync_phase.rpc_id(peer_id, phase, _phase_timer, time_left)
+
+	# Every Bog that is standing, built by the message that builds them all, and
+	# then told what is left of it. The name, team, weapon and skin come off this
+	# peer's own copy of the roster inside `_create_bog`, which it has: the
+	# roster went out before `_begin_match` did.
+	for other: int in bogs:
+		var bog: Bog = bogs[other]
+		if not is_instance_valid(bog):
+			continue
+		_create_bog.rpc_id(peer_id, other, _pose_of(bog), bog.life)
+		_restore_bog.rpc_id(peer_id, other, bog.health, bog.alive,
+			maxf(0.0, bog.invulnerable_until - _now()))
+
+	# Everything lying on the ground, through the message that put it there.
+	for id: int in _pickups:
+		var item: Pickup = _pickups[id]
+		if not is_instance_valid(item) or item.is_taken():
+			continue
+		_spawn_pickup.rpc_id(peer_id, id, item.kind, item.letter, item.spot,
+			item.keeps())
+
+	# What the teams have banked. The players' own masks ride in `stats` below;
+	# this one is kept beside it rather than derived from it (see `_team_letters`)
+	# and so has to be said out loud.
+	_sync_team_letters.rpc_id(peer_id, _team_letters)
+
+	# Every card in the air and every robe on a back, with the time each has
+	# already run carried alongside so the joiner's clocks start where everyone
+	# else's are rather than at the top.
+	for holder: int in _letter_holds:
+		var hold: Dictionary = _letter_holds[holder]
+		_do_begin_hold.rpc_id(peer_id, holder, int(hold["letter"]),
+			letter_hold_total(holder), _now() - float(hold["started_at"]))
+	for wearer: int in _elders:
+		_do_set_elder.rpc_id(peer_id, wearer, true, elder_remaining(wearer))
+
+	# The scoreboard, to everybody: the joiner learns every row, and everybody
+	# else learns there is one more name on the board. After the Bogs, because
+	# `_create_bog` seeds a row for a peer it has never heard of and this is the
+	# host's table overwriting whatever that left.
+	_push_scores()
+
+	# And last, a body of their own, on their machine alone. They need one: the
+	# camera, the HUD and the spectator switch all hang off the local Bog's rig,
+	# and re-targeting that rig is what spectating already is in this game
+	# (D-020). Nobody else is told — an invisible corpse standing on a spawn pad
+	# on seven other machines is a collider somebody walks into.
+	_create_bog.rpc_id(peer_id, peer_id, _next_spawn(peer_id), 0, true)
+
+	# ...and only now may the host's Bogs speak to them: every node those packets
+	# are addressed to is on its way. See `_peer_has_world`.
+	_has_world[peer_id] = true
+
+
+## Where a Bog is and which way it is facing, as `_create_bog` wants it.
+##
+## `body_yaw` rather than the model's rotation: that is the number the body
+## itself steers by and the one `revive_at` reads back out of the basis.
+func _pose_of(bog: Bog) -> Transform3D:
+	return Transform3D(Basis.from_euler(Vector3(0.0, bog.body_yaw, 0.0)),
+		bog.global_position)
+
+
+## How one Bog already stands, for a peer that has just built it (D-164).
+##
+## The one message in this file that describes a state rather than announcing an
+## event, and it exists because the three things a late joiner cannot work out
+## for itself are all things `revive_at` has just got wrong for it: health is a
+## number only the host owns and `_do_damage` only ever carried a *change*; a
+## Bog that is dead was killed by a message this peer was not here for; and
+## spawn protection was granted at a spawn it did not see.
+##
+## No ragdoll and no death feedback. A corpse is local and cosmetic (D-010) and
+## belongs to the peers that watched it fall; a hitmarker or a shake for a death
+## that happened a minute ago would be feedback about nothing.
+@rpc("authority", "call_remote", "reliable")
+func _restore_bog(peer_id: int, health: float, standing: bool,
+		protection: float) -> void:
+	var bog: Bog = bogs.get(peer_id)
+	if not is_instance_valid(bog):
+		return
+	bog.grant_invulnerability(protection)
+	if standing:
+		bog.set_health(health)
+		return
+	bog.kill(0, Bog.Cause.UNKNOWN)
+	bog.visible = false
+
+
+## The teams' pooled masks, whole, for a peer that has just arrived (D-164).
+##
+## Whole rather than a bit at a time, for the reason the roster is broadcast
+## whole (D-004): there are at most eight teams and a mask is three bits, and a
+## table pushed entire cannot arrive half-applied.
+@rpc("authority", "call_remote", "reliable")
+func _sync_team_letters(pooled: Dictionary) -> void:
+	_team_letters = pooled
+	scores_changed.emit()
 
 
 func _on_left_lobby(_reason: int, _message: String) -> void:
@@ -484,6 +666,9 @@ func reset() -> void:
 	_capture_declared_letters = []
 	_capture_declared_radius = CaptureLayout.DEFAULT_BASE_RADIUS
 	_arena_ready.clear()
+	# Cleared with the Bogs whose synchronizers read it, and never while one is
+	# still standing: an empty list with a live Bog on it is a Bog nobody sees.
+	_has_world.clear()
 	_arena_ready_deadline = 0.0
 	# The arena these point into is the one being left, and it is freed on the
 	# next scene change. Nothing may spawn into it between here and the next
@@ -522,6 +707,12 @@ func _begin_warmup() -> void:
 	_finished = false
 	time_left = float(config().effective_time_limit())
 	_phase_timer = config().effective_warmup_time()
+
+	# Everybody on the socket is about to be given this world, whole, by the spawn
+	# loop below. See `_peer_has_world`.
+	_has_world.clear()
+	for peer_id: int in multiplayer.get_peers():
+		_has_world[peer_id] = true
 
 	_sync_phase.rpc(Phase.WARMUP, _phase_timer, time_left)
 	_sync_phase(Phase.WARMUP, _phase_timer, time_left)
@@ -787,8 +978,15 @@ func _life_of(peer_id: int) -> int:
 	return int(stats.get(peer_id, {}).get("deaths", 0))
 
 
+## `spectating` is the late joiner's own body and nothing else builds one
+## (D-164): a Bog that is put in the world already dead, hidden, publishing
+## nothing, purely so its owner has a camera to watch the match through. It is a
+## flag on this message rather than a message of its own because the window
+## between two messages is a window in which the `Sync` node publishes to peers
+## that have no such node — two engine errors a packet, which is D-044 exactly.
 @rpc("authority", "call_remote", "reliable")
-func _create_bog(peer_id: int, spawn: Transform3D, life: int) -> void:
+func _create_bog(peer_id: int, spawn: Transform3D, life: int,
+		spectating: bool = false) -> void:
 	if not _arena_is_standing() or bogs.has(peer_id):
 		return
 	var bog := BOG_SCENE.instantiate() as Bog
@@ -899,9 +1097,48 @@ func _create_bog(peer_id: int, spawn: Transform3D, life: int) -> void:
 		# You do not need a label telling you your own name.
 		plate.visible = peer_id != Net.local_id()
 
+	# **A Bog publishes only to peers that have been handed this world** (D-164).
+	#
+	# The default is the other way round: a `MultiplayerSynchronizer` speaks to
+	# every peer on the socket the instant ENet reports one, and the engine sends
+	# that first packet before any script hears `peer_connected` — so a peer that
+	# joins mid-match logs `Node not found: Arena/Players/Bog_N/Sync` for a body
+	# it has not been given, and no handler can get in front of it. A *filter*
+	# can, because it is asked rather than told: it is in place before the joiner
+	# exists and answers no until `_admit_late_joiner` has built the bodies.
+	#
+	# A filter and not `set_visibility_for`, which was tried and is worse: an
+	# explicit per-peer flag is bookkeeping the engine re-sends on every change,
+	# and flipping it turned one stray packet into hundreds.
+	#
+	# The host's Bogs and no one else's. A filter only means anything on the peer
+	# that owns the synchronizer, and `_has_world` is the host's list — a client
+	# has a relayed copy of the peer table that this is not willing to bet a
+	# permanently frozen Bog on. What that leaves is a stray packet per
+	# *client-owned* Bog at a mid-match join, which costs the joiner a line in its
+	# log and nothing else.
+	if Net.is_host:
+		var gate := bog.get_node_or_null("Sync") as MultiplayerSynchronizer
+		if gate != null:
+			gate.add_visibility_filter(_peer_has_world)
+
 	bogs[peer_id] = bog
 	if not stats.has(peer_id):
 		stats[peer_id] = _new_stats()
+
+	# A late joiner's own body, put down dead (D-164). Nothing else on this
+	# machine knows a body can be built already spent, so it is said here, in the
+	# message that built it, and in this order: the synchronizer is silenced
+	# before the frame it would first publish in, because no other peer has this
+	# node to receive it.
+	if spectating:
+		var mine := bog.get_node_or_null("Sync") as MultiplayerSynchronizer
+		if mine != null:
+			mine.public_visibility = false
+		bog.kill(0, Bog.Cause.UNKNOWN)
+		bog.visible = false
+		if peer_id == Net.local_id():
+			local_spectate.emit()
 
 
 func _respawn(peer_id: int) -> void:
@@ -2117,11 +2354,19 @@ func _end_letter_hold(peer_id: int) -> void:
 ## how long the hold was in the first place, and the dial is no answer to that
 ## (a carry's `seconds` is INF, and a host can move `letter_hold_time`
 ## mid-match).
-func _do_begin_hold(peer_id: int, letter: int, seconds: float) -> void:
+## `elapsed` is how much of the hold has already run when this arrives, and it is
+## 0.0 for every hold that is actually beginning. It is only ever a real number
+## for a late joiner, who is told about holds that started before they were here
+## (D-164) and whose ring would otherwise sweep from the top while everybody
+## else's was nearly full. Subtracting it from both ends keeps `seconds` the
+## hold's true length, which is what `letter_hold_fraction` divides by — and INF
+## minus anything is still INF, so a carry is untouched.
+func _do_begin_hold(peer_id: int, letter: int, seconds: float,
+		elapsed: float = 0.0) -> void:
 	_letter_holds[peer_id] = {
 		"letter": letter,
-		"ends_at": _now() + seconds,
-		"started_at": _now(),
+		"ends_at": _now() + seconds - elapsed,
+		"started_at": _now() - elapsed,
 		"seconds": seconds,
 	}
 	letter_hold_changed.emit(peer_id)

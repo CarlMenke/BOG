@@ -232,7 +232,7 @@ sed -n 's/^net_loopback:   \([0-9]* rematches, .*\)$/  \1/p' "$HOST_LOG"
 echo
 
 # -------------------------------------------------------- what Godot said ---
-# Nine green stages and two clean exit codes prove less than they look like
+# Thirteen green stages and two clean exit codes prove less than they look like
 # they do. Godot prints an error and carries straight on running, which is why
 # `smoke_test.sh` treats a SCRIPT ERROR as a failure (D-015); these are engine
 # errors rather than script errors and the same argument applies to them. Every

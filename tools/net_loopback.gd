@@ -207,6 +207,9 @@ var _timed_out_start: bool = false
 ## Client only, stage 10: the arena the last result was shown in, so a rematch
 ## can be told apart from still standing in it.
 var _old_arena: int = 0
+## Client only: the invite code this process dialled, kept so stage 12 can dial
+## it a second time.
+var _code: String = ""
 
 
 func _ready() -> void:
@@ -269,6 +272,10 @@ func _ready() -> void:
 ## the session to the arena.
 func _on_match_start() -> void:
 	_match_started = true
+	# Traced because it is the one navigation nothing else in this file makes,
+	# and a second one nobody asked for is a second island build — two seconds of
+	# a run, and a `MatchState` talking to an arena that is about to be freed.
+	_trace("match_start_requested -> the arena")
 	await SceneFlow.go_to_arena()
 
 
@@ -325,6 +332,8 @@ func _run_host() -> void:
 		ok = await _stage_respawn()
 	if ok:
 		ok = await _stage_rematch()
+	if ok:
+		ok = await _stage_late_join()
 	# Runs whatever happened above. The client is a live process that has to be
 	# told to stop, its tally has to reach this log, and the disconnect is the
 	# last check either way.
@@ -332,9 +341,9 @@ func _run_host() -> void:
 	await _finish()
 
 
-## 1/12. A client connects, and both sides notice.
+## 1/13. A client connects, and both sides notice.
 func _stage_connect() -> bool:
-	print("net_loopback: stage 1/12 — connection")
+	print("net_loopback: stage 1/13 — connection")
 	if not await _await_until("a peer to connect", JOIN_TIMEOUT,
 			func() -> bool: return not _peer_connected.is_empty()):
 		return false
@@ -351,14 +360,14 @@ func _stage_connect() -> bool:
 	return true
 
 
-## 2/12. Both sides hold the same roster, and the name got there through
+## 2/13. Both sides hold the same roster, and the name got there through
 ## `_request_join`.
 ##
 ## The client's copy is fetched over the control channel, which is this
 ## harness's own `@rpc` rather than the game's chat — if it were chat, a broken
 ## chat would look like a broken roster here and the real check would never run.
 func _stage_roster() -> bool:
-	print("net_loopback: stage 2/12 — roster replication")
+	print("net_loopback: stage 2/13 — roster replication")
 	_check("the roster has two players", Net.player_count(), 2)
 	var mine := _roster_digest()
 	var reply := await _request("roster", {}, STEP_TIMEOUT)
@@ -371,11 +380,11 @@ func _stage_roster() -> bool:
 	return true
 
 
-## 3/12. The client asked for a name the host already had, and `_unique_name`
+## 3/13. The client asked for a name the host already had, and `_unique_name`
 ## disambiguated it — on the host, where the decision belongs, and on the
 ## client, which only ever sees the answer.
 func _stage_names() -> bool:
-	print("net_loopback: stage 3/12 — name collision")
+	print("net_loopback: stage 3/13 — name collision")
 	_check("the host kept its name", Net.player_name(1), HOST_NAME)
 	_check("the host renamed the client", Net.player_name(_client_id),
 		CLIENT_UNIQUE_NAME)
@@ -391,7 +400,7 @@ func _stage_names() -> bool:
 	return true
 
 
-## 4/12. A weapon picked on the client, decided by the host, and read back on
+## 4/13. A weapon picked on the client, decided by the host, and read back on
 ## both sides (D-069).
 ##
 ## **The one stage that can prove this at all.** `weapon_select.tscn` drives the
@@ -406,7 +415,7 @@ func _stage_names() -> bool:
 ## sends an ordinal that is not a weapon, and the host has to turn it into a
 ## spear rather than into an index off the end of a list.
 func _stage_weapons() -> bool:
-	print("net_loopback: stage 4/12 — weapon replication")
+	print("net_loopback: stage 4/13 — weapon replication")
 	_check("both rows start on the default", Net.player_weapon(1),
 		Loadout.Weapon.SPEAR)
 	_check("the client's too", Net.player_weapon(_client_id),
@@ -472,7 +481,7 @@ func _stage_weapons() -> bool:
 	return true
 
 
-## 4/12, continued. The **Teams** skin rules over the socket (D-109).
+## 4/13, continued. The **Teams** skin rules over the socket (D-109).
 ##
 ## It rides on the weapon stage rather than taking a stage number of its own
 ## because it is the same question about the sibling of the same roster key, and
@@ -498,7 +507,7 @@ func _stage_weapons() -> bool:
 ## The mode goes back to free-for-all at the end, and the client back onto team
 ## 0, because every stage after this was written against a free-for-all match.
 func _stage_skins() -> bool:
-	print("net_loopback: stage 4/12, continued — the Teams skin rules")
+	print("net_loopback: stage 4/13, continued — the Teams skin rules")
 	# Teams, and the deal fixed rather than random: under random teams
 	# `teams_decided()` is false in the lobby (D-048), so a skin still belongs to
 	# a player and the rules below do not exist yet.
@@ -594,11 +603,11 @@ func _free_skin(taken: Array) -> int:
 	return Skins.DEFAULT
 
 
-## 5/12. `MatchConfig.to_dict()` over the wire and `apply_dict` on the far side —
+## 5/13. `MatchConfig.to_dict()` over the wire and `apply_dict` on the far side —
 ## a flat Dictionary of primitives rather than a Resource, so that receiving one
 ## never means decoding an object (D-004).
 func _stage_config() -> bool:
-	print("net_loopback: stage 5/12 — config replication")
+	print("net_loopback: stage 5/13 — config replication")
 	var settings := Net.config.duplicate_config()
 	settings.map = CONFIG_MAP
 	settings.map_seed = CONFIG_SEED
@@ -627,10 +636,10 @@ func _stage_config() -> bool:
 	return true
 
 
-## 6/12. Chat in both directions, through `Net.send_chat`, asserting the text and
+## 6/13. Chat in both directions, through `Net.send_chat`, asserting the text and
 ## who it says sent it.
 func _stage_chat() -> bool:
-	print("net_loopback: stage 6/12 — chat both directions")
+	print("net_loopback: stage 6/13 — chat both directions")
 	var before := _chat.size()
 	if (await _request("say", {"text": CLIENT_CHAT}, STEP_TIMEOUT)).is_empty():
 		return false
@@ -659,11 +668,11 @@ func _stage_chat() -> bool:
 	return true
 
 
-## 7/12. Ready up, then start. `can_start_match()` refuses until every non-host
+## 7/13. Ready up, then start. `can_start_match()` refuses until every non-host
 ## peer has readied, so the client's `_request_ready` has to have arrived for
 ## this to be reachable at all.
 func _stage_match_start() -> bool:
-	print("net_loopback: stage 7/12 — match start")
+	print("net_loopback: stage 7/13 — match start")
 	_check("the host cannot start yet", Net.can_start_match(), false)
 	if (await _request("ready", {}, STEP_TIMEOUT)).is_empty():
 		return false
@@ -685,7 +694,7 @@ func _stage_match_start() -> bool:
 	return true
 
 
-## 8/12. The arena, and then the one thing no stage here had ever asked a
+## 8/13. The arena, and then the one thing no stage here had ever asked a
 ## *client* to do: use an ability.
 ##
 ## Both peers build the real island from the replicated seed, and then the
@@ -702,7 +711,7 @@ func _stage_match_start() -> bool:
 ## host sends it the instant *its own* island finishes. See the note below for
 ## how close that actually runs.
 func _stage_abilities() -> bool:
-	print("net_loopback: stage 8/12 — the arena, and the client's abilities in it")
+	print("net_loopback: stage 8/13 — the arena, and the client's abilities in it")
 	var started := Time.get_ticks_msec()
 	if not await _await_until("the host's arena", ARENA_TIMEOUT,
 			func() -> bool: return get_tree().current_scene is Arena):
@@ -804,10 +813,10 @@ func _stage_abilities() -> bool:
 	return true
 
 
-## 9/12. The host decides a death through `MatchState.report_kill` — the same
+## 9/13. The host decides a death through `MatchState.report_kill` — the same
 ## call a landed spear makes — and the client is asked what it saw.
 func _stage_kill() -> bool:
-	print("net_loopback: stage 9/12 — a hit and then a kill, over the wire")
+	print("net_loopback: stage 9/13 — a hit and then a kill, over the wire")
 	# Somewhere that is not the client's own spawn pad. Left where it spawned,
 	# the client dies on its pad and `_next_spawn` hands the same pad straight
 	# back — it is the one furthest from the host — so the respawn in stage 9
@@ -899,7 +908,7 @@ func _stage_kill() -> bool:
 	return true
 
 
-## 10/12. The client comes back with nothing in its hands, and the host's copy of
+## 10/13. The client comes back with nothing in its hands, and the host's copy of
 ## it comes back to where it actually is.
 ##
 ## A player's report: *"you spawn with either an item or the elder randomly, it
@@ -922,7 +931,7 @@ func _stage_kill() -> bool:
 ## in — so the host's copy is required to follow the client to wherever it
 ## respawned, over a real socket, with the life number crossing it.
 func _stage_respawn() -> bool:
-	print("net_loopback: stage 10/12 — a respawn over the wire")
+	print("net_loopback: stage 10/13 — a respawn over the wire")
 	var bog: Bog = MatchState.bogs.get(_client_id)
 	if not _require("the host still has the client's Bog", is_instance_valid(bog)):
 		return false
@@ -979,7 +988,7 @@ func _stage_respawn() -> bool:
 	return true
 
 
-## 11/12. Run the match to a result and rematch it, ten times in a row.
+## 11/13. Run the match to a result and rematch it, ten times in a row.
 ##
 ## A player: *"rematch only works 50% of the time / takes a while"*. Every round
 ## ends the match the way a real one ends — a kill that reaches the kill limit,
@@ -997,7 +1006,7 @@ func _stage_respawn() -> bool:
 ## went. A warmup that begins with a peer missing from `_arena_ready` is the
 ## `ARENA_READY_TIMEOUT` path, and fails the round outright.
 func _stage_rematch() -> bool:
-	print("net_loopback: stage 11/12 — a match to a result and a rematch, %d times"
+	print("net_loopback: stage 11/13 — a match to a result and a rematch, %d times"
 		% REMATCHES)
 	# One kill ends a match from here on, and there is no countdown before the
 	# next: ten rounds of the island build are the cost of this stage and
@@ -1091,6 +1100,110 @@ func _stage_rematch() -> bool:
 	return true
 
 
+## 12/13. Somebody walks into a match that is already being played (D-164).
+##
+## Until this stage there was nothing to check: `Net._on_peer_connected` refused
+## every joiner while `match_running`, and it refused them because
+## `MatchState._create_bog` is sent once, at spawn time, so a peer that arrived
+## after it would have stood in an empty arena with nothing to tell it otherwise.
+## What this exercises is the message that did not exist — the world, on join —
+## and the only way a two-process harness can reach it: the client is thrown out
+## of a running match and dials back in.
+##
+## The same process under a new peer id is a real late join in every way that
+## matters here. It is a fresh connection, a fresh `_request_join`, a roster it
+## has to be given again, an arena it has to build again, and a `MatchState` it
+## has to be told the whole of — none of which has ever happened into a running
+## match before, on a socket or off one.
+##
+## Three things are put into the match first, because each travels by a
+## different half of the join message and **none of them is an event the joiner
+## was here for**: a Bog that is not on full health, an item lying on the ground,
+## and a robe on somebody's back.
+func _stage_late_join() -> bool:
+	print("net_loopback: stage 12/13 — a late joiner")
+	if not _require("a match is running to join",
+			MatchState.phase == MatchState.Phase.PLAYING):
+		return false
+	var old_id := _client_id
+	var host_bog: Bog = MatchState.bogs.get(1)
+	if not _require("the host has a Bog to be seen", is_instance_valid(host_bog)):
+		return false
+
+	# `Cause.UNKNOWN` rather than a spear: `HEADSHOT_CAUSES` would make the
+	# figure depend on where stage 11 left this body standing, which is the coin
+	# flip stage 9 already had to write a comment about.
+	MatchState.report_damage(1, 1, WIRE_DAMAGE, Bog.Cause.UNKNOWN,
+		host_bog.global_position, Vector3.ZERO, "")
+	var left := MatchState.health_of(1)
+	# On a spawn pad, through the host API a practice range's well uses: a pad is
+	# the one point on any map guaranteed to be standable, and `place_pickup`
+	# keeps the item, so a slow island build cannot let it rot before the joiner
+	# arrives to see it.
+	var loot_spot: Vector3 = MatchState._next_spawn().origin
+	var loot_id := MatchState.place_pickup(Pickup.Kind.SHIELD, loot_spot)
+	# After the damage, not before: damage to an Elder is zero (D-040).
+	MatchState._make_elder(1)
+	_check("the host is hurt and not dead", left, Bog.MAX_HEALTH - WIRE_DAMAGE)
+	_check("there is an item on the ground", loot_id > 0, true)
+	_check("and a robe on the host's back", MatchState.is_elder(1), true)
+
+	var seen := await _request("rejoin", {"loot": loot_id, "health": left},
+		ARENA_TIMEOUT)
+	if seen.is_empty():
+		return false
+	if not _require("the mid-match join was not refused",
+			String(seen.get("refused", "")).is_empty()):
+		print("net_loopback:   %s" % String(seen.get("refused", "")))
+		return false
+	var new_id := int(seen.get("id", 0))
+	if not _require("the joiner came back under a new peer id",
+			new_id > 1 and new_id != old_id):
+		return false
+
+	# The host's side of it.
+	_check("the host has the joiner on the roster", Net.has_player(new_id), true)
+	_check("the roster is two again", Net.player_count(), 2)
+	_check("the old row went with the old connection", Net.has_player(old_id), false)
+	_check("the host gave the joiner a scoring row",
+		MatchState.stats.has(new_id), true)
+	_check("and it is a spectator's row", MatchState.is_alive(new_id), false)
+	# The joiner's own body is built on the joiner's machine and nowhere else —
+	# an invisible corpse on a spawn pad is a collider somebody walks into.
+	_check("the host did not put a body in the world for them",
+		MatchState.bogs.has(new_id), false)
+	_check("the host still has exactly its own Bog", MatchState.bogs.size(), 1)
+
+	# The joiner's side of it, reported back.
+	_check("the joiner built the arena", bool(seen.get("arena", false)), true)
+	_check("the joiner was told the match is PLAYING", int(seen.get("phase", -1)),
+		MatchState.Phase.PLAYING)
+	_check("the joiner sees the Bog that was already standing",
+		bool(seen.get("sees_host", false)), true)
+	_check("with the health the host has for it",
+		float(seen.get("host_health", -1.0)), left)
+	_check("and the robe on its back", bool(seen.get("host_elder", false)), true)
+	_check("the joiner sees the item lying on the ground",
+		bool(seen.get("loot", false)), true)
+	_check("the joiner's clock is this match's clock",
+		absf(float(seen.get("clock", -1.0)) - MatchState.time_left) < 5.0, true)
+	_check("the joiner's scoreboard holds both rows", int(seen.get("rows", -1)), 2)
+	_check("the joiner has a body of its own to watch through",
+		bool(seen.get("own_bog", false)), true)
+	_check("which is not alive", bool(seen.get("own_alive", true)), false)
+	_check("the joiner is spectating a living Bog",
+		bool(seen.get("spectating", false)), true)
+	_check("and was never spawned into the round",
+		bool(seen.get("stayed_out", false)), true)
+
+	# Everything after this stage addresses the client, and it is a different
+	# peer now.
+	_client_id = new_id
+	print("net_loopback:   peer %d left and peer %d walked into the running match" % [
+		old_id, new_id])
+	return true
+
+
 ## The current scene's instance id, or 0. An id rather than the node, because
 ## the node is about to be freed and the point is to compare against it after.
 func _scene_id() -> int:
@@ -1173,14 +1286,14 @@ func _process(_delta: float) -> void:
 		_traced_ready = reported
 
 
-## 12/12. The client goes away and the host clears up after it. `Net.player_left`
+## 13/13. The client goes away and the host clears up after it. `Net.player_left`
 ## and `MatchState._on_player_left` are the newest code in the networking layer
 ## and have never run against a socket.
 func _stage_disconnect() -> void:
 	if _client_id == 0 or not Net.has_player(_client_id):
-		print("net_loopback: stage 12/12 — skipped, no client to disconnect")
+		print("net_loopback: stage 13/13 — skipped, no client to disconnect")
 		return
-	print("net_loopback: stage 12/12 — disconnect")
+	print("net_loopback: stage 13/13 — disconnect")
 
 	# Its tally first, while it can still answer.
 	var tally := await _request("finish", {}, STEP_TIMEOUT)
@@ -1222,6 +1335,7 @@ func _run_client(code: String) -> void:
 	if not _require("a code was passed", not code.is_empty()):
 		await _finish()
 		return
+	_code = code
 
 	# Both processes share `user://settings.cfg` — Godot keys user data on the
 	# project name, not the path — and `_on_connected_to_server` sends whatever
@@ -1493,6 +1607,8 @@ func _serve(message: Dictionary) -> void:
 			reply["playing"] = scene is Arena and scene.get_instance_id() != _old_arena \
 				and MatchState.phase == MatchState.Phase.PLAYING
 			reply["bogs"] = _bogs_in_current_arena()
+		"rejoin":
+			reply = await _client_rejoin(payload)
 		"finish":
 			reply["checks"] = _checks
 			reply["failures"] = _failures
@@ -1586,6 +1702,93 @@ func _client_abilities() -> Dictionary:
 		func() -> bool: return bog.is_pulled())
 	out["pulled"] = bog.is_pulled()
 	_check("the magnet pulled this client", out["pulled"], true)
+	return out
+
+
+## The client's half of stage 12: leave the running match and walk back into it
+## through the front door (D-164).
+##
+## Nothing here is harness-only except the `leave` and the second `join_lobby`.
+## Everything after that is the shipping path — `_request_join`, the roster
+## broadcast, the `_begin_match` the host sends a joiner, `_on_match_start`
+## standing in for the lobby's, the island build, `register_arena`, the ready
+## report — and then whatever `MatchState` chooses to say back.
+func _client_rejoin(payload: Dictionary) -> Dictionary:
+	var out := {"ok": true, "id": 0, "refused": "", "arena": false, "phase": -1}
+	# Leave *then* tidy up, the order the pause menu's Leave takes: the host is
+	# still publishing its own Bog, and a peer that freed its copy a frame before
+	# it left used to catch one packet on the way out (D-044).
+	Net.leave_lobby(Net.Leave.LOCAL_REQUEST, "", false)
+	MatchState.reset()
+	await get_tree().process_frame
+	_joined = false
+	_join_failure = ""
+	_match_started = false
+	_old_arena = _scene_id()
+
+	if not _require("the code dialled a second time", Net.join_lobby(_code)):
+		out["refused"] = _join_failure
+		return out
+	if not await _await_until("joined_lobby again", JOIN_TIMEOUT,
+			func() -> bool: return _joined or not _join_failure.is_empty()):
+		out["refused"] = "the host never answered the second join"
+		return out
+	# **The check this stage is named for.** This is the line that used to read
+	# "That match has already started."
+	_check("a match in progress is not a closed door", _join_failure, "")
+	if not _join_failure.is_empty():
+		out["refused"] = _join_failure
+		return out
+	out["id"] = Net.local_id()
+	_check("the joiner was told the roster", Net.player_count(), 2)
+	_check("and that a match is running", Net.match_running, true)
+
+	# The host sends `_begin_match` to a joiner; in the real game the lobby is
+	# what acts on it, and here this harness is.
+	if not await _await_until("the joiner's arena", ARENA_TIMEOUT,
+			func() -> bool:
+				var scene := get_tree().current_scene
+				return scene is Arena and scene.get_instance_id() != _old_arena):
+		return out
+	out["arena"] = true
+	if not await _await_until("the world to arrive", ARENA_TIMEOUT,
+			func() -> bool:
+				return MatchState.phase != MatchState.Phase.IDLE \
+					and MatchState.bogs.has(1) and MatchState.local_bog() != null):
+		return out
+
+	out["phase"] = int(MatchState.phase)
+	out["clock"] = MatchState.time_left
+	out["rows"] = MatchState.stats.size()
+	var theirs: Bog = MatchState.bogs.get(1)
+	out["sees_host"] = is_instance_valid(theirs)
+	out["host_health"] = theirs.health if is_instance_valid(theirs) else -1.0
+	out["host_elder"] = MatchState.is_elder(1)
+	out["loot"] = MatchState._pickups.has(int(payload.get("loot", 0)))
+	_check("the joiner sees the Bog that was already there", out["sees_host"], true)
+	_check("on the health the host says it has", out["host_health"],
+		float(payload.get("health", -1.0)))
+	_check("wearing the robe it picked up before anybody joined",
+		out["host_elder"], true)
+	_check("and the item that was already lying on the ground", out["loot"], true)
+
+	var mine := MatchState.local_bog()
+	out["own_bog"] = mine != null
+	out["own_alive"] = mine != null and mine.alive
+	_check("the joiner has a body to watch through", out["own_bog"], true)
+	_check("and it is not standing in the round", out["own_alive"], false)
+	var hud := _hud()
+	out["spectating"] = hud != null and hud._spectating
+	_check("the joiner is spectating", out["spectating"], true)
+
+	# And stays out. Two seconds is a respawn delay and then some; the row the
+	# host wrote has no respawn due at all, so nothing should ever bring it back.
+	for i in 120:
+		await get_tree().physics_frame
+	out["stayed_out"] = not MatchState.is_alive(Net.local_id()) \
+		and (mine == null or not mine.alive)
+	_check("and was not spawned into the round it walked in on",
+		out["stayed_out"], true)
 	return out
 
 

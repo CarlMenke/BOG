@@ -17140,3 +17140,75 @@ off the name under the picture — plus a third, that the picture actually
 loaded, and it passes on `hollow` and on `wharf`. `ui_range -- lobby_map` no
 longer scrolls to "the last row in the panel", which since this change is the
 potion sliders. (BOG-31.)
+
+## D-164 — A late joiner is told the world, and watches the rest of the round
+Until now a peer that connected while `match_running` was
+refused at the door: `Net._on_peer_connected` answered `Leave.MATCH_IN_PROGRESS`
+and sent them back to the menu. The refusal was honest — every message in
+`MatchState` is an *event*, told to everybody at the moment it happens and never
+again, so `_create_bog` is sent once at spawn time and there was simply nothing
+to hand somebody who arrived after it. Host-leaves and client-drops were done and
+proven; this was the third case and the only one with a missing piece.
+
+The piece is one message that is not an event: `_admit_late_joiner`, sent to a
+single peer from `_report_arena_ready` when that report arrives into a match that
+has already begun. It is assembled out of **the same RPCs the events use** —
+`_create_bog` per Bog, `_spawn_pickup` per item, `_do_begin_hold` per carrier,
+`_do_set_elder` per robe, `_sync_phase`, `_sync_scores` — rather than out of a
+snapshot format of its own, so there is no second description of a Bog to keep in
+step with the first and a field added to any of them reaches a joiner without
+anybody remembering to. Only `_restore_bog` is new, and it says the one thing an
+event never had to: not *this just happened* but *this is how it already stands*
+— health, whether the body is on the ground, and what is left of its spawn
+protection.
+
+**A late joiner watches; it does not play.** It is given the eliminated player's
+row — not alive, no lives, no respawn due — so `_tick_respawns` never brings it
+in, and the next `_begin_warmup` rebuilds `stats` from the roster and it is in
+that match like anybody else. Nothing new is remembered anywhere to make that
+true. Its own body is built **on its machine alone**, dead and hidden, purely so
+its camera rig has something to hang off: spectating in this game is a change of
+subject, not a second camera (D-020), and an invisible corpse standing on a spawn
+pad on seven other machines is a collider somebody walks into. That body is a
+flag on `_create_bog` rather than a message after it, because the window between
+two messages is a window in which its `Sync` publishes to peers with no such node
+— D-044 exactly.
+
+**Two things this turned up that were not the feature.**
+
+`Net.match_running` cannot be the flag a lobby reads. A client that presses BACK
+TO LOBBY on a results screen walks itself home with `match_running` still true —
+only the host clears it, on the broadcast that ends the match for everybody — so
+a lobby keyed on it threw those clients straight back into the arena, two island
+builds a round. `Net.late_join_pending` is a one-shot set by `_begin_match`'s new
+`late` argument and cleared by whoever acts on it, and it exists because the
+signal `_begin_match` carries reaches nobody on a joiner: that peer is still in
+the main menu, fading into a lobby that does not exist yet.
+
+A `MultiplayerSynchronizer` speaks to every peer on the socket the instant ENet
+reports one, and the engine sends that first packet **before any script hears
+`peer_connected`** — so a joiner logs `Node not found: Arena/Players/Bog_N/Sync`
+for a body it has not been given, and no handler can get in front of it. The
+answer is a *visibility filter*, `_peer_has_world`, added to every host-owned
+Bog at spawn: a filter is asked rather than told, so it is in place before the
+joiner exists and answers no until the bodies are on their way. `set_visibility_for`
+was tried first and is worse — an explicit per-peer flag is bookkeeping the engine
+re-sends on every change, and flipping it turned one stray packet into 272. The
+filter is on the host's Bogs only: `multiplayer.get_peers()` is the whole truth on
+peer 1 and a relayed copy on a client, and a wrong answer there is a permanently
+frozen Bog.
+
+Skipped, and listed because a spectator can see what is missing: corpses and
+ragdolls (local and cosmetic, D-010), projectiles already in flight, the kill feed
+before you arrived, other Bogs' ability stock and cooldowns, and a re-sent
+pickup's rot clock, which restarts on the joiner.
+
+`tools/net_loopback.gd` gained stage **12/13**, and it reaches a mid-match join
+the only way a two-process harness can: the client is thrown out of a running
+match and dials back in under a new peer id. Three things are put into the match
+first — a Bog off full health, an item on the ground and a robe on a back —
+because each travels by a different half of the join message and none of them is
+an event the joiner was here for. `net_test.sh` is 263 + 53 assertions, engine
+quiet. Not covered by any harness: the lobby's own `late_join_pending` branch,
+three or more peers (a client-owned Bog still leaks one `Node not found` line
+into a joiner's log), and joining a Teams, B·O·G or lives match. (BOG-5.)

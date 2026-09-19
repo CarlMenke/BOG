@@ -130,6 +130,7 @@ func _ready() -> void:
 	MatchState.match_finished.connect(_on_match_finished)
 	MatchState.local_death.connect(_on_local_death)
 	MatchState.local_respawn.connect(_on_local_respawn)
+	MatchState.local_spectate.connect(_on_local_spectate)
 	MatchState.letters_changed.connect(_on_letters_changed)
 	MatchState.letter_hold_changed.connect(_on_letters_changed)
 	MatchState.letter_picked_up.connect(_on_letter_picked_up)
@@ -967,6 +968,21 @@ func _on_local_death(respawn_in: float) -> void:
 	_death_prompt.text = "Press [%s] to change class" \
 		% SettingsPanel.primary_key("change_class")
 	_death_prompt.visible = true
+
+
+## Joined a match that was already running (D-164). The same camera an
+## eliminated player gets, and deliberately the same banner shape — what differs
+## is the sentence, because the one thing this must not say is "back in 3".
+func _on_local_spectate() -> void:
+	# All three clocks, because this banner is meant to stay: the joiner was just
+	# told the phase, so `_on_phase_changed` has a "FIGHT" flash or a warmup
+	# countdown running, and either would take this off the screen a second later.
+	_respawn_clock = 0.0
+	_phase_clock = 0.0
+	_flash = 0.0
+	_begin_spectating()
+	_show_banner("SPECTATING", "This match started without you. You are in on the next one.",
+		UIPalette.BOG)
 
 
 func _on_local_respawn() -> void:
