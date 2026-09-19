@@ -17442,3 +17442,83 @@ design for a whole pass and no render showed it).
   lobby photograph silently (BOG-58).
 - `tools/capture_preview.tscn` runs only on `safari`, the one map with no
   declared bases (BOG-59). (BOG-29.)
+
+## D-170 — The campfire stops standing in its own shadow, and its light carries further on less energy
+The owner, having looked at D-138: *"for the fire place work, the light needs
+to be a little dimmer, and right now some pieces of the fire place actually
+create a shadow on the light emitting from the fire place which doesnt make
+sense, so dim it and make sure the fireplace model doesnt block it."* And
+then: *"for the lighting for it, is it also possible to maybe make it reach
+further, but not make it brighter?"*
+
+**The pit was shadowing itself, and it was worse than it looked.** The key is
+an `OmniLight3D` at 0.55 m, which is inside the log pile of a 0.81 m model, so
+every log and every stone of the ring stood between the flame and the ground:
+the fire painted five hard black wedges across the glade radiating out of
+itself. The hero was standing in one of them. Measured off the render with the
+fire's own contribution isolated, D-138's hero was receiving **24 %** of the
+light the same lamp puts on him unshadowed — so the "too bright" he was looked
+at with was a hot pit and a rock ring next to a Bog in a wedge of night, and
+the brightness complaint and the shadow complaint are one fault.
+
+**The mesh stops casting; the light does not move.** Every `MeshInstance3D`
+under the imported campfire gets `SHADOW_CASTING_SETTING_OFF`, which is
+`MenuLetters._hush_shadows` one metre lower down and for its reason. Moving the
+light up out of the pile was the other candidate and was not taken: this light's
+position is what everything else in the glade was measured against — the moon is
+a third of it by a reading off a Bog's belly (D-136), the hero's 177.7 degree yaw
+is a quarter turn from the lens toward it (D-133) — and lifting a campfire's key
+over its own flame tip relights every face in the scene from above in order to
+solve a problem about shadows. Godot has no "cast for every light but this one",
+so the pit gives up its moon shadow as well: a 0.9 m prop lit from behind the
+lens, whose shadow was already hidden behind itself.
+
+**Dimmer and further are two dials, because Godot's omni is not the falloff its
+field names suggest.** It is `energy * (1 - (d/range)**4)**2 * d**-attenuation`:
+the attenuation is the exponent of an inverse-power law over the whole field and
+the range is a window that pinches the last few metres to nothing. So lowering
+the attenuation lifts everything past a metre and lifts the far end most, and
+raising the range is what stops that tail being cut off before it arrives.
+Energy **3.0 to 1.7**, range **11 to 15 m**, attenuation **1.6 to 1.2**.
+
+**Read off renders, the way D-136 read the moon.** The menu and the lobby
+photographed through `ui_range menu_letters` / `lobby_letters` with the flicker
+pinned at zero, patches averaged in linear luma — 90x115 px of the hero's belly,
+45x65 px of Sorrel's at the far end of the ring (4.2 m) and Nettle's at the near
+end — and a fire-off pass subtracted as the moon-and-ambient floor, so what is
+compared is what the fire put on the body:
+
+                        D-138   D-138 unshadowed   now     of unshadowed
+      the hero's belly  0.0135  0.0555             0.0464    -16 %
+      Sorrel (far)      0.0236  0.0243             0.0281    +15 %
+      Nettle (near)     0.0511  0.0525             0.0504     -4 %
+
+The middle column is the baseline, not the first: the first is a measurement of
+the shadow. Against the light he should have had, the hero and the near end of
+the ring come down a step and the far end of the arc goes up a seventh — dimmer
+at the source, further at the edge, which is the whole of what was asked for.
+**The ticket's "hero no brighter than D-138" is therefore not met against what
+was on screen, and cannot honestly be:** on screen he is brighter, because the
+black wedge over him is gone; matching the shadowed figure would need energy near
+0.5 and a glade with no fire in it. The treeline still falls away into night;
+15 m is the width of the ring and the trees behind it, not of the 26 m glade.
+
+Nothing else moved. The flicker is 0.22, the colour, the 0.55 m height and the
+2.0 volumetric energy are D-009's and D-138's, the moon is untouched, and the
+flame's bloom is emission in the asset rather than light, so the environment's
+1.45 glow threshold never entered into it. `menu_letters` and `lobby_letters`
+print the same boxes to three decimals as before. Not measured: the flicker at
+its extremes, and the Weapon-and-Character portrait.
+
+### Rejected
+
+- **Moving the light up out of the log pile.** It fixes the shadow and relights
+  every face in the glade from above to do it, against the one position three
+  other decisions were measured from.
+- **Holding the hero at the luma D-138 rendered him at.** That figure is the
+  shadow; matching it means energy near 0.5 and a menu with no fire in it.
+- **Attenuation 1.0.** The ask was a gentler falloff, not a flat one; at 1.0 the
+  floor eight metres out reads as a clearing under a streetlamp.
+- **Keeping the pit's moon shadow by hand** (a second campfire mesh in a
+  shadows-only pass). A second opinion about where a 0.9 m prop is, for a shadow
+  that falls behind the prop. (BOG-43.)

@@ -400,8 +400,53 @@ const CAMERA_CLEARANCE := 6.0
 
 ## Torch flicker. Two detuned sines beat against each other so the period never
 ## quite repeats, which is what stops a flicker reading as a pulsing loop.
-const FIRE_ENERGY := 3.0
+##
+## **1.7, down from 3.0, and it is one number of three** — see `FIRE_RANGE` for
+## the other two and for the renders all three were read off. The owner, having
+## looked at D-138: *"the light needs to be a little dimmer"*, and then *"is it
+## also possible to maybe make it reach further, but not make it brighter?"* A
+## longer range with a gentler decay puts more light on the far arc, so the step
+## down at the source is what pays for the reach rather than being undone by it.
+const FIRE_ENERGY := 1.7
 const FIRE_FLICKER := 0.22
+
+## How far the fire's light carries, in metres, and how fast it decays on the
+## way. **15.0 and 1.2, from 11.0 and 1.6** (D-170). The owner: *"is it also
+## possible to maybe make it reach further, but not make it brighter?"* — which
+## is two dials on one `OmniLight3D` and not one, so it is answerable.
+##
+## **They are not the dials their names suggest.** Godot 4's omni is
+## `energy * (1 - (d/range)**4)**2 * d**-attenuation`: the attenuation is the
+## exponent of an inverse-power law over the *whole* field, and the range is a
+## window that pinches the last few metres to nothing. So dropping the
+## attenuation lifts everything past a metre and lifts the far end most, and
+## raising the range is what stops the tail being cut off before it gets there.
+## Trading it against energy is therefore not a wash — the three together can
+## hold the Bog at the fire and lift the Bog on the far arc, which is exactly
+## the shape of what was asked for.
+##
+## **Read off renders, the way D-136 read the moon.** The menu and the lobby
+## were photographed through `ui_range menu_letters` / `lobby_letters` with the
+## flicker pinned at zero, and patches averaged in linear luma: 90x115 px of the
+## hero's belly, 45x65 px of Sorrel's at the far end of the ring (4.2 m out) and
+## the same of Nettle's at the near end. A fourth pass with the fire off gives
+## the moon-and-ambient floor under all three, so what is compared is what the
+## *fire* put on the body:
+##
+##                     D-138   D-138 unshadowed   now     of unshadowed
+##   the hero's belly  0.0135  0.0555             0.0464    -16%
+##   Sorrel (far)      0.0236  0.0243             0.0281    +15%
+##   Nettle (near)     0.0511  0.0525             0.0504     -4%
+##
+## The middle column is the one to read this against, not the first: D-138's
+## hero was standing in the pit's own shadow and getting a quarter of the fire
+## (`_build_fire`), so the figure he was actually rendered at is a measurement of
+## a bug. Against the light he *should* have had, the hero and the near end of
+## the ring come down a step and the far end goes up a seventh — dimmer at the
+## source, further at the edge. The treeline still falls away into night: 15 m
+## is the width of the ring and the trees behind it, not of the 26 m glade.
+const FIRE_RANGE := 15.0
+const FIRE_ATTENUATION := 1.2
 
 ## How big the campfire model is built, uniformly.
 ##
@@ -468,9 +513,11 @@ const MOON_PITCH_DEGREES := 52.0
 ## The moon's **directional** energy, and it is not the fire's number over three.
 ##
 ## "A third of the campfire" is a ratio between two lights measured in different
-## units: the fire is an `OmniLight3D` at energy 3.0 with a 1.6 falloff over an
-## 11 m range, so what actually lands on a body depends on how far away it is
-## standing, and the directional moon lands the same everywhere. The only honest
+## units: the fire is an `OmniLight3D` with a falloff (energy 3.0, attenuation
+## 1.6 and an 11 m range when this reading was taken; `FIRE_RANGE` says what it
+## is now and what that did to the numbers), so what actually lands on a body
+## depends on how far away it is standing, and the directional moon lands the
+## same everywhere. The only honest
 ## comparison is the one on screen, so it was taken there. The menu was rendered
 ## three times with the flicker held at zero — fire alone, moon alone at energy
 ## 1.0, and both lights off — and a 90x115 px patch of the hero Bog's belly was
@@ -1214,13 +1261,16 @@ func _place(parent: Node3D, model: String, spot: Vector3, yaw: float,
 ## the same two fields the cones used to set by hand. If the bloom is ever
 ## wrong, it is wrong in the pipeline.
 ##
-## **The light did not move.** The `OmniLight3D` below is the key light for the
-## whole glade and for every Bog standing in the ring, and its numbers were
-## measured against faces rather than against the flame: the moon is a third of
-## it by a reading taken off a Bog's belly (`MOON_ENERGY`), the 11 m range is
-## what makes the treeline fall away into night, and the volumetric energy is
-## D-009's. Changing the thing that is *drawn* at the centre of the glade is no
-## reason to relight it, so nothing here but the mesh is different.
+## **The light stayed where it is and changed how far it carries** (D-170). The
+## `OmniLight3D` below is the key for the whole glade and for every Bog standing
+## in the ring, and its position, colour, flicker and volumetric energy are
+## D-009's and D-138's untouched — the moon is still a third of it by a reading
+## taken off a Bog's belly (`MOON_ENERGY`), and the hero still stands a quarter
+## turn off the lens toward it. What moved is the falloff, because the owner
+## asked for a fire that is dimmer at the source and reaches further, and those
+## are two dials: `FIRE_ENERGY` and `FIRE_RANGE` carry the numbers and the
+## renders they were read off. The mesh also stopped shadowing it, which is the
+## other half of that note and is dealt with below.
 func _build_fire() -> void:
 	var pit := Node3D.new()
 	pit.name = "Fire"
@@ -1235,15 +1285,36 @@ func _build_fire() -> void:
 			Vector3.ONE * FIRE_MODEL_SCALE),
 		Vector3.ZERO)
 	pit.add_child(model)
+	# **The fire does not stand in its own light.** The owner: *"some pieces of
+	# the fire place actually create a shadow on the light emitting from the
+	# fire place which doesnt make sense."* He is right, and it is not a tuning
+	# problem: the key light sits at 0.55 m, which is *inside* the log pile, so
+	# every log and every stone of the ring is between the flame and the ground
+	# and the pit painted five black wedges across the glade radiating out of
+	# itself. `MenuLetters._hush_shadows` is the same move for the same reason
+	# one metre higher up.
+	#
+	# The mesh stops casting rather than the light moving up out of it, because
+	# the light is what everything else in this scene was measured against — the
+	# moon is a third of it on a Bog's belly (`MOON_ENERGY`), the hero's yaw is a
+	# quarter turn toward it (`_slot_transform`) — and lifting a campfire's key
+	# over the flame tip relights every face in the glade from above to solve a
+	# problem about shadows. What the pit gives up is its *moon* shadow too,
+	# which Godot has no way to keep on its own: that is a 0.9 m prop lit from
+	# behind the lens, so the shadow it is losing was hidden behind itself.
+	for node: Node in model.find_children("*", "MeshInstance3D", true, false):
+		(node as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 	_fire = OmniLight3D.new()
 	_fire.light_color = Color(1.0, 0.73, 0.47)
 	_fire.light_energy = FIRE_ENERGY
-	# Tight enough that the glade falls away into night a few metres out. A
-	# wide range lights the whole clearing evenly and the result reads as
-	# daylight with an orange filter on it.
-	_fire.omni_range = 11.0
-	_fire.omni_attenuation = 1.6
+	# Far enough to reach the far arc of the ring and the floor under it, soft
+	# enough on the way that it arrives there rather than being spent in the
+	# first two metres. `FIRE_RANGE` carries the arithmetic. Wider still and the
+	# whole clearing lights evenly, which reads as daylight with an orange
+	# filter on it.
+	_fire.omni_range = FIRE_RANGE
+	_fire.omni_attenuation = FIRE_ATTENUATION
 	_fire.shadow_enabled = true
 	# D-009: torch lights need roughly this to punch a halo through the
 	# volumetric fog rather than lighting geometry and nothing else.
