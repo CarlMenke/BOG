@@ -646,7 +646,9 @@ func _apply_slot(index: int) -> void:
 	# comes through here, so a skin picked in the strip is on the ring's Bogs on
 	# the next refresh — and in Teams that is *everyone on the picker's team*
 	# changing at once, which is exactly what the ring is on screen to show.
-	bog.wear_skin(Skins.texture_of(Skins.sanitize(entry.get("skin", Skins.DEFAULT))))
+	var worn := Skins.sanitize(entry.get("skin", Skins.DEFAULT))
+	bog.wear_skin(Skins.texture_of(worn), Skins.roughness_of(worn),
+		Skins.emission_of(worn))
 	# **A skin and a team recolour are two answers to one question**, so a Bog
 	# that has been dressed is not also repainted: in Teams the skin *is* the
 	# team's identity on the body, and the plate below keeps the team's colour to

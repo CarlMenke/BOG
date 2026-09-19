@@ -611,6 +611,9 @@ var _tint_material: ShaderMaterial
 ## material carrying it for a Bog with no team colour.
 var _skin_texture: Texture2D
 var _skin_material: Material
+## The skin's optional roughness and emissive maps, null for most skins (D-154).
+var _skin_roughness: Texture2D
+var _skin_emission: Texture2D
 var alive: bool = true
 ## What is left of this Bog, from `MAX_HEALTH` down to zero (D-062).
 ##
@@ -803,6 +806,11 @@ func set_team_tint(new_team: int) -> void:
 		_tint_material = make_tint_material(body_mesh.mesh.surface_get_material(0))
 		if _skin_texture != null:
 			_tint_material.set_shader_parameter("albedo_texture", _skin_texture)
+		# A skin put on before the first tint carries its maps across too; null
+		# clears the override and the shader falls back on its hint defaults,
+		# which are the no-op white and black (D-154).
+		_tint_material.set_shader_parameter("roughness_texture", _skin_roughness)
+		_tint_material.set_shader_parameter("emission_texture", _skin_emission)
 	_tint_material.set_shader_parameter("team_colour", Nameplate.colour_for_team(new_team))
 	body_mesh.set_surface_override_material(0, _tint_material)
 
@@ -812,8 +820,16 @@ func set_team_tint(new_team: int) -> void:
 ## tint shader finds the skin by hue on whatever texture it is given, so a
 ## recoloured body still takes its team's colour where the shader's window
 ## still matches it, and keeps the recolour where it does not.
-func wear_skin(texture: Texture2D) -> void:
+##
+## `roughness` and `emission` are the skin folder's optional maps (D-154), null
+## for most skins and for the plain body. They go on both materials, because a
+## Bog is drawn through the plain one in free-for-all and through the shader on
+## a team, and a glaze that only shows on blue is not a glaze.
+func wear_skin(texture: Texture2D, roughness: Texture2D = null,
+		emission: Texture2D = null) -> void:
 	_skin_texture = texture
+	_skin_roughness = roughness
+	_skin_emission = emission
 	_skin_material = null
 	if body_mesh == null:
 		return
@@ -821,10 +837,21 @@ func wear_skin(texture: Texture2D) -> void:
 		var plain := body_mesh.mesh.surface_get_material(0).duplicate() as BaseMaterial3D
 		if plain != null:
 			plain.albedo_texture = texture
+			# The imported material carries a black emission with the *add*
+			# operator and no texture, so a map lands as itself and no map
+			# leaves the body exactly as it was; its roughness is a flat 1.0,
+			# which the map then scales. Nothing is set when there is no map, so
+			# a pre-D-154 skin's material is the material it always was.
+			if roughness != null:
+				plain.roughness_texture = roughness
+			if emission != null:
+				plain.emission_texture = emission
 			_skin_material = plain
 	if _tint_material != null:
 		_tint_material.set_shader_parameter("albedo_texture",
 			texture if texture != null else (body_mesh.mesh.surface_get_material(0) as BaseMaterial3D).albedo_texture)
+		_tint_material.set_shader_parameter("roughness_texture", roughness)
+		_tint_material.set_shader_parameter("emission_texture", emission)
 	# Put the skin on unless the body is currently drawn *through the tint*, in
 	# which case the parameter written above is already the whole of the change.
 	#
@@ -1932,6 +1959,8 @@ func body_axis_nearest(point: Vector3) -> Vector3:
 const HEAD_RADIUS := 0.25
 const HEAD_BONE := "mixamorig_Head"
 const HEAD_END_BONE := "mixamorig_HeadTop_End"
+## The rig `head_centre` reads, found on its first call. See there.
+var _head_skeleton: Skeleton3D
 ## What a hit through the head is worth over the same hit anywhere else.
 const HEADSHOT_MULTIPLIER := 1.3
 ## How far past the impact point a shot is followed looking for the head. The
@@ -1942,8 +1971,14 @@ const HEADSHOT_REACH := 0.8
 
 
 ## The centre of the head sphere in world space, off the posed skeleton.
+##
+## Asked once a shot until D-150 and once a frame since — the nameplate rides
+## the head now — so the rig is found once and kept rather than searched for by
+## name down the model tree on every one of eight Bogs every frame.
 func head_centre() -> Vector3:
-	var skeleton := _model_root.find_child("Skeleton3D", true, false) as Skeleton3D
+	if _head_skeleton == null or not is_instance_valid(_head_skeleton):
+		_head_skeleton = _model_root.find_child("Skeleton3D", true, false) as Skeleton3D
+	var skeleton: Skeleton3D = _head_skeleton
 	if skeleton != null:
 		var head := skeleton.find_bone(HEAD_BONE)
 		var end := skeleton.find_bone(HEAD_END_BONE)

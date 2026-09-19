@@ -13,7 +13,8 @@ extends Node3D
 ## name while it still has candidates. Several keys separated by commas stack
 ## as rows. `from`/`to` narrow every row to a window of the clip in seconds.
 ## A trailing `skin=<name>` dresses every BOG in `art/skins/<name>/basecolor.png`
-## (D-100).
+## (D-100), with the folder's `roughness.png` and `emission.png` if it has them
+## (D-154).
 ##
 ## This is `preview_bog.gd` for the rebuilt body: the body is
 ## `art/bog/BOG.fbx` and the clips come from `art/generated/bog_clips.res`,
@@ -34,9 +35,18 @@ const LIBRARY := "res://art/generated/bog_clips.res"
 func _ready() -> void:
 	var args := PackedStringArray()
 	var skin: Texture2D = null
+	var skin_roughness: Texture2D = null
+	var skin_emission: Texture2D = null
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("skin="):
-			skin = load("res://art/skins/%s/basecolor.png" % a.trim_prefix("skin="))
+			var folder := "res://art/skins/%s/" % a.trim_prefix("skin=")
+			skin = load(folder + "basecolor.png")
+			# The optional maps, whichever the folder holds (D-154). This is a
+			# skin folder read the way the game reads one, not through `Skins`,
+			# because a skin worth looking at here is often one not yet in
+			# `Skins.NAMES` — the parked eleven, a fresh download.
+			skin_roughness = _optional(folder + "roughness.png")
+			skin_emission = _optional(folder + "emission.png")
 		else:
 			args.append(a)
 	var keys: PackedStringArray = args[3].split(",", false) if args.size() >= 4 else PackedStringArray(["Idle"])
@@ -74,6 +84,11 @@ func _ready() -> void:
 				var body := n.find_child("Bog", true, false) as MeshInstance3D
 				var worn := body.mesh.surface_get_material(0).duplicate() as BaseMaterial3D
 				worn.albedo_texture = skin
+				# The three lines `Bog.wear_skin` runs, maps included.
+				if skin_roughness != null:
+					worn.roughness_texture = skin_roughness
+				if skin_emission != null:
+					worn.emission_texture = skin_emission
 				body.set_surface_override_material(0, worn)
 			ap.play(key)
 			ap.seek(from + step * float(i), true)
@@ -118,6 +133,11 @@ func _ready() -> void:
 	cam.position = Vector3(0, (FRAME_LOW + FRAME_HIGH) * 0.5, 20.0)
 	add_child(cam)
 	cam.make_current()
+
+
+## A texture if the skin folder has it, null if it does not (D-154).
+func _optional(path: String) -> Texture2D:
+	return load(path) as Texture2D if ResourceLoader.exists(path) else null
 
 
 ## A 2 cm bar at the row's floor, behind the BOGs, so a hovering foot shows the

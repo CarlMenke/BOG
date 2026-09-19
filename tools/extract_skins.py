@@ -14,11 +14,24 @@ rather than from whatever Godot happened to leave beside them.
     python tools/extract_skins.py --dry-run       # report, write nothing
 
 For each .glb it reads the glTF JSON out of the container itself (no
-pygltflib in this environment), follows the *material's*
-`pbrMetallicRoughness.baseColorTexture` to its image — never a normal or
-metallic-roughness map, which Tripo also ships — decodes it, downsamples to
-2048 square if Tripo gave 4096 (never upsamples: the example skin is 2048 and
-a recolour does not need more), and writes the PNG.
+pygltflib in this environment), follows the *material's* texture slots to their
+images, decodes them, downsamples to 2048 square if Tripo gave 4096 (never
+upsamples: the example skin is 2048 and a recolour does not need more), and
+writes the PNGs.
+
+Three slots, one file each, and only `basecolor.png` is required (D-154):
+
+    basecolor.png   pbrMetallicRoughness.baseColorTexture
+    roughness.png   pbrMetallicRoughness.metallicRoughnessTexture, green channel
+                    only (glTF packs roughness in green, metallic in blue), so
+                    the file is a grey map the body's material reads on red
+    emission.png    emissiveTexture
+
+A skin whose download carries neither of the optional two writes neither, and
+`Skins`, `Bog.wear_skin` and the tint shader all read it exactly as they did
+before. A normal map is still not followed: the silhouette is the sculpt's and
+a recolour does not change it. `KHR_materials_emissive_strength` is not carried
+either — the brightness of a glow is a dial in the shader, not in the download.
 
 It also prints what it found in the mesh: vertex count and primitive count per
 GLB, against the body's one skinned mesh of 15 872 vertices (D-095). A download
@@ -49,6 +62,12 @@ DEST = REPO / "art" / "skins"
 # The example recolour's size (D-100): the body's own texture is 4096² / 12 MB,
 # which a recolour does not need.
 TARGET = 2048
+
+# The three files a skin folder may hold, in the order they are written.
+# `basecolor` is the skin; the other two are written only when the download
+# carries them (D-154), and the folder convention is "the file is there or it
+# is not" — nothing anywhere records which skins have a glow.
+SLOTS = ("basecolor", "roughness", "emission")
 
 # The body as Godot imports `art/bog/BOG.fbx`: one skinned mesh, this many
 # vertices (assets/source/README.md, "Godot import facts").
@@ -87,29 +106,45 @@ def read_glb(path: Path):
     return gltf, bin_chunk
 
 
-def base_colour_image(gltf):
-    """Index of the image the first material's base colour texture points at.
+def texture_image(gltf, tex):
+    """Index of the image a texture reference points at, or None.
 
-    material -> pbrMetallicRoughness.baseColorTexture.index -> textures[i]
-    -> source -> images[j]. Anything else a material carries (normal,
-    metallicRoughness, emissive) is deliberately not followed.
+    textures[i] -> source -> images[j], with the source read out of an
+    extension (KHR_texture_basisu and friends) when the entry has none of its
+    own.
     """
-    materials = gltf.get("materials") or []
-    textures = gltf.get("textures") or []
-    for mat in materials:
+    if tex is None:
+        return None
+    entry = (gltf.get("textures") or [])[tex["index"]]
+    source = entry.get("source")
+    if source is None:
+        for ext in (entry.get("extensions") or {}).values():
+            if isinstance(ext, dict) and "source" in ext:
+                return ext["source"]
+    return source
+
+
+def material_maps(gltf):
+    """({slot: image index}, material name) for the first textured material.
+
+    The base colour is the slot that decides which material this is — a
+    download has one, and a material without one is not the body's paint. The
+    other two are taken from that same material if it carries them and left out
+    if it does not (D-154). A normal map is deliberately not followed.
+    """
+    for mat in gltf.get("materials") or []:
         pbr = mat.get("pbrMetallicRoughness") or {}
-        tex = pbr.get("baseColorTexture")
-        if tex is None:
+        base = texture_image(gltf, pbr.get("baseColorTexture"))
+        if base is None:
             continue
-        entry = textures[tex["index"]]
-        source = entry.get("source")
-        if source is None:  # KHR_texture_basisu and friends
-            for ext in (entry.get("extensions") or {}).values():
-                if isinstance(ext, dict) and "source" in ext:
-                    source = ext["source"]
-                    break
-        if source is not None:
-            return source, mat.get("name", "?")
+        maps = {"basecolor": base}
+        rough = texture_image(gltf, pbr.get("metallicRoughnessTexture"))
+        if rough is not None:
+            maps["roughness"] = rough
+        emissive = texture_image(gltf, mat.get("emissiveTexture"))
+        if emissive is not None:
+            maps["emission"] = emissive
+        return maps, mat.get("name", "?")
     raise ValueError("no material with a pbrMetallicRoughness.baseColorTexture")
 
 
@@ -120,6 +155,16 @@ def image_bytes(gltf, bin_chunk, index):
     view = gltf["bufferViews"][img["bufferView"]]
     start = view.get("byteOffset", 0)
     return bin_chunk[start: start + view["byteLength"]], img.get("mimeType", "?")
+
+
+def fit(img):
+    """Tripo's 4096² down to the 2048² a recolour needs, never the other way."""
+    longest = max(img.size)
+    if longest <= TARGET:
+        return img, "kept"
+    scale = TARGET / float(longest)
+    size = (max(1, round(img.width * scale)), max(1, round(img.height * scale)))
+    return img.resize(size, Image.LANCZOS), "downsampled"
 
 
 def mesh_shape(gltf):
@@ -151,46 +196,51 @@ def extract(glb: Path, name: str, dry_run: bool) -> dict:
         # `build/body_ref.glb` and says so if missing.
         import bake_skin
         return bake_skin.bake(glb, name, dry_run)
-    index, mat_name = base_colour_image(gltf)
-    raw, mime = image_bytes(gltf, bin_chunk, index)
-
-    src = Image.open(io.BytesIO(raw))
-    fmt, size, mode = src.format, src.size, src.mode
-    img = src.convert("RGB")
-
-    longest = max(img.size)
-    if longest > TARGET:
-        scale = TARGET / float(longest)
-        out_size = (max(1, round(img.width * scale)), max(1, round(img.height * scale)))
-        img = img.resize(out_size, Image.LANCZOS)
-        action = "downsampled"
-    else:
-        action = "kept"  # never upsample
-
-    out = DEST / name / "basecolor.png"
-    written = 0
-    if not dry_run:
-        out.parent.mkdir(parents=True, exist_ok=True)
-        img.save(out, "PNG", optimize=True)
-        written = out.stat().st_size
-
-    return {
+    maps, mat_name = material_maps(gltf)
+    row = {
         "name": name,
         "glb": glb,
         "glb_bytes": glb.stat().st_size,
         "material": mat_name,
-        "format": fmt,
-        "mime": mime,
-        "mode": mode,
-        "src_size": size,
-        "src_bytes": len(raw),
-        "out_size": img.size,
-        "out_bytes": written,
-        "action": action,
         "verts": verts,
         "prims": prims,
         "skinned": skinned,
+        "maps": [],
     }
+    for slot in SLOTS:
+        if slot not in maps:
+            continue
+        raw, mime = image_bytes(gltf, bin_chunk, maps[slot])
+        src = Image.open(io.BytesIO(raw))
+        # glTF packs roughness in green and metallic in blue; the body is never
+        # metal, so the green channel alone is the whole of the map and a grey
+        # PNG is a third of the file. Everything else keeps its colour.
+        img = src.convert("RGB")
+        if slot == "roughness":
+            img = img.split()[1]
+        img, action = fit(img)
+
+        out = DEST / name / (slot + ".png")
+        written = 0
+        if not dry_run:
+            out.parent.mkdir(parents=True, exist_ok=True)
+            img.save(out, "PNG", optimize=True)
+            written = out.stat().st_size
+        entry = {
+            "slot": slot,
+            "format": src.format,
+            "mime": mime,
+            "mode": src.mode,
+            "src_size": src.size,
+            "src_bytes": len(raw),
+            "out_size": img.size,
+            "out_bytes": written,
+            "action": action,
+        }
+        row["maps"].append(entry)
+        if slot == "basecolor":  # the row's headline numbers are the paint's
+            row.update(entry)
+    return row
 
 
 def main(argv=None) -> int:
@@ -239,9 +289,18 @@ def main(argv=None) -> int:
             "%dx%d" % r["out_size"],
             r["action"],
             r["verts"], r["prims"], note))
-        print("         %s  source image %.1f MB %s, png %.1f MB" % (
-            r["glb"], r["src_bytes"] / 1e6, r["mime"],
-            r["out_bytes"] / 1e6))
+        print("         %s" % r["glb"])
+        # One line per slot, so "this download had no roughness map" is read off
+        # the report rather than off the folder afterwards.
+        for m in r.get("maps") or []:
+            print("         %-10s %-11s -> %-11s %-9s source %.1f MB %s, png %.1f MB" % (
+                m["slot"] + ".png",
+                "%dx%d" % m["src_size"], "%dx%d" % m["out_size"], m["action"],
+                m["src_bytes"] / 1e6, m["mime"], m["out_bytes"] / 1e6))
+        missing = [s for s in SLOTS[1:]
+                   if s not in [m["slot"] for m in r.get("maps") or []]]
+        if missing:
+            print("         no %s map in the download" % " or ".join(missing))
 
     for name, err in failed:
         print("FAILED %s: %s" % (name, err), file=sys.stderr)

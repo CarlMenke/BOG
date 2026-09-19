@@ -32,6 +32,18 @@ uniform float roughness = 0.9;
 uniform float specular = 0.5;
 uniform vec3 emission : source_color = vec3(0.4236);
 uniform float emission_energy = 1.0;
+// The two optional maps a skin folder may carry beside its `basecolor.png`
+// (D-154): Tripo ships a metallic-roughness with its retextures and can ship an
+// emissive, and CHIP's glaze, OOZE's wet slime and VOLT's circuitry are those
+// maps or they are nothing. Both default to the value that makes them
+// *disappear* — white multiplies the roughness by one, black adds no glow — so
+// a skin with no maps, and the plain body, are lit exactly as before.
+uniform sampler2D roughness_texture : hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D emission_texture : source_color, hint_default_black, filter_linear_mipmap_anisotropic, repeat_enable;
+// The glow's brightness, the dial `KHR_materials_emissive_strength` would have
+// been if the extractor carried it. Past the environment's 1.45 glow threshold
+// (D-138) a bright texel of the map blooms.
+uniform float emission_texture_energy = 1.0;
 
 vec3 recolour(vec3 texel) {
 	float hi = max(texel.r, max(texel.g, texel.b));
@@ -58,8 +70,12 @@ vec3 recolour(vec3 texel) {
 void fragment() {
 	vec3 base = recolour(texture(albedo_texture, UV).rgb);
 	ALBEDO = base;
-	ROUGHNESS = roughness;
+	// Red, not green: the extractor has already pulled glTF's green channel out
+	// into a grey PNG, which is what `BaseMaterial3D` reads on red as well, so
+	// the two paths onto this body read the same file the same way.
+	ROUGHNESS = roughness * texture(roughness_texture, UV).r;
 	METALLIC = 0.0;
 	SPECULAR = specular;
-	EMISSION = base * emission * emission_energy;
+	EMISSION = base * emission * emission_energy
+		+ texture(emission_texture, UV).rgb * emission_texture_energy;
 }

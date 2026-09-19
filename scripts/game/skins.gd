@@ -15,6 +15,8 @@ extends RefCounted
 ## A skin is a folder (D-100): `art/skins/<name>/basecolor.png` is a texture in
 ## the body's own UV layout, worn through `Bog.wear_skin`, and
 ## `art/skins/<name>/thumb.png` is the 128² head-and-shoulders the picker shows.
+## It **may** also hold `roughness.png` and `emission.png`, whichever its Tripo
+## download carried (D-154), which is what lets a skin be glossy or glow.
 ## Nothing here loads a `.glb`, a material or a mesh — a skin that is a *garment*
 ## (the Elder's robe) is the other kind and is not pickable.
 
@@ -63,6 +65,15 @@ const DEFAULT := 0
 ## `texture_path` refuses to answer for.
 const TEXTURE_PATH := "res://art/skins/%s/basecolor.png"
 
+## The two optional maps beside the paint (D-154). Tripo ships a
+## metallic-roughness with a retexture and can ship an emissive;
+## `tools/extract_skins.py` writes whichever the download carried and nothing
+## for the ones it did not, so **the file being there is the whole of the
+## record** — there is no list of which skins gloss or glow, and a skin folder
+## holding neither is the ordinary case.
+const ROUGHNESS_PATH := "res://art/skins/%s/roughness.png"
+const EMISSION_PATH := "res://art/skins/%s/emission.png"
+
 ## The picker's tile. Every skin has one, `bog` included — it is the only
 ## picture of the plain body in the project.
 const THUMB_PATH := "res://art/skins/%s/thumb.png"
@@ -76,6 +87,11 @@ const THUMB_PATH := "res://art/skins/%s/thumb.png"
 ## — which is the point: the skins in the ring are the skins in the arena.
 static var _textures: Dictionary = {}
 static var _thumbs: Dictionary = {}
+## The optional maps, cached the same way and with the same entry for "this skin
+## has none" as for "this skin has one": a null in the dictionary is an answer,
+## so the folder is looked at once per skin rather than once per `wear_skin`.
+static var _roughness: Dictionary = {}
+static var _emission: Dictionary = {}
 
 
 ## Turn anything that arrived from outside into a skin.
@@ -128,6 +144,31 @@ static func texture_of(skin: Variant) -> Texture2D:
 	if not _textures.has(index):
 		_textures[index] = ResourceLoader.load(TEXTURE_PATH % NAMES[index]) as Texture2D
 	return _textures[index]
+
+
+## The skin's roughness map, or **null** when its folder has none — which is
+## `wear_skin`'s word for "leave the body's own roughness alone", so every skin
+## that shipped before D-154 costs nothing and loads nothing.
+static func roughness_of(skin: Variant) -> Texture2D:
+	return _optional(_roughness, ROUGHNESS_PATH, skin)
+
+
+## The skin's emissive map, or null. Same rule as `roughness_of`.
+static func emission_of(skin: Variant) -> Texture2D:
+	return _optional(_emission, EMISSION_PATH, skin)
+
+
+## One cache lookup, one `exists` check, for the two maps that may not be there.
+## The plain body is never asked: `art/skins/bog/` holds no textures at all.
+static func _optional(cache: Dictionary, path_format: String, skin: Variant) -> Texture2D:
+	var index := sanitize(skin)
+	if index == DEFAULT:
+		return null
+	if not cache.has(index):
+		var path := path_format % NAMES[index]
+		cache[index] = ResourceLoader.load(path) as Texture2D \
+			if ResourceLoader.exists(path) else null
+	return cache[index]
 
 
 ## The 128² tile, or null if it has not been rendered yet — which the picker

@@ -30,6 +30,13 @@ container, downsamples Tripo's 4096² JPEG to the 2048² a recolour needs (D-100
 and writes `art/skins/<name>/basecolor.png`, lower-cased. That PNG is what is
 committed and what `Bog.wear_skin` wears.
 
+It writes two more files when the download has them (D-154):
+`roughness.png` from `metallicRoughnessTexture` (glTF's green channel, as a
+grey map) and `emission.png` from `emissiveTexture`. The dry run says which a
+download carried — `python tools/extract_skins.py --dry-run NAME` prints a
+line per map and names the missing ones — and a download with neither writes
+neither, which is the ordinary case for the thirteen that shipped first.
+
 The `.gdignore` beside this file keeps Godot out, the way `Rust/`, `props/` and
 `Mushroom/` do: importing 13 more copies of the body costs ten minutes of build
 and buys nothing, because the mesh is already in the project as `art/bog/BOG.fbx`.

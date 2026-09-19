@@ -16503,3 +16503,71 @@ moments of each of eighteen clips, reading `Nameplate.name_bottom()` a frame
 tool reproducing it. It reads 0.120 m at its tightest and 0.000 m of lift at
 rest. The pictures are `out/plate_runjump.png` and `out/plate_dive.png`. The
 carrier's letter card still hangs at the old anchor; that is BOG-55. (BOG-8.)
+
+## D-154 — Shine and glow ride in the skin folder, and a folder without them is the same body it was
+`tools/extract_skins.py` followed one texture slot, `baseColorTexture`, with
+"never a normal or metallic-roughness map, which Tripo also ships" written into
+its docstring; `bog_team_tint.gdshader` took an albedo and a flat roughness
+float. Everything a Tripo retexture knows about how a surface *behaves* was
+thrown away at the door. CHIP is glazed porcelain, OOZE is wet slime, VOLT and
+CRACK are circuitry and lightning (`docs/SKIN_PIPELINE.md`), and every one of
+them arrives in the game as matte paint on the same dull body.
+
+**A skin folder may now hold three files, and only the first is required.**
+`basecolor.png` as before, plus `roughness.png` — glTF packs roughness in green
+and metallic in blue, the body is never metal, so the green channel alone goes
+out as a grey PNG a third the size — and `emission.png` from `emissiveTexture`,
+both at the recolour's 2048² (D-100). The extractor writes whichever slots the
+download carried and nothing for the ones it did not, and its report now says
+which it found and names the missing ones, so "this download has no roughness
+map" is read off the run rather than off the folder afterwards.
+`KHR_materials_emissive_strength` is deliberately not carried: how bright a glow
+burns is a dial in the shader, next to the environment's 1.45 glow threshold
+(D-138), not a number in somebody's download.
+
+**The file being there is the whole of the record.** No list of which skins
+gloss, no flag on a name, nothing to keep in step with `Skins.NAMES`.
+`Skins.roughness_of` / `Skins.emission_of` answer null for a folder without
+them; `Bog.wear_skin` takes the two maps as defaulted arguments and puts them on
+*both* materials, because a Bog is drawn through the plain `BaseMaterial3D` in
+free-for-all and through the tint shader on a team, and a glaze that only shows
+on blue is not a glaze. Both paths are no-ops when the maps are null: the shader
+declares them `hint_default_white` and `hint_default_black` — one multiplies the
+roughness by one, the other adds no glow — and the plain material is left
+untouched rather than set to something neutral. The imported body material makes
+that free: it carries a flat roughness of 1.0 and a *black* emission on the add
+operator with no texture, so a map lands as itself and no map leaves the body
+exactly as it was. `preview_bog.gd` and `skin_thumbs.gd` read the same folder
+the same way, so a glossy skin's picker tile is glossy.
+
+**Proved, and short of proved.** A maps-free skin renders **pixel-identical**
+before and after the change (`preview_bog`, muck, `Idle`). Through the shader,
+four tinted bodies side by side — no maps, roughness, emission, both — show the
+two maps doing their work with the team colour still reading blue; roughness
+alone moves 2 900 pixels of specular highlight. `team_tint` passes on all five
+of its checks, corpse included, and `weapon_select` on all 221. What could not
+be done is the last mile: **no skin in the repository has a map yet.** The
+downloads are untracked source (D-128) and none is on this machine, so the
+render proofs above used a throwaway folder carrying a real Tripo roughness
+(`CAMPFIRE.glb`) and a real Tripo emissive (`Spear.glb`) as stand-ins, and that
+folder was deleted. The capability ships ahead of anything that uses it, on
+purpose: it costs nothing until a download carries a map, and the next batch of
+downloads is BOG-15's anyway.
+
+### Rejected
+
+- **Reading the metallic channel too.** glTF's blue channel is there and the
+  body is never metal; a skin that wants to look like metal wants a paint job
+  that reads as metal, which is what the retexture prompt is for.
+- **Drawing an untinted skin through the tint shader at `strength = 0`.** It
+  would have given one material path instead of two, and the shader was written
+  to copy the imported material exactly, so it would have looked the same. But
+  the picker's checks read the worn texture off a `BaseMaterial3D`
+  (`weapon_select._worn`), and a free-for-all body is not a thing to change the
+  type of for a convenience.
+- **Recording which skins carry maps in `Skins`.** A second list beside `NAMES`
+  that has to be kept in step with what is on disk, to save one
+  `ResourceLoader.exists` per skin per session.
+- **Hand-painting a roughness map for one of the thirteen to prove it with.** A
+  map nobody's prompt asked for is a shape improvised in code by another name
+  (D-135). The proof waits for a download. (BOG-13.)

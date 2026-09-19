@@ -25,7 +25,10 @@ bracket from the table at the bottom):
 
 Download with the texture embedded → `assets/source/skins/<NAME>/<NAME>.glb`.
 
-**Step 2.** `python tools/extract_skins.py` → `art/skins/<name>/basecolor.png`.
+**Step 2.** `python tools/extract_skins.py` → `art/skins/<name>/basecolor.png`,
+plus `roughness.png` and `emission.png` if the download carried a
+metallic-roughness or an emissive map (D-154). Nothing to do for those: they
+are written, imported and worn by being in the folder.
 
 **Step 3.** Append `<name>` to `Skins.NAMES` in `scripts/game/skins.gd`
 (append only, never reorder — the index goes on the wire).
@@ -149,10 +152,21 @@ side by side and the fit script tuned on it before any of the list runs.
 
 ---
 
-## Cheap win for every recolour
+## Shine and glow come out of the download (D-154)
 
-`tools/extract_skins.py` only reads `baseColorTexture`; the tint shader only
-takes albedo. Tripo also ships a metallic-roughness map (and can ship
-emissive). Extracting those and giving `bog_team_tint.gdshader` optional
-roughness and emission textures is what makes CHIP gloss, OOZE wet and VOLT
-and CRACK glow. Small change, applies to all twelve.
+Built, and free for every recolour from here on. A skin folder may hold
+`roughness.png` (Tripo's metallic-roughness, green channel, as a grey map) and
+`emission.png` (its emissive) beside `basecolor.png`.
+`tools/extract_skins.py` writes whichever the `.glb` carried and nothing for the
+ones it did not; `Skins.roughness_of` / `Skins.emission_of` return null for a
+folder without them; `Bog.wear_skin` puts them on both the plain material and
+the team-tint shader, and both are no-ops when absent. That is what makes CHIP
+gloss, OOZE wet, and VOLT and CRACK glow — **when their downloads carry the
+maps.** A Tripo *retexture* may ship a metallic-roughness and usually emits
+nothing at all (D-138), so a glow may have to be cut out of the paint the way
+the campfire's was (`tools/flame_glow.py`). Check what came back before
+promising a glow:
+
+    python tools/extract_skins.py --dry-run VOLT
+
+prints one line per map found and says which are missing.

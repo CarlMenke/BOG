@@ -881,7 +881,9 @@ func _create_bog(peer_id: int, spawn: Transform3D, life: int) -> void:
 	# as the name, the team and the weapon above are — `Net.skin_for` is the one
 	# function that knows whether the answer is this player's own row or their
 	# team's, and the lobby ring asked it the same question a minute ago.
-	bog.wear_skin(Skins.texture_of(Net.skin_for(peer_id)))
+	var worn := Net.skin_for(peer_id)
+	bog.wear_skin(Skins.texture_of(worn), Skins.roughness_of(worn),
+		Skins.emission_of(worn))
 	# **Not also recoloured.** D-046 painted the body in its team's colour and
 	# the skin picker takes that over: in Teams the team *is* a body now, and a
 	# Bog wearing its team's skin under its team's paint is one team said twice

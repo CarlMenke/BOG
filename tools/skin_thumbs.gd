@@ -171,7 +171,7 @@ func _run() -> void:
 	var written := 0
 	for skin: int in wanted:
 		var texture := Skins.texture_of(skin)
-		# The same two lines `Bog.wear_skin` runs: a duplicate of the imported
+		# The same few lines `Bog.wear_skin` runs: a duplicate of the imported
 		# material with the skin in its albedo slot, or the imported material
 		# itself for the plain body. Not a call into `Bog`, because there is no
 		# `Bog` here — this is the raw import, which is what `preview_bog.gd`
@@ -181,6 +181,14 @@ func _run() -> void:
 		else:
 			var worn := imported.duplicate() as BaseMaterial3D
 			worn.albedo_texture = texture
+			# And its maps, if the folder has any (D-154), so a glossy skin's
+			# tile is glossy the way the body in the arena is.
+			var rough := Skins.roughness_of(skin)
+			if rough != null:
+				worn.roughness_texture = rough
+			var glow := Skins.emission_of(skin)
+			if glow != null:
+				worn.emission_texture = glow
 			mesh.set_surface_override_material(0, worn)
 		await process_frame
 		RenderingServer.force_draw()
