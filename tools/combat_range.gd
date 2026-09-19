@@ -1147,6 +1147,7 @@ var _draw_rows: Array[Dictionary] = []
 var _items: Node3D
 var _players: Node3D
 var _aim_at: Vector3 = Vector3.ZERO
+var _bow_bone: String = ""
 ## The frame the Elder's bolt was fired on, or 0 for "not yet". The verdict is
 ## taken relative to this rather than at a fixed frame, because the cast waits
 ## on the robe being picked up and that is an `Area3D` overlap rather than a
@@ -3633,6 +3634,7 @@ func _drive_bow(player: Bog, combat: BogCombat) -> void:
 			if elapsed < 20:
 				return
 			_bow_health = dummy.health
+			_bow_watch_bone()
 			combat.try_draw_bow()
 			_bow_next(5)
 		5:  # let go on the very next frame — one tick of `bow_draw_time`
@@ -3655,6 +3657,7 @@ func _drive_bow(player: Bog, combat: BogCombat) -> void:
 			if elapsed < 20:
 				return
 			_bow_health = dummy.health
+			_bow_watch_bone()
 			combat.try_draw_bow()
 			_bow_next(9)
 		9:  # held until the charge says it is full, not until a frame count does
@@ -3727,6 +3730,14 @@ func _report_bow_shot(label: String, dummy: Bog, low: float, high: float) -> voi
 	var charge: float = _bow_arrow.charge
 	var taken := _bow_health - dummy.health
 	var owed := ArrowProjectile.damage_for(charge, Net.config)
+	# This range aims at the dummy's eyes, so the flat full draw goes through the
+	# head and the dropping snap shot does not — and since D-130 that is a
+	# different number. Asked of the host's own announcement rather than
+	# re-derived here: `report_damage` files a headshot under `Bog.HEAD_BONE`,
+	# and a harness that measured the head for itself would be agreeing with
+	# its own arithmetic. Capped at what the dummy had, which is what `taken` is.
+	if _bow_bone == Bog.HEAD_BONE:
+		owed = minf(owed * Bog.HEADSHOT_MULTIPLIER, _bow_health)
 	var flight := _fit_flight()
 	var fails: Array[String] = []
 	if charge < low or charge > high:
@@ -3755,6 +3766,18 @@ func _report_bow_shot(label: String, dummy: Bog, low: float, high: float) -> voi
 				flight["band"], label])
 		return
 	_bow_fail(label, "; ".join(fails))
+
+
+## Remember which bone the host filed the next landed hit under (D-130).
+func _bow_watch_bone() -> void:
+	_bow_bone = ""
+	if not MatchState.hit_landed.is_connected(_on_bow_hit):
+		MatchState.hit_landed.connect(_on_bow_hit)
+
+
+func _on_bow_hit(_attacker: int, _victim: int, _amount: float, _cause: int,
+		_point: Vector3, bone: String) -> void:
+	_bow_bone = bone
 
 
 func _bow_fail(label: String, why: String) -> void:
