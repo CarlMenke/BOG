@@ -1344,6 +1344,13 @@ check "quarry parkour and ramps" "parkour_report: PASS" \
     "$GODOT" --path "$GODOT_ROOT" --resolution 1000x1000 --script tools/snapshot.gd -- \
     res://tools/parkour_report.tscn "$GODOT_LOG_DIR/quarry_parkour.png" 30 top \
     map=res://scenes/world/maps/quarry.tscn
+# Twin Quarry is fair (D-135). The two bases are one function called twice, and
+# this re-proves it from the built scene rather than trusting that: the bases
+# congruent under a half turn, all three letter runs the same length from both,
+# cover and high ground counted equal either side, and every pad and letter on
+# solid ground. It is the only thing standing between "not symmetrical" and
+# "not even".
+check "the quarry is even" "quarry_check: PASS"     "$GODOT" --headless --path "$GODOT_ROOT" --script tools/quarry_check.gd
 # Glowworm Grounds' eight pads, all of them on one lodge deck — which is what
 # makes `PAD_SEPARATION` the number the deck's 24 m width was derived from. Its
 # triangle floor is its own and the lowest but the quarry's: the whole range is

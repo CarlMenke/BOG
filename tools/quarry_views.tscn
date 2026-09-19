@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://bq7vw8quarryview1"]
+
+[ext_resource type="Script" path="res://tools/quarry_views.gd" id="1"]
+
+[node name="QuarryViews" type="Node3D"]
+script = ExtResource("1")

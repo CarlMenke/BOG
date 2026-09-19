@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://cq7ry8sheetqr1"]
+
+[ext_resource type="Script" path="res://tools/quarry_sheet.gd" id="1"]
+
+[node name="QuarrySheet" type="Node3D"]
+script = ExtResource("1")

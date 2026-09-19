@@ -1,55 +1,59 @@
 [gd_scene load_steps=3 format=3 uid="uid://bgubmapquarry01"]
 
-; Twin Quarry — the sixth map, and the first built for Capture B·O·G (D-058).
+; Twin Quarry — the sixth map, and the first built for Capture B·O·G (D-082),
+; rebuilt in place against the quarry asset pack (D-129).
 ;
 ; Like Kopje Crossing, Lantern Wharf and Halcyon Wake this scene has no geometry
-; in it at all. `scripts/world/maps/quarry_map.gd` extends `StaticMap` and builds
-; the pit in `_ready()` from its layout tables — the floor, the rim cliff, the
-; two cut benches with their walls, the two haul ramps into each, and the
-; columns, blocks and kerbs standing in the middle, and the eight spoil rocks in
-; the two empty corners — then calls `super()`, which sweeps all of it into
-; world-space trimesh collision on layer 1, and then adds the dressing: rubble,
-; weeds, puddles, ramp paint, two derricks over the rim and a work lamp over each
-; base.
+; in it at all. `scripts/world/maps/quarry_map.gd` extends `StaticMap` and
+; builds the pit in `_ready()` from its layout tables — the floor, the rim
+; cliff, the shaft with the monolith standing in it, the two cut benches with
+; their walls and haul ramps, the north-west spoil bench with the adit bored
+; through it, the south-east terraces, the two catwalks over the shaft, and the
+; columns, berms, blocks and kerbs standing on the floor — then calls `super()`,
+; which sweeps all of it into world-space trimesh collision on layer 1, and then
+; adds the dressing: rubble, weeds, puddles, ramp paint, derricks, work lamps,
+; the quarry asset pack and the ambience.
 ;
-; The spoil rocks are on the solid side of that line and the rest of the kit is
-; not, which is the point: a rock the size of a Bog reads as cover, so it is
-; cover, and it is squashed to 1.2 m so it is a *kerb* rather than a fourth
-; height nobody declared. A pebble or a weed is obviously not cover and is
-; walked through.
+; Three things are on the solid side of that line that look like dressing, and
+; each is there for one reason: **the spoil rocks and the minecarts read as
+; cover, so they are cover** (the carts stand on a box built in code, not on
+; the art asset's trimesh), and everything else the pack puts down — ore,
+; barrels, portals, signs, rail — is obviously not cover and is walked through.
 ;
 ; The symmetry is **rotational**: Team 2's half is Team 1's half turned 180
-; degrees about the origin, so every coordinate below is one of a pair that
-; negate each other. See the script's header for why that rather than a mirror.
+; degrees about the origin. The two things that are not a turned pair — the
+; spoil bench with the tunnel and the three terraces — both stand on the
+; perpendicular bisector of the line between the bases, which is where a thing
+; can be asymmetric and still be exactly as far from one base as from the other.
+; See the script's header.
 ;
 ; So this file is what `static_map.gd` asks for:
 ;
-;   Environment  an overcast first light (`quarry_env.tres`) — the only grey
-;                weather on the map list.
-;   Sun          50 degrees up out of the north-east, pale and weak. Under a
-;                flat sky it is barely a key light; SSAO and the drill lines cut
-;                into the stone are what give the pit its shape. Serialised
-;                ROW-major, as every `.tscn` stores a `Transform3D`.
+;   Environment  hard late-morning sun, no cloud (`quarry_env.tres`). It was an
+;                overcast until the rebuild; a sun-baked quarry is a shadow map.
+;   Sun          50 degrees up out of the north-east, bright and white, with
+;                shadows on. Serialised ROW-major, as every `.tscn` stores a
+;                `Transform3D`.
 ;   Spawns       eight pads on the pit floor, four to a team, alternating so a
 ;                two-player match opens with the two players in opposite
-;                corners. None of them is on a bench: you spawn *outside* your
-;                base and run in, which is the same thing an attacker has to do
-;                and is what keeps the ramps the busiest ground on the map.
-;                Each faces the middle.
+;                corners, and every pad a rotational pair with its partner so
+;                the two teams' openings are congruent. None of them is on a
+;                bench: you spawn *outside* your base and run in, which is the
+;                same thing an attacker has to do and is what keeps the ramps
+;                the busiest ground on the map. Each faces the middle.
 ;   Bases        Team 1 at (-17.75, 4, -17.75), Team 2 at (17.75, 4, 17.75) —
 ;                the middle of each bench, four metres up, inside the wall
 ;                (D-051). 50.2 m apart, and neither can see the other: the
-;                Stack stands on the diagonal between them.
-;   Letters      G on the other diagonal, 28.5 m from each base; U and B a
-;                rotational pair, 22.2 m from one and 32.5 m from the other
-;                each way round. See the markers below for why they are not
-;                three neutral points.
+;                monolith stands in the shaft on the diagonal between them and
+;                a column stands on the lip either side of it.
+;   Letters      all three on the bisector, so each is exactly as far from one
+;                base as from the other: G in the tunnel's corner chamber, U on
+;                the shaft's south-east lip, B on the top terrace.
 ;
-; `tools/preview_map.gd` stands a Bog on every pad, `tools/parkour_report.gd`
-; walks the jump graph, proves the benches are reachable only by the ramps and
-; that the columns and rim are reachable by nothing, and measures the longest
-; sightline, and `tools/playthrough.gd` plans the capture layout off the
-; declared bases — all four are in `tools/smoke_test.sh`.
+; `tools/preview_map.gd` stands a Bog on every pad, `tools/quarry_check.gd`
+; measures the two flag runs against each other and proves the bases are
+; congruent, `tools/parkour_report.gd` walks the jump graph, and
+; `tools/playthrough.gd` plans the capture layout off the declared bases.
 
 [ext_resource type="Script" path="res://scripts/world/maps/quarry_map.gd" id="1_quarry_map"]
 [ext_resource type="Environment" path="res://resources/config/quarry_env.tres" id="2_quarry_env"]
@@ -62,19 +66,51 @@ base_radius = 4.0
 [node name="Environment" type="WorldEnvironment" parent="."]
 environment = ExtResource("2_quarry_env")
 
+; Bright and white and shadowed, where the overcast's was pale and weak. The
+; bearing is unchanged — the shadows were already falling the right way across
+; the benches — but the energy is now a key light rather than a suggestion, and
+; the shadow distance reaches the far rim so a base is in its own bench's shade.
 [node name="Sun" type="DirectionalLight3D" parent="."]
 transform = Transform3D(0.81915, -0.43948, 0.36869, 0, 0.64279, 0.76604, -0.57358, -0.62757, 0.52654, 0, 40, 0)
-light_color = Color(0.94, 0.95, 1, 1)
-light_energy = 0.95
-light_specular = 0.35
+light_color = Color(1, 0.97, 0.91, 1)
+light_energy = 1.55
+light_specular = 0.5
 shadow_enabled = true
+shadow_bias = 0.04
+shadow_normal_bias = 1.4
 directional_shadow_mode = 1
-directional_shadow_max_distance = 80.0
+directional_shadow_max_distance = 110.0
 directional_shadow_blend_splits = true
+
+; The bounce. A quarry floor is pale limestone in direct sun, so the shaded side
+; of everything in the pit is lit by a large warm source from below and in
+; front — and a `ProceduralSkyMaterial` cannot supply that, because its ambient
+; comes off a sky that is blue at the top and dusty white at the horizon. Left
+; to it, every shadow on this map came out navy: the base benches read as the
+; bottom of a swimming pool and the low terrace read as standing water.
+;
+; So this is Glowworm Grounds' trick (D-119): a second `DirectionalLight3D`,
+; shadows **off**, on the bearing opposite the sun at a third of its energy, in
+; the colour of the floor it is pretending to have come off. It points *down* at
+; a shallow 22 degrees rather than up out of the ground, which was the first
+; try: a light shining upward reaches only vertical faces and soffits, and the
+; surfaces this map most needed rescuing were the shaded **floors** — a bench
+; top, a terrace tread — every one of which faces the sky and got nothing at
+; all from it. It is not physical and is not meant to be — it is one number
+; standing in for a bounce solution nobody is going to run at sixty frames a
+; second, and it is the difference between a sun-baked pit and a grey one with
+; a bright side.
+[node name="Bounce" type="DirectionalLight3D" parent="."]
+position = Vector3(0, 12, 0)
+rotation_degrees = Vector3(-22, 150, 0)
+light_color = Color(1, 0.89, 0.72, 1)
+light_energy = 0.46
+light_specular = 0
+shadow_enabled = false
 
 [node name="Spawns" type="Node3D" parent="."]
 
-; 0  Team 1, in the north band facing the middle
+; 0  Team 1, in the south band facing the middle
 [node name="Spawn0" type="Marker3D" parent="Spawns"]
 transform = Transform3D(-0.97946, 0, -0.20165, 0, 1, 0, 0.20165, 0, -0.97946, -3.5, 0.12, -17)
 
@@ -90,21 +126,21 @@ transform = Transform3D(-0.20165, 0, -0.97946, 0, 1, 0, 0.97946, 0, -0.20165, -1
 [node name="Spawn3" type="Marker3D" parent="Spawns"]
 transform = Transform3D(0.20165, 0, 0.97946, 0, 1, 0, -0.97946, 0, 0.20165, 17, 0.12, 3.5)
 
-; 4  Team 1, out past the foot of the east ramp
+; 4  Team 1, off the shaft's north-west lip, under the spoil bench's east face
 [node name="Spawn4" type="Marker3D" parent="Spawns"]
-transform = Transform3D(-0.97014, 0, 0.24254, 0, 1, 0, -0.24254, 0, -0.97014, 5, 0.12, -20)
+transform = Transform3D(0.61394, 0, -0.78935, 0, 1, 0, 0.78935, 0, 0.61394, -9, 0.12, 7)
 
 ; 5  Team 2, its turn
 [node name="Spawn5" type="Marker3D" parent="Spawns"]
-transform = Transform3D(0.97014, 0, -0.24254, 0, 1, 0, 0.24254, 0, 0.97014, -5, 0.12, 20)
+transform = Transform3D(-0.61394, 0, 0.78935, 0, 1, 0, -0.78935, 0, -0.61394, 9, 0.12, -7)
 
-; 6  Team 1, out past the foot of the south ramp
+; 6  Team 1, mid south band, between the mid block and the flank column
 [node name="Spawn6" type="Marker3D" parent="Spawns"]
-transform = Transform3D(0.17238, 0, -0.98503, 0, 1, 0, 0.98503, 0, 0.17238, -20, 0.12, 3.5)
+transform = Transform3D(-0.97486, 0, 0.22282, 0, 1, 0, -0.22282, 0, -0.97486, 4, 0.12, -17.5)
 
 ; 7  Team 2, its turn
 [node name="Spawn7" type="Marker3D" parent="Spawns"]
-transform = Transform3D(-0.17238, 0, 0.98503, 0, 1, 0, -0.98503, 0, -0.17238, 20, 0.12, -3.5)
+transform = Transform3D(0.97486, 0, -0.22282, 0, 1, 0, 0.22282, 0, 0.97486, -4, 0.12, 17.5)
 
 [node name="Bases" type="Node3D" parent="."]
 
@@ -118,18 +154,18 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 17.75, 4, 17.75)
 
 [node name="Letters" type="Node3D" parent="."]
 
-; G on the other diagonal — the perpendicular bisector of the line between the
-; bases — which is the only place one card is exactly as far from one base as
-; from the other. 28.5 m to each.
+; G in the tunnel's corner chamber, where the two legs of the adit meet. On the
+; bisector, so 34.6 m from each base; and the only card on the map nobody can
+; see you take, because an L has no line through it.
 [node name="G" type="Marker3D" parent="Letters"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -9.5, 0, 9.5)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -17.8, 0, 17.8)
 
-; U and B are a rotational pair rather than two more neutral points: each is
-; near one team (22.2 m) and far from the other (32.5 m), and its partner is the
-; other way round, so the pair is fair even though neither card is. There is
-; nowhere left to put two neutral cards — the middle is the Stack.
+; U on the shaft's south-east lip, a metre off a sixteen-metre drop, with two
+; berms and a monolith for company and no roof at all. 27.4 m from each base.
 [node name="U" type="Marker3D" parent="Letters"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 11.5, 0, -3.5)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.5, 0, -8.5)
 
+; B on the top terrace, 4.5 m up in the open — the easiest card on the map to
+; reach and the hardest to leave with. 40.1 m from each base.
 [node name="B" type="Marker3D" parent="Letters"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -11.5, 0, 3.5)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 21, 4.5, -21)

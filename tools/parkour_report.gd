@@ -124,7 +124,17 @@ const EXPECT := {
 		# and there is nowhere on that diagonal left to stand a column. At 56 m a
 		# spear cannot cross the gap, so what the two bases have of each other is
 		# information, not threat.
-		"sightline": 42.0, "roof_sightline": 56.0, "reach": 24.0, "grid": 2.0,
+		#
+		# Both grew again at the rebuild (D-129) and for one reason: the shaft
+		# went from 13 m across to 15, so there is two metres more of the middle
+		# of this map that no rock can ever stand in. 44 m of ground line is a
+		# rim-to-rim run down the one band the berms do not cross, and 60 m from
+		# a landing is the spoil bench's top corner to the far terrace — the two
+		# highest standable points on the map, 4.5 m up, on opposite corners of
+		# the bisector and each built so the other can be seen from it. At that
+		# range a spear cannot cross and a bow is shooting at three pixels, so
+		# what those two have of each other is information, not threat.
+		"sightline": 44.0, "roof_sightline": 60.0, "reach": 24.0, "grid": 2.0,
 	},
 	"res://scenes/world/maps/yacht.tscn": {
 		"min_platforms": 60, "min_big_edges": 0, "summit_zone": "",

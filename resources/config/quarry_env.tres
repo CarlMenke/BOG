@@ -1,45 +1,50 @@
 [gd_resource type="Environment" load_steps=3 format=3 uid="uid://cq2gubquarryenv"]
 
-; Environment for Twin Quarry. Overcast first light at the bottom of a stone
-; pit, and the one weather on the map list: Rust is a hard afternoon, Kopje
-; Crossing a noon, Lantern Wharf a dusk, Halcyon Wake a bright morning and
-; Whisperbloom Hollow a torch-lit night. None of them is grey (D-058).
+; Environment for Twin Quarry. **Hard sun, late morning, no cloud** — the
+; weather a worked-out limestone pit is remembered in, and a deliberate change
+; at the rebuild (D-129): this map shipped under an overcast, which made it the
+; one grey map on the list and made a pit full of one rock read as one material
+; lit four ways. The owner's brief for the rebuild says sun-baked, and a
+; sun-baked quarry is a *shadow* map — the floor is pale, the faces are sawn,
+; and everything the player needs to read about the shape of the place is
+; written by the sun on those faces.
 ;
-; Derived from `wharf_env.tres`, which came from `safari_env.tres`, which came
-; from `rust_env.tres`, and the rule held again: the tonemapping, the glow and
-; the SSAO are theirs, and the sky, the fog and the exposure are the whole of
-; the difference.
+; It is still not Kopje Crossing's noon or Rust's afternoon: the sun here is
+; 50 degrees up out of the north-east and the sky has nothing in it, so the
+; shadows are hard, short and coloured by bounce off pale stone rather than by
+; a sky.
 ;
-;   * A flat sky: pale blue-grey overhead, a colder white at the horizon, with
-;     the sun's disc curve wide so nothing on it reads as a sun. It is the
-;     ambient and the reflections, so every face of every block gets light and
-;     the map's shape comes from SSAO and from the drill lines rather than from
-;     shadow — which is the point of an overcast, and why the two work lamps
-;     over the bases are the only warm thing in the pit.
+;   * A clear sky: deep blue overhead going to a dusty, almost white horizon,
+;     with the disc curve tight so the sun reads as a sun. It is the ambient
+;     and the reflections both, and the bounce off a limestone floor is what
+;     fills the shaded side of every block — which is why the ground colours
+;     below are warm and light rather than the neutral dark the other maps use.
 ;   * **`background_energy_multiplier` is the exposure control** (see
-;     `rust_env.tres`, which measured it). 1.05 here, which is the lowest on any
-;     map: a flat sky is ambient from every direction at once, and pale stone
-;     under it at the wharf's 1.5 came out white with no readable edges at all.
-;   * Fog is height-limited so it lies *in* the pit rather than over it: the
-;     floor at y = 0 is hazier than the rim at 11 m, which is what separates the
-;     near cover from the far cover on a map whose stone is all one rock.
-;     **It has to be thin.** The first pass ran the height density at 0.12 and
-;     the bottom eleven metres of the pit — which is all of the map anybody
-;     plays in — came out as a flat white field with the cover invisible in it.
-;     0.02 is a haze you read depth from; anything near a tenth is weather.
-;   * Glow stays on at Rust's threshold, for the two lamp heads.
+;     `rust_env.tres`, which measured it). 1.3: higher than the overcast's 1.05
+;     because a clear sky puts far less ambient into a pit than a flat white
+;     one does, and the stone went muddy at the old number.
+;   * Fog is height-limited so it lies *in* the pit rather than over it, and it
+;     is warm now rather than blue-grey: dust over hot rock, not sea air.
+;     **It has to be thin** — the first overcast pass ran it at 0.12 and the
+;     bottom eleven metres came out a flat white field with the cover invisible
+;     in it. 0.016 is a haze you read depth from.
+;   * **Volumetric fog is on**, which it was not, and `quarry_ambience.gd` is
+;     why: the heat haze over the floor and the dust hanging in the shaft are
+;     both `FogVolume`s, and a `FogVolume` in a scene with volumetric fog
+;     disabled draws nothing at all and reports nothing about it.
+;   * Glow stays on at Rust's threshold, for the two lamp heads and the sun.
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_quarrysky"]
-sky_top_color = Color(0.42, 0.49, 0.59, 1)
-sky_horizon_color = Color(0.7, 0.73, 0.77, 1)
-sky_curve = 0.42
+sky_top_color = Color(0.19, 0.36, 0.62, 1)
+sky_horizon_color = Color(0.79, 0.79, 0.74, 1)
+sky_curve = 0.15
 sky_energy_multiplier = 1.0
-ground_bottom_color = Color(0.3, 0.29, 0.27, 1)
-ground_horizon_color = Color(0.6, 0.59, 0.56, 1)
+ground_bottom_color = Color(0.45, 0.41, 0.34, 1)
+ground_horizon_color = Color(0.72, 0.68, 0.59, 1)
 ground_curve = 0.1
 ground_energy_multiplier = 1.0
-sun_angle_max = 40.0
-sun_curve = 0.02
+sun_angle_max = 8.0
+sun_curve = 0.12
 use_debanding = true
 
 [sub_resource type="Sky" id="Sky_quarry"]
@@ -50,11 +55,11 @@ radiance_size = 3
 resource_name = "QuarryEnvironment"
 background_mode = 2
 sky = SubResource("Sky_quarry")
-background_energy_multiplier = 1.05
+background_energy_multiplier = 1.12
 ambient_light_source = 3
 reflected_light_source = 2
 tonemap_mode = 3
-tonemap_exposure = 1.0
+tonemap_exposure = 0.95
 tonemap_white = 6.0
 ssao_enabled = true
 ssao_radius = 1.3
@@ -83,16 +88,24 @@ glow_hdr_threshold = 2.0
 glow_hdr_scale = 2.0
 glow_hdr_luminance_cap = 10.0
 fog_enabled = true
-fog_light_color = Color(0.5, 0.54, 0.6, 1)
+fog_light_color = Color(0.78, 0.74, 0.64, 1)
 fog_light_energy = 1.0
-fog_sun_scatter = 0.05
-fog_density = 0.002
-fog_aerial_perspective = 0.3
+fog_sun_scatter = 0.18
+fog_density = 0.0014
+fog_aerial_perspective = 0.15
 fog_sky_affect = 0.0
 fog_height = 5.0
-fog_height_density = 0.02
-volumetric_fog_enabled = false
+fog_height_density = 0.0075
+volumetric_fog_enabled = true
+volumetric_fog_density = 0.008
+volumetric_fog_albedo = Color(0.93, 0.9, 0.83, 1)
+volumetric_fog_emission_energy = 0.0
+volumetric_fog_gi_inject = 0.0
+volumetric_fog_anisotropy = 0.25
+volumetric_fog_length = 90.0
+volumetric_fog_detail_spread = 2.0
+volumetric_fog_ambient_inject = 0.35
 adjustment_enabled = true
 adjustment_brightness = 1.0
 adjustment_contrast = 1.16
-adjustment_saturation = 0.92
+adjustment_saturation = 0.95

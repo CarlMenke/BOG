@@ -15469,3 +15469,50 @@ a handedness, which is why its material is mirrored in u and nothing else is),
 four moored boats and a lit far shore, midges under the lit strings, and hooks
 for quay water north and south and for rigging. Eleven new draw calls, seven
 shared materials, no new shadow casters; collision unchanged.
+
+## D-135 — Twin Quarry is rebuilt on its own footprint: one base written once, the asymmetry on the bisector, and a tunnel
+The owner: *"rebuild the quarry map with the idea the same as the old one just
+more in depth and more detail. The main idea is one big hole in the middle,
+quarry-like, with 2 identical bases. The map doesn't have to be symmetrical, it
+just can't have anything too crazy, to keep the sides even (this is a capture
+the flag map). There should also be a tunnel somewhere."* And: match Lantern
+Wharf's art and texture style. **Rebuilds D-082's map in place**; its footprint
+(`HALF` 24, the 11 m rim and its tiers) and its map id are unchanged.
+
+**Even without being mirrored.** Both bases come out of `_build_base(at)`,
+called twice on a half turn, and every cover table is written once and placed
+twice — identical by construction rather than by inspection. Everything that
+differs sits on the **perpendicular bisector** of the base-to-base line, which
+is the one place a thing can differ and still be exactly as far from both: NW a
+4.5 m spoil bench with an L-shaped adit bored through it (4.0 m wide, 3.4 m of
+headroom so the spring arm survives, timbered, railed, two carts, two lamps),
+SE three open 1.5 m terraces climbing to the same 4.5 m. All three letters are
+on that line — G in the tunnel chamber, U on the shaft's lip, B on the top
+terrace. `tools/quarry_check.gd` re-proves all of it from the built scene
+(bases congruent to 0.0000 m, letter runs 0.0 % apart, cover 12 v 12, high
+ground 2 v 2, pads and letters on solid ground) and is in the gate.
+
+**The pit** is a 15 m shaft sixteen metres deep with a stepped monolith of raw
+rock standing in it to 12 m: the landmark, and the thing that closes every
+base-to-base and pad-to-pad line through the origin, as D-082's Stack did. Four
+routes: the NW lane (over the bench or through it), the SE terraces, and two
+timber catwalks across the shaft, each with a rail and a gap that has to be
+dived.
+
+**The pack is dressing, never collision.** `art/maps/quarry/` is 26 of the 65
+models `tools/trim_quarry_pack.py` made out of the owner's Tripo pack; the rest
+were deleted as unused (ice, crystal, glowing and futuristic pieces do not
+belong in a sun-baked quarry) and can be re-made from the raw pack. The
+playable tunnel is boxes built in code: scaled to a real corridor the pack's
+tunnel dioramas are ten metres of solid mound inside it, so they are blind
+adits against the rim. Carts read as cover, so each stands on a box.
+
+**The look** is six CC0 Poly Haven sets (`assets/maps/quarry/SOURCES.md`, 19 MB)
+world-triplanar, in the wharf's manner; pale coursed sandstone on what can be
+climbed and dark bedded rock on what cannot, so D-082's "pale means climbable"
+is carried by material. Relief is visual only and never stands more than 10 cm
+into walkable space. Team identity is paint, banners, flags and a tarp on
+dressed block, not a tinted wall. Overcast became hard sun with a warm bounce
+fill, which is the one change here that is taste rather than measurement.
+Known weak: rectangular puddles, a very brown palette, a plant that reads as
+shapes from the pit floor. **Nobody has played it.**
