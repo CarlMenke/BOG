@@ -66,6 +66,16 @@ const SPAWN_RIM_MARGIN := 4.0
 ## And at least this far from every pad solved before it. Two bearings that both
 ## have to swing clear of the knoll used to come to rest on the same patch of
 ## flat ground, 3-5 m apart — one pad in all but name (D-055).
+##
+## Six metres is as much as the ring has to give. Eight pads evenly spaced on a
+## circle at SPAWN_RING of a 23 m rim sit 2·0.66·23·sin(π/8) ≈ 11.6 m from their
+## neighbours, but the sweep below may swing a pad 37 degrees either way and
+## shift it ±3.8 m in and out to get off the shrine, and two neighbours both
+## running from the same landmark close most of that gap between them. Half the
+## ideal spacing is the floor that still leaves the search somewhere to go:
+## measured over twelve seeds it comes out at 6.2-10.2 m with room to spare,
+## while seven metres already runs a bearing out of ground on seed 20263835 —
+## the one whose ideal points straight at the knoll (D-151).
 const SPAWN_MIN_APART := 6.0
 ## Bogs are spawned a few centimetres up so the capsule settles onto the ground
 ## rather than starting the match intersecting it.
@@ -292,10 +302,22 @@ func _build_spawn_points() -> void:
 ##
 ## So: a full sweep for a pad that satisfies everything; failing that, the
 ## flattest pad that is at least out of every landmark, accepting a slope we
-## would rather not have; and only if even that finds nothing, the ideal.
+## would rather not have; and only if even that finds nothing, the roomiest spot
+## the sweep saw.
+##
+## That last tier used to be the ideal position, handed back without asking
+## anything of it — which made the separation below a preference rather than a
+## rule, since the one path that gives up on every other rule gave up on that one
+## too. Nothing on the seeds we ship reaches it, but a pad that lands on top of
+## another is the defect this whole search exists to avoid, and a fallback that
+## can produce it is not a fallback (D-151). So the crowded candidates are kept
+## as they go past, and the one standing furthest from its neighbours is what a
+## failed sweep hands back.
 func _solve_spawn(mass: IslandGenerator.Landmass, bearing: float) -> Vector2:
 	var fallback := Vector2.INF
 	var fallback_slope := INF
+	var roomiest := Vector2.INF
+	var roomiest_gap := -INF
 	for swing_step in 13:
 		# 0, +0.16, -0.16, +0.32, -0.32 ... out to about 37 degrees either way.
 		var swing := 0.16 * float((swing_step + 1) / 2) 			* (1.0 if swing_step % 2 == 0 else -1.0)
@@ -310,6 +332,16 @@ func _solve_spawn(mass: IslandGenerator.Landmass, bearing: float) -> Vector2:
 			var spot := _spawn_candidate(mass, bearing + swing, fraction)
 			if not _spawn_is_clear(mass, spot):
 				continue
+			# Separation is asked here rather than inside `_spawn_is_clear` because
+			# it is the one rule whose near misses are worth keeping: a spot that is
+			# only too close is still standable ground on the right landmass, and it
+			# is what the last tier below falls back on.
+			var gap := _pad_gap(spot)
+			if gap < SPAWN_MIN_APART:
+				if gap > roomiest_gap:
+					roomiest_gap = gap
+					roomiest = spot
+				continue
 			var slope := island.slope_at(spot.x, spot.y, 0.8)
 			if slope <= SPAWN_MAX_SLOPE:
 				return spot
@@ -321,6 +353,10 @@ func _solve_spawn(mass: IslandGenerator.Landmass, bearing: float) -> Vector2:
 		push_warning("arena: spawn at bearing %.2f is steeper than wanted (%.2f)"
 			% [bearing, fallback_slope])
 		return fallback
+	if roomiest != Vector2.INF:
+		push_warning("arena: every spawn at bearing %.2f is crowded; taking the "
+			% bearing + "roomiest at %.1f m from its neighbour" % roomiest_gap)
+		return roomiest
 	push_warning("arena: no clear spawn at bearing %.2f; using its ideal position"
 		% bearing)
 	return _spawn_candidate(mass, bearing, SPAWN_RING)
@@ -331,9 +367,20 @@ func _spawn_candidate(mass: IslandGenerator.Landmass, bearing: float,
 	return Vector2(cos(bearing), sin(bearing)) * mass.rim_radius(bearing) * fraction
 
 
-## Everything about a pad except how steep it is: on the right landmass, well
-## inside the rim, out of every landmark and off every torch. Slope is judged
-## separately because it is the one rule the search is willing to bend.
+## How far the nearest pad solved before this one is, on the ground plane, or INF
+## for the first pad of the ring. `_solve_spawn` compares it against
+## SPAWN_MIN_APART itself, because it keeps the crowded near misses.
+func _pad_gap(spot: Vector2) -> float:
+	var gap := INF
+	for pad: Transform3D in spawn_points:
+		gap = minf(gap, spot.distance_to(Vector2(pad.origin.x, pad.origin.z)))
+	return gap
+
+
+## Everything about a pad the search will not bend on: on the right landmass,
+## well inside the rim, out of every landmark and off every torch. Slope and
+## separation are judged separately, because those are the two rules the search
+## will trade against each other when a bearing runs out of ground.
 func _spawn_is_clear(mass: IslandGenerator.Landmass, spot: Vector2) -> bool:
 	if island.landmass_at(spot.x, spot.y) != mass:
 		return false
@@ -343,9 +390,6 @@ func _spawn_is_clear(mass: IslandGenerator.Landmass, spot: Vector2) -> bool:
 		# Only the hard keepouts matter: a spawn is allowed to be on the grassy
 		# skirt of a landmark, just not inside the landmark.
 		if keepout.blocks_dense and spot.distance_to(keepout.centre) < keepout.radius + 1.5:
-			return false
-	for pad: Transform3D in spawn_points:
-		if spot.distance_to(Vector2(pad.origin.x, pad.origin.z)) < SPAWN_MIN_APART:
 			return false
 	# And never on top of a torch. Torches are placed before the spawn ring is
 	# solved, and a pad that lands on one puts a player in the brightest circle

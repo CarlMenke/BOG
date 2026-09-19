@@ -16318,3 +16318,36 @@ to High; the map-building skill was asked for three times), BOG-35 and
 BOG-44, two questions to Carl answered in-session, and a process rule kept as
 memory rather than a ticket. What stays manual: getting the mp3 off the phone
 into `memos/`.
+
+## D-151 — A pad's separation is a rule at every tier of the search, and six metres is what the ring has to give
+The spawn ring's minimum separation arrived with D-055 as a test inside
+`_spawn_is_clear`, and for two tiers of `_solve_spawn` it held. The third did
+not: a bearing that found nothing clear at all fell back to
+`_spawn_candidate(mass, bearing, SPAWN_RING)` — the ideal position, handed back
+without being asked anything, separation included. The one path that gives up on
+every other rule gave up on that one too, which made the floor a preference. No
+shipped seed reaches that tier, but two pads on the same patch of ground is the
+defect the whole search exists to prevent, and a fallback that can produce it is
+not a fallback.
+
+So separation moves out of `_spawn_is_clear` and into `_solve_spawn`, as
+`_pad_gap(spot)` — the distance to the nearest pad already solved. It is the one
+rule whose near misses are worth keeping: a spot that is *only* too close is
+still standable ground on the right landmass. The sweep remembers the roomiest
+of them, and that is what a failed bearing returns. The accept path and the
+steep-pad fallback are untouched, so every seed that solved before solves to the
+same eight pads.
+
+**Six metres, and not more.** Eight pads evenly spaced at `SPAWN_RING` of a 23 m
+rim stand 2·0.66·23·sin(π/8) ≈ 11.6 m from their neighbours, but the sweep may
+swing a pad 37° either way and shift it ±3.8 m in and out to get off the shrine,
+and two neighbours both running from the same landmark close most of that gap.
+Half the ideal spacing is the floor that still leaves the search somewhere to
+go: over twelve seeds the closest pair comes out at 6.2–10.2 m, while seven
+metres already runs seed 20263835's knoll-facing bearing out of ground and into
+the new tier. `tools/island_report.gd` now asserts `Arena.SPAWN_MIN_APART`
+itself rather than a typed 5.5 m, so a widened sweep cannot quietly bring the
+3.8 m pair back past a floor slacker than the rule. It measures in 3D where the
+solver solves in 2D, so a pad on a slope reads a few centimetres further than it
+was allowed to be — the assertion can only be conservative, never a false pass.
+(BOG-6.)

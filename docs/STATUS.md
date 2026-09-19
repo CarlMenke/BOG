@@ -865,10 +865,6 @@ and the tool quietly uses its defaults. Pass them literally.
   35°/25° against that grain and swept the alternatives to find out why it could
   go no further: 25° reaches 160 m/s and 18° reaches 285 m/s, because the spans
   have to cover the bend the death pose already contains.
-- **Two spawn pads can end up ~3.8 m apart** on the default seed. `_next_spawn`
-  prefers a pad with nobody near it, so it rarely bites, but the ring solver in
-  `arena.gd` could enforce a minimum separation between pads as well as a slope
-  limit.
 
 Five more are limitations of the source art rather than faults in the code, and
 D-029 argues each one out rather than pretending it is fixed:

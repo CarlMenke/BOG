@@ -28,7 +28,13 @@ const TREE_HEIGHT := Vector2(12.0, 18.0)
 ## The capture bases were 18.8 m apart on the old ring (D-051), and two pads
 ## could come to rest 3.8 m from each other.
 const BASES_APART := 25.0
-const PADS_APART := 5.5
+## Asked of the solver's own constant rather than typed, so the two cannot drift:
+## this check is the only thing standing between a widened sweep and the 3.8 m
+## pair coming back, and a hand-typed floor slacker than the rule would have let
+## it (D-151). The pads are measured in 3D here and solved in 2D, so a pad on a
+## slope reads a few centimetres *further* than the solver let it be — the
+## assertion can only be conservative, never a false pass.
+const PADS_APART := Arena.SPAWN_MIN_APART
 
 var _failures: int = 0
 
