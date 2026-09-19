@@ -323,12 +323,33 @@ const SHIELD := preload("res://scenes/items/shield.tscn")
 ##              hop chain has to *keep* what it arrived with instead of being
 ##              reset to a walk by the first swing. Prints the top sustainable
 ##              speed for each. Headless with `--fixed-fps 60`.
+##   emote    — **Y**, pressed on a keyboard (D-105). `primary`'s argument, one
+##              key over: the emote is a toggle polled unconditionally in
+##              `BogCombat._process`, so the only witness that can say the key
+##              works is that poll, and the press has to be a real press. Three
+##              verdicts out of one run. `key` is the toggle — one press starts
+##              the dance and a second ends it, read off `Bog.emoting`, which is
+##              the flag every other peer is shown. `plays` is the half a flag
+##              cannot prove: the animator's `emote` blend has to reach full
+##              inside `BogAnimator.PLANE_XFADE` and go back to nothing after
+##              the second press, and the **body has to actually move** — a
+##              hand's travel relative to the hips over twenty ticks of dancing,
+##              against the same twenty ticks of the Bog standing there
+##              breathing as its control, because a Blend2 pointed at a clip
+##              that never advances (D-026) reads exactly like a dance from a
+##              boolean. `walk` is D-105's other way out, also on a key:
+##              `move_forward` held while dancing ends it, which is
+##              `Bog._read_input` rather than `refresh_emote`.
+##
+##              Nothing here carries a letter. `can_emote()` refuses a hold
+##              today and may not tomorrow (BOG-47), and this mode is about the
+##              key and the clip, not about that list.
 ##   free     — no script; play it yourself
 const MODES := ["flight", "hit", "arc", "miss", "aim", "shield", "cover",
 	"magnet", "magnet_self", "letter", "cards", "lightning", "blast", "ward", "recharge",
 	"release", "cast", "bow", "draw", "strafe", "spine", "strafing", "aiming",
 	"respawn", "health", "potion", "embed", "hurt", "walk", "bhop", "leave",
-	"sword", "chain", "primary", "free"]
+	"sword", "chain", "primary", "emote", "free"]
 
 ## How long after the cast the verdict is taken, in physics ticks. The click
 ## only starts the windup — the bolt leaves at `MatchConfig.lightning_delay`,
@@ -1504,7 +1525,10 @@ func _dummy_count() -> int:
 		# `chain` is a movement measurement down an empty range, for `bhop`'s
 		# reason: a second capsule on the line is something for a chained swing
 		# to run into half way through the run.
-		"recharge", "bhop", "release", "cast", "strafe", "spine", "chain":
+		# And `emote` is one Bog dancing on an empty range: the thing measured is
+		# how far its own hand travels, and a second capsule contributes nothing
+		# to that and can be walked into by the step at the end of the run.
+		"recharge", "bhop", "release", "cast", "strafe", "spine", "chain", "emote":
 			return 0
 		# One to swing at and one to make an Elder. They are parked far down the
 		# range between steps and stood exactly where the rehearsal says the
@@ -1723,6 +1747,9 @@ func _physics_process(_delta: float) -> void:
 		return
 	if _mode == "primary":
 		_drive_primary(player, combat)
+		return
+	if _mode == "emote":
+		_drive_emote(player, combat)
 		return
 	if _mode == "ward":
 		_drive_ward(combat)
@@ -5170,6 +5197,220 @@ func _report_primary() -> void:
 			"press PASS" if _primary_failures == 0 else "press FAIL"])
 	print("combat_range: %s" % ("primary PASS" if _primary_failures == 0
 		else "primary FAIL (%d)" % _primary_failures))
+	get_tree().quit()
+
+
+# ------------------------------------------------------------------ emote ---
+#
+# The schedule, in physics ticks. Every press is a tick down and a tick up, like
+# `primary`'s: `BogCombat._process` polls `is_action_just_pressed`, so a key held
+# for two ticks and a key tapped are the same event, and a key never released is
+# a key the next press cannot be told apart from.
+#
+# The two windows are the same length on purpose. `plays` compares how far a
+# hand travels while the Bog is dancing with how far it travels while the Bog is
+# standing there breathing, and a comparison between windows of different
+# lengths would be a comparison between two different questions.
+const EMOTE_IDLE_FROM := 30
+const EMOTE_IDLE_TO := 90
+const EMOTE_PRESS_AT := 95
+## `BogAnimator.PLANE_XFADE` is 0.15 s, which is nine ticks; this is well past
+## it, so a blend that is merely on its way up fails here rather than passing on
+## the way.
+const EMOTE_FULL_AT := 110
+const EMOTE_DANCE_FROM := 112
+const EMOTE_DANCE_TO := 172
+const EMOTE_STOP_AT := 176
+const EMOTE_GONE_AT := 192
+const EMOTE_RESTART_AT := 196
+const EMOTE_STEP_AT := 210
+const EMOTE_STEPPED_AT := 214
+const EMOTE_DONE_AT := 220
+
+## The joints the pose is read off, relative to the hips. Five rather than one
+## because a dance is not guaranteed to be in the arms: `Twerk` is mostly hips
+## and knees, and a mode that watched a hand alone would be measuring whichever
+## limb the *next* emote happens to move.
+const EMOTE_BONES := ["mixamorig_RightHand", "mixamorig_LeftHand",
+	"mixamorig_Head", "mixamorig_RightFoot", "mixamorig_LeftFoot"]
+
+## How far those five joints have to travel between them over the second of
+## dancing — and how many times further than they travel over the same second of
+## standing still. Both, because either alone is weak: an absolute floor passes
+## for a body that was already swaying, and a ratio passes for two numbers that
+## are both a millimetre. Measured: 1.91 m dancing against 0.37 m breathing.
+const EMOTE_TRAVEL_MIN := 0.60
+const EMOTE_TRAVEL_RATIO := 3.0
+
+var _emote_failures: int = 0
+var _emote_started: bool = false
+var _emote_stopped: bool = false
+var _emote_restarted: bool = false
+var _emote_walked_off: bool = false
+var _emote_blend_full: float = -1.0
+var _emote_blend_gone: float = -1.0
+var _emote_idle_travel: float = 0.0
+var _emote_dance_travel: float = 0.0
+var _emote_travel: float = 0.0
+var _emote_last_pose: Array = []
+var _emote_tracking: bool = false
+var _emote_skeleton: Skeleton3D
+var _emote_bones: Array = []
+var _emote_hips_bone: int = -1
+
+
+## **Y**, pressed on a keyboard (D-105). See the `emote` entry in MODES' notes.
+##
+## `Input.action_press("emote")` and not `combat.toggle_emote()`, for the reason
+## `primary` presses the mouse button: the emote is one more line in the
+## unconditional poll in `BogCombat._process`, and a mode that called the
+## function would prove the dance and not the key. `tools/camera_range.gd` calls
+## `start_emote()` directly and says so — it is asking what the lens does while a
+## body dances, not whether anything starts one.
+func _drive_emote(player: Bog, combat: BogCombat) -> void:
+	var tick := _frames
+	if _emote_tracking:
+		_emote_track(player)
+
+	match tick:
+		EMOTE_IDLE_FROM:
+			_emote_open_window()
+		EMOTE_IDLE_TO:
+			_emote_idle_travel = _emote_close_window()
+		EMOTE_PRESS_AT:
+			Input.action_press("emote")
+		EMOTE_PRESS_AT + 1:
+			Input.action_release("emote")
+			# Read off `Bog.emoting` rather than off `BogCombat`: the flag lives
+			# on the body because that is where the two things it changes are
+			# written, and it is what every other peer is shown (D-105).
+			_emote_started = player.emoting and combat.is_emoting()
+			_emote_expect(_emote_started, "one press of Y did not start the dance")
+		EMOTE_FULL_AT:
+			_emote_blend_full = _emote_blend(player)
+			_emote_expect(_emote_blend_full > 0.99,
+				"the emote blend was %.2f a quarter-second after the press"
+					% _emote_blend_full)
+		EMOTE_DANCE_FROM:
+			_emote_open_window()
+		EMOTE_DANCE_TO:
+			_emote_dance_travel = _emote_close_window()
+		EMOTE_STOP_AT:
+			Input.action_press("emote")
+		EMOTE_STOP_AT + 1:
+			Input.action_release("emote")
+			_emote_stopped = not player.emoting and not combat.is_emoting()
+			_emote_expect(_emote_stopped, "a second press of Y did not end the dance")
+		EMOTE_GONE_AT:
+			_emote_blend_gone = _emote_blend(player)
+			_emote_expect(_emote_blend_gone < 0.01,
+				"the emote blend was still %.2f after it was stopped"
+					% _emote_blend_gone)
+		EMOTE_RESTART_AT:
+			Input.action_press("emote")
+		EMOTE_RESTART_AT + 1:
+			Input.action_release("emote")
+			_emote_restarted = player.emoting
+			_emote_expect(_emote_restarted,
+				"the key could not start a second dance after the first")
+		EMOTE_STEP_AT:
+			# The other way out, and it is a key as well: `Bog._read_input` sees
+			# a movement input and calls `stop_emote()` before the dance gets to
+			# empty it (D-105). Nothing else in this run walks anywhere.
+			Input.action_press("move_forward")
+		EMOTE_STEPPED_AT:
+			Input.action_release("move_forward")
+			# `_emote_restarted` is in the verdict rather than beside it: without
+			# it, "is not dancing" is satisfied by a Bog that never started, and
+			# this line would go green on every build where the key does nothing
+			# at all.
+			_emote_walked_off = _emote_restarted and not player.emoting
+			_emote_expect(_emote_walked_off, "a step did not end the dance")
+		EMOTE_DONE_AT:
+			_report_emote()
+
+
+## How much of the emote the animator is showing, 0 to 1 — the blend the tree
+## actually runs, not the flag it is moved toward.
+func _emote_blend(player: Bog) -> float:
+	var tree := player.get_node_or_null("AnimationTree") as BogAnimator
+	if tree == null:
+		return -1.0
+	return float(tree.get(BogAnimator.P_EMOTE))
+
+
+func _emote_open_window() -> void:
+	_emote_travel = 0.0
+	_emote_last_pose = []
+	_emote_tracking = true
+
+
+func _emote_close_window() -> float:
+	_emote_tracking = false
+	return _emote_travel
+
+
+## How far the five joints moved since last tick, relative to the hips, added up
+## over the window. **Path length and not a bounding box**: a pose that shuttles
+## between two places covers ground a box cannot see, and a clip that stopped
+## dead on one frame and stayed there — D-026's fault, and the one thing a
+## boolean cannot tell from a dance — adds nothing at all to a path.
+##
+## Relative to the hips because a Bog's clips are root-locked (D-095), so the
+## joints *relative to them* are the clip's own motion with the body's position
+## taken out of it: a Bog pushed around by anything else in the range would
+## otherwise read as a dancer.
+func _emote_track(player: Bog) -> void:
+	if _emote_skeleton == null or not is_instance_valid(_emote_skeleton):
+		_emote_skeleton = player.find_child("Skeleton3D", true, false) as Skeleton3D
+		if _emote_skeleton == null:
+			return
+		_emote_hips_bone = _emote_skeleton.find_bone("mixamorig_Hips")
+		_emote_bones = []
+		for name: String in EMOTE_BONES:
+			var index := _emote_skeleton.find_bone(name)
+			if index >= 0:
+				_emote_bones.append(index)
+	if _emote_hips_bone < 0 or _emote_bones.is_empty():
+		return
+	var hips := _emote_skeleton.get_bone_global_pose(_emote_hips_bone).origin
+	var pose: Array = []
+	for index: int in _emote_bones:
+		pose.append(_emote_skeleton.get_bone_global_pose(index).origin - hips)
+	if _emote_last_pose.size() == pose.size():
+		for i in pose.size():
+			_emote_travel += (pose[i] as Vector3).distance_to(_emote_last_pose[i])
+	_emote_last_pose = pose
+
+
+func _emote_expect(ok: bool, complaint: String) -> void:
+	if ok:
+		return
+	print("combat_range: %s" % complaint)
+	_emote_failures += 1
+
+
+func _report_emote() -> void:
+	var toggled := _emote_started and _emote_stopped and _emote_restarted
+	print("combat_range: Y started the dance, Y ended it, Y started it again — key %s"
+		% ("PASS" if toggled else "FAIL"))
+
+	var moved := _emote_dance_travel >= EMOTE_TRAVEL_MIN \
+		and _emote_dance_travel >= _emote_idle_travel * EMOTE_TRAVEL_RATIO
+	var blended := _emote_blend_full > 0.99 and _emote_blend_gone < 0.01
+	_emote_expect(moved,
+		"the dancing body travelled %.3f m against %.3f m standing still"
+			% [_emote_dance_travel, _emote_idle_travel])
+	print("combat_range: blend %.2f dancing, %.2f stopped; the joints travelled "
+		% [_emote_blend_full, _emote_blend_gone]
+		+ "%.3f m over a second of Twerk against %.3f m of standing still (x%.1f, %.2f allowed) — plays %s"
+			% [_emote_dance_travel, _emote_idle_travel,
+				_emote_dance_travel / maxf(_emote_idle_travel, 0.0001),
+				EMOTE_TRAVEL_MIN, "PASS" if moved and blended else "FAIL"])
+	print("combat_range: a step ended it — walk %s"
+		% ("PASS" if _emote_walked_off else "FAIL"))
+	print("combat_range: %s" % ("emote PASS" if _emote_failures == 0
+		else "emote FAIL (%d)" % _emote_failures))
 	get_tree().quit()
 
 

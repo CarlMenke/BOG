@@ -147,7 +147,8 @@ check "match rules" "match_rules: PASS" \
 # the scatter's dart throw places fewer than it is asked for, so what is held
 # here is what landed: on four seeds, 10-14 trees at a mean height of 12-18 m
 # (29 at 7.4 m before), the main island at its stated radius, the capture bases
-# more than 25 m apart (18.8 before) and no two pads within 5.5 m (3.8 before).
+# more than 25 m apart (18.8 before) and no two pads within 6.0 m (3.8 before) —
+# the solver's own SPAWN_MIN_APART, asked of it rather than typed here (D-151).
 # Headless, the whole procedural layout without a scene tree, about ten seconds.
 check "the hollow's forest and pads" "island_report: PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/island_report.tscn -- 20260904 4
@@ -703,6 +704,36 @@ check "one button for every weapon" "primary PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/combat_range.tscn -- primary
 also "one button for every weapon" "press PASS"
 also "one button for every weapon" "hold PASS"
+# **Y**, pressed on a keyboard (D-105), which is the check that key never had.
+# The emote is one more line in the same unconditional poll `primary` above is
+# about, and it is the only *toggle* in it — so the press has to be a real press
+# and there have to be three of them: one to start the dance, one to end it, one
+# to start it again, each read off `Bog.emoting`, which is the flag the other
+# seven machines are shown (`key`).
+#
+# `plays` is the half a flag cannot prove. `Twerk` sits under a `Blend2` rather
+# than a `OneShot` precisely because it loops, and a blend pointed at a clip that
+# has run to its last frame and stopped there (D-026) reads exactly like a dance
+# from a boolean — `camera_range` has called `start_emote()` for three decision
+# records and could not have told the difference. So the animator's own blend has
+# to reach full inside `PLANE_XFADE` and fall back to nothing when it is
+# stopped, and five joints measured against the hips have to *travel*: 1.91 m
+# over a second of dancing against 0.37 m over the same second of the same Bog
+# standing there breathing, which is the control that stops a stuck pose passing.
+#
+# `walk` is D-105's other way out and is also a key — `move_forward` held while
+# dancing ends it in `Bog._read_input`, before the dance gets to empty the input.
+# It carries "and it was dancing first" inside the verdict, or it would go green
+# on a build where Y does nothing.
+#
+# **Nothing in this run carries a letter.** `can_emote()` refuses a hold today
+# and BOG-47 may let it through tomorrow; this check is about the key and the
+# clip and says nothing either way. Headless, and it quits itself at tick 220.
+check "Y dances" "emote PASS" \
+    "$GODOT" --headless --fixed-fps 60 --path "$GODOT_ROOT" tools/combat_range.tscn -- emote
+also "Y dances" "key PASS"
+also "Y dances" "plays PASS"
+also "Y dances" "walk PASS"
 # The input map, checked rather than read (D-070).
 #
 # **This check exists because of a bug nobody could see.** D-068 put
@@ -851,6 +882,16 @@ also "teammate names through walls" "team_plates: enemy PASS"
 also "teammate names through walls" "team_plates: hud PASS"
 also "teammate names through walls" "team_plates: PASS"
 check "free-for-all names unchanged" "team_plates: ffa PASS"     "$GODOT" --headless --path "$GODOT_ROOT" tools/team_plates.tscn -- ffa
+# The plate is above the head and not above the capsule (D-150). An air clip's
+# own vertical rise is kept by the import and scrubbed by the jump arc, so the
+# model climbs inside a capsule that does not move: `RunJump` puts the crown of
+# the head 0.085 m through the bottom of the name. `Nameplate` lifts what it
+# draws by the head's own height when it has to and by nothing at all otherwise,
+# and this holds both halves of that — the head never reaches the lettering in
+# any of twelve moments of eighteen clips, and the lift is a flat zero in every
+# pose a Bog keeps its head inside its capsule in. Headless, about half a minute.
+check "the name clears the head" "preview_plate: plate PASS"     "$GODOT" --headless --path "$GODOT_ROOT" tools/preview_plate.tscn
+also "the name clears the head" "preview_plate: resting PASS"
 # A letter picked up is told to everyone (D-050). A player: "some kind of
 # notification when someone picks up a letter, maybe it should also show people
 # with letters through walls". Through the real spawn path, the real HUD and real
@@ -1284,6 +1325,12 @@ check "the ability tiles are one set" "bake_tiles: PASS" \
 # to twenty-five skin tiles (D-126) and the lobby's frame rate dropped below the
 # line where a second holds enough of them: the verdict then simply never
 # printed, on about one run in two.
+# The frame-rate readout (D-148): off out of the box, on screen with a real
+# number in it when the setting is on, kept by settings.cfg, and hidden whenever
+# a render tool has set the suppression flag — which is what keeps it out of
+# every preview_* shot on a machine whose owner left it switched on.
+check "the fps readout" "fps_readout: PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" tools/fps_readout.tscn
 check "every slider can be dragged" "widths: PASS" \
     "$GODOT" --path "$GODOT_ROOT" --resolution 1600x900 --script tools/snapshot.gd -- \
     res://tools/ui_range.tscn "$GODOT_LOG_DIR/widths.png" 150 widths

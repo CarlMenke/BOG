@@ -16571,3 +16571,56 @@ downloads is BOG-15's anyway.
 - **Hand-painting a roughness map for one of the thirteen to prove it with.** A
   map nobody's prompt asked for is a shape improvised in code by another name
   (D-135). The proof waits for a download. (BOG-13.)
+
+## D-155 — The gate presses Y, and the socket run wears a team's skin
+Two things nothing checked. `Y` had been the emote key since D-105 and no
+harness had ever pressed it: `tools/camera_range.gd` calls `start_emote()`
+directly, because what it is asking about is the lens. And the Teams skin
+rules — any member of a team changes its body, no two teams wear the same
+one (D-109) — were asserted only by `tools/weapon_select.tscn`, which runs
+in an offline session where `rpc_id` reaches nobody and the local call does
+all the work. That is precisely the shape of the bug D-024 took two
+processes to find, one feature over.
+
+**`combat_range -- emote` presses the key**, for `primary`'s reason: the
+emote is one more line in the unconditional poll in `BogCombat._process`
+and the only *toggle* in it, so the press has to be a real press and there
+have to be three of them — start, stop, start again — each read off
+`Bog.emoting`, the flag the other seven machines are shown (`key`).
+
+**`plays` is the half a flag cannot prove.** `Twerk` sits under a `Blend2`
+rather than a `OneShot` because it loops, and a blend pointed at a clip
+that has run to its last frame and stopped there (D-026) reads exactly like
+a dance from a boolean. So the animator's own `emote` blend has to reach
+full inside `PLANE_XFADE` and fall back to nothing when it is stopped, and
+five joints measured against the hips have to **travel**: path length, not a
+bounding box, because a stuck pose adds nothing to a path — 1.91 m over a
+second of dancing against 0.37 m over the same second of the same Bog
+standing there breathing, which is the control. `walk` is D-105's other way
+out, also on a key, and carries "and it was dancing first" inside the
+verdict or it would go green on a build where Y does nothing. Nothing in
+the run carries a letter: `can_emote()` refuses a hold today and may not
+tomorrow (BOG-47), and this check says nothing either way.
+
+**`net_loopback` stage 4 gained the skins beside the weapons**, in the
+lobby, because `_request_skin` refuses everything once `match_running` is
+set. The lobby goes to Teams with the deal fixed — under random teams
+`teams_decided()` is false and a skin still belongs to a player (D-048) —
+the client takes team 1, and then: the seeded bodies differ and both peers
+hold the same `team_skins`, riding in `_sync_roster`'s third argument; the
+**client**, which cannot reach the array itself, dresses its team and
+nothing is written onto its own roster row; and the client then asks for the
+body the other team wears and is **refused in silence**, which is a negative
+that has to be proved on both machines — neither array moved and the client
+is still holding a true roster. It goes back to free-for-all at the end,
+because every stage after it was written against one.
+
+**What the first green run found.** Stage 9 aimed its wire hit a metre
+above the victim's feet, which was "somewhere in the body" until D-130 made
+a shot through the head worth `HEADSHOT_MULTIPLIER` — and then the same call
+took 40 or 52 depending on the pose stage 8 left the Bog in. It took 52,
+and four assertions about a health number crossing a socket had been red
+since D-130 landed with nobody running this file. The hit is at
+`body_centre()` now, the one point on a Bog that is nowhere near the head
+sphere in any stance. The emote adds four checks to the gate; the socket run
+is 225 + 41. (BOG-21.)

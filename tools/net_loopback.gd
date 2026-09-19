@@ -310,6 +310,8 @@ func _run_host() -> void:
 	if ok:
 		ok = await _stage_weapons()
 	if ok:
+		ok = await _stage_skins()
+	if ok:
 		ok = await _stage_config()
 	if ok:
 		ok = await _stage_chat()
@@ -468,6 +470,128 @@ func _stage_weapons() -> bool:
 		Loadout.weapon_name(Net.player_weapon(1)),
 		Loadout.weapon_name(Net.player_weapon(_client_id))])
 	return true
+
+
+## 4/12, continued. The **Teams** skin rules over the socket (D-109).
+##
+## It rides on the weapon stage rather than taking a stage number of its own
+## because it is the same question about the sibling of the same roster key, and
+## it has to be asked in the same place: in the lobby, before stage 7 starts the
+## match, because `_request_skin` refuses everything once `match_running` is set.
+##
+## **The half `tools/weapon_select.tscn` cannot reach.** That harness drives
+## these same calls in an offline session, where `OfflineMultiplayerPeer`
+## swallows `rpc_id` and the local call does all the work — so every assertion it
+## makes about a *client* changing its team's body is really an assertion about
+## the host changing it. Here the ask leaves a second process as a packet:
+##
+##   * **any member changes it.** The client — not the host, and not the team's
+##     first member, because there is no such thing — picks a skin and the
+##     host's `team_skins` moves. Nothing is written onto the client's own
+##     roster row, which is the difference between this and a weapon.
+##   * **no two teams alike.** The client then asks for the body the *other*
+##     team is wearing. `_request_skin` refuses it silently and broadcasts
+##     nothing, so what has to be proved is a negative on both machines: neither
+##     side's array moved, and the client is still holding a true roster rather
+##     than a hopeful one.
+##
+## The mode goes back to free-for-all at the end, and the client back onto team
+## 0, because every stage after this was written against a free-for-all match.
+func _stage_skins() -> bool:
+	print("net_loopback: stage 4/12, continued — the Teams skin rules")
+	# Teams, and the deal fixed rather than random: under random teams
+	# `teams_decided()` is false in the lobby (D-048), so a skin still belongs to
+	# a player and the rules below do not exist yet.
+	var teamed := Net.config.duplicate_config()
+	teamed.mode = MatchConfig.Mode.TEAMS
+	teamed.random_teams = false
+	teamed.team_count = 2
+	Net.update_config(teamed)
+	_check("the lobby went to Teams", Net.config.mode, MatchConfig.Mode.TEAMS)
+	_check("and the teams mean a body", Net.teams_decided(), true)
+
+	Net.set_team(0)
+	if (await _request("team", {"want": 1}, STEP_TIMEOUT)).is_empty():
+		return false
+	if not await _await_until("the client's team to arrive", STEP_TIMEOUT,
+			func() -> bool: return Net.player_team(_client_id) == 1):
+		return false
+	_check("the host is on team 0", Net.player_team(1), 0)
+	_check("the client is on team 1", Net.player_team(_client_id), 1)
+
+	# `_seed_team_skins` never starts from a collision, which is the rule's
+	# other half and the one that holds before anybody has pressed anything.
+	var theirs := Net.team_skin(0)
+	var mine := Net.team_skin(1)
+	_check("the two teams were seeded different bodies", theirs != mine, true)
+	_check("the host wears its team's body", Net.skin_for(1), theirs)
+	_check("the client wears its team's", Net.skin_for(_client_id), mine)
+	var seen := await _request("skins", {}, STEP_TIMEOUT)
+	if seen.is_empty():
+		return false
+	_check("the client holds the same team_skins",
+		JSON.stringify(seen.get("skins", [])), JSON.stringify(Net.team_skins))
+
+	# Any member changes it, and the member here is the one that cannot reach
+	# the array itself.
+	var row_before := Net.player_skin(_client_id)
+	var wanted := _free_skin([theirs, mine])
+	if (await _request("skin", {"want": wanted}, STEP_TIMEOUT)).is_empty():
+		return false
+	if not await _await_until("the client's skin pick to arrive", STEP_TIMEOUT,
+			func() -> bool: return Net.team_skin(1) == wanted):
+		return false
+	_check("a member who is not the host dressed its team", Net.team_skin(1), wanted)
+	_check("and the other team is untouched", Net.team_skin(0), theirs)
+	_check("and the host sees that client in it", Net.skin_for(_client_id), wanted)
+	# The difference between a team's skin and a weapon, in one line: the
+	# request wrote nothing onto the row of the peer that sent it.
+	_check("nothing was written onto the client's own row",
+		Net.player_skin(_client_id), row_before)
+	_check("and the host's own row did not move", Net.skin_for(1), theirs)
+
+	# No two teams alike. A negative, so it is given time to fail: a broadcast
+	# that should not come cannot be waited for.
+	if (await _request("skin", {"want": theirs, "expect_after": wanted},
+			STEP_TIMEOUT)).is_empty():
+		return false
+	_check("a team may not take the body another team wears", Net.team_skin(1), wanted)
+	_check("and the team that had it still has it", Net.team_skin(0), theirs)
+	var after := await _request("skins", {}, STEP_TIMEOUT)
+	if after.is_empty():
+		return false
+	_check("the refusal was silent and the client's roster is still true",
+		JSON.stringify(after.get("skins", [])), JSON.stringify(Net.team_skins))
+	print("net_loopback:   team 0 %s, team 1 %s — and team 1 could not have %s" % [
+		Skins.NAMES[Net.team_skin(0)], Skins.NAMES[Net.team_skin(1)],
+		Skins.NAMES[theirs]])
+
+	# Put the lobby back the way the stages after this one expect it: the client
+	# onto team 0 while a team pick is still something the host will accept, and
+	# then free-for-all, where a skin is one more key on your own row again.
+	if (await _request("team", {"want": 0}, STEP_TIMEOUT)).is_empty():
+		return false
+	if not await _await_until("the client back on team 0", STEP_TIMEOUT,
+			func() -> bool: return Net.player_team(_client_id) == 0):
+		return false
+	var ffa := Net.config.duplicate_config()
+	ffa.mode = MatchConfig.Mode.FREE_FOR_ALL
+	Net.update_config(ffa)
+	_check("the lobby is back in free-for-all", Net.config.mode,
+		MatchConfig.Mode.FREE_FOR_ALL)
+	_check("and a body is your own row again", Net.skin_for(_client_id),
+		Net.player_skin(_client_id))
+	return true
+
+
+## The first pickable skin neither team is already wearing. Chosen rather than
+## written down: `Skins.NAMES` is appended to, and a constant here would be a
+## second opinion about what is free.
+func _free_skin(taken: Array) -> int:
+	for index in Skins.NAMES.size():
+		if not taken.has(index):
+			return index
+	return Skins.DEFAULT
 
 
 ## 5/12. `MatchConfig.to_dict()` over the wire and `apply_dict` on the far side —
@@ -717,8 +841,18 @@ func _stage_kill() -> bool:
 	# host subtracts, broadcasts what is left, and the client is asked what its
 	# own body says — if those two ever disagree, a player is fighting with a
 	# bar that is lying to them.
+	# **In the chest, and it has to be said out loud now** (D-130). The hit used
+	# to be aimed a metre above the victim's feet, which was "somewhere in the
+	# body" until a shot through the head became worth
+	# `Bog.HEADSHOT_MULTIPLIER` — and then, depending on the pose stage 8 left
+	# this Bog in, the same call took 40 or 52 and every number below it was a
+	# coin flip. `body_centre()` is the capsule's own middle, which is the one
+	# point on a Bog that is nowhere near the head sphere in any stance.
+	var chest := point + Vector3.UP
+	if is_instance_valid(victim_bog):
+		chest = victim_bog.body_centre()
 	var took := MatchState.report_damage(_client_id, 1, WIRE_DAMAGE,
-		Bog.Cause.SPEAR, point + Vector3.UP, Vector3.FORWARD * 6.0, "mixamorig_Spine1")
+		Bog.Cause.SPEAR, chest, Vector3.FORWARD * 6.0, "mixamorig_Spine1")
 	_check("the host's hit landed", took, WIRE_DAMAGE)
 	_check("the host took it off the body",
 		MatchState.health_of(_client_id), Bog.MAX_HEALTH - WIRE_DAMAGE)
@@ -1170,6 +1304,51 @@ func _serve(message: Dictionary) -> void:
 		"weapons":
 			reply["mine"] = Net.player_weapon(Net.local_id())
 			reply["host"] = Net.player_weapon(1)
+		"team":
+			# The shipping call, which on a client is an `rpc_id(1, ...)` and
+			# nothing else — the stripe does not move until the host says so.
+			var want_team := int(payload.get("want", 0))
+			Net.set_team(want_team)
+			await _await_until("this client's team to come back", STEP_TIMEOUT,
+				func() -> bool: return Net.player_team(Net.local_id()) == want_team)
+			_check("the client's team was decided by the host",
+				Net.player_team(Net.local_id()), want_team)
+			reply["team"] = Net.player_team(Net.local_id())
+		"skin":
+			# `Net.set_skin` and not a poke at `team_skins`: in Teams this is an
+			# `rpc_id(1, ...)` asking the host to dress the whole team, which is
+			# the one call this harness exists to put on a wire (D-109).
+			var want_skin := int(payload.get("want", Skins.DEFAULT))
+			var my_team := Net.player_team(Net.local_id())
+			Net.set_skin(want_skin)
+			if payload.has("expect_after"):
+				# A refusal is silence, so this waits out the round trip a
+				# broadcast would have taken and then requires nothing to have
+				# happened. Twenty frames is an order of magnitude more than a
+				# loopback answer costs anywhere else in this file.
+				for i in 20:
+					await get_tree().process_frame
+				_check("a refused pick changed nothing on the client",
+					Net.team_skin(my_team), int(payload["expect_after"]))
+			else:
+				await _await_until("this client's team to be dressed", STEP_TIMEOUT,
+					func() -> bool: return Net.team_skin(my_team) == want_skin)
+				_check("the client's team wears what the client picked",
+					Net.team_skin(my_team), want_skin)
+				_check("and the client sees itself in it",
+					Net.skin_for(Net.local_id()), want_skin)
+			reply["mine"] = Net.team_skin(my_team)
+		"skins":
+			# The array whole, for a string comparison against the host's. It
+			# rides in `_sync_roster`'s third argument rather than in a broadcast
+			# of its own, so this is also the check that the third argument
+			# arrives (D-109).
+			var skins: Array = []
+			for value: int in Net.team_skins:
+				skins.append(value)
+			_check("the client was told about both teams' bodies",
+				Net.team_skins.size() >= 2, true)
+			reply["skins"] = skins
 		"config":
 			var want: Dictionary = payload.get("want", {})
 			var got := Net.config.to_dict()
