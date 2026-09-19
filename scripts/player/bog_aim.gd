@@ -103,6 +103,27 @@ const AIM_SHARES: Array[float] = [0.25, 0.35, 0.40]
 ## measures the residual; the old rig's clip needed -92.
 const BOW_OFF_FACING := 0.0
 
+## The same offset with the archer's plane taken out from under the draw, which
+## is every frame of an airtime — and it is the old number back again, for the
+## reason it was the number in the first place (D-127).
+##
+## The draw is an **upper-body layer** (`BogAnimator.UPPER_BODY_BONES`), so what
+## it contributes is the spine chain's own rotations and nothing of the pelvis
+## under them; the archer's side-on stance is square only because the archer's
+## plane is holding the pelvis 92° round. `grounded` swaps that whole plane for
+## the air pose the instant the feet leave the floor — legs, pelvis and all,
+## because an air pose is a whole body — and the layer goes on laying its
+## side-on chest over a square one. So above the ground the constant D-098
+## zeroed has something to correct again, and it is the same 92°: the offset was
+## never a property of the clip's own frame, only of which pelvis was under it.
+##
+## Measured by `tools/movement_check.tscn`, which holds a full draw through a
+## jump and prints the chest in both places every run. Uncorrected it read
+## +92.2° off the facing on the floor and +0.4° at the top of the jump — the
+## whole of the archer's stance, gone, with the bow swinging the same 92° round
+## to −90.7° off the crosshair. Corrected, both ends read +92 and the bow +2.
+const BOW_OFF_AIR := -92.0
+
 ## The pitch the torso is allowed to take, off the camera's own limits rather
 ## than typed here. `BogCamera` already clamps the view to -69°..+54°, and a
 ## second clamp would be a place for the two to disagree: a torso that stopped
@@ -182,7 +203,14 @@ func _process_modification() -> void:
 	if weight <= 0.001:
 		return
 
-	var turn := correction(deg_to_rad(BOW_OFF_FACING),
+	# One weight does both halves of the swap, and that is the whole of the air
+	# case: the yaw the archer's plane was carrying for the layer comes back
+	# here in exactly the proportion the tree is taking that plane away, so
+	# there is no frame in which both are present and none in which neither is.
+	# `plane_lost` and not "is it airborne", because a landing one-shot takes
+	# the plane away too, on the floor, for the length of its clip (D-127).
+	var turn := correction(
+		deg_to_rad(lerpf(BOW_OFF_FACING, BOW_OFF_AIR, _animator.plane_lost())),
 		clampf(_body.aim_pitch(), PITCH_MIN, PITCH_MAX))
 	# The weight scales the whole turn along its own axis, which is what makes
 	# a bow coming up read as a torso coming round rather than as a pose

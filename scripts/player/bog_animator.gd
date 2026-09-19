@@ -100,19 +100,20 @@ const REQUIRED_CLIPS: Array[String] = [
 	"SpearCarry", "Twerk",
 ]
 
-## The slide jump's clip, and the clip it borrows until that one exists. **Not**
-## in `REQUIRED_CLIPS`: see `clip_or`. `RunJump` is the honest stand-in — it is
-## the other leap scrubbed by the same arc between the same three markers, so
-## the move is complete and only its drawing is provisional.
+## The slide jump's clip, and the clip it borrowed until that one landed
+## (D-125). **Not** in `REQUIRED_CLIPS`: see `clip_or`. `RunJump` was the honest
+## stand-in — it is the other leap scrubbed by the same arc between the same
+## three markers, so the move was complete and only its drawing provisional.
 const SLIDE_JUMP_ROLE := "SlideJump"
 const SLIDE_JUMP_FALLBACK := "RunJump"
 
-## The punch's clip, and the clip it borrows until that one exists. **Not** in
-## `REQUIRED_CLIPS` either, for `SLIDE_JUMP_ROLE`'s reason exactly: the move is
-## designed, wired and playable, and the take that draws it has not been picked
-## off Mixamo yet (`assets/source/clips.json` carries the row and the query).
+## The punch's clip, and the clip it borrowed until that one landed (D-125:
+## `Cross Punch`, `hit` at 0.367). **Not** in `REQUIRED_CLIPS` either, for
+## `SLIDE_JUMP_ROLE`'s reason exactly: the move was designed, wired and playable
+## a day before its take was picked off Mixamo (`assets/source/clips.json`
+## carries the row, the query and the pick).
 ##
-## `Cast` is the stand-in the feel round chose, and it is an honest one: a
+## `Cast` was the stand-in the feel round chose, and it was an honest one: a
 ## one-handed forward thrust from the shoulder, which is what a punch is, with a
 ## `release` marker sitting exactly where a `hit` marker would go. That last
 ## part is why the marker's *name* is resolved beside the role below — the
@@ -560,6 +561,22 @@ var _skeleton_path: String = ""
 ## Smoothed blend weights, so nothing in the tree steps.
 var _stance: float = 0.0
 var _airborne: float = 0.0
+## How far the ground plane has been taken out from under the layers (D-127):
+## the airtime, and every full-body one-shot that holds the pose after it.
+var _plane_lost: float = 0.0
+
+## The full-body one-shots, as the six things `_shot_weight` reads off each of
+## them: the `active` flag, the two fade remainders, the two fades those
+## remainders are a fraction of, and the weight the shot was carrying last
+## frame. Resolved once in `_ready`, because the alternative is fifteen string
+## concatenations a frame on every BOG in the match.
+##
+## Every one-shot in the graph that is **not** filtered to the upper body is
+## here, which is what makes this a rule rather than a list of cases: those are
+## the nodes that can put somebody else's pelvis under a layer. `swing` is the
+## sixth and is left out — `BogCombat._can_act` refuses a sword spin, an emote
+## and a holster alike while a string is back, so it cannot play under a draw.
+var _full_body_shots: Array[Array] = []
 var _dive_blend: float = 0.0
 var _leap_blend: float = 0.0
 ## How far the pull is over the body. Not the charge — the charge is the
@@ -656,6 +673,20 @@ func _ready() -> void:
 	_skeleton_path = _find_skeleton_track_prefix(player)
 	tree_root = _build_graph(player)
 	active = true
+
+	# The parameter paths of the full-body one-shots, resolved against the graph
+	# that has just been built (D-127).
+	for shot: Array in [
+			["takeoff", TAKEOFF_FADE_IN, TAKEOFF_FADE_OUT],
+			["slide", SLIDE_FADE_IN, SLIDE_FADE_OUT],
+			["land", LAND_FADE_IN, LAND_FADE_OUT],
+			["land_hard", LAND_FADE_IN, LAND_FADE_OUT],
+			["roll", ROLL_FADE_IN, ROLL_FADE_OUT]]:
+		_full_body_shots.append([
+			"parameters/%s/active" % shot[0],
+			"parameters/%s/fade_in_remaining" % shot[0],
+			"parameters/%s/fade_out_remaining" % shot[0],
+			shot[1], shot[2], 0.0])
 
 	# After the graph, because the modifier reads this node's own blend weight.
 	var skeleton := _body.find_child("Skeleton3D", true, false) as Skeleton3D
@@ -1161,6 +1192,26 @@ func _process(delta: float) -> void:
 	# held through a fall arrives on the floor already tucked, which is what a
 	# landing slide fades in out of.
 	_stance = move_toward(_stance, _body.crouch_pose(), STANCE_BLEND_SPEED * delta)
+
+	# How much of the ground plane is left under the layers, for `BogAim`
+	# (D-127) — and it is asked **here**, before the blend below moves, because
+	# the pose standing in the skeleton right now is one animation step behind
+	# the numbers this node is holding: `_airborne` is written as a parameter at
+	# the bottom of this function and the tree does not read it until its next
+	# advance. So the airborne weight that actually drew the body is the one
+	# still in the variable.
+	#
+	# A product and not a maximum, because that is how the graph stacks: a
+	# one-shot blends over whatever `grounded` has already produced, so what is
+	# left of the plane is what each node left of what the node below it left.
+	# And the one-shots are in it at all because every one of them is full body
+	# and sits under the layers — a landing takes the plane away exactly as an
+	# airtime does, and holds it away with both feet on the floor.
+	var plane_left := 1.0 - _airborne
+	for shot: Array in _full_body_shots:
+		plane_left *= 1.0 - _shot_weight(shot)
+	_plane_lost = 1.0 - plane_left
+
 	var airborne_target := 0.0 if _grounded else 1.0
 	var airborne_speed := AIRBORNE_RISE_SPEED if airborne_target > _airborne \
 		else AIRBORNE_FALL_SPEED
@@ -1518,6 +1569,54 @@ func is_throwing() -> bool:
 ## `BogAim`.
 func aim_blend() -> float:
 	return _aim_blend
+
+
+## How far the ground plane has been taken out from under the layers, 0 to 1
+## (D-127). Read by `BogAim`, and it is the one number that can tell it what it
+## needs to know: an upper-body layer supplies the arms and the chest and
+## *nothing below them*, so where the bow ends up pointing is decided by which
+## pelvis the branch underneath is driving.
+##
+## Not `_airborne`, though it agrees with it most of the time. Every full-body
+## one-shot in this graph sits **above** `grounded` and **below** the layers, so
+## a landing takes the plane away exactly as an airtime does and holds it away
+## for the length of the clip, on the floor, with `_airborne` already back at 0.
+func plane_lost() -> float:
+	return _plane_lost
+
+
+## How much of the pose one full-body one-shot is actually holding, 0 to 1, for
+## a row of `_full_body_shots`.
+##
+## **`active` is a flag and a fade is not**, which is the whole reason this is a
+## function and not a boolean: `Land` spends 0.20 s on its way out with the
+## plane coming back under the layer a degree at a time, and a correction driven
+## off the flag holds full through all of it — 77° of chest, measured (D-127).
+## Both remainders are published by the node itself, so this reads that node's
+## own clock instead of starting a second one beside it.
+##
+## What is handed back is **last frame's** number and this frame's is kept for
+## next time, which is the same one step the caller's comment is about seen from
+## the other end: the tree advances these remainders in its own process, which
+## runs before this node's, so the fade that drew the pose standing in the
+## skeleton is the one they held a frame ago. Reading them live is worth a flat
+## 8° of chest through `Land`'s fade-out and an 8° flick on the frame `active`
+## goes false, both measured — and the flag drops a step early for the same
+## reason the remainders do, which is why remembering the number covers it and
+## adding a delta onto the remainders did not.
+func _shot_weight(shot: Array) -> float:
+	var weight := 0.0
+	if bool(get(shot[0])):
+		weight = 1.0
+		var fading_in := float(get(shot[1]))
+		var fading_out := float(get(shot[2]))
+		if fading_in > 0.0:
+			weight = clampf(1.0 - fading_in / float(shot[3]), 0.0, 1.0)
+		elif fading_out > 0.0:
+			weight = clampf(fading_out / float(shot[4]), 0.0, 1.0)
+	var shown: float = shot[5]
+	shot[5] = weight
+	return shown
 
 
 ## Is there actually a weapon in this BOG's hands (D-070)? Asked of the hands

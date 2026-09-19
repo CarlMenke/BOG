@@ -1,12 +1,12 @@
 extends Node3D
-## The feel round's four movement claims, measured on a real Bog. Development
-## tool, not shipped.
+## The feel round's four movement claims and the bow's fifth, measured on a real
+## Bog. Development tool, not shipped.
 ##
 ##   Godot --headless --fixed-fps 60 --path . tools/movement_check.tscn
 ##
 ## **Why this is not in `tools/playthrough.gd`.** The playthrough is a walk
 ## across the joins between whole scenes, and it runs seven times in the gate,
-## once per map. Every one of these four claims is about a body on a flat floor
+## once per map. Every one of these claims is about a body on a flat floor
 ## over a known number of physics ticks — a slide has a friction and a cooldown,
 ## a landing has to happen on a tick nobody has to guess at, and a full draw
 ## takes a real second of charge — so hanging them off a match would make six
@@ -23,9 +23,11 @@ extends Node3D
 ## keyboard, and everything downstream of those three fields is the shipping
 ## code.
 ##
-## The four verdicts:
+## The five verdicts:
 ##
 ##   draw        a full draw walks at WALK_SPEED * DRAW_SPEED_SCALE
+##   air_draw    a full draw carried into a jump keeps pointing where the body
+##               points, on the way up, at the top and through the landing
 ##   slide_jump  crouch without sprint slides, and a jump out of it leaves at
 ##               1.2x the slide along the slide's own direction, with 1.12x lift
 ##   landing     a run-speed landing with crouch held is sliding on the tick it
@@ -57,6 +59,9 @@ const REST_TICKS := 90
 ## `--fixed-fps 60` run as fast as the machine can manage — so this is a hang
 ## guard and not a measurement.
 const DRAW_TICKS := 40000
+## Ticks the touchdown is watched for, which has to outlast the longest landing
+## one-shot: `Land` is 1.1 s and `LandHard` 1.6 s, and both play whole.
+const LAND_TICKS := 120
 ## Ticks the speed is averaged over, after the body has had time to reach it.
 const SETTLE_TICKS := 90
 const SAMPLE_TICKS := 30
@@ -88,6 +93,7 @@ func _ready() -> void:
 		_ok("the local Bog is local and the remote one is not", false)
 
 	await _check_draw()
+	await _check_air_draw()
 	await _check_slide_jump()
 	await _check_landing()
 	await _check_remote()
@@ -224,6 +230,208 @@ func _check_draw() -> void:
 	_bog.weapon = Loadout.DEFAULT
 	combat.refresh_hand()
 	print("movement_check: draw %s" % _verdict())
+
+
+# ------------------------------------------------------------- the air draw ---
+
+## The two bones the chest's own facing is read off, the BOG's left first. A
+## shoulder line is the one pair that answers "which way is the top half
+## pointing" without having to know a bone's local axes, and it is the line
+## `import_clip` measures a clip's twist off, so a number here and a number
+## there mean the same thing.
+const CHEST_LINE: Array[String] = ["mixamorig_LeftShoulder", "mixamorig_RightShoulder"]
+
+## How far a jump may move the drawn pose, in degrees.
+##
+## The quantity is a **difference**, and that is the whole of what this leg
+## knows: an archer's chest is meant to sit most of a right angle off its own
+## hips (it reads +92° on the floor and that is the pose, D-097), so "the chest
+## faces forward" is the wrong question to ask of it. The two right questions
+## are whether the bow points where the body points, which is the only thing a
+## player aims with, and whether leaving the ground moved the chest — which is
+## the fault itself, stated as the one number that is zero in a working game.
+const CHEST_TOLERANCE := 10.0
+
+
+## A full draw carried into a jump keeps pointing where the body points.
+##
+## The fault this exists to catch is structural and not cosmetic. The draw is an
+## **upper-body layer**: it supplies the arms and the chest and nothing below
+## them, and it is square to its own hips — the archer's side-on stance lives in
+## the *pelvis*, which is the archer plane's to drive. So the bow points down
+## the facing only while that plane is under the layer, and the plane is gone
+## the instant the feet leave the ground, because an air pose is a whole body.
+## Before D-127 a jump swung the whole top half ninety degrees left and the bow
+## with it, for as long as the Bog was off the floor and again for the length of
+## the landing.
+##
+## Measured off `BoneAttachment3D`s and not off `Skeleton3D.get_bone_global_pose`,
+## for D-066's reason: a `SkeletonModifier3D` writes the pose the skin is built
+## from and the skeleton restores the animation's own behind it, so a bone pose
+## read from a `_physics_process` is the pose *before* `BogAim` turned anything.
+func _check_air_draw() -> void:
+	await _reset()
+	_bog.weapon = Loadout.Weapon.BOW
+	var combat := _bog.get_node_or_null("Combat") as BogCombat
+	if not _ok("the Bog has a Combat node", combat != null):
+		return
+	var tree := _animator(_bog)
+	if not _ok("the Bog has an animator", tree != null):
+		return
+	combat.refresh_hand()
+	# Asked every tick until it takes, rather than once: this leg runs after the
+	# one that loosed an arrow, and `bow_recharge` refuses a draw until the next
+	# one has grown back.
+	var charged := false
+	for _i in DRAW_TICKS:
+		await get_tree().physics_frame
+		if not _bog.is_drawing():
+			combat.try_draw_bow()
+		elif _bog.draw_fraction() >= 1.0:
+			charged = true
+			break
+	if not _ok("the bow reached full draw", charged):
+		return
+	# The aim plane crossfades in PLANE_XFADE and the draw layer in about a
+	# tenth of a second; this is a long way past both.
+	await _ticks(SETTLE_TICKS)
+	var ground_chest := _chest_offset(_bog)
+	var ground_bow := _bow_offset(_bog)
+
+	_bog.request_jump()
+	var airborne := false
+	for _i in 30:
+		await get_tree().physics_frame
+		if not _bog.is_on_floor():
+			airborne = true
+			break
+	if not _ok("the drawn Bog left the ground", airborne):
+		return
+	# Long enough for `_airborne` to have reached 1 (AIRBORNE_RISE_SPEED is 14
+	# a second) and short enough to still be going up.
+	await _ticks(12)
+
+	var air_chest := 0.0
+	var air_bow := 0.0
+	var blend := 0.0
+	var held := true
+	var samples := 0
+	for _i in 20:
+		await get_tree().physics_frame
+		if _bog.is_on_floor():
+			break
+		samples += 1
+		blend = maxf(blend, float(tree.get(BogAnimator.P_AIRBORNE)))
+		held = held and _bog.is_drawing()
+		# The worst sample of each, and "worst" is a different question for the
+		# two: the bow is measured against the facing, the chest against where
+		# the same chest was standing on the floor a moment ago.
+		var chest := _chest_offset(_bog)
+		var bow := _bow_offset(_bog)
+		if samples == 1 or absf(chest - ground_chest) > absf(air_chest - ground_chest):
+			air_chest = chest
+		if samples == 1 or absf(bow) > absf(air_bow):
+			air_bow = bow
+
+	print("movement_check: at a full draw the chest sits %+6.1f° off the facing on the ground and %+6.1f° in the air (worst of %d samples, %+.1f° of swing); the bow %+6.1f° and %+6.1f°"
+		% [ground_chest, air_chest, samples, air_chest - ground_chest, ground_bow, air_bow])
+	_ok("the jump was taken with the string still back", held and samples > 0)
+	_ok("the air pose had taken over (%.2f)" % blend, blend > 0.99)
+	_ok("the grounded bow points down the facing (%+.1f°, under %.0f)" % [ground_bow, CHEST_TOLERANCE],
+		absf(ground_bow) <= CHEST_TOLERANCE)
+	_ok("the airborne bow points down the facing (%+.1f°, under %.0f)" % [air_bow, CHEST_TOLERANCE],
+		absf(air_bow) <= CHEST_TOLERANCE)
+	_ok("leaving the ground did not turn the chest (%+.1f°, under %.0f)"
+		% [air_chest - ground_chest, CHEST_TOLERANCE],
+		absf(air_chest - ground_chest) <= CHEST_TOLERANCE)
+
+	var landed := false
+	for _i in 180:
+		await get_tree().physics_frame
+		if _bog.is_on_floor():
+			landed = true
+			break
+	# The touchdown itself, and not only the settled pose after it: `Land` is a
+	# **full-body** one-shot that sits *under* the draw layer in the graph, so
+	# the second or so it holds is another stretch of archer's chest over a
+	# square pelvis if anything here only looked at the two ends.
+	var land_chest := ground_chest
+	for _i in LAND_TICKS:
+		await get_tree().physics_frame
+		var chest := _chest_offset(_bog)
+		if absf(chest - ground_chest) > absf(land_chest - ground_chest):
+			land_chest = chest
+	await _ticks(SETTLE_TICKS)
+	var after_chest := _chest_offset(_bog)
+	print("movement_check: through the landing the chest is worst at %+6.1f° (%+.1f° of swing) and settles at %+6.1f°"
+		% [land_chest, land_chest - ground_chest, after_chest])
+	_ok("the Bog came back down", landed)
+	_ok("the landing did not turn the chest (%+.1f°, under %.0f)"
+		% [land_chest - ground_chest, CHEST_TOLERANCE],
+		absf(land_chest - ground_chest) <= CHEST_TOLERANCE)
+	_ok("and the grounded draw is where it was (%+.1f° against %+.1f°)" % [after_chest, ground_chest],
+		absf(after_chest - ground_chest) <= CHEST_TOLERANCE)
+
+	combat.release_draw()
+	await _ticks(30)
+	_bog.weapon = Loadout.DEFAULT
+	combat.refresh_hand()
+	print("movement_check: air_draw %s" % _verdict())
+
+
+## Where the chest is pointing, in degrees off the Bog's own facing, + to the
+## Bog's left. Zero is a top half square with the hips.
+func _chest_offset(bog: Bog) -> float:
+	var probe := _probes(bog, CHEST_LINE)
+	if probe.size() < 2:
+		return 0.0
+	return _line_offset(bog, probe[0].global_position - probe[1].global_position)
+
+
+## Where the composed bow is pointing, the same way `tools/combat_range.gd`
+## reads it: the line between the two fists, off the attachments the props
+## themselves hang on.
+func _bow_offset(bog: Bog) -> float:
+	var skeleton := bog.find_child("Skeleton3D", true, false) as Skeleton3D
+	if skeleton == null:
+		return 0.0
+	var bow := skeleton.get_node_or_null("BowHand") as Node3D
+	var draw_hand := skeleton.get_node_or_null("SpearHand") as Node3D
+	if bow == null or draw_hand == null:
+		return 0.0
+	var along := bow.global_position - draw_hand.global_position
+	var flat := Vector3(along.x, 0.0, along.z)
+	if flat.length_squared() < 0.0001:
+		return 0.0
+	return rad_to_deg(flat.normalized().signed_angle_to(bog.facing(), Vector3.UP))
+
+
+## A body line turned into degrees off the facing. The line runs to the Bog's
+## left, and left crossed with up is forward.
+func _line_offset(bog: Bog, line: Vector3) -> float:
+	var flat := Vector3(line.x, 0.0, line.z)
+	if flat.length_squared() < 0.0001:
+		return 0.0
+	return rad_to_deg(flat.normalized().cross(Vector3.UP).signed_angle_to(bog.facing(), Vector3.UP))
+
+
+## `BoneAttachment3D`s hung off the named bones, made once and kept. They are
+## the only honest reader of a pose a `SkeletonModifier3D` has touched: they
+## update off `skeleton_updated`, which fires after the modifier stack.
+func _probes(bog: Bog, bones: Array[String]) -> Array[Node3D]:
+	var skeleton := bog.find_child("Skeleton3D", true, false) as Skeleton3D
+	if skeleton == null:
+		return []
+	var out: Array[Node3D] = []
+	for bone in bones:
+		var probe := skeleton.get_node_or_null("Probe_" + bone) as BoneAttachment3D
+		if probe == null:
+			probe = BoneAttachment3D.new()
+			probe.name = "Probe_" + bone
+			skeleton.add_child(probe)
+			probe.bone_name = bone
+		out.append(probe)
+	return out
 
 
 # ------------------------------------------------------------- slide jump ---
