@@ -23,13 +23,13 @@ island and out to a results screen, and two automated checks now walk that path:
 one in a single process, one across two processes over a real socket.
 
 ```
-bash tools/smoke_test.sh        # 199 checks, ~10 minutes, all green; finds Godot by itself
-bash tools/net_test.sh          # two processes, one socket; ~45 s, run by hand
+bash tools/smoke_test.sh        # 204 checks, ~10 minutes, all green; finds Godot by itself
+bash tools/net_test.sh          # two processes, one socket; ~100 s, run by hand
 ```
 
-`smoke_test.sh` is the gate; it is at **199 of 199** (the low-priority round, D-148..D-155, 2026-09-19). `net_test.sh` is kept out
+`smoke_test.sh` is the gate; it is at **204 of 204** (the medium-priority round, D-156..D-164, 2026-09-19). `net_test.sh` is kept out
 of it to keep the gate fast; run it by hand after touching networking, the lobby
-or the results screen. It passes all twelve stages (225 + 41 assertions; stage 4 carries the Teams skin rules over the socket, and stage 9's hit, a headshot since D-130, is at `body_centre()` now, D-155), ten of
+or the results screen. It passes all thirteen stages (263 + 53 assertions; stage 12 walks a peer out of a running match and back into it as a spectator, D-164; stage 4 carries the Teams skin rules over the socket, and stage 9's hit, a headshot since D-130, is at `body_centre()` now, D-155), ten of
 which end in a rematch, with the engine quiet in both processes — the error it
 had reported at "match start" since D-022 was its own teardown. Rematch was
 stalling for 25 s whenever a client had pressed BACK TO LOBBY; D-044 is the fix
@@ -223,7 +223,7 @@ not the first batch, whose paint *is* the body's layout. The owner's call is
 to get the second batch the way the first was made — a Tripo retexture of the
 original mesh, 15 872 vertices, worn straight through `extract_skins.py` —
 rather than tune a registration; until then `Skins.PARKED` holds the names and
-the gate pins the pickable list at fourteen. `PLUSH` is an empty folder and
+the gate pins the pickable list at fifteen (SHIRT, the first garment skin, D-163). `PLUSH` is an empty folder and
 `SHIRT` is a garment (the pipeline spike), so neither is a skin.
 
 The gate is at **178 of 178** and green, and `net_test.sh` passed after the
@@ -247,7 +247,7 @@ a gallery, a melee pit, an ability yard, a parkour course and two void lips off
 one lodge deck. A **Practice** button on the main menu goes straight there with
 no lobby and no port. Twenty-seven dummies — real Bogs at roster ids 900+, hidden
 from every roster screen, driven by the host — stand on their marks running eight
-behaviours; item wells, a refill stone and three weapon racks stand on the apron;
+behaviours; item wells, a refill stone and three weapon racks line the lodge's east wall and four item wells its west (D-161);
 and boards, drifting orbs and a gong are things to shoot that are not Bogs.
 `docs/PLAN_RANGE.md` is the scope it was all argued against and
 `docs/ARCHITECTURE.md` says where each piece lives.
@@ -387,7 +387,7 @@ What exists now:
   the clip's own mean so the sway survives, and `clip_check` holds both joints
   inside `UNTWIST_TOLERANCE` (3°). The archer's plane keeps its turned stance:
   there the stance *is* the pose.
-- 112 markers on 52 clips, each from `tools/clip_events.gd`'s kinematics and
+- 113 markers on 52 clips, each from `tools/clip_events.gd`'s kinematics and
   a six-frame sheet: `release` on Throw (0.800), BowLoose (0.183) and Cast
   (1.000), with `windup` 0.300 on Throw — the spear's throw plays at rate 1.0
   because that 0.500 s window is what the clip authored (D-104);
@@ -527,7 +527,7 @@ of what that means:
   back-face culling built at load (**D-031**). The host picks between the maps in
   the lobby's Match panel; the seed row hides itself for the static ones.
 - **The third map** (Kopje Crossing) is hand-made and has no import: a 96 m
-  savanna plateau whose 123 rock platforms are laid out of tables in
+  savanna plateau whose 127 rock platforms are laid out of tables in
   `safari_map.gd` and baked into collision by the same `StaticMap` (**D-042**).
   A checker proves every platform is reachable on the Bog's real jump arc.
 - **The fourth map** (Lantern Wharf) is built the same way and is the opposite
@@ -649,11 +649,16 @@ of what that means:
 
 1. **Real multiplayer has never been played.** See the next section — this is
    the big one.
-2. **Mid-match join as spectator** (PLAN 1.8). The other two disconnect cases
-   are done and tested. This one needs a piece that does not exist: a late
-   joiner is never told about Bogs that already spawned, because `_create_bog`
-   is broadcast once, at spawn time, and there is no world-state-on-join
-   message. That is the whole of the work.
+2. **Mid-match join as spectator is built and has never been played** (PLAN 1.8,
+   **D-164**). A peer that joins a running match is no longer refused: it is told
+   the phase, the clock, every Bog that is standing and what is left of each,
+   everything lying on the ground, the teams' letters, every hold and robe with the
+   time already run, and the scoreboard, and it watches the rest of the round,
+   joining properly at the next match. `net_test.sh` stage 12 proves it over a real
+   socket with one process leaving and rejoining. What no harness covers is the
+   lobby's own path, three or more peers (a client-owned Bog still leaks one
+   `Node not found` line into a joiner's log), and joining a Teams, B·O·G or lives
+   match rather than a free-for-all.
 3. **Rust has never been played on by a person.** The map itself is **done** —
    `scenes/world/maps/rust.tscn`, `resources/config/rust_env.tres`, the
    `"rust"` row in `MapCatalog`, and `scripts/world/static_map.gd` filled in
@@ -772,6 +777,9 @@ Three tiers, because three different kinds of claim need three different proofs
 | `tools/team_tint.tscn` | every Bog's body is in its team's nameplate colour, free-for-all is the body's own imported colour, the Elder's robe stays purple, a corpse keeps its colour, and a lobby team switch repaints the Bog (D-046). **In the gate**, headless; through `snapshot.gd` it renders the lineup |
 | `tools/letter_carriers.tscn` | a letter card that starts a hold puts "Name picked up G" in the feed and a wasted duplicate puts nothing; carriers behind a wall, enemy included, have a gold card marker over their heads drawn through it and above the nameplate, your own hold marks nothing on your screen, and the marker goes on bank and on death; the same in free-for-all (`-- ffa`) (D-050). **In the gate**, headless; through `snapshot.gd` it renders the Bog's own view with the feed |
 | `tools/capture_preview.tscn` | a Capture B·O·G match in the real arena: both team bases drawn, three letter cards at home, every Bog on its own team's pad (D-051). **In the gate** on Kopje Crossing, headless; takes a map id; through `snapshot.gd` it renders the view from above Team 1's base. The mode's rules are `match_rules`, and the base/letter layout on every map is checked by `playthrough` |
+| `tools/map_thumbs.tscn` | the lobby carousel's seven 480x270 map photographs (D-162), baked through the real `arena.tscn` into `art/generated/map_thumbs/<id>.png` from each `MapCatalog` row's `thumb_camera`. **Not** in the gate and **not headless**. `"$GODOT" --path . --resolution 960x540 tools/map_thumbs.tscn` (a trailing `-- quarry` does just that map; `-- <id> candidates` sweeps angles into `out/`), then `--import` |
+| `tools/range_views.tscn` | Highsun Grounds at eye height, with the range's items built (which `preview_map` does not). Its `probe` view stands a Bog-sized capsule on all eight pads and walks one out from every rack: no pad blocked, no pad arming a swap, and the depth of floor in front of each rack (D-161). **In the gate** as a snapshot |
+| `tools/shoulder_shots.gd` | `snapshot.gd` with the aim button held from frame 0 and a crosshair painted at centre, for choosing the aiming shoulder from renders (D-159). Not in the gate |
 | `tools/fps_readout.tscn` | the FPS readout (D-148): off out of the box, following the Settings toggle in both directions with a real frame rate in it, kept by `settings.cfg`, and hidden whenever a render tool has set the suppression flag, so no `preview_*` shot carries it. **In the gate**, headless, about five seconds |
 | `tools/preview_plate.tscn` | the nameplate against the head (D-150): twelve moments of eighteen clips, the name 0.120 m clear of the crown at its tightest (`RunJump`) and the lift a flat 0.000 m in every ground clip. **In the gate**, headless; `sheet <Clip>` through `snapshot.gd` draws the picture |
 | `tools/combat_range.tscn -- emote` | the Y key pressed for real (D-155): start, stop, start again off `Bog.emoting`, the `Twerk` blend reaching full and the joints travelling, and a step ending it. **In the gate**, headless |
