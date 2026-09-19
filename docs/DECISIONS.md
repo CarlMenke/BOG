@@ -15338,3 +15338,26 @@ the chest they threw the body by, not a place they struck, and a direct bolt is
 a whole body's worth already. In practice this is the bow's rule: 20-80 becomes
 26-104, **so a full draw to the head kills from full health**, which is new and
 is the point. The spear's 100 is 130 and changes nothing.
+
+## D-131 — The shoulder walks out with the bowstring, to seventeen degrees at a full draw
+The owner: *"when you're fully drawn with the bow, the camera angle is behind
+the bog, you can't see your crosshair, the camera needs to offset to the right a
+few degrees."*
+
+Both of `PLAN_CAMERA`'s shoulders put the lens 11 to 13 degrees off the Bog's
+back, which clears a Bog with a spear up and does not clear one at full draw:
+the bow arm comes out and the bow stands up through the crosshair.
+`BogCamera._apply_stance` now lerps the shoulder from the stance's own value to
+`distance * SHOULDER_DRAWN_RATIO` (0.307, the tangent of 17 degrees) along
+`Bog.draw_fraction()`. A ratio and not a length because the string is on the
+attack button and can be drawn with the aim held (2.15 m of arm) or without it
+(3.1 m), and it is the angle that has to be the same in both; along the draw
+rather than switched, so a snap shot hardly moves the view.
+
+**This amends `PLAN_CAMERA` rule 4** ("over the right shoulder, fixed"), and
+only for the bow: the rest and aim shoulders are the plan's, untouched, which is
+why `tools/camera_range` — which reads them off the rig's constants — has
+nothing new to say. Written against the pre-D-rework rig and ported onto
+`_apply_stance` when the PvP camera landed underneath it the same evening; rule
+5 (the shot leaves the lens) means the crosshair stays truthful wherever the
+shoulder is.

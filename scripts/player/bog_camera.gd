@@ -65,6 +65,17 @@ const DISTANCE_DEFAULT := 3.1
 const DISTANCE_AIMING := 2.15
 const SHOULDER_DEFAULT := 0.62
 const SHOULDER_AIMING := 0.48
+## The shoulder at a full draw, as a fraction of the boom. Either shoulder above
+## puts the lens 11 to 13 degrees off the Bog's back, which clears a Bog with a
+## spear up and does not clear one at full draw: the bow arm comes out and the
+## bow stands up in front of it, straight through the crosshair. 0.307 is the
+## tangent of 17 degrees — four to six further round to the right — and a ratio
+## rather than a length because the string is on the attack button and can be
+## drawn with the aim held (2.15 m of boom) or without it (3.1 m), and it is the
+## angle that has to be the same in both. Reached along `draw_fraction()` rather
+## than switched to, so the view walks out with the string and a snap shot
+## hardly moves it.
+const SHOULDER_DRAWN_RATIO := 0.307
 const FOV_AIM_SCALE := 0.82
 ## How fast the rig crosses between those two sets: an eighth of a second, which
 ## is slower than the bow comes up and faster than a player can act on it.
@@ -253,11 +264,16 @@ func _follow(delta: float) -> void:
 	global_position = next
 
 
-## Rule 3: cross between the resting shot and the aiming one.
+## Rule 3: cross between the resting shot and the aiming one. The shoulder also
+## walks out with the bowstring (`SHOULDER_DRAWN_RATIO`), so a full draw does not
+## stand the bow in front of the crosshair.
 func _apply_stance(delta: float) -> void:
 	var t := clampf(STANCE_SPEED * delta, 0.0, 1.0)
-	_distance = lerpf(_distance, DISTANCE_AIMING if _aiming else DISTANCE_DEFAULT, t)
-	_shoulder = lerpf(_shoulder, SHOULDER_AIMING if _aiming else SHOULDER_DEFAULT, t)
+	var want_distance := DISTANCE_AIMING if _aiming else DISTANCE_DEFAULT
+	var want_shoulder := lerpf(SHOULDER_AIMING if _aiming else SHOULDER_DEFAULT,
+		want_distance * SHOULDER_DRAWN_RATIO, _body.draw_fraction())
+	_distance = lerpf(_distance, want_distance, t)
+	_shoulder = lerpf(_shoulder, want_shoulder, t)
 	_camera.fov = lerpf(_camera.fov, _base_fov * (FOV_AIM_SCALE if _aiming else 1.0), t)
 
 
