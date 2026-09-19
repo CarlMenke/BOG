@@ -34,6 +34,12 @@ extends Node3D
 ##
 ## Not headless, for `tools/snapshot.gd`'s reason: the headless driver uses the
 ## dummy rasteriser and produces no image. A window appears for a few seconds.
+##
+## **Every picture is stamped with what it was taken of** (D-175), so that
+## `tools/thumb_check.tscn` — which is headless and in the gate — can say a map
+## has been rebuilt and its photograph has not. The stamping lives here because
+## the baker is the one thing that knows what went into a shot; the checker only
+## recomputes it. See `inputs_of` below.
 
 const ARENA := preload("res://scenes/world/arena.tscn")
 
@@ -59,6 +65,29 @@ const FIRST_EXTRA := 40
 const CANDIDATE_YAWS := [35.0, 125.0, 215.0, 305.0]
 const CANDIDATE_PITCHES := [-22.0, -38.0]
 
+## Map id to the hash of what its photograph was taken of, beside the pictures.
+## One file rather than one per map: a bare `-- quarry` run re-stamps a single
+## row and leaves the other six alone, so this is merged and never overwritten.
+const STAMP_PATH := "res://art/generated/map_thumbs/stamps.json"
+
+## Where a map's own files live. Everything in here named `<id>_` is that map's
+## — `wharf_map.gd` and `wharf_ambience.gd` both are — which is how a map that
+## grows a second script is covered without anybody adding it to a list.
+const MAP_SCRIPT_DIR := "res://scripts/world/maps"
+
+## The files the hollow is *grown* out of. A procedural map has no scene to
+## hash, so its inputs are the generation code plus the seed it is baked from
+## (D-007). `arena.gd` is on this list for the hollow alone: for a static map
+## all it does is instance a scene, and putting it on all seven rows would turn
+## every arena edit into seven red lines.
+const PROCEDURAL_INPUTS := [
+	"res://scripts/world/arena.gd",
+	"res://scripts/world/island_generator.gd",
+	"res://scripts/world/landmarks.gd",
+	"res://scripts/world/prop_scatter.gd",
+	"res://scripts/world/ambience.gd",
+]
+
 var _wanted: Array[String] = []
 var _candidates: bool = false
 var _camera: Camera3D
@@ -67,6 +96,14 @@ var _written: int = 0
 
 
 func _ready() -> void:
+	# A session with no socket, so this tool is the host of the match it is
+	# photographing — `tools/playthrough.gd`'s first line, for its reason. Without
+	# it `MatchState`'s arena-ready path takes its client branch and Godot logs
+	# `RPC '_report_arena_ready' on yourself is not allowed` once per map. Fixed
+	# here rather than in `match_state.gd`: the client branch is right, and the
+	# tool standing outside any session is what was wrong.
+	Net.start_offline()
+
 	var ids := MapCatalog.ids()
 	for arg: String in OS.get_cmdline_user_args():
 		if arg == "candidates":
@@ -90,6 +127,7 @@ func _ready() -> void:
 
 
 func _run() -> void:
+	var stamps := load_stamps()
 	var first := true
 	for id: String in _wanted:
 		if not await _build(id, first):
@@ -103,6 +141,10 @@ func _run() -> void:
 					MapCatalog.thumb_path(id)):
 				get_tree().quit(1)
 				return
+			# Stamped as the picture is written and not at the end, so a run that
+			# dies on map five leaves four honest rows rather than seven claims.
+			stamps[id] = stamp_of(id)
+			_write_stamps(stamps)
 			_written += 1
 		_teardown()
 		await get_tree().process_frame
@@ -111,6 +153,7 @@ func _run() -> void:
 		% [_written, MapCatalog.ids().size(), OUT_SIZE.x, OUT_SIZE.y])
 	print("map_thumbs: %s" % ("PASS" if _candidates or _written == _wanted.size()
 		else "FAIL"))
+	MatchState.reset()
 	get_tree().quit(0)
 
 
@@ -139,6 +182,12 @@ func _build(id: String, first: bool) -> bool:
 
 func _teardown() -> void:
 	if _arena != null:
+		# Before the arena goes, not after. Since this tool became the host of the
+		# session it photographs (see `_ready`) `MatchState` really runs a match on
+		# each map, and an arena freed out from under it leaves it ticking a void
+		# check over Bogs that no longer exist — `capture_preview` calls the same
+		# line before it quits, for the same reason.
+		MatchState.reset()
 		remove_child(_arena)
 		# `free`, not `queue_free`: the next map is instanced on the next line and
 		# two arenas in the tree at once is two skies, two suns and two worlds of
@@ -228,3 +277,92 @@ func _bounds() -> AABB:
 	for pad: Transform3D in pads:
 		box = box.expand(pad.origin)
 	return box.grow(maxf(box.size.x, box.size.z) * SPAWN_MARGIN)
+
+
+# ------------------------------------------------------- what a shot is of ---
+# Static, and called by `tools/thumb_check.gd` as well: one definition of "this
+# map's inputs", or the gate would be checking something other than what the
+# baker stamped.
+
+
+## Every file this map's photograph is a picture of.
+##
+## **Its own files and nothing shared.** A static map is its scene, the `.gd`
+## and `.tres` that scene names — its script and its environment — and anything
+## beside that script called `<id>_*.gd`. Deliberately *not* `static_map.gd`,
+## `arena.gd`, the Bog or the theme: those are touched most weeks, and a check
+## that goes red on every second commit is one people re-bake past without
+## looking. What is left out is what a picture of a map does not show.
+##
+## The hollow has no scene, so it is `PROCEDURAL_INPUTS` and the seed instead.
+static func inputs_of(id: String) -> PackedStringArray:
+	if MapCatalog.is_procedural(id):
+		var grown := PackedStringArray(PROCEDURAL_INPUTS)
+		grown.sort()
+		return grown
+	var out := PackedStringArray()
+	var scene := String(MapCatalog.get_entry(id)["scene"])
+	if not scene.is_empty():
+		out.append(scene)
+		for line: String in FileAccess.get_file_as_string(scene).split("\n"):
+			if not line.begins_with("[ext_resource"):
+				continue
+			var path := line.get_slice('path="', 1).get_slice('"', 0)
+			if path.get_extension() in ["gd", "tres"]:
+				out.append(path)
+	var dir := DirAccess.open(MAP_SCRIPT_DIR)
+	if dir != null:
+		for file: String in dir.get_files():
+			if file.begins_with("%s_" % id) and file.get_extension() == "gd":
+				out.append("%s/%s" % [MAP_SCRIPT_DIR, file])
+	var unique := PackedStringArray()
+	for path: String in out:
+		if not unique.has(path):
+			unique.append(path)
+	unique.sort()
+	return unique
+
+
+## The one string that says what this map looked like when it was photographed:
+## the catalog's answers about it — the resolved `thumb_camera` row, its kind
+## and its scene — and a digest per input file.
+static func stamp_of(id: String) -> String:
+	var parts := PackedStringArray()
+	var entry := MapCatalog.get_entry(id)
+	# The *resolved* row, not the entry's own override, so a change to
+	# `MapCatalog.THUMB_CAMERA` moves every map that leans on the default.
+	parts.append("camera %s" % JSON.stringify(MapCatalog.thumb_camera(id)))
+	parts.append("kind %d scene %s" % [int(entry["kind"]), String(entry["scene"])])
+	if MapCatalog.is_procedural(id):
+		parts.append("seed %d" % MatchConfig.new().map_seed)
+	for path: String in inputs_of(id):
+		parts.append("%s %s" % [path, _digest(path)])
+	return "\n".join(parts).sha256_text()
+
+
+## The stamps as they stand on disk, empty if none have been written yet.
+static func load_stamps() -> Dictionary:
+	if not FileAccess.file_exists(STAMP_PATH):
+		return {}
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(STAMP_PATH))
+	return parsed if parsed is Dictionary else {}
+
+
+## One text file's contents, with the line endings taken out of the question:
+## several files in this repo flip between LF and CRLF depending on which tool
+## last wrote them, and that is not a change to a map.
+static func _digest(path: String) -> String:
+	if not FileAccess.file_exists(path):
+		return "missing"
+	return FileAccess.get_file_as_string(path).replace("\r\n", "\n") \
+		.strip_edges().sha256_text()
+
+
+static func _write_stamps(stamps: Dictionary) -> void:
+	var file := FileAccess.open(STAMP_PATH, FileAccess.WRITE)
+	if file == null:
+		push_error("map_thumbs: could not write %s" % STAMP_PATH)
+		return
+	# Indented and key-sorted, because this is a committed file and a one-line
+	# blob is a diff nobody can read.
+	file.store_line(JSON.stringify(stamps, "\t", true))
