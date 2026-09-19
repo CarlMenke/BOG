@@ -4014,7 +4014,7 @@ func _replicates(field: String) -> bool:
 ## had a foot actually down.
 ##
 ## The Bog is held facing one way by holding the *view* still and letting the
-## body do what it always does now — point at it (`docs/PLAN_CAMERA.md`). This
+## body do what it always does now — point at it (D-174). This
 ## used to need the `face_view` flag, because a body left to itself faced its own
 ## velocity and there would have been no strafe to measure; under the PvP rig a
 ## held view is a held facing for free, which is the pose every gait in this
@@ -4433,8 +4433,8 @@ func _bow_elevation(bog: Bog) -> float:
 ## dimensions — the one form of the question that is as well conditioned looking
 ## at the sky as it is looking at the horizon.
 ##
-## The crosshair's own direction comes from `aim_ray`, which is the *unobstructed*
-## camera's (D-045) and is the same vector `BogCombat` reads at the release, so
+## The crosshair's own direction comes from `aim_ray`, which is the actual
+## camera's (D-174) and is the same vector `BogCombat` reads at the release, so
 ## this compares the bow against the thing the arrow will actually follow rather
 ## than against the angles the mode happened to ask for.
 func _bow_off_crosshair(bog: Bog, rig: BogCamera) -> float:

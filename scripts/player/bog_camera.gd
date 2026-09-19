@@ -1,6 +1,6 @@
 class_name BogCamera
 extends Node3D
-## The third-person rig BOG is fought from. See `docs/PLAN_CAMERA.md`.
+## The third-person rig BOG is fought from (D-174; spec `docs/PLAN_CAMERA.md`).
 ##
 ## The owner, 2026-09-18: *"the camera and model need a better connection, right
 ## now they are completely separated, which is too much freedom and allows for
@@ -37,7 +37,8 @@ extends Node3D
 ##    spear goes, wherever scenery has put the camera.
 ##
 ## Rule 4 supersedes D-045's rule that the aim is read from the *unobstructed*
-## camera. That rule bought one thing — a wall behind the Bog could not move a
+## camera, and with it the whole of D-088 (D-174). That rule bought one thing —
+## a wall behind the Bog could not move a
 ## throw — and charged for it twice: the crosshair stopped being the aim, so the
 ## lens had to be turned in to meet the ray, and that correction then had to be
 ## rate-limited because the ray's meeting point jumps the length of the ray

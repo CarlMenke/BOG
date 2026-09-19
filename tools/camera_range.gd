@@ -1,6 +1,6 @@
 extends Node3D
 ## The PvP camera rig, driven the way a mouse drives it, and asked five
-## questions every frame. See `docs/PLAN_CAMERA.md`.
+## questions every frame (D-174; spec `docs/PLAN_CAMERA.md`).
 ## Development tool, not shipped. Headless, a couple of seconds.
 ##
 ##   Godot --headless --fixed-fps 60 --path . tools/camera_range.tscn
@@ -61,9 +61,9 @@ extends Node3D
 ##   than a pop, so coming in is instant. The worst one is printed rather than
 ##   judged, and it is the honest price of the rule.
 ##
-## - **faces** — the body follows the camera (the whole rework), *except* while
-##   the player is only looking around (`Bog.YAW_SLACK`). Five claims, and the
-##   middle three are the idle slack:
+## - **faces** — the body follows the camera (the whole rework, D-174), *except*
+##   while the player is only looking around (`Bog.YAW_SLACK`, D-177). Five
+##   claims, and the middle three are the idle slack:
 ##     * a 45-degree view step with the Bog standing still moves the body **not
 ##       at all** — 45 is inside the 60 degrees of slack, and the whole point of
 ##       the feature is that a look is not a turn;

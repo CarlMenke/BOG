@@ -372,15 +372,15 @@ const CROUCH_TRANSITION := 9.0
 ## responsive, slow enough that the turn reads as a turn.
 const TURN_SPEED := 14.0
 
-## **Idle yaw slack**: how far the view may swing off a Bog that is only looking
-## around before the body is dragged after it. See `_face`.
+## **Idle yaw slack** (D-177): how far the view may swing off a Bog that is only
+## looking around before the body is dragged after it. See `_face`.
 ##
 ## The owner, after the first evening on the PvP rig: *"if they are standing
 ## still, not moving at all and just moving the camera, then let them get it a
 ## little further around before it starts moving the character, not all the way
 ## just further, and then if they start moving, smooth it back to inside the
 ## previous clamp."* That is Fortnite's standing behaviour, and it is the answer
-## to the one cosmetic gap `docs/PLAN_CAMERA.md` knowingly left open: with the
+## to the one cosmetic gap D-174 knowingly left open: with the
 ## body welded to the camera, a Bog that stands still and looks around slides
 ## its feet across the floor for every degree of it, because this repo has no
 ## turn-in-place clips to hide the turn with. The slack does not remove the
@@ -688,7 +688,8 @@ var reads_local_input: bool = true
 var body_yaw: float = 0.0
 ## How far the view is currently allowed to be off `body_yaw` before the body
 ## follows it: `YAW_SLACK` while this Bog is only looking around, closing to
-## zero at `SLACK_CLOSE_RATE` the moment it does anything else. See `_face`.
+## zero at `SLACK_CLOSE_RATE` the moment it does anything else (D-177). See
+## `_face`.
 ##
 ## Local only, and there is nothing to replicate: what other peers need is where
 ## the body ended up, and that arrives on `sync_yaw` already slacked.
@@ -1065,7 +1066,7 @@ func is_local() -> bool:
 
 
 ## Called by the camera rig each frame. The view is where this Bog walks
-## relative to *and* where it looks (`docs/PLAN_CAMERA.md`).
+## relative to *and* where it looks (D-174, `docs/PLAN_CAMERA.md`).
 ##
 ## It used to carry a third argument, `face_view`, which said whether the body
 ## should point at the camera this frame instead of at its own velocity. There
@@ -1946,7 +1947,7 @@ func _detect_landing(grounded_before: bool) -> void:
 	_was_grounded = grounded_now
 
 
-## **The body faces where the camera faces** (`docs/PLAN_CAMERA.md`). The mouse
+## **The body faces where the camera faces** (D-174). The mouse
 ## turns the Bog; the stick moves it relative to that facing.
 ##
 ## This used to turn the body toward its own *velocity* and only point it at the
@@ -1979,7 +1980,8 @@ func _detect_landing(grounded_before: bool) -> void:
 ## than as delay.
 ##
 ## **The one thing that is not welded: a Bog that is only looking around**
-## (`YAW_SLACK`, `SLACK_CLOSE_RATE`). The rework shipped with the body on the
+## (`YAW_SLACK`, `SLACK_CLOSE_RATE`, D-177). The rework shipped with the body on
+## the
 ## camera at every instant, and named the cost itself — a standing Bog that
 ## looks about slides its feet, because there are no turn-in-place clips here to
 ## hide the turn with. The owner played it and asked for Fortnite's answer:

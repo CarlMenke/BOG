@@ -1298,6 +1298,14 @@ func draw_fraction() -> float:
 ## The point the crosshair is over, or a point far along the view ray if it is
 ## over nothing. This is what makes a throw land where the reticle is instead of
 ## parallel to it.
+##
+## Under the PvP rig the crosshair is not an approximation of the shot, it *is*
+## the shot (D-174): `aim_ray` is the actual `Camera3D`'s own origin and forward,
+## wherever scenery has pulled it, so screen centre and the spear agree by
+## construction rather than by a correction. D-045's unobstructed ray, and the
+## reticle turn-in and rate limit that had to be built on top of it (D-088), are
+## both gone. `camera_range`'s `aim` verdict reaches into this function, rather
+## than a copy of it, precisely because this is the one a throw reads.
 func _aim_point() -> Vector3:
 	var rig := _bog.get_node_or_null("CameraRig") as BogCamera
 	if rig == null:
@@ -1308,7 +1316,9 @@ func _aim_point() -> Vector3:
 
 	var space := _bog.get_world_3d().direct_space_state
 	# Tested from the Bog's own depth outwards: nothing behind the thrower can be
-	# thrown at, and the wall that pushed the camera in is behind it (D-045).
+	# thrown at, and the wall that pushed the lens in is behind it. `clear_of` is
+	# the lens's own distance from the pivot now, which is why this survived the
+	# shot moving onto the lens (D-174; D-025 by another route).
 	var query := PhysicsRayQueryParameters3D.create(
 		origin + direction * float(ray.get("clear_of", 0.0)),
 		origin + direction * MAX_AIM_DISTANCE)
