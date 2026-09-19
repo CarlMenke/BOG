@@ -112,3 +112,7 @@ art/bog/BOG_0.png.import
 # .gdignore beside them.
 memos/*
 !memos/.gdignore
+
+# The raw quarry pack: 5 GB of Tripo exports, trimmed into art/maps/quarry/ by
+# tools/trim_quarry_pack.py. Never committed, and hidden from Godot by .gdignore.
+assets/quarry_asset_pack/
