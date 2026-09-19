@@ -15314,3 +15314,27 @@ falling when it is back at the height this airtime opened at
 outruns the clip and holds the pose, which is the pause the owner allowed; one
 above it is cut short by the roll. The jump and slide-jump arcs pass no
 `land_speed` and read exactly as before.
+
+## D-130 — The head is a sphere on the skull, and a shot through it is worth 1.3 of itself
+The owner: *"there should be a headshot hitbox, the headshots need to do 30%
+more damage."*
+
+The body is one capsule and stays one: a second collider would be a second
+thing for every projectile, sweep and camera test in the game to know about.
+The head is instead a **question asked of a hit that already landed** —
+`Bog.is_headshot(point, direction)`: a 0.25 m sphere (`HEAD_RADIUS`) midway
+between `mixamorig_Head` and `HeadTop_End` on the posed skeleton, so it is lower
+in a crouch and forward in a dive. The impact point is on the capsule, which is
+fatter than the head it stands in for, so the shot's path is followed
+`HEADSHOT_REACH` past the impact and its closest approach to the sphere is what
+is measured; `SpearProjectile.nearest_bone` was never good enough for this and
+says so in its own comment. `MatchState.report_damage` asks it after the
+refusals and before the health is worked out, so the hit marker, the damage
+number and the bar carry one figure, and moves the reported bone to the head so
+the corpse goes over from where it was hit.
+
+Only `HEADSHOT_CAUSES` — the arrow and the spear. A swing and a blast report
+the chest they threw the body by, not a place they struck, and a direct bolt is
+a whole body's worth already. In practice this is the bow's rule: 20-80 becomes
+26-104, **so a full draw to the head kills from full health**, which is new and
+is the point. The spear's 100 is 130 and changes nothing.

@@ -1742,6 +1742,49 @@ func body_axis_nearest(point: Vector3) -> Vector3:
 	return centre + up * clampf((point - centre).dot(up), -half, half)
 
 
+## The head as a target: a sphere riding the skull, midway between the `Head`
+## bone and the end of it, so it goes where the animation puts the head — down
+## in a crouch, forward in a dive — rather than sitting on top of the capsule.
+## 0.25 is the skull's own half-height (0.39 m from `Head` to `HeadTop_End` in
+## the rest pose) with a little over for the shaft's width.
+const HEAD_RADIUS := 0.25
+const HEAD_BONE := "mixamorig_Head"
+const HEAD_END_BONE := "mixamorig_HeadTop_End"
+## What a hit through the head is worth over the same hit anywhere else.
+const HEADSHOT_MULTIPLIER := 1.3
+## How far past the impact point a shot is followed looking for the head. The
+## impact is on the capsule, which is fatter than the head it stands in for, so
+## the question is where the shaft was *going*; the capsule's own width is as
+## far as it can be from getting there.
+const HEADSHOT_REACH := 0.8
+
+
+## The centre of the head sphere in world space, off the posed skeleton.
+func head_centre() -> Vector3:
+	var skeleton := _model_root.find_child("Skeleton3D", true, false) as Skeleton3D
+	if skeleton != null:
+		var head := skeleton.find_bone(HEAD_BONE)
+		var end := skeleton.find_bone(HEAD_END_BONE)
+		if head >= 0 and end >= 0:
+			return skeleton.global_transform * skeleton.get_bone_global_pose(head).origin.lerp(
+				skeleton.get_bone_global_pose(end).origin, 0.5)
+	# No rig to ask: the top hemisphere of the capsule is where the head is.
+	var up := _collision.global_basis.y.normalized()
+	return _collision.global_position + up * (_capsule.height * 0.5 - _capsule.radius)
+
+
+## Would a shot that struck the body at `point`, travelling along `direction`,
+## go through the head? The path is followed `HEADSHOT_REACH` past the impact
+## and the closest it comes to the head's centre is what is measured.
+func is_headshot(point: Vector3, direction: Vector3) -> bool:
+	var centre := head_centre()
+	var nearest := point
+	if direction.length_squared() > 0.0001:
+		var along := direction.normalized()
+		nearest = point + along * clampf((centre - point).dot(along), 0.0, HEADSHOT_REACH)
+	return nearest.distance_squared_to(centre) <= HEAD_RADIUS * HEAD_RADIUS
+
+
 ## How far `point` is from the surface of this Bog's collision capsule, and zero
 ## from inside it. What the Elder's blast radius is measured against (D-053):
 ## the body, not its feet or its middle, so a crouched Bog is a smaller target

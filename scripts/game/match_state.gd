@@ -858,6 +858,9 @@ func _do_respawn(peer_id: int, spawn: Transform3D, life: int) -> void:
 
 # ------------------------------------------------------ damage, and death ---
 
+## The hits that are aimed at a place on the body, and so can be a headshot.
+const HEADSHOT_CAUSES := [Bog.Cause.ARROW, Bog.Cause.SPEAR]
+
 ## Host only. **The single place a hit is decided** (D-062).
 ##
 ## Everything that can hurt a Bog comes through here, and the questions that
@@ -951,6 +954,15 @@ func report_damage(victim_id: int, attacker_id: int, amount: float,
 	# whittle down a body that does not exist.
 	var victim: Bog = bogs.get(victim_id)
 	var before := victim.health if is_instance_valid(victim) else Bog.MAX_HEALTH
+	# A shot through the head is worth `Bog.HEADSHOT_MULTIPLIER` of itself. Asked
+	# here, after the refusals and before the health is worked out, so that the
+	# hit marker, the damage number and the return all carry the one figure; and
+	# of the aimed shots only (`HEADSHOT_CAUSES`), because a swing and a blast
+	# report the chest they threw the body by, not a place they struck. The bone
+	# is moved to the head with it, so the corpse goes over from where it was hit.
+	if cause in HEADSHOT_CAUSES and is_instance_valid(victim) 			and victim.is_headshot(point, blow):
+		amount *= Bog.HEADSHOT_MULTIPLIER
+		bone = Bog.HEAD_BONE
 	var left := before - amount
 
 	# **What was actually taken**, which on a killing blow is not what was
