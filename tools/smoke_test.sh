@@ -924,40 +924,57 @@ also "letter pickups told to everyone" "letter_carriers: feed picked up PASS"
 also "letter pickups told to everyone" "letter_carriers: duplicate PASS"
 also "letter pickups told to everyone" "letter_carriers: marker PASS"
 check "free-for-all letter carriers" "letter_carriers: ffa PASS"     "$GODOT" --headless --path "$GODOT_ROOT" tools/letter_carriers.tscn -- ffa
-# The camera, kept out of the scenery (D-045). A player: "too frequently the
-# camera is inside meshes and stuff when there are meshes behind the character".
-# Seven legs — a wall on each shoulder walked along, a corner, under a canopy and
-# at its edge, a wall at the Bog's back with the view swung and flicked through
-# it, and a low tunnel walked through — 1,700 frames, each asked three ways
-# whether the lens is inside collision: a point query, a near-plane sphere, and a
-# ray from the eye (is it behind a wall). Against the old spring arm 942 of the
-# 1,700 fail, in every leg.
+# The PvP camera rig, asked five questions every frame (D-174, spec
+# `docs/PLAN_CAMERA.md`). Eight legs, 2,240 frames: the seven placement stations
+# this check has always had — a wall on each shoulder walked along, a corner,
+# under a canopy and at its edge, a wall at the Bog's back with the view swung
+# and flicked through it, and a low tunnel — because the complaint they were
+# written for ("too frequently the camera is inside meshes and stuff when there
+# are meshes behind the character") is not answered by rewriting the rig, it is
+# answered by those frames still coming back clean; plus a patch of open ground
+# where the view is turned and the *body* is watched.
 #
-# The first `also` is the half that keeps D-025 true: the point a throw is aimed
-# at is required, every frame, to be the one the *unobstructed* camera would give
-# for the same view. With `aim_ray` taken from the pulled-in lens instead, 1,030
-# frames fail. `--fixed-fps 60` so a tick of view-turning is the same on every
-# machine; headless, about two seconds.
+# `clip` is the original question, asked three ways because no one of them sees
+# every case: a point query at the lens, a near-plane sphere there, and a ray
+# from the Bog's eye (is the lens behind a wall). Against the spring arm D-045
+# replaced, 942 of 1,700 failed, in every leg. Zero now.
 #
-# The second is the framing (D-083): the lens is never allowed further off the
-# boom's axis than the unobstructed camera would be at the depth the boom got to,
-# so the Bog keeps its place in the frame while the camera comes in. With the
-# shoulder held at its full length through the pull-in, 1,461 frames fail, by as
-# much as 0.62 m — which is a Gub sliding most of a screen width sideways, the
-# same way whichever way the player was turning.
+# The first `also` is what keeps D-025 true, and it is the invariant that
+# replaced D-045's. The aim used to be required to match the *unobstructed*
+# camera; under D-174 `aim_ray` is the actual `Camera3D`, so the requirement is
+# that `BogCombat._aim_point` is where a ray out of that camera hits, within a
+# centimetre — screen centre is the shot, wherever scenery has put the lens.
+# `--fixed-fps 60` so a tick of view-turning is the same on every machine;
+# headless, about two seconds.
 #
-# The third is how the lens *moves* rather than where it ends up (D-086), which
-# is what is left once the placement is right: no frame may turn the lens more
-# than 1.2 degrees on its own, and the frames that dolly it faster than 5.4 m/s,
-# or reverse its direction, stay under 4 % each. Without the lead sweeps, the
-# split pull-in and return speeds, the hold and the rate-limited reticle
-# correction, that is 241 frames over the step limit against 64 allowed and a
-# 13.8-degree single-frame snap of the whole picture with nobody at the mouse.
+# The second is the framing (D-083): the lens never leaves the segment from the
+# pivot to the unobstructed lens point. Under this rig that is not a rule the
+# code obeys but the shape of the code — one sweep along one segment, the lens
+# at a fraction of it — so the Bog cannot slide across the picture while the
+# camera comes in, and the measured number is zero to float rather than zero to
+# a tolerance. With the shoulder held at full width through a pull-in instead,
+# 1,461 frames fail by as much as 0.62 m.
+#
+# The third is how the lens *moves* rather than where it ends up, and D-174 made
+# it three zeroes where D-088 needed three budgets: the pivot never outruns the
+# subject plus the ease of the gap it already had, a lens with the view still and
+# the arm out moves no further than the body did, and the arm never grows faster
+# on the way out than `RETURN_RATE` allows. Pull-ins are exempt by design — a
+# frame drawn from inside a wall is worse than a pop — so the worst one is
+# printed rather than judged.
+#
+# The fourth is the rework itself: the body faces where the camera faces, except
+# through the idle yaw slack (a standing Bog gets 60 degrees of look before its
+# feet move) and the four committed states — a spin, a roll, a slide and an
+# emote, each a heading already paid for. It fails on a build where the body has
+# gone back to facing its own velocity, which is the one regression a placement
+# check cannot see.
 check "camera stays out of the scenery" "clip PASS" \
     "$GODOT" --headless --fixed-fps 60 --path "$GODOT_ROOT" tools/camera_range.tscn
 also "camera stays out of the scenery" "aim PASS"
 also "camera stays out of the scenery" "frame PASS"
 also "camera stays out of the scenery" "calm PASS"
+also "camera stays out of the scenery" "faces PASS"
 # Menu to results screen, through the real scenes and the real autoloads. The
 # only check here that can notice a *join* coming apart — a lobby that never
 # hands off to the arena, an arena that never registers, a results screen that

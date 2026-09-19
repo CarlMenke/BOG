@@ -3339,6 +3339,21 @@ a low ceiling), that segment falls back to a ray rather than collapsing the
 camera into the Gub. The boom and shoulder lengths themselves did not change; the
 `SpringArm3D` node became a plain `Boom`.
 
+> **Superseded by D-174, and it is the whole of the next four paragraphs.** The
+> aim is no longer read from where the camera *would* be with nothing in the way.
+> Under the PvP rig `aim_ray` is the actual `Camera3D`'s origin and forward,
+> wherever scenery has put it, so screen centre is where the spear goes and the
+> lens is never turned in to meet a ray it is not on. The "reticle turned in to
+> meet the aim ray" paragraph below, and the rate limit D-088 grew out of it, are
+> both gone with it. What survives is `clear_of` — still how far along the ray the
+> Bog itself is, which under one sweep along one segment is the lens's own
+> distance from the pivot — so D-025 still holds: nothing aims at the wall that
+> pushed the lens in. The `aim` verdict still exists and still reads
+> `BogCombat._aim_point`; it now compares against the real camera rather than an
+> unobstructed one. The sphere-swept *placement* this record is titled for is not
+> superseded — the sweep is one segment now instead of two, but the lens is still
+> out of the scenery on every frame.
+
 **The aim does not move** (D-025). `aim_ray` used to be projected from the
 `Camera3D`; it is now built from where the camera *would* be with nothing in the
 way — the rig's pivot, yaw and pitch, the full boom and shoulder, plus shake's
@@ -11115,6 +11130,18 @@ checker now knows about.
   builds its own containers and cranes.
 
 ## D-088 — The camera's bad feel near walls was an unbounded reticle rotation, not its placement: three rates, a hold, a lead, and a `calm` verdict that measures the lens's own motion
+> **Superseded in full by D-174.** Every mechanism below — the three rates, the
+> hold, the lead sweeps, the rate-limited reticle correction and the per-channel
+> budgets — existed to make D-045's *unobstructed* aim ray survive a lens that
+> kept moving away from it. The PvP camera rework takes the ray from the lens, so
+> there is no correction left to rate-limit and no disagreement left to damp: the
+> rig is one sphere sweep along one segment, an instant pull-in and one eased
+> return, with a rotation that has no filter at all. The research below is still
+> the reason the rework picked Unreal's spring arm over an "alternate point of
+> view" strategy, and the `calm` verdict is still in the gate and still measures
+> the lens's own motion — but it asserts three zeroes now rather than three
+> budgets, because there are no longer five rates to fight each other.
+
 The user: *"set another agent on really fine tuning the camera when it hits
 walls and stuff, maybe do some research on how other devs have done this in the
 past, we seem to be making very minimial progress in this area"*.
@@ -16785,8 +16812,8 @@ over to the right."* The aiming shoulder is now **0.78**, above the resting one.
 `snapshot.gd` with two differences that are the whole reason it exists: it holds
 the aim button from the first frame, which no mode of the combat range does for
 a still frame, and it paints a crosshair at screen centre — which under the PvP
-camera rework's fourth rule (`docs/PLAN_CAMERA.md`, merged as 8d36b6e; its own
-record is still owed, BOG-11) is exactly where the shot goes. Four values were
+camera rework's fourth rule (D-174, `docs/PLAN_CAMERA.md`, merged as 8d36b6e,
+written down after this record) is exactly where the shot goes. Four values were
 rendered with a spear cocked (`out/bog53-shoulder-*-spear.png`) and read off as
 angle from the Bog's back at the 2.15 m aiming boom, against 16.1 degrees at
 rest: 0.48 is 12.6 and puts the head on the crosshair; 0.62 (16.1) and 0.70
@@ -17522,3 +17549,140 @@ its extremes, and the Weapon-and-Character portrait.
 - **Keeping the pit's moon shadow by hand** (a second campfire mesh in a
   shadows-only pass). A second opinion about where a 0.9 m prop is, for a shadow
   that falls behind the prop. (BOG-43.)
+
+## D-174 — The camera and the body become one thing
+The owner, 2026-09-18: *"the camera and model need a better connection, right
+now they are completely separated, which is too much freedom and allows for
+things that end up not being fun for the user. ... we need third person
+specifically for pvp, such as Fortnite; the third person that exists for story
+games where they are completely separate does not work as well in a pvp. Rework
+the camera from the bottom using this new approach, trying to not take anything
+from the existing camera set up at all. Match what industry leaders in pvp third
+person are doing. Keep it as simple as possible, overengineer only where it is
+worth it."* The spec written before a line was touched is `docs/PLAN_CAMERA.md`;
+the work is merge `8d36b6e`. This record was owed from that day and is written
+after D-159, which already amends it.
+
+**What was separated, and what it cost.** `Bog._face` turned the body toward its
+own *velocity* and the rig orbited it freely; the body pointed at the camera
+only while a weapon was up (`_face_view`). That is the story-game rig — Zelda,
+Uncharted — and it makes two facts out of one: the thing under the crosshair and
+the thing the Bog is pointed at. A player in a fight has to hold both. Every
+industry PvP third person — Fortnite, Apex in 3P, Warzone 3P, Gears, Splitgate —
+is the other way round, and so is this now. `scripts/player/bog_camera.gd` was
+rewritten from an empty file rather than edited: 584 lines and 47 top-level
+members became 410 and 31, and not a constant, helper or comment was carried
+over. Reading the old file to learn the public API was the only use made of it.
+
+**The body faces where the camera faces. Always.** Body yaw tracks camera yaw on
+the local Bog every physics tick with `rotate_toward` at `Bog.TURN_SPEED`
+(14 rad/s, about 800 deg/s) — effectively instant for a drag, a frame or two
+behind a flick, which reads as weight rather than delay. The mouse turns the
+character; WASD moves it relative to that facing. This costs the animator
+nothing: its three locomotion planes are already body-relative (D-066), so a
+strafe and a backpedal land on the clips drawn for them without a line changing,
+and `BACK_SPEED_SCALE` (D-098) stops mattering only while aiming and starts
+mattering always. `_face_view` and the `face_view` argument of `set_view_basis`
+are gone; there is nothing left for that flag to decide.
+
+**Four rules, and there is nothing else in the rig.**
+1. **Rotation has no lag.** `_yaw` and `_pitch` are the mouse, this frame,
+   written straight onto the node. Rotation smoothing is the story-game feel and
+   it is what makes aiming mushy.
+2. **Position has a short lag.** The pivot eases to the eye point, flat fast
+   (`LAG_FLAT` 20/s) and vertical slower (`LAG_RISE` 11/s), so a step or a scrape
+   along a wall does not pump the picture. This is Unreal's `bEnableCameraLag`,
+   which Fortnite ships.
+3. **Over the right shoulder, fixed.** No swap. 3.1 m back and 0.62 m across at
+   rest, 2.15 aiming, field of view and mouse sensitivity both scaled by
+   `FOV_AIM_SCALE` 0.82 so aiming narrows the view without sweeping the same hand
+   movement further across the world.
+4. **The shot comes out of the lens.** `aim_ray()` is the actual `Camera3D`'s own
+   origin and forward, wherever scenery has put it. Screen centre is where the
+   spear goes.
+
+**Collision is Unreal's spring arm, and the framing falls out of it.** One sphere
+sweep (`PROBE_RADIUS` 0.25 m, `PROBE_MARGIN` 0.05 m, mask world | camera blockers
+`1 | 64`, never players) from the pivot to the full desired lens point —
+`pivot + basis * (shoulder, 0, distance)` — and the lens sits at the clear
+fraction of that one segment. Because the segment passes through the pivot, the
+shoulder shrinks with the distance automatically: **D-083's invariant (the Bog
+keeps its place in the frame while the camera comes in) is no longer a rule the
+code obeys but the shape of the code**, which is why the `frame` verdict is zero
+to float rather than zero to a tolerance. Pull-in is instant, because a frame
+drawn from inside a wall is worse than a pop; the return is one exponential
+(`RETURN_RATE` 6/s) after a short hold (`HOLD_TIME` 0.2 s), so a picket fence is
+one pull-in and not a hunt.
+
+**The states where the body holds, and the mouse still turns the camera through
+all of them.** Each is a commitment already paid for: a **spin** (D-068), where
+the advance was bought at the click and the clip turns the skeleton through a
+whole revolution on top of this yaw; a **roll out of a dive**, which already
+refuses steering for the same reason; a **slide**, a momentum move that faces its
+own horizontal velocity and swings back onto the camera at `TURN_SPEED` when it
+ends; and an **emote**, which is Fortnite exactly — the camera orbits the dancer.
+Dead or spectating there is no body to steer, and `spectate`/`spectating` keep
+their contract (D-020).
+
+**What this supersedes.** D-045's aim half and the whole of D-088. D-045 made
+`aim_ray` the *unobstructed* camera — where the lens would be with nothing in the
+way — which bought one thing, that a wall behind the Bog could not move a throw,
+and charged for it twice: the crosshair stopped being the aim, so the lens had to
+be turned in to meet the ray, and that correction then had to be rate-limited
+because the ray's meeting point jumps the length of the ray whenever it crosses
+an edge. D-088 is the whole apparatus that rate limit grew into — three rates, a
+hold, a lead, five channels arguing. Taking the ray from the lens deletes the
+correction, the rate limit and the disagreement together, and with them the five
+rates that `calm` had to be given budgets for. The price is the honest one every
+Unreal third-person game pays: with your back against a wall the shot leaves from
+up to a boom's length further forward than it otherwise would. `clear_of` is
+still how far along the ray the Bog itself is — under this rig that is the lens's
+actual distance from the pivot — so nothing aims at the wall that pushed the lens
+in, and D-025 survives by another route.
+
+**Rejected.** A shoulder swap: two mirror-image muscle memories for one aim, and
+every PvP rig named above ships one shoulder. Any rotation lag at all, for rule 1.
+Lookahead sweeps, a second fat probe, per-channel holds and a rate-limited pull —
+all of D-088's machinery — because each existed to paper over the unobstructed
+ray and none of them survives its removal. Keeping the old file and editing
+toward the new model: the brief said not to take anything from it, and the
+measure of whether that held is that the rewrite is a quarter shorter with a
+third fewer members.
+
+**Known and left.** The feet slide when a standing Bog looks around: this repo
+has no turn-in-place clips and Fortnite hides the same turn with them (BOG-19,
+its own ticket, left out of v1 on purpose). The first evening on the rig closed
+most of the *occasion* for it rather than the slide — a standing Bog now gets
+`YAW_SLACK` (60 degrees) of view to swing before the body is dragged after it,
+closing at `SLACK_CLOSE_RATE` (4 rad/s) as soon as it moves, aims, draws or
+throws — which is BOG-33, landed as `fb3ffec`, and whose own record is still
+owed (BOG-60). Sideways movement reads as uneasy now that the body faces the
+camera in every stance rather than only while aiming (BOG-16). And D-159 has
+already amended rule 3: the aiming shoulder walks *out* to 0.78, past the resting
+0.62, with the drawn bow's `SHOULDER_DRAWN_RATIO` as a floor under it rather than
+a target.
+
+**The PLAN line the ticket asked for is deliberately not written.**
+`docs/PLAN.md` has been a frozen build log since 2026-09-18 and the camera round
+has no line in it to correct — 2.2 and 10.8 are both ticked and both still true
+as history. Adding one would be new work written into the freeze. The camera's
+current state is carried by this record and by STATUS.
+
+**How it is checked.** `tools/camera_range.gd` was rewritten with the rig and
+carries five verdicts over eight legs and 2,240 frames — the seven placement
+stations this file has always had, because the complaint they were written for is
+not answered by rewriting the rig, plus a patch of open ground where the view is
+turned and the *body* is watched. `clip`: the lens inside the scenery on 0 of
+2,240 frames, asked three ways (a point query, a near-plane sphere, a ray from
+the eye). `aim`: `BogCombat._aim_point` against a ray out of the actual
+`Camera3D`, 0 frames off, worst 0.0000 m — the invariant that replaced D-045's.
+`frame`: 0 off the pivot-to-lens line, worst 0.0000 m. `calm`: the pivot outran
+the body 0 times, the lens drifted on 0 of 373 loose frames, the arm went out over
+the eased cap 0 times; 394 pull-ins, worst 1.686 m in one turned frame under the
+canopy and 2.735 m across a deliberate cut, which is printed rather than judged
+because it is the rule's honest price. `faces`, new with the rework: the body
+matched the view on 6 of 6 turns inside 6 ticks (worst 4), held still through 50
+standing and 186 committed frames at 0.000 degrees of drift, sat 0 frames off the
+slack's edge, and gave the whole 60 degrees back in 15 ticks of the 21 allowed. In
+the gate as "camera stays out of the scenery" with `clip`, `aim`, `frame`, `calm`
+and now `faces`, headless at `--fixed-fps 60`, about two seconds. (BOG-11.)

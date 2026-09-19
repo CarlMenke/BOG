@@ -569,11 +569,23 @@ of what that means:
 - **Every letter is called out across the top of the screen** (**D-093**), in the
   team's colour, in every mode: picked up, the full set, and stolen. Text only,
   no sound.
-- **The camera near geometry is measured, not guessed at** (**D-088**).
-  `tools/camera_range.gd` now carries a fourth verdict, `calm`, which watches the
-  lens's own motion with the player's walking and turning subtracted out. The
-  uncommanded rotation it was added to catch went from 13.84 deg in one frame to
-  1.00, and the old rig fails the new check on all three of its counts.
+- **The camera and the body are one thing** (**D-174**, spec `docs/PLAN_CAMERA.md`,
+  merge `8d36b6e`). The third-person rig is the PvP one — Fortnite, not Uncharted:
+  the mouse turns the **Bog**, WASD moves it relative to that facing, and a strafe
+  and a backpedal are ordinary motion rather than a pose the aim button unlocks.
+  `bog_camera.gd` was rewritten from an empty file (584 lines to 410) on four
+  rules: rotation with no lag, position with a short one, one fixed right shoulder,
+  and the shot out of the **lens** — screen centre is where the spear goes.
+  Collision is one sphere sweep along one segment with an instant pull-in and an
+  eased return, so D-083's framing invariant falls out of the geometry. This
+  supersedes D-045's aim half and the whole of D-088, whose three rates, hold, lead
+  and rate-limited reticle correction all existed to prop up the unobstructed aim
+  ray. `tools/camera_range.gd` carries five verdicts over 2,240 frames —
+  `clip`, `aim`, `frame`, `calm` and the new `faces` — and all five are in the
+  gate. A standing Bog gets 60 degrees of yaw slack before its feet move (BOG-33);
+  the aiming shoulder walks out to 0.78 rather than in (**D-159**). Two known
+  cosmetic gaps are their own tickets: no turn-in-place clips (BOG-19) and
+  sideways movement reading as uneasy (BOG-16).
 - **There are three asset kits now.** The Stylized Nature MegaKit (CC0,
   Quaternius) it always had, Kenney's **Factory Kit** (CC0, 143 models on a 1 m
   grid, one colour atlas) for industrial dressing, and Kenney's **City Kit
@@ -779,6 +791,7 @@ Three tiers, because three different kinds of claim need three different proofs
 | `tools/capture_preview.tscn` | a Capture B·O·G match in the real arena: both team bases drawn, three letter cards at home, every Bog on its own team's pad (D-051). **In the gate** on Kopje Crossing, headless; takes a map id; through `snapshot.gd` it renders the view from above Team 1's base. The mode's rules are `match_rules`, and the base/letter layout on every map is checked by `playthrough` |
 | `tools/map_thumbs.tscn` | the lobby carousel's seven 480x270 map photographs (D-162), baked through the real `arena.tscn` into `art/generated/map_thumbs/<id>.png` from each `MapCatalog` row's `thumb_camera`. **Not** in the gate and **not headless**. `"$GODOT" --path . --resolution 960x540 tools/map_thumbs.tscn` (a trailing `-- quarry` does just that map; `-- <id> candidates` sweeps angles into `out/`), then `--import` |
 | `tools/range_views.tscn` | Highsun Grounds at eye height, with the range's items built (which `preview_map` does not). Its `probe` view stands a Bog-sized capsule on all eight pads and walks one out from every rack: no pad blocked, no pad arming a swap, and the depth of floor in front of each rack (D-161). **In the gate** as a snapshot |
+| `tools/camera_range.tscn` | the PvP camera rig, driven the way a mouse drives it and asked five questions every frame (D-174): `clip` (the lens is never inside the scenery, asked three ways), `aim` (`BogCombat._aim_point` is the point a ray out of the *actual* `Camera3D` hits, which is what makes the crosshair truthful), `frame` (the lens never leaves the pivot-to-lens segment — D-083's invariant, now geometry rather than a rule), `calm` (how the lens *moves*: three zeroes, with the pull-ins printed rather than judged) and `faces` (the body follows the camera, except through the idle yaw slack and the four committed states). Eight legs, 2,240 frames. **In the gate**, headless with `--fixed-fps 60`, about two seconds |
 | `tools/shoulder_shots.gd` | `snapshot.gd` with the aim button held from frame 0 and a crosshair painted at centre, for choosing the aiming shoulder from renders (D-159). Not in the gate |
 | `tools/fps_readout.tscn` | the FPS readout (D-148): off out of the box, following the Settings toggle in both directions with a real frame rate in it, kept by `settings.cfg`, and hidden whenever a render tool has set the suppression flag, so no `preview_*` shot carries it. **In the gate**, headless, about five seconds |
 | `tools/preview_plate.tscn` | the nameplate against the head (D-150): twelve moments of eighteen clips, the name 0.120 m clear of the crown at its tightest (`RunJump`) and the lift a flat 0.000 m in every ground clip. **In the gate**, headless; `sheet <Clip>` through `snapshot.gd` draws the picture |
