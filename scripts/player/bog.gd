@@ -581,15 +581,14 @@ var _crouch_pose: float = 0.0
 var _slide_blend: float = 0.0
 var _was_grounded: bool = true
 var _fall_speed: float = 0.0
-## Set by the camera each frame; movement is relative to where you are looking.
+## Set by the camera each frame, and the one input the whole PvP rig is built
+## on: movement is relative to where you are looking, and so is the *facing* —
+## see `_face`. Flat, always; the pitch travels beside it as a number.
 var _view_basis: Basis = Basis.IDENTITY
-## The boom's pitch on the Bog we own, handed down by `set_view_basis`. The
+## The view's pitch on the Bog we own, handed down by `set_view_basis`. The
 ## local half of `aim_pitch()`, exactly as `draw` is the local half of
 ## `draw_fraction()`.
 var aim_pitch_local: float = 0.0
-## While aiming or throwing the body faces the camera instead of the direction
-## of travel, so a thrown spear goes where the crosshair is.
-var _face_view: bool = false
 
 var _magnet_centre: Vector3 = Vector3.ZERO
 var _magnet_strength: float = 0.0
@@ -819,16 +818,23 @@ func is_local() -> bool:
 	return is_multiplayer_authority()
 
 
-## Called by the camera rig each frame so movement is relative to the view.
+## Called by the camera rig each frame. The view is where this Bog walks
+## relative to *and* where it looks (`docs/PLAN_CAMERA.md`).
 ##
-## `pitch` is the boom's, and it is a third argument rather than a pitched
+## It used to carry a third argument, `face_view`, which said whether the body
+## should point at the camera this frame instead of at its own velocity. There
+## is nothing left for that flag to decide: in a PvP third-person rig the body
+## always points at the camera, so the two callers that used to raise it — a
+## drawn bow and a wind-up — are now the ordinary case rather than an exception
+## to it.
+##
+## `pitch` is the view's, and it is a second argument rather than a pitched
 ## `basis` because the two are wanted for opposite reasons: everything that
 ## reads `_view_basis` — `_wish_direction`, `_face` — wants it flat, and the
 ## only thing that wants the pitch is a torso that is not steering anything
 ## (D-066).
-func set_view_basis(basis: Basis, face_view: bool, pitch: float = 0.0) -> void:
+func set_view_basis(basis: Basis, pitch: float = 0.0) -> void:
 	_view_basis = basis
-	_face_view = face_view
 	aim_pitch_local = pitch
 
 
@@ -1648,24 +1654,49 @@ func _detect_landing(grounded_before: bool) -> void:
 	_was_grounded = grounded_now
 
 
+## **The body faces where the camera faces** (`docs/PLAN_CAMERA.md`). The mouse
+## turns the Bog; the stick moves it relative to that facing.
+##
+## This used to turn the body toward its own *velocity* and only point it at the
+## camera while a weapon was up, which is the story-game rig — Zelda, Uncharted —
+## and the freedom the owner asked to have taken away. Turning it round costs the
+## animator nothing: its three locomotion planes are already body-relative
+## (D-066), so a backpedal and a strafe land on the clips drawn for them without
+## a line changing, and `BACK_SPEED_SCALE` (D-098) stops mattering only while
+## aiming and starts mattering always.
+##
+## Four states hold the heading instead, and the mouse still turns the *camera*
+## through all of them. Each is a commitment already paid for:
+##
+## - **A spin** (D-068). The advance was committed at the click and the clip
+##   turns the *skeleton* through a whole revolution on top of whatever this yaw
+##   is; letting the camera drag the body round underneath it would slide the Bog
+##   one way while it was drawn going another, and would hand a player a way to
+##   re-point a swing they had already bought. The clip's own rotation is not
+##   affected — it is inside the skeleton, which is why `BogCombat` reads the
+##   blade off the bone attachment rather than off this yaw.
+## - **A roll out of a dive**, which already refuses steering in
+##   `_handle_movement` for the same reason: the tumble is the price of the dive.
+## - **A slide**, which is a momentum move: the body faces the way it is actually
+##   travelling, and swings back onto the camera at `TURN_SPEED` when it ends.
+## - **An emote**, which is Fortnite exactly — the camera orbits the dancer and
+##   the dance keeps its own heading.
+##
+## `TURN_SPEED` is 14 rad/s, about 800 deg/s. For a drag that is effectively
+## instant; for a flick it is a frame or two behind, which reads as weight rather
+## than as delay. There is deliberately no idle dead zone and no turn-in-place:
+## a standing Bog that looks around slides its feet, because this repo has no
+## turn-in-place clips to hide it with, and that is the one cosmetic gap the
+## rework knowingly leaves open.
 func _face(delta: float) -> void:
-	# A spin steers nothing, including itself (D-068). The advance was committed
-	# at the click and the clip turns the *skeleton* through a whole revolution
-	# on top of whatever this yaw is; letting the camera drag the body round
-	# underneath it would slide the Bog one way while it was drawn going
-	# another, and would hand a player a way to re-point a swing they had
-	# already paid for. The clip's own rotation is not affected — it is inside
-	# the skeleton, which is why `BogCombat` has to read the blade off the bone
-	# attachment rather than off this yaw.
-	if is_spinning():
+	if is_spinning() or is_rolling() or is_emoting():
 		return
-	var desired := body_yaw
-	if _face_view:
-		desired = yaw_towards(-_view_basis.z)
-	else:
+	var desired := yaw_towards(-_view_basis.z)
+	if is_sliding():
+		# A slide that has run down to nothing has no heading left to read, so
+		# it keeps the one it had rather than snapping onto the view mid-slide.
 		var horizontal := Vector3(velocity.x, 0.0, velocity.z)
-		if horizontal.length() > 0.35:
-			desired = yaw_towards(horizontal)
+		desired = yaw_towards(horizontal) if horizontal.length() > 0.35 else body_yaw
 	body_yaw = rotate_toward(body_yaw, desired, TURN_SPEED * delta)
 	_model_root.rotation.y = body_yaw
 

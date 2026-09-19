@@ -75,9 +75,7 @@ script = ExtResource("3_anim")
 top_level = true
 script = ExtResource("4_cam")
 
-[node name="Boom" type="Node3D" parent="CameraRig"]
-
-[node name="Camera3D" type="Camera3D" parent="CameraRig/Boom"]
+[node name="Camera3D" type="Camera3D" parent="CameraRig"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.62, 0, 3.1)
 fov = 75.0
 near = 0.05
