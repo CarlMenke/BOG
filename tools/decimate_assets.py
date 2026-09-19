@@ -197,7 +197,38 @@ TARGETS = {
     "heal_potion": ("assets/source/props/HEAL_POTION.glb", 6000, 512),
     "greatsword":  ("assets/source/props/GreatSword.glb", 3000, 1024),
     "campfire":    ("assets/source/props/CAMPFIRE.glb", 10000, 1024),
+    "spear_v2":       ("assets/source/props/SPEAR_V2.glb", 3000, 512),
+    "greatsword_v2":  ("assets/source/props/GREATSWORD_V2.glb", 3000, 1024),
+    "one_hand_axe":   ("assets/source/props/ONE_HAND_AXE.glb", 3000, 1024),
+    "beam_staff":     ("assets/source/props/BEAM_STAFF.glb", 4000, 1024),
+    "throwing_star":  ("assets/source/props/THROWING_STAR.glb", 1200, 512),
+    "dynamite":       ("assets/source/props/DYNAMITE.glb", 6000, 512),
 }
+
+# The seven that arrived on 2026-09-19 are downloads waiting on their tickets,
+# and six of them are rows above: each one takes the numbers of the prop whose
+# case it is, because none of them is a new argument.
+#
+# `spear_v2` and `greatsword_v2` replace the spear and the great sword in place
+# and take their numbers unchanged — same object, same distance, same swing, a
+# better sculpt. `one_hand_axe` is the great sword's case at arm's length rather
+# than two hands': held large and in frame through a swing, with a flat head
+# whose bevels and haft wrap are texture once the triangles come out. It arrives
+# at 10,022 triangles rather than half a million, so its 3000 is the same kind
+# of reduction the letters' is and not a rescue. `beam_staff` is a long thin
+# stick with a worked head, carried upright where the bow is carried, and takes
+# the bow's 4000/1024 for the head's sake. `throwing_star` is the arrow's case
+# exactly — small, thrown, several in the air at once, never looked at slowly —
+# so it takes the arrow's numbers. `dynamite` is the magnet's and the potion's:
+# thrown or lying in the grass in ones and twos, and a bundle of cylinders,
+# which faceting finds as readily as it finds a bottle.
+#
+# The seventh, `PRIMITIVE_PISTOL.glb`, has no row and cannot have one yet. It
+# arrives as *twenty* meshes under one material, and `read_single_mesh` here
+# refuses anything that is not one mesh with one primitive (which is the whole
+# reason the UV transfer and the seam-continuous normals can be written the way
+# they are). Joining it into one mesh is a step in front of this pipeline, not
+# inside it, and it belongs to that prop's ticket.
 
 # Targets that get something added after the decimator has finished with them.
 #
