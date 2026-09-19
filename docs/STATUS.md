@@ -247,7 +247,7 @@ a gallery, a melee pit, an ability yard, a parkour course and two void lips off
 one lodge deck. A **Practice** button on the main menu goes straight there with
 no lobby and no port. Twenty-seven dummies — real Bogs at roster ids 900+, hidden
 from every roster screen, driven by the host — stand on their marks running eight
-behaviours; item wells, a refill stone and three weapon racks line the lodge's east wall and four item wells its west (D-161);
+behaviours; three weapon racks line the lodge's east wall and four item wells its west, with a refill stone in the middle of the deck (D-161);
 and boards, drifting orbs and a gong are things to shoot that are not Bogs.
 `docs/PLAN_RANGE.md` is the scope it was all argued against and
 `docs/ARCHITECTURE.md` says where each piece lives.
