@@ -331,6 +331,14 @@ const SWORD_IMPULSE := 60.0
 ## to be *behind* a swing and enough for an attacker to have chosen wrong.
 const SWORD_ARC := 75.0
 
+## How far the blade has to have turned between two frames before its direction
+## of travel is believed, in degrees (D-168). The bone attachment is read out of
+## a pose written in the idle frame, so a frame in which the clip did not
+## advance reads as a blade that turned a hundredth of a degree the wrong way —
+## and the swipe would flip its sweep on it. A quarter of a degree is well under
+## what `SwordSpin` covers in a frame (222 deg/s is 3.7) and well over the noise.
+const BLADE_SENSE_MIN := 0.25
+
 ## What one slash of the chain does to a Bog (the feel round).
 ##
 ## **The first attack in this game that is not a one-shot, and that is the
@@ -565,6 +573,18 @@ var _slash_index: int = 0
 var _server_slash_index: int = 0
 var _server_slash_until: float = 0.0
 
+## Which way the blade is travelling, +1 for a sweep to its own left, and the
+## last bearing it was seen at (D-168). Only the swipe reads them.
+##
+## **Kept on every peer and measured rather than sent**, which is the one thing
+## about the swipe that is not the host's: every machine plays the same clip, so
+## every machine can watch the attachment turn and none of them needs to be told
+## which way. Sending it would be a field on the wire carrying news the receiver
+## already has, and it would arrive a round trip after the frame it describes.
+## Sampled only while a blade is actually out — see `_tick_blade_sweep`.
+var _blade_seen: Vector3 = Vector3.ZERO
+var _blade_sense: float = 1.0
+
 ## How far the string was back when it was let go, or **-1 for "no arrow on its
 ## way"**.
 ##
@@ -664,6 +684,10 @@ func _process(_delta: float) -> void:
 	# one, and what takes the great sword out of the fists on the frame the
 	# window shuts rather than on the next.
 	_tick_slash()
+	# On every peer and before the hand, for `_tick_slash`'s reason one step
+	# along: the blade whose turn this samples is in the fists the line below
+	# paints, and the sample has to be taken on the frame it describes.
+	_tick_blade_sweep()
 	_tick_hand()
 	_tick_charge()
 	refresh_emote()
@@ -2366,6 +2390,57 @@ func _blade_direction() -> Vector3:
 	return out.normalized()
 
 
+## Watch the blade turn, so the swipe can be drawn the way it went (D-168).
+##
+## One reading a frame and only while a blade is out, which is `_tick_charge`'s
+## shape: a poll on the one thing that can answer, rather than a field somebody
+## has to remember to set. The sense is *latched* — it survives to the next
+## attack — because the frame the hit lands on is occasionally a frame in which
+## the pose did not advance, and a swipe that fell back to "left" on those would
+## be a swipe that sometimes ran backwards through its own arc.
+##
+## Every stage of the chain gets its own answer for free, which is the whole
+## reason this is measured rather than tabled: `SwordCombo` was drawn as one
+## continuous motion, so slash 2 starts where slash 1's follow-through left the
+## blade and the three cuts do not all go the same way. A table of directions
+## per slash would be a second copy of that, and it would rot the first time the
+## clip's markers moved.
+func _tick_blade_sweep() -> void:
+	if _bog == null or not (is_swinging() or is_slashing()):
+		_blade_seen = Vector3.ZERO
+		return
+	var out := _blade_direction()
+	if _blade_seen != Vector3.ZERO:
+		var turned := _blade_seen.signed_angle_to(out, Vector3.UP)
+		if absf(rad_to_deg(turned)) >= BLADE_SENSE_MIN:
+			_blade_sense = signf(turned)
+	_blade_seen = out
+
+
+## Draw the sector the host just hit with (D-168).
+##
+## **The one place the hit's geometry becomes a picture, and it is handed the
+## same locals the hit was decided from.** `reach` and `arc` are the two
+## arguments `_sword_victims` was called with, so the fan on screen cannot be a
+## different shape from the swing that produced it — there is no second set of
+## constants to keep in step.
+##
+## The one conversion is `Bog.CAPSULE_RADIUS`, and it belongs here rather than
+## in `SwordSwipe` because it is a fact about the *rule*: the reach is measured
+## to a body's surface (`Bog.distance_to_body`), so the locus of places a Bog
+## can be *standing* and still die is the dial plus its own radius. That is the
+## question a player is asking when they look at this — "does that one die if I
+## swing now" — and drawing the dial instead would draw a fan that is a body's
+## width short of the kills it is a claim about.
+##
+## Run on every peer from the `_do_*` handlers, so everybody watching sees where
+## your sword kills and not only you.
+func _show_swipe(centre: Vector3, blade: Vector3, reach: float,
+		arc: float) -> void:
+	SwordSwipe.sweep(_spawn_root(), centre, blade,
+		reach + Bog.CAPSULE_RADIUS, arc, _blade_sense)
+
+
 @rpc("any_peer", "call_remote", "reliable")
 func _request_swing_windup() -> void:
 	if not Net.is_host or multiplayer.get_remote_sender_id() != _bog.peer_id:
@@ -2572,10 +2647,17 @@ func _sword_victims(blade: Vector3, reach: float = -1.0,
 ## rather than to the hit, so `_begin_swing` fires it on every peer at clip time
 ## zero and a swing through air is simply that whoosh with nothing on the end of
 ## it — which is also the only thing a miss should sound like.
+##
+## The blade is no longer ignored here and that is D-168: it and `point` are the
+## two things the host's sector was built from, so every peer can draw the sector
+## rather than be told what it looked like. The reach is read locally off
+## `_config`, which is the same replicated dial the host measured with — sending
+## it would be a third copy of a number every machine already has.
 @rpc("authority", "call_remote", "reliable")
-func _do_swing_sword(point: Vector3, _blade: Vector3, connected: bool) -> void:
+func _do_swing_sword(point: Vector3, blade: Vector3, connected: bool) -> void:
 	_sword_ready_at = _now() + _config.sword_recharge
 	cooldowns_changed.emit()
+	_show_swipe(point, blade, maxf(_config.sword_reach, 0.01), SWORD_ARC)
 	if connected:
 		AudioDirector.play_3d_varied(AudioDirector.SWORD_HIT_BODY, point)
 	# Here and not in `_begin_swing`, which is where a swing *starts*. The windup
@@ -2772,8 +2854,8 @@ func _host_slash(index: int, aim: Vector3) -> void:
 	var victims := _sword_victims(blade, reach)
 	# Broadcast before the damage is reported, the ordering every host-decided
 	# reaction in this file keeps.
-	_do_slash.rpc(centre, not victims.is_empty())
-	_do_slash(centre, not victims.is_empty())
+	_do_slash.rpc(centre, blade, not victims.is_empty())
+	_do_slash(centre, blade, not victims.is_empty())
 
 	for other: Bog in victims:
 		var chest := other.body_axis_nearest(centre)
@@ -2805,8 +2887,14 @@ func slash_reach() -> float:
 ## The slash landing, on every machine. No `play_slash` here: the clip started
 ## `slash_release(index)` ago on every peer and firing it again would snap the
 ## blade back to the start of the cut on the frame it goes through somebody.
+##
+## The blade travels here since D-168 for the swing's reason, and the reach is
+## `slash_reach()` rather than the dial: a slash claims the metres its step buys
+## it, so a fan drawn at the dial would be a fan 0.35 m short of the cut it is
+## a picture of.
 @rpc("authority", "call_remote", "reliable")
-func _do_slash(point: Vector3, connected: bool) -> void:
+func _do_slash(point: Vector3, blade: Vector3, connected: bool) -> void:
+	_show_swipe(point, blade, slash_reach(), SWORD_ARC)
 	if connected:
 		AudioDirector.play_3d_varied(AudioDirector.SWORD_HIT_BODY, point)
 	weapon_launched.emit("sword")

@@ -18172,3 +18172,127 @@ the ability yard and the gallery.
   the peat in one move and taken it out of the torches, the letter cards and
   the red MegaKit dressing with it. The complaint is about the light, so the
   fix is in the lights. (BOG-26.)
+
+## D-168 — The sword's swipe is the hit volume drawn, and the two are the same numbers
+Two players swung a great sword at somebody a step to the side, watched it
+connect, and watched them live. Their reading of the weapon was *"I think it's
+just a rectangle in front of me so if you're a little to the side it doesn't
+kill you"*, and what they asked for was *"some visual to see where it's
+swinging, its death range... like a wind-like swipe."*
+
+The rectangle was never there. `BogCombat._sword_victims` has been a horizontal
+**sector** since D-068 — every living Bog whose capsule *surface* is inside
+`MatchConfig.sword_reach` of the swinger's body centre, whose bearing to its own
+axis is inside `SWORD_ARC` (75° either side, a 150° fan), with a clear line
+through the world and through deployables. Nothing about that shape was wrong.
+What was wrong is that it had never been drawn, so the only evidence a player
+had for it was which swings happened to land.
+
+So the fan is drawn, and the rule about it is that **there is one geometry and
+not two**. `SwordSwipe.sweep` takes the reach and the arc as arguments, and the
+only call site hands it the locals the host just measured its victims with —
+`_show_swipe(centre, blade, reach, arc)`, out of `_do_swing_sword` and
+`_do_slash`. Move `SWORD_ARC`, drag the lobby's reach slider to its 6.0, take a
+slash's extra `SLASH_STEP`, and the picture moves on the same frame, because
+there is no second copy to keep in step. A mesh authored once at one size would
+have been that second copy.
+
+### The one conversion, and where it lives
+
+The fan's outer edge is the dial **plus `Bog.CAPSULE_RADIUS`**, and that is not
+a fudge for looks. The reach is measured to a body's *surface*, so the set of
+places a Bog can be standing and still die is the dial plus its own radius —
+1.81 m at the 1.43 default, 2.16 m for a slash. That is the question a player is
+actually asking when they look at this ("does that one die if I swing now"), and
+a fan drawn at the dial would be a body's width short of the kills it claims.
+The conversion sits in `BogCombat._show_swipe`, in the file that owns the rule,
+and `SwordSwipe` is handed a footprint it knows nothing else about.
+
+The angular edges get no such allowance, because the hit gives none: the bearing
+is taken to the victim's axis, not its surface, so the fan's straight edges are
+exactly where a swing stops working. That asymmetry is the shape's, not the
+picture's, and the picture is now the place anybody can see it.
+
+**No number moved.** The reach, the arc, the damage, the host's authority and
+the release marker are all D-068's and the feel round's. They played at the 6.0
+maximum and called it *"too big"*, and the 1.43 default *"not too bad, bump the
+radius up a bit, fine tuning"* — which is a tuning pass that can now be done by
+eye instead of by inference, which is why it is not done here.
+
+### What it looks like, and the render that added half of it
+
+Additive, unshaded, depth-tested and gone in 0.34 s — `SpearTrail`'s and
+`WardFlash`'s rule, because this is light and not a surface, and depth-tested
+because a fan seen through a barricade would promise a kill the line-of-sight
+test refuses. A leading edge crosses the arc in the first 42% of that life and
+the wind behind it thins to a floor rather than to nothing, so the sweep reads
+as something passing through *and* leaves the whole footprint legible behind it.
+Pale and cool at a peak alpha of 0.26: the first build at 0.46 rendered as a
+sheet of paper lying on the fight, which is the neon pie this effect exists not
+to be.
+
+The **curtain** is there because of a render and would not have been thought of
+without one. The sector is drawn in the plane the hit is measured in, which is
+horizontal, and from a third-person camera a metre and a half up that plane is
+nearly edge-on — a bright sliver and nothing else. A bystander looking down on
+somebody else's swing sees the fan perfectly; the swinger sees almost none of
+it. So the rim also stands 0.80 m of haze up off itself, fading out. From above
+it is a rim on the fan; from your own shoulder it is the whole effect. Both are
+the same arc.
+
+### The sweep goes the way the blade goes, and nobody is told which way
+
+Which way the wind travels through the arc is **measured on every peer, not
+sent**. `_tick_blade_sweep` watches the bone attachment turn while a blade is
+out and latches the sign; every machine is playing the same clip, so a field on
+the wire would be news the receiver already had, arriving a round trip after the
+frame it described. It also means each stage of the chain answers for itself:
+`SwordCombo` was drawn as one continuous motion, slash 2 starts where slash 1's
+follow-through left the blade, and a table of directions per slash would rot the
+first time the clip's markers moved.
+
+### What the fan makes visible, which is not what anybody expected
+
+The slash chain cuts where the body faces — `_tick_windup` reads `facing()` at
+the release for a slash and for a punch. The **spin** does not: it reads the
+blade off the attachment, and at the release the blade is 95° to 105° off the
+Bog's own facing (D-068 measured 55–66° before D-124 moved the carry). So the
+sprint attack's 150° fan is centred most of a right angle round from where the
+player is aiming, and `combat_range -- swipe` photographs exactly that. That is
+D-068's behaviour unchanged and is now a thing that can be looked at instead of
+inferred; whether it should stay is a play question and a ticket of its own
+(BOG-63).
+
+### Asserted, and against the picture rather than beside it
+
+`combat_range -- sword` gains a fifth verdict, `swipe`. Two dummies either side
+of the arc's edge at a radius well inside the reach, one swing: the inside one
+dies and the outside one lives. The bearings in the verdict are computed from
+the **fan that was drawn** — `SwordSwipe` carries the blade and the centre the
+host hit with, and the mode reads them back — because "what you see is what
+hits" is only a claim if the verdict is taken from the thing on screen. The same
+verdict fails if the fan's radius has drifted from `sword_reach +
+CAPSULE_RADIUS` or its half-angle from `SWORD_ARC`, which is the one way this
+could quietly go back to being a decoration.
+
+The dummies are placed twelve degrees either side of the edge and not three,
+because they have to be placed *before* the swing and the only bearing available
+then is the rehearsal's — which wanders up to eight degrees from the release
+that follows it, since the cross-fade lands differently against a body turning
+at 222°/s. Under that and the mode fails on its own placement. It takes a third
+dummy as well, and the reason is a property of this harness worth writing down:
+a dummy it has already killed cannot be killed again. `Bog.revive_at` stands a
+body up on every peer, but `MatchState.stats` is where `damage_refusal` reads
+`alive` from and a raw revive does not touch it — so the reach verdict's victim
+and the edge verdict's victim have to be two different Bogs.
+
+`combat_range -- swipe` is the picture: a slash and then the spin on one Bog,
+with a dummy inside each fan and outside the other's. The tick the shot is taken
+on chooses which attack is in it, and the mode prints the tick each fan appeared
+on so a warmup is read off a run rather than guessed. `pov` puts the camera back
+on the swinger's own shoulder, which is the shot the curtain exists for.
+
+Not exercised: another peer seeing the swipe (the relay of `_do_slash` with its
+new `blade` argument is reasoned, and `net_test.sh` has no sword round), how the
+pale additive fan reads at Highsun's noon, and a render at the 6.0 reach.
+(BOG-48.)

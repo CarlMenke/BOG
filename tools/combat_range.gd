@@ -272,6 +272,16 @@ const SHIELD := preload("res://scenes/items/shield.tscn")
 ##              camera, each running a different bearing at RUN_SPEED, posed
 ##              entirely out of the `sync_*` fields a real client would have
 ##              sent. Nothing is asserted; the eye does it.
+##   swipe    — the picture the sword's own geometry makes (D-168). One Bog, a
+##              slash and then the spin, with a dummy inside each fan and a
+##              dummy outside it. Nothing is asserted here — `sword` does the
+##              asserting — and what the eye is for is the one question a number
+##              cannot answer: whether the wind on the ground reads as *where
+##              the blade kills*. The tick the shot is taken on is what chooses
+##              which attack is in it, and the mode prints both, because the
+##              slash's fan is centred on the body's facing and the spin's is
+##              centred on the blade, which is a different direction entirely.
+##              `pov` puts the camera back on the swinger's own shoulder.
 ##   aiming   — the picture `spine` measures. Five Bogs side-on at a full draw,
 ##              at five pitches from `PITCH_MIN` to `PITCH_MAX`, posed the same
 ##              way — two replicated floats apiece and nothing else.
@@ -352,6 +362,7 @@ const SHIELD := preload("res://scenes/items/shield.tscn")
 const MODES := ["flight", "hit", "arc", "miss", "aim", "shield", "cover",
 	"magnet", "magnet_self", "letter", "cards", "lightning", "blast", "ward", "recharge",
 	"release", "cast", "bow", "draw", "strafe", "spine", "strafing", "aiming",
+	"swipe",
 	"respawn", "health", "potion", "embed", "hurt", "walk", "bhop", "leave",
 	"sword", "chain", "primary", "emote", "free"]
 
@@ -863,6 +874,13 @@ const VIEWS := {
 	# every angle and keeping the one the gesture reads at (D-067).
 	"potion": {"eye": Vector3(2.3, 1.62, 6.9), "look": Vector3(0.0, 1.22, 9.0),
 		"fov": 32.0},
+	# High, behind and off to the swinger's right, because the subject is a
+	# shape **on the ground**: a fan seen from a standing bystander's eye is a
+	# bright line and says nothing about how far round it goes. This is roughly
+	# where a player two steps away and slightly up a slope would see it from,
+	# which is the angle the question actually gets asked at in a fight.
+	"swipe": {"eye": Vector3(4.6, 4.2, 12.6), "look": Vector3(-0.2, 0.6, 7.6),
+		"fov": 55.0},
 }
 
 ## The two picture rows (D-066). Both run along +X with the camera in front of
@@ -1351,6 +1369,15 @@ var _sword_hand_seen: int = 0
 var _sword_failures: int = 0
 var _sword_problems: Array[String] = []
 var _wards_at_swing: int = 0
+## The fan the swing drew, caught the tick it appeared on (D-168). It lives a
+## third of a second and the verdicts are taken two seconds later, so it has to
+## be latched by `_watch_sword` rather than looked for afterwards — and what is
+## latched is the footprint it was *built* with, which is the thing that has to
+## agree with the hit.
+var _swipe_radius: float = -1.0
+var _swipe_arc: float = -1.0
+var _swipe_blade: Vector3 = Vector3.ZERO
+var _swipe_centre: Vector3 = Vector3.ZERO
 
 var _chain_subject: int = 0
 var _chain_step: int = 0
@@ -1534,13 +1561,20 @@ func _dummy_count() -> int:
 		# to that and can be walked into by the step at the end of the run.
 		"recharge", "bhop", "release", "cast", "strafe", "spine", "chain", "emote":
 			return 0
-		# One to swing at and one to make an Elder. They are parked far down the
-		# range between steps and stood exactly where the rehearsal says the
+		# One to swing at, one to make an Elder, and — since D-168 — a third for
+		# the edge of the fan, because this mode kills two bodies and cannot
+		# kill one of them twice (see `_drive_sword`). They are parked far down
+		# the range between steps and stood exactly where the rehearsal says the
 		# blade will be for each one.
 		"sword":
-			return 2
+			return 3
 		# One per pose in the row. See `_dummy_spot`, which is what puts them
 		# somewhere other than the three the shooting modes share.
+		# One inside each fan and one outside it — see `_drive_swipe`, which is
+		# why two are not enough: the slash cuts where the body faces and the
+		# spin cuts where the blade is, and those are ninety degrees apart.
+		"swipe":
+			return 2
 		"strafing":
 			return STRAFE_COMPASS.size()
 		"aiming":
@@ -1574,7 +1608,7 @@ func _mode_weapon() -> int:
 		# aimed. Starve it of one and it has nothing to measure.
 		"bow", "draw", "spine", "aiming":
 			return Loadout.Weapon.BOW
-		"sword", "chain":
+		"sword", "chain", "swipe":
 			return Loadout.Weapon.SWORD
 		_:
 			return Loadout.Weapon.SPEAR
@@ -1695,6 +1729,9 @@ func _physics_process(_delta: float) -> void:
 		return
 	if _mode == "chain":
 		_drive_chain()
+		return
+	if _mode == "swipe":
+		_drive_swipe()
 		return
 	if _mode == "strafing":
 		_drive_lineup(_strafing_rows())
@@ -4867,6 +4904,38 @@ const SWORD_RELEASE_TOLERANCE := 1.5
 ## How long the mode waits for a swing to have finished before giving up.
 const SWORD_PATIENCE := 400
 
+## How far either side of `BogCombat.SWORD_ARC` the two dummies of the `swipe`
+## verdict stand, in degrees (D-168).
+##
+## `SWORD_MARGIN`'s question turned through ninety degrees: the `reach` verdict
+## asks it along the blade, where the answer was already visible, and this asks
+## it at the **edge of the fan**, which is the edge two players could not see and
+## the reason this ticket exists.
+##
+## Twelve degrees and not the three or four that would make the point, because
+## the two dummies have to be placed before the swing and the only bearing there
+## is to place them off is the **rehearsal's** — which wanders up to about eight
+## degrees from the release that follows it, since the cross-fade lands
+## differently against a body turning at 222 deg/s. Anything under that and the
+## outside dummy is sometimes genuinely inside the arc, which is a mode failing
+## on its own placement rather than on the game. The verdict checks where they
+## actually ended up (`_swing_bearing`) rather than trusting this number.
+const SWORD_ARC_MARGIN := 12.0
+
+## How far inside the reach the two of them stand, in metres of surface
+## distance. Well clear of the line `reach` is about, so that the only thing
+## either verdict can be deciding is the bearing: a dummy that failed both tests
+## at once would prove neither.
+const SWORD_ARC_INSET := 0.6
+
+## How far the drawn fan may sit from the sector the host hit with. Metres on
+## the radius, degrees on the half-angle, and both are floating-point slack
+## rather than a tolerance anybody would want to spend: the whole claim of D-168
+## is that the two are built from the same numbers, so any real gap between them
+## is the claim being false.
+const SWIPE_RADIUS_TOLERANCE := 0.001
+const SWIPE_ARC_TOLERANCE := 0.01
+
 
 ## The great sword, end to end (D-068). See the `sword` entry in MODES' notes.
 ##
@@ -4885,7 +4954,15 @@ func _drive_sword() -> void:
 	var combat := player.get_node_or_null("Combat") as BogCombat if player != null else null
 	var near := MatchState.bogs.get(DUMMY_BASE) as Bog
 	var far := MatchState.bogs.get(DUMMY_BASE + 1) as Bog
-	if player == null or combat == null or near == null or far == null:
+	# The third is the `swipe` verdict's victim and exists because a dummy this
+	# mode has already killed cannot be killed again (D-168): `Bog.revive_at`
+	# stands a body back up on every peer, but `MatchState.stats` is where
+	# `damage_refusal` reads `alive` from and a raw revive does not touch it. So
+	# `near` dies at the reach and this one dies at the edge of the fan, and
+	# neither verdict is the other's leftovers.
+	var edge := MatchState.bogs.get(DUMMY_BASE + 2) as Bog
+	if player == null or combat == null or near == null or far == null \
+			or edge == null:
 		return
 	var rig := player.get_node_or_null("CameraRig")
 	if rig != null:
@@ -4894,13 +4971,15 @@ func _drive_sword() -> void:
 	_watch_sword(player, combat)
 
 	match _sword_step:
-		0:  # settle, and get both dummies out of the way
+		0:  # settle, and get all three dummies out of the way
 			if _frames < 20:
 				return
 			near.revive_at(_facing(SWORD_PARK, PLAYER_SPOT))
 			far.revive_at(_facing(SWORD_PARK + Vector3(3.0, 0.0, 0.0), PLAYER_SPOT))
+			edge.revive_at(_facing(SWORD_PARK + Vector3(6.0, 0.0, 0.0), PLAYER_SPOT))
 			_stand_still(near)
 			_stand_still(far)
+			_stand_still(edge)
 			_sword_next(1)
 		1:  # the rehearsal: one swing at nobody
 			if not combat.has_sword():
@@ -4996,7 +5075,65 @@ func _drive_sword() -> void:
 				% [SWORD_MARGIN, Net.config.sword_reach]
 				+ "%.2f m outside it is a survivor" % SWORD_MARGIN)
 			_sword_next(7)
-		7:  # the Elder, taking a direct hit
+		7:  # the two edges of the fan, one either side of the arc
+			if not combat.has_sword():
+				return
+			near.revive_at(_facing(SWORD_PARK, PLAYER_SPOT))
+			edge.revive_at(_facing(_sword_arc_spot(
+				BogCombat.SWORD_ARC - SWORD_ARC_MARGIN), _sword_blade_at))
+			far.revive_at(_facing(_sword_arc_spot(
+				BogCombat.SWORD_ARC + SWORD_ARC_MARGIN), _sword_blade_at))
+			_stand_still(near)
+			_stand_still(edge)
+			_stand_still(far)
+			_sword_kill_of = 0
+			_swipe_radius = -1.0
+			_swipe_arc = -1.0
+			_begin_swing_at(player, combat)
+			_sword_next(8)
+		8:
+			if player.is_spinning() and _frames - _sword_clicked < SWORD_PATIENCE:
+				return
+			# The bearings the swing actually presented, not the ones the dummies
+			# were placed at: the two differ by however far this release's blade
+			# wandered from the rehearsal's, and a verdict at the edge of a fan
+			# cannot be taken off an assumption about where the edge is.
+			var inside := _swing_bearing(edge)
+			var outside := _swing_bearing(far)
+			_sword_expect(inside < BogCombat.SWORD_ARC,
+				"the inside dummy stood %.1f deg out, which is not inside the arc"
+					% inside)
+			_sword_expect(outside > BogCombat.SWORD_ARC,
+				"the outside dummy stood %.1f deg out, which is not outside the arc"
+					% outside)
+			_sword_expect(not edge.alive, "%s survived a swing at %.1f deg"
+				% [edge.display_name, inside])
+			_sword_expect(far.alive, "%s died at %.1f deg" % [far.display_name, outside])
+			_sword_expect(_sword_kill_of == DUMMY_BASE + 2,
+				"the kill that was reported was %d" % _sword_kill_of)
+			# And the picture, against the same swing. `SwordSwipe` is handed the
+			# reach and the arc the host measured its victims with, so this is the
+			# whole of D-168 asked as a number: the fan's outer edge is where a
+			# *body* stops dying — the dial plus a Bog's own radius, because the
+			# reach is measured to a capsule's surface — and its half-angle is
+			# `SWORD_ARC` itself. A swipe that had grown constants of its own
+			# would pass every other line in this mode and fail here.
+			var owed := Net.config.sword_reach + Bog.CAPSULE_RADIUS
+			_sword_expect(_swipe_radius >= 0.0, "no swipe was drawn")
+			_sword_expect(absf(_swipe_radius - owed) <= SWIPE_RADIUS_TOLERANCE,
+				"the swipe reaches %.3f m and the hit reaches %.3f"
+					% [_swipe_radius, owed])
+			_sword_expect(absf(_swipe_arc - BogCombat.SWORD_ARC)
+				<= SWIPE_ARC_TOLERANCE,
+				"the swipe spans %.2f deg either side and the hit spans %.2f"
+					% [_swipe_arc, BogCombat.SWORD_ARC])
+			_sword_verdict("swipe", "%.1f deg off the blade is a kill and %.1f deg "
+				% [inside, outside]
+				+ "is a survivor against a %.0f deg edge, under a fan %.3f m out "
+				% [BogCombat.SWORD_ARC, _swipe_radius]
+				+ "and %.0f deg either side" % _swipe_arc)
+			_sword_next(9)
+		9:  # the Elder, taking a direct hit
 			if not combat.has_sword():
 				return
 			far.revive_at(_facing(_sword_spot(
@@ -5006,8 +5143,8 @@ func _drive_sword() -> void:
 			_wards_at_swing = _wards
 			_sword_kill_of = 0
 			_begin_swing_at(player, combat)
-			_sword_next(8)
-		8:
+			_sword_next(10)
+		10:
 			if player.is_spinning() and _frames - _sword_clicked < SWORD_PATIENCE:
 				return
 			_sword_expect(far.alive, "the Elder died to a swing")
@@ -5512,6 +5649,17 @@ func _watch_sword(player: Bog, combat: BogCombat) -> void:
 		return
 	if _sword_clicked <= 0:
 		return
+	# The swipe, caught on the tick it appears (D-168). Latched and never
+	# overwritten inside a step, because a mode that read the *last* fan it saw
+	# would be reading whichever swing happened to be most recent rather than
+	# the one the verdict beside it is about.
+	if _swipe_radius < 0.0:
+		var swipe := get_tree().get_first_node_in_group("sword_swipes") as SwordSwipe
+		if swipe != null:
+			_swipe_radius = swipe.outer_radius
+			_swipe_arc = swipe.half_arc
+			_swipe_blade = swipe.blade
+			_swipe_centre = swipe.global_position
 	_sword_hand_seen += 1
 	var wrong := false
 	if player.is_spinning():
@@ -5593,6 +5741,120 @@ func _sword_spot(surface: float) -> Vector3:
 	var spot := _sword_blade_at + _sword_blade * (surface + Bog.CAPSULE_RADIUS)
 	spot.y = 0.1
 	return spot
+
+
+# ------------------------------------------------------------- the picture ---
+
+## Where the two picture dummies stand, as bearings off the swinger's facing in
+## degrees, and how far inside the slash's reach (D-168). The first is inside
+## the **slash's** fan, which is centred on the body; the second is inside the
+## **spin's**, which is centred on the blade and is most of a right angle round
+## from it. Each is outside the other's, which is the whole reason there are two.
+const SWIPE_BEARINGS: Array[float] = [42.0, 100.0]
+const SWIPE_INSET := 0.35
+
+## Which tick the slash is clicked on and which the spin is. Far enough apart
+## that the chain has lapsed and the recharge is back — the shot's warmup is
+## what chooses which of the two is on screen, and the mode prints the tick each
+## fan appeared on so the warmup can be read off a run rather than guessed.
+const SWIPE_SLASH_AT := 30
+const SWIPE_SPIN_AT := 160
+
+
+## The sword's geometry, photographed (D-168). See the `swipe` entry in MODES'
+## notes.
+##
+## No verdicts: `sword` owns those, and a picture mode that also asserted would
+## be a second opinion about the same swing. What this is for is the half of the
+## ticket a number cannot close — two players said they could not *see* where
+## the sword kills, and the only witness to that is a frame.
+func _drive_swipe() -> void:
+	var player := MatchState.bogs.get(1) as Bog
+	var combat := player.get_node_or_null("Combat") as BogCombat if player != null else null
+	if player == null or combat == null:
+		return
+	player.reads_local_input = false
+	player.input_direction = Vector2.ZERO
+	player.wants_sprint = false
+	# The swinger's own view, pointed where it is standing and looking, and only
+	# until the click: a `pov` shot of this mode is the whole reason the curtain
+	# on `SwordSwipe`'s rim exists, and a rig left wherever it spawned is not
+	# that view. Re-aimed every frame up to the click for `_physics_process`'s
+	# reason — one call lands close and the next few converge.
+	var rig := player.get_node_or_null("CameraRig") as BogCamera
+	if rig != null and _frames < SWIPE_SLASH_AT:
+		rig.look_at_point(PLAYER_SPOT + Vector3.FORWARD * 8.0 + Vector3.UP * 1.0)
+	if _frames == SWIPE_SLASH_AT - 6:
+		for i in SWIPE_BEARINGS.size():
+			var dummy := MatchState.bogs.get(DUMMY_BASE + i) as Bog
+			if dummy == null:
+				continue
+			dummy.revive_at(_facing(_swipe_spot(SWIPE_BEARINGS[i]), PLAYER_SPOT))
+			_stand_still(dummy)
+	# The click, which from a standstill is the chain, and then the spin — which
+	# is reached by name rather than by getting the body up to sprint speed,
+	# because a Bog running at 5.4 m/s is a Bog that has left the frame.
+	if _frames == SWIPE_SLASH_AT:
+		combat.try_sword_attack()
+	if _frames == SWIPE_SPIN_AT:
+		combat.try_swing_sword()
+	var swipe := get_tree().get_first_node_in_group("sword_swipes") as SwordSwipe
+	if swipe != null and swipe.get_meta("seen", false) == false:
+		swipe.set_meta("seen", true)
+		print("combat_range: a swipe %.3f m out, %.0f deg either side, on tick %d"
+			% [swipe.outer_radius, swipe.half_arc, _frames])
+
+
+## Where a picture dummy stands: `degrees` round from the swinger's facing, a
+## little inside the reach a slash gets, on the side the blade comes round.
+func _swipe_spot(degrees: float) -> Vector3:
+	var out := Vector3.FORWARD.rotated(Vector3.UP, deg_to_rad(degrees))
+	var combat := (MatchState.bogs.get(1) as Bog).get_node_or_null("Combat") as BogCombat
+	var reach := combat.slash_reach() if combat != null else 1.78
+	var spot := PLAYER_SPOT + out * (reach - SWIPE_INSET + Bog.CAPSULE_RADIUS)
+	spot.y = 0.1
+	return spot
+
+
+## Where a dummy has to stand to be `degrees` round from the blade, well inside
+## the reach (D-168).
+##
+## `_sword_spot`'s twin turned through a right angle, and off the same
+## `_sword_blade_at` for the same reason: the body is a metre further on by the
+## time the blade connects, so a bearing taken from where the button was pressed
+## is a bearing to somewhere else. The sign is arbitrary — the sector is
+## symmetric — so it is taken to the blade's left, which is the side the rest of
+## this mode never uses.
+func _sword_arc_spot(degrees: float) -> Vector3:
+	var out := _sword_blade.rotated(Vector3.UP, deg_to_rad(degrees))
+	var spot := _sword_blade_at + out * (Net.config.sword_reach
+		- SWORD_ARC_INSET + Bog.CAPSULE_RADIUS)
+	spot.y = 0.1
+	return spot
+
+
+## How far round from the blade `body` stood when the swing connected, in
+## degrees, unsigned (D-168). The quantity `_sword_victims` puts against
+## `SWORD_ARC`, read off the same two points it reads: the swinger's own centre
+## and the nearest point on the victim's axis.
+##
+## **Both taken off the fan that was drawn**, and that is the point rather than
+## a convenience. The rehearsal's blade is what the dummies are *placed* off and
+## it is not the same number twice — the fade-in lands differently against a
+## body turning at 222 deg/s — so a bearing computed from it would be a bearing
+## to somewhere the swing was not. `SwordSwipe` carries the blade and the centre
+## the host actually hit with, so reading them back is the harness asking the
+## picture where the edge is and then asking the bodies whether they agreed.
+func _swing_bearing(body: Bog) -> float:
+	if _swipe_blade == Vector3.ZERO or body == null:
+		return -1.0
+	var target := body.body_axis_nearest(_swipe_centre)
+	var toward := Vector3(target.x - _swipe_centre.x, 0.0,
+		target.z - _swipe_centre.z)
+	if toward.length_squared() < 0.0001:
+		return -1.0
+	return rad_to_deg(absf(_swipe_blade.signed_angle_to(
+		toward.normalized(), Vector3.UP)))
 
 
 ## How many ticks after the click the blade connects, as the game's own constant
