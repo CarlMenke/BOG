@@ -29,3 +29,18 @@ Linear"**. The short form:
   projects or fields without a reason written into the team document.
 - **`docs/PLAN.md` is frozen.** It is the build log up to 2026-09-18. New work
   is not added to it; its open items were moved to Linear on that date.
+
+## Commit and push to main, often
+
+Small, frequent pushes to `main` are the rule here. Carl's worry is code going
+stale on one machine, not merge conflicts; those are cheap when the pieces are
+small and pulled often.
+
+- Commit each coherent piece as soon as it is in a state worth keeping, and
+  push it. Do not save up a round for one big commit.
+- `git pull --rebase` before starting and before each push. Resolve conflicts
+  on the spot; a conflict found early is a five-minute job.
+- Standing permission: no need to ask before committing or pushing to `main`.
+  Feature branches are for the rare change that would break `main` for hours,
+  not the default.
+- The last push of a batch carries a `[FINAL]` prefix in its subject.
