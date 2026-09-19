@@ -663,10 +663,12 @@ func _show_capture_rules(lobby: Node) -> void:
 ## `settings_network` is: the top of the panel is the reference shot and moving
 ## it would mean the mode that has always shown Mode and Limits stops doing so.
 ##
-## The Map row is the only thing in that panel a *host* can change that a
-## screenshot would otherwise never see — the panel scrolls, its scrollbar is
-## invisible against the theme (a known issue in docs/STATUS.md), and the row
-## sits well below the fold at every size the game runs at.
+## The Map section is directly under Mode since D-162, and a carousel of baked
+## screenshots rather than a dropdown of names, so it is usually in frame
+## already. The scroll is kept because that is what makes it a fact about the
+## shot rather than something that happens to be true at 1600x900 — the panel
+## scrolls and its scrollbar is invisible against the theme (a known issue in
+## docs/STATUS.md).
 func _show_map_row(lobby: Node) -> void:
 	# Searched from the panel, not from the lobby: the player list has a
 	# `Scroll` of its own and it comes first in tree order, so a search from the
@@ -685,14 +687,18 @@ func _show_map_row(lobby: Node) -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 	scroll.ensure_control_visible(row)
-	# And then the row under it, so the shot carries the whole section rather
-	# than the picker with the seed row sliced off at the bottom edge. The two
-	# belong together: which map is chosen is what decides whether there is a
+	# And then the seed row under it, so the shot carries the whole section
+	# rather than the carousel with the seed sliced off at the bottom edge. The
+	# two belong together: which map is chosen is what decides whether there is a
 	# seed row at all.
-	var rows := row.get_parent()
-	var last := rows.get_child(rows.get_child_count() - 1) as Control
-	if last != null:
-		scroll.ensure_control_visible(last)
+	#
+	# **The seed row by name, not the last row in the panel.** It was the last
+	# row until D-162 moved the Map section up under Mode, and "scroll to the
+	# bottom of the panel" quietly became a shot of the potion sliders with the
+	# subject of the mode forty rows above it.
+	var seed_row := panel.find_child("MapSeedRow", true, false) as Control
+	if seed_row != null and seed_row.visible:
+		scroll.ensure_control_visible(seed_row)
 
 
 # ------------------------------------------------- the worst label there is ---

@@ -297,17 +297,22 @@ func _stage_lobby() -> bool:
 	# perfectly for a player who has no way to ask for it.
 	var row := lobby.find_child("MapRow", true, false)
 	if _require("the lobby has a map row", row != null):
-		var picker := _find_first(row,
-			func(node: Node) -> bool: return node is OptionButton) as OptionButton
-		if _require("the map row has a picker", picker != null):
-			var listed: Array[String] = []
-			for i in picker.item_count:
-				listed.append(picker.get_item_text(i))
+		# A carousel of baked screenshots since D-162, so the two questions are
+		# asked of the panel rather than of an `OptionButton`: `map_choices` is
+		# read off the tiles a player can press and `map_showing` off the name
+		# under the picture. Both are still the *drawn* answer, which is the
+		# whole reason this check reads controls instead of `Net.config`.
+		var panel := lobby.find_child("MatchSettings", true, false) as MatchSettingsPanel
+		if _require("the map row has a picker", panel != null):
+			var listed := panel.map_choices()
 			_check("the picker lists every map in the catalog",
 				", ".join(listed), ", ".join(MapCatalog.display_names()))
 			_check("the picker is showing the map this match will build",
-				picker.get_item_text(picker.selected),
+				panel.map_showing(),
 				String(MapCatalog.get_entry(_map)["display_name"]))
+			var thumb := row.find_child("MapThumb", true, false) as TextureRect
+			_check("the carousel has a picture of this map",
+				thumb != null and thumb.texture != null, true)
 			print("playthrough: the lobby offers %s" % ", ".join(listed))
 
 	# And the seed row, which is the one control whose *absence* is the feature:

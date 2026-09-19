@@ -17072,3 +17072,71 @@ it needs one, is a real prop and a relaxed `_prop_allowed`, not primitives
 (D-135). The sun and the fill are BOG-26's. The four wells' `OmniLight3D`s are
 now inside the hall rather than out on the apron, which is a consequence of
 moving them and not a lighting decision. (BOG-30.)
+
+## D-162 — The lobby picks the map from a carousel of baked screenshots, right under the mode
+The Map row was the last thing in the Match panel and an `OptionButton` of seven
+names — forty rows below the fold, under the potion sliders, with a scrollbar
+that is invisible against the theme. `tools/ui_range.gd` had a whole mode whose
+job was to scroll down far enough to photograph it. The owner, 2026-09-18: *"the
+map should be selected right under the mode... and it should be like a carousel
+of screenshots of the maps you scroll through instead of just the names."* Both
+halves are done: the Map section is now directly under Mode and above Limits,
+and the picker is a 272x153 photograph between two arrows with the map's name
+under it and a strip of seven index tiles under that. Where a match is played
+decides more about it than any slider below, and it decides what the rest of the
+panel *is* — a practice map folds the whole rules half away (D-112) and only a
+procedural one has a seed — so the rows it governs now come after it.
+
+**The pictures are baked, and the tool is `skin_thumbs.gd`'s shape.**
+`tools/map_thumbs.gd` sets `Net.config.map`, instances the **real**
+`scenes/world/arena.tscn`, and photographs it: 480x270 into
+`art/generated/map_thumbs/<id>.png`, seven of them, `PASS` when all seven are
+written. Through the arena rather than through a map scene, which is the whole
+reason it is written this way — Whisperbloom Hollow does not exist until
+`arena.gd` grows it from the seed (D-007), and a carousel with six photographs
+and a blank where the island should be is the version that loads map scenes. A
+bare map id bakes that one map, so re-photographing a rebuilt map is a
+one-argument run — which `quarry` will need when BOG-52 lands. Not headless, for
+`snapshot.gd`'s reason: the dummy rasteriser produces no image. Live thumbnails
+were never on the table: seven maps at the two to six seconds `arena.gd`'s own
+build log reports is half a minute of a screen whose job is waiting for people.
+
+**The perspective is authored per map, and it is a perspective rather than a
+place.** A `thumb_camera` row on the `MapCatalog` entry carries a compass
+bearing, a pitch, a zoom and how far up the map to look; the metres are solved
+from the map's own box, so a map that is redrawn is re-photographed from the
+same angle rather than from a point that used to be over its rim. The box is the
+**spawn pads**, grown 22%, not the meshes `preview_map.gd` measures: Lantern
+Wharf's town beyond its wall and the quarry's rim columns are dressing, and a
+frame built to hold them is a photograph of the things that are not the map —
+the first wharf render was exactly that. Each row was picked off a sweep of four
+bearings and two pitches (`-- <id> candidates`). What the sweep settled: a walled
+yard needs -38 deg or steeper or the picture is of its own wall; the kopje is a
+plateau on a flat plain and anything shallower photographs the plain; the island
+is a night map and at the distance that frames the whole spawn ring it is a dark
+shape on dark water, so it is the only one taken close in (zoom 0.55) with the
+horizon's last light behind the trees; the yacht is the only one shot from near
+the water, because a hull reads as a ship from beside it and as a deck plan from
+above; and the range's pads are all on one apron, so it stands 2.2x back.
+
+**Three layouts were rendered on the real lobby screen before one landed**,
+D-117's method. `SPOTLIGHT` is the picture and two arrows; `STRIP` is the row of
+tiles alone — at the size seven of them fit the 460 px rail, a stone pit and a
+superyacht stop being told apart, which is the whole point of a picture;
+`SPOTLIGHT_STRIP` is both, and is what landed, pending the owner's pick.
+`MatchSettingsPanel.MAP_PICKER` is the one constant that switches them. Stepping
+**wraps**: a carousel with a dead button at each end is a list with arrows drawn
+on it. The chosen tile is rimmed in the accent and the rest are dimmed to 55%,
+`lobby.gd`'s rule for a skin swatch and for its reason — the theme's pressed
+state is a wash and is invisible under a full-bleed photograph.
+
+**Nothing about what travels changed.** A map's id has to survive being sent to
+a peer that may not have the same list, which is why `MapCatalog` exists; the
+arrows and the tiles call the same `_push` -> `Net.update_config` the dropdown
+called, and a client gets the arrows and tiles disabled the way the Reroll
+button already was. `tools/playthrough.gd`'s two questions are asked of the
+panel now — `map_choices()` off the tiles a player can press, `map_showing()`
+off the name under the picture — plus a third, that the picture actually
+loaded, and it passes on `hollow` and on `wharf`. `ui_range -- lobby_map` no
+longer scrolls to "the last row in the panel", which since this change is the
+potion sliders. (BOG-31.)

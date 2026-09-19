@@ -30,6 +30,9 @@ extends RefCounted
 ##   loading_line  the line under the title on the loading card. If it contains
 ##                 `%d` it is formatted with the map seed — a static map has no
 ##                 seed to name, so its line must not contain one.
+##   thumb_camera  where the lobby carousel's photograph of this map is taken
+##                 from (D-162), as a partial override of `THUMB_CAMERA`. Never
+##                 a world coordinate: see that constant.
 
 enum Kind {
 	PROCEDURAL,  ## grown from `Net.config.map_seed` by `arena.gd` itself
@@ -40,6 +43,29 @@ enum Kind {
 ## and the only one that cannot fail to load because it has nothing on disk to
 ## load. `MAPS` must always contain it.
 const DEFAULT := "hollow"
+
+## Where a map is photographed from for the lobby's carousel (D-162), and what
+## every `thumb_camera` row below is a partial override of.
+##
+## **A perspective, not a place.** `yaw` is the compass bearing the camera stands
+## on, `pitch` how far it looks down, `zoom` how far back it stands as a multiple
+## of the distance that just fits the map's half-span in the lens, and `look_at`
+## how far up the map's own box the lens is pointed (0 is the floor, 1 the
+## highest thing on it). `tools/map_thumbs.gd` solves the metres from the map's
+## bounding box, so a map that is rebuilt — `quarry` is being redrawn as this
+## lands — is re-photographed from the same angle rather than from a point that
+## used to be over its rim.
+const THUMB_CAMERA := {
+	"yaw": 35.0,
+	"pitch": -30.0,
+	"zoom": 1.0,
+	"look_at": 0.25,
+	"fov": 50.0,
+}
+
+## Where the baked thumbs live. Beside the other generated art rather than in
+## `art/maps/`, which is ignored except for the `.glb`s a map is built from.
+const THUMB_DIR := "res://art/generated/map_thumbs"
 
 ## The practice range. Named here rather than spelled in `main_menu.gd` for the
 ## reason the whole file exists: the Practice button and the lobby's picker have
@@ -53,6 +79,10 @@ const MAPS: Array[Dictionary] = [
 		"display_name": "Whisperbloom Hollow",
 		"kind": Kind.PROCEDURAL,
 		"scene": "",
+		# Close in and side-on: the island is a night map, and at the distance
+		# that frames the whole spawn ring it is a dark shape on dark water.
+		# 125 puts the horizon's last light behind the trees.
+		"thumb_camera": {"yaw": 125.0, "pitch": -24.0, "zoom": 0.55, "look_at": 0.35},
 		"loading_line": "Growing the island from seed %d",
 	},
 	{
@@ -60,6 +90,7 @@ const MAPS: Array[Dictionary] = [
 		"display_name": "Rust",
 		"kind": Kind.STATIC,
 		"scene": "res://scenes/world/maps/rust.tscn",
+		"thumb_camera": {"yaw": 35.0, "pitch": -38.0, "zoom": 0.95},
 		# No `%d`: a static map has no seed to name, and the card would print
 		# the literal "%d" if this said one.
 		"loading_line": "Unloading the containers",
@@ -74,6 +105,9 @@ const MAPS: Array[Dictionary] = [
 		# twenty-three rock platforms out of a layout table. From this table's
 		# point of view that is none of its business, which is exactly what the
 		# `kind` column is for.
+		# Steep, because the kopje is a plateau on a flat plain and anything
+		# shallower photographs the plain.
+		"thumb_camera": {"yaw": 35.0, "pitch": -40.0, "zoom": 0.82},
 		"loading_line": "Stacking the kopje",
 	},
 	{
@@ -85,6 +119,9 @@ const MAPS: Array[Dictionary] = [
 		# yard with two declared Capture B·O·G bases (D-056). It was 36 m until
 		# the 1.2x pass, which multiplied every position in the layout and no
 		# size in it.
+		# 305 is the corner with the crane in it and the containers lit; a
+		# shallower pitch than -38 is a photograph of the yard's own wall.
+		"thumb_camera": {"yaw": 305.0, "pitch": -38.0, "zoom": 0.95},
 		"loading_line": "Stringing the lanterns",
 	},
 	{
@@ -94,6 +131,10 @@ const MAPS: Array[Dictionary] = [
 		"scene": "res://scenes/world/maps/yacht.tscn",
 		# Built from a table too, and the tall one: four decks on one hull at
 		# anchor, with the sea as the void (D-057).
+		# The one map photographed from near the water: the hull reads as a
+		# ship from beside it and as a deck plan from above, and the coast
+		# D-057 put there is behind it at this bearing.
+		"thumb_camera": {"yaw": 125.0, "pitch": -20.0, "zoom": 0.9, "look_at": 0.5},
 		"loading_line": "Weighing anchor",
 	},
 	{
@@ -104,6 +145,7 @@ const MAPS: Array[Dictionary] = [
 		# Built from a table as well, and the first one drawn for Capture B·O·G
 		# rather than fitted to it: a stone pit with each team's base a storey
 		# up on a cut bench, reached by two haul ramps and nothing else (D-082).
+		"thumb_camera": {"yaw": 35.0, "pitch": -40.0, "zoom": 0.9},
 		"loading_line": "Cutting the benches",
 	},
 	{
@@ -120,6 +162,9 @@ const MAPS: Array[Dictionary] = [
 		# being *on* it. Read through `MatchConfig.is_practice` and its
 		# `effective_*` accessors and nowhere else.
 		"practice": true,
+		# Standing well back, because the pads are all on the lodge apron and
+		# the lanes they are pointed down are the map.
+		"thumb_camera": {"yaw": 35.0, "pitch": -40.0, "zoom": 2.2, "look_at": 0.10},
 		"loading_line": "Walking out the lanes",
 	},
 	# A static map is one more entry and nothing else in this file changes —
@@ -184,6 +229,32 @@ static func is_procedural(id: String) -> bool:
 ## change" rather than one per caller. See `match_config.gd`.
 static func is_practice(id: String) -> bool:
 	return bool(get_entry(id).get("practice", false))
+
+
+## Where this map's baked thumbnail is, whether or not one has been taken.
+static func thumb_path(id: String) -> String:
+	return "%s/%s.png" % [THUMB_DIR, String(get_entry(id)["id"])]
+
+
+## The thumbnail itself, or `null` if this build has not got one. Null rather
+## than a placeholder: the carousel draws the map's name under the picture
+## either way, so a missing thumb costs the name of a map and not the ability to
+## pick it.
+static func thumb_of(id: String) -> Texture2D:
+	var path := thumb_path(id)
+	if not ResourceLoader.exists(path):
+		return null
+	return load(path) as Texture2D
+
+
+## Where `tools/map_thumbs.gd` stands to photograph this map: the default above
+## with the entry's own row written over it, so a row says only what it changes.
+static func thumb_camera(id: String) -> Dictionary:
+	var row := THUMB_CAMERA.duplicate()
+	var authored: Dictionary = get_entry(id).get("thumb_camera", {})
+	for key: String in authored:
+		row[key] = authored[key]
+	return row
 
 
 static func _find(id: String) -> Dictionary:

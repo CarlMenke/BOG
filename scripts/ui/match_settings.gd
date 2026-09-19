@@ -131,6 +131,17 @@ func _build() -> void:
 		+ "at a time. Teams captures the letters home.")
 	_bog_note.name = "BogRules"
 
+	# **Directly under Mode, and no longer last** (D-162). Where a match is
+	# played decides more about it than any slider below, and the Map section
+	# spent every build of this panel at the bottom of a scroll of forty rows —
+	# `tools/ui_range.gd` has a mode whose whole job is to scroll down far enough
+	# to photograph it. It also decides what the rest of the panel *is*: a
+	# practice map folds the whole rules half away (D-112) and only a procedural
+	# one has a seed, so the rows it governs now come after it rather than before.
+	_section("Map")
+	_map_carousel()
+	_seed_row()
+
 	_section("Limits")
 	_slider("kill_limit", "Kill limit", 1, 50, 1, func(v: float) -> String:
 		return "%d" % int(v))
@@ -341,10 +352,6 @@ func _build() -> void:
 	_slider("max_players", "Lobby size", MatchConfig.MIN_PLAYERS, MatchConfig.MAX_PLAYERS,
 		1, func(v: float) -> String: return "%d Bogs" % int(v))
 
-	_section("Map")
-	_map_row()
-	_seed_row()
-
 
 ## Every slider row in the panel, as `{"field", "label", "slider", "readout",
 ## "format", "row"}`. Public because `tools/ui_range.gd` measures this panel
@@ -438,6 +445,11 @@ func _capture_value(field: String, entry: Dictionary, config: MatchConfig) -> St
 		return _plain(raw)
 	if control is CheckButton:
 		return "on" if bool(raw) else "off"
+	if control is Label:
+		# The seed, and the map's name under its picture. The label is what the
+		# panel says, and "Lantern Wharf" is what a capture should carry rather
+		# than the id `wharf` that travels on the wire.
+		return (control as Label).text
 	return _plain(raw)
 
 
@@ -789,6 +801,11 @@ func _write_field(field: String, config: MatchConfig) -> void:
 	var entry: Dictionary = _fields[field]
 	var control: Control = entry["control"]
 	var value: Variant = config.get(field)
+	if field == "map":
+		# The one field whose widget is a whole section rather than a control
+		# (D-162): a picture, a name and a strip, all written from one id.
+		_write_map(String(value))
+		return
 	if control is OptionButton:
 		var picker := control as OptionButton
 		if field == "win_condition":
@@ -796,17 +813,11 @@ func _write_field(field: String, config: MatchConfig) -> void:
 			# both letter ordinals show the same B·O·G entry. See `_build`.
 			picker.selected = _condition_choice(int(value))
 			return
-		# Most pickers stand for an int (an enum, or a count with an offset).
-		# The map picker stands for a string id, so it carries the id list that
-		# pairs with its items and is selected by lookup instead of arithmetic.
-		var ids: Array[String] = entry.get("ids", [] as Array[String])
-		if ids.is_empty():
-			picker.selected = clampi(int(value) - int(entry.get("offset", 0)),
-				0, picker.item_count - 1)
-		else:
-			# An id this build does not have would be a config that skipped
-			# `_clamp_all`; show the first map rather than nothing selected.
-			picker.selected = maxi(0, ids.find(String(value)))
+		# Every picker left stands for an int — an enum, or a count with an
+		# offset. The one that stood for a string id was the map's, and it is a
+		# carousel now (D-162).
+		picker.selected = clampi(int(value) - int(entry.get("offset", 0)),
+			0, picker.item_count - 1)
 	elif control is CheckButton:
 		(control as CheckButton).set_pressed_no_signal(bool(value))
 	elif control is HSlider:
@@ -905,6 +916,11 @@ func _apply_editability() -> void:
 			(control as HSlider).editable = editable
 	if _seed_button != null:
 		_seed_button.disabled = not editable
+	# The carousel's arrows and tiles. A client still *sees* which map is picked
+	# — that is the whole point of a read-only view of the config — and cannot
+	# move it.
+	for button: Button in _map_buttons:
+		button.disabled = not editable
 	_host_only_hint.visible = not editable
 
 
@@ -1090,35 +1106,208 @@ func _toggle(field: String, label_text: String) -> void:
 	toggle.toggled.connect(func(on: bool) -> void: _push(field, on))
 
 
+# ------------------------------------------------------------ the carousel ---
+#
+# D-162, on the user's own *"the map should be selected right under the mode...
+# and it should be like a carousel of screenshots of the maps you scroll through
+# instead of just the names"*.
+#
+# **The pictures are baked, not live.** `tools/map_thumbs.gd` photographs every
+# map in the catalog through the real `arena.tscn` from a perspective authored
+# on the map's own `MapCatalog` row, and this draws the PNG. A lobby that built
+# seven maps to show seven pictures would spend two to six seconds a map doing
+# it (`arena.gd`'s own build log) on a screen whose whole job is waiting for
+# people to arrive.
+#
+# **The config still travels as an id.** Nothing about the picker changed that:
+# a map's id has to survive being sent to a peer that may not have the same
+# list, which is why `MapCatalog` exists and why the carousel walks `ids()`
+# rather than an ordinal.
+
+## The three shapes this was rendered as before one landed, as D-117 did it.
+## Switching is one constant: the builder below draws whichever is named here.
+##
+##   SPOTLIGHT        one picture between two arrows, the name under it.
+##   STRIP            a scrolling row of pictures, the chosen one rimmed.
+##   SPOTLIGHT_STRIP  both: the picture, and the row under it as the index.
+enum MapPicker { SPOTLIGHT, STRIP, SPOTLIGHT_STRIP }
+const MAP_PICKER := MapPicker.SPOTLIGHT_STRIP
+
+## The picture, in pixels. 16:9, the shape `tools/map_thumbs.gd` bakes, and as
+## wide as the rail's 460 px leaves once the panel has taken its padding.
+const MAP_THUMB := Vector2(272, 153)
+
+## And the tiles on the strip under it, which are an index rather than a
+## picture: small enough that all seven maps fit in the rail at once, big enough
+## that a stone pit and a superyacht are told apart at a glance.
+const MAP_TILE := Vector2(52, 29)
+
+## The carousel's own list of maps, in the order stepping walks them. Read once
+## at build time, like the `OptionButton` of names this replaced.
+var _map_ids: Array[String] = []
+## One tile per map, or empty in `SPOTLIGHT`. `map_choices()` reads these.
+var _map_tiles: Array[Button] = []
+var _map_picture: TextureRect
+var _map_name: Label
+var _map_scroll: ScrollContainer
+## Every control on the carousel a host may press, disabled together for a
+## client by `_apply_editability` — the same job `_seed_button` does for the
+## Reroll button, and for the same reason: neither is a field's own control.
+var _map_buttons: Array[Button] = []
+
+
 ## Which map the match is played on. Above the seed row because it decides
 ## whether the seed row is there at all.
-##
-## The picker deals in indices and the config deals in ids, and `MapCatalog`
-## keeps `ids()` and `display_names()` in the same order so the two can be
-## converted by position. It is not built from an enum for the reason
-## `MapCatalog` exists: a map's id has to survive being sent to a peer that may
-## not have the same list, and an ordinal does not.
-func _map_row() -> void:
-	var row := _row("Map")
-	# The one generated row with a name. The panel scrolls and this row is below
-	# the fold at every window size the game ships at, so `tools/ui_range.gd`
-	# has to be able to scroll to it to photograph it — and a row that nothing
-	# can find is a row no screenshot check will ever cover.
+func _map_carousel() -> void:
+	_map_ids = MapCatalog.ids()
+	var row := VBoxContainer.new()
+	# The one generated row with a name, and it keeps it: `tools/ui_range.gd`
+	# scrolls to it to photograph it and `tools/playthrough.gd` checks the lobby
+	# offers every map in the catalog through it. A row that nothing can find is
+	# a row no check will ever cover.
 	row.name = "MapRow"
-	var picker := OptionButton.new()
-	var names := MapCatalog.display_names()
-	for i in names.size():
-		picker.add_item(names[i], i)
-	picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(picker)
+	row.add_theme_constant_override("separation", 6)
+	_rows_root.add_child(row)
 
-	_fields["map"] = {"row": row, "control": picker, "ids": MapCatalog.ids(),
-		"label": row.get_meta("label"), "section": _current_section,
+	if MAP_PICKER != MapPicker.STRIP:
+		var frame := HBoxContainer.new()
+		frame.add_theme_constant_override("separation", UIPalette.GAP)
+		frame.alignment = BoxContainer.ALIGNMENT_CENTER
+		row.add_child(frame)
+		frame.add_child(_map_arrow("◂", -1))
+		_map_picture = TextureRect.new()
+		_map_picture.name = "MapThumb"
+		_map_picture.custom_minimum_size = MAP_THUMB
+		_map_picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		_map_picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		frame.add_child(_map_picture)
+		frame.add_child(_map_arrow("▸", 1))
+
+	# Under the picture, which is where the ticket puts it and where a caption
+	# belongs: the photograph is what is being chosen and the name is what it is
+	# called. `AccentLabel` because this is the one line in the section that
+	# answers "what am I looking at".
+	_map_name = Label.new()
+	_map_name.name = "MapName"
+	_map_name.theme_type_variation = "AccentLabel"
+	_map_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	row.add_child(_map_name)
+
+	if MAP_PICKER != MapPicker.SPOTLIGHT:
+		# Scrolled rather than wrapped: seven tiles fit the rail today and the
+		# eighth map should push the row sideways rather than start a second line
+		# that moves everything under it down.
+		_map_scroll = ScrollContainer.new()
+		_map_scroll.custom_minimum_size.y = MAP_TILE.y + 8
+		_map_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		row.add_child(_map_scroll)
+		var strip := HBoxContainer.new()
+		strip.name = "MapStrip"
+		strip.add_theme_constant_override("separation", 4)
+		_map_scroll.add_child(strip)
+		for id: String in _map_ids:
+			var tile := _map_tile(id)
+			strip.add_child(tile)
+			_map_tiles.append(tile)
+
+	# No `label` key: there is no name column on this row, and `capture_rows`
+	# already falls back to the field's own name, which is "Map".
+	_fields["map"] = {"row": row, "control": _map_name,
+		"section": _current_section,
 		"format": func(_v: float) -> String: return ""}
-	picker.item_selected.connect(func(index: int) -> void:
-		var ids := MapCatalog.ids()
-		if index >= 0 and index < ids.size():
-			_push("map", ids[index]))
+
+
+## One end of the carousel. Stepping **wraps**: a carousel with a dead button at
+## each end is a list with arrows drawn on it.
+func _map_arrow(glyph: String, step: int) -> Button:
+	var button := Button.new()
+	button.theme_type_variation = "GhostButton"
+	button.text = glyph
+	button.custom_minimum_size = Vector2(34, MAP_THUMB.y * 0.5)
+	button.pressed.connect(func() -> void:
+		var at := _map_ids.find(Net.config.map)
+		if at < 0 or _map_ids.is_empty():
+			return
+		_push("map", _map_ids[posmod(at + step, _map_ids.size())]))
+	_map_buttons.append(button)
+	return button
+
+
+## One tile of the strip: the same photograph at index size, pressed to pick
+## that map. The rim is drawn by `_write_map`, because which one is lit is
+## config and not a property of the tile.
+func _map_tile(id: String) -> Button:
+	var tile := Button.new()
+	tile.custom_minimum_size = MAP_TILE
+	tile.tooltip_text = String(MapCatalog.get_entry(id)["display_name"])
+	tile.pressed.connect(func() -> void: _push("map", id))
+	var picture := TextureRect.new()
+	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	picture.set_anchors_preset(Control.PRESET_FULL_RECT)
+	picture.texture = MapCatalog.thumb_of(id)
+	picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	tile.add_child(picture)
+	_map_buttons.append(tile)
+	return tile
+
+
+## Draw the carousel at whatever `Net.config.map` says. Called from
+## `_write_field`, which is the one place this panel writes widgets from the
+## config.
+func _write_map(id: String) -> void:
+	var entry := MapCatalog.get_entry(id)
+	_map_name.text = String(entry["display_name"])
+	if _map_picture != null:
+		_map_picture.texture = MapCatalog.thumb_of(id)
+	var at := _map_ids.find(String(entry["id"]))
+	for i in _map_tiles.size():
+		# The chosen tile is rimmed in the accent, `lobby.gd`'s rule for a skin
+		# swatch and for its reason: the theme's pressed state is a wash, which
+		# is invisible under a full-bleed photograph. The others are dimmed, so
+		# the strip reads as one lit map and six places it could go.
+		var chosen := i == at
+		# Every state but `hover` and `focus`, so the rim survives a client's
+		# disabled tiles and the press it was put there by — the theme's own
+		# boxes for those two would paint it out.
+		for state: String in ["normal", "pressed", "disabled"]:
+			_map_tiles[i].add_theme_stylebox_override(state, _map_tile_box(chosen))
+		_map_tiles[i].add_theme_stylebox_override("hover",
+			_map_tile_box(chosen, true))
+		_map_tiles[i].modulate = Color(1, 1, 1, 1.0 if chosen else 0.55)
+	if _map_scroll != null and at >= 0 and at < _map_tiles.size():
+		_map_scroll.ensure_control_visible(_map_tiles[at])
+
+
+func _map_tile_box(chosen: bool, hovered: bool = false) -> StyleBoxFlat:
+	var box := StyleBoxFlat.new()
+	box.bg_color = UIPalette.RAISED_STRONG if hovered else UIPalette.RAISED
+	box.set_corner_radius_all(4)
+	box.set_content_margin_all(0)
+	if chosen:
+		box.set_border_width_all(2)
+		box.border_color = UIPalette.AMBER
+	return box
+
+
+## The maps this carousel offers, in its own order — what
+## `tools/playthrough.gd` reads to check the lobby can ask for every map in the
+## catalog. Off the tiles where there are tiles, because that is the list a
+## player can actually see and press.
+func map_choices() -> Array[String]:
+	var out: Array[String] = []
+	if not _map_tiles.is_empty():
+		for tile: Button in _map_tiles:
+			out.append(tile.tooltip_text)
+		return out
+	for id: String in _map_ids:
+		out.append(String(MapCatalog.get_entry(id)["display_name"]))
+	return out
+
+
+## The name the carousel is showing, read off the label under the picture.
+func map_showing() -> String:
+	return _map_name.text if _map_name != null else ""
 
 
 ## The island is generated from this number and every client builds the same map
