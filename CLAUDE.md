@@ -40,6 +40,35 @@ Linear"**. The short form:
 - **`docs/PLAN.md` is frozen.** It is the build log up to 2026-09-18. New work
   is not added to it; its open items were moved to Linear on that date.
 
+## Ask for real assets; do not improvise shapes
+
+Anything a player looks at, walks past, holds or shoots is a real asset: a
+modelled, textured mesh, a motion-captured clip. Primitives assembled in code
+are for tools, checks and stand-ins that will be replaced, never for the
+finished thing (D-135). This holds for every session working anywhere in this
+repo.
+
+- **Recognise it early and say so.** When a ticket needs a mesh, a clip, a
+  texture or a sound that is not in the repo, the first message about it says
+  what is needed and where it comes from: a Tripo model from a prompt Claude
+  writes, a Mixamo clip named by its search term, a download Carl fetches, an
+  asset pack. Getting the asset is part of the plan, not a fallback after the
+  primitive version disappoints.
+- **Ask, do not substitute.** If the asset has to come from Carl, the ticket
+  gets **Needs a human** and an `Open:` line naming exactly what to fetch (the
+  Tripo prompt, the Mixamo clip name, the file to download), and the build
+  waits for it. A cone over five boxes because nobody asked for a campfire is
+  the failure this rule exists to stop.
+- **The route in.** Meshes: `assets/source/props/` through
+  `tools/decimate_assets.py`. Clips: `assets/source/anims/` as skinless FBX
+  through the Godot-native import (D-095..D-101). Skins and garments:
+  `docs/SKIN_PIPELINE.md`. Every route is a D-record; follow it.
+- **Quality is the reason.** Carl, 2026-09-19: "You making random shapes and
+  random things in godot is not the best approach. You know the best approach
+  to make the best outcome, and you should go with that even if it means
+  getting a mesh from the user or if it means downloading a mesh... you
+  recognizing when we need that is crucial to make this grow with quality."
+
 ## Commit and push to main, often
 
 Small, frequent pushes to `main` are the rule here. Carl's worry is code going
