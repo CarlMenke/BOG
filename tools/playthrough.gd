@@ -924,7 +924,7 @@ func _stage_practice() -> bool:
 	var station := Transform3D(Basis(Vector3.UP, PI), Vector3(4.0, 0.12, -12.0))
 	# The ordinal this spawn will wear, read *before* it happens. The map itself
 	# now stands twenty-three dummies on its own marks the moment the director
-	# lands, so this one is "Dummy 24" on Glowworm Grounds and "Dummy 1" on a
+	# lands, so this one is "Dummy 24" on Highsun Grounds and "Dummy 1" on a
 	# bare fixture; what is being asserted is that the registry numbers them in
 	# order, not that this test got there first.
 	var ordinal := dummies.ids().size() + 1

@@ -66,6 +66,8 @@ var _seed_button: Button
 var _capture_section: Array[Control] = []
 var _capture_note: Label
 var _practice_note: Label
+## What the one B·O·G entry means in each mode, under the "Ends on" picker.
+var _bog_note: Label
 
 ## field name -> {"row": Control, "control": Control, "readout": Label}
 var _fields: Dictionary = {}
@@ -102,11 +104,32 @@ func _build() -> void:
 	# Directly under the count it deals into, and hidden with it outside Teams.
 	# Dealt at Start, not now — see `Net.request_match_start` (D-048).
 	_toggle("random_teams", "Random teams")
-	# In `MatchConfig.WinCondition` order, because `_choice` converts by index.
-	# Appending here is the other half of never reordering that enum.
+	# **Four entries for five ordinals**, because there is one letters game and
+	# it is called B·O·G. The Match type above picks which of its two flavours
+	# is played: Free-for-all is the collect race (`LETTERS`, D-033/D-035) and
+	# Teams is capture-the-flag (`CAPTURE`, D-051). They were two entries here,
+	# one of them labelled "(teams)", which asked the host to pick a mode twice
+	# and let them pick two answers that disagreed.
+	#
+	# The first four are still in `MatchConfig.WinCondition` order, so `_choice`'s
+	# index arithmetic is still right on the way out: picking B·O·G writes
+	# `LETTERS`, and `MatchConfig._clamp_all` turns that into `CAPTURE` when the
+	# mode is Teams. That is the whole of "the mode decides the flavour" and it
+	# lives in one place, in the clamp, where every path into a config goes
+	# through it — this panel, a peer's dictionary, a harness.
+	#
+	# The way *in* is the direction that needs a table, because `CAPTURE` has no
+	# index of its own: see `_condition_choice`, which `_write_field` uses.
+	# Appending to the enum is still safe and still needs no entry here.
 	_choice("win_condition", "Ends on",
-		["First to the kill limit", "Last Bog standing", "The clock",
-			"First to collect B·O·G", "Capture B·O·G (teams)"])
+		["First to the kill limit", "Last Bog standing", "The clock", "B·O·G"])
+	# Under the picker, because it is the answer to the question the single
+	# entry now raises: what does B·O·G mean here? Shown on a practice map too,
+	# for the reason `PRACTICE_HIDDEN` gives about the condition itself — the
+	# range is where the letters markers are practised on.
+	_bog_note = _note("Free-for-all races to collect B, O and G, one letter out "
+		+ "at a time. Teams captures the letters home.")
+	_bog_note.name = "BogRules"
 
 	_section("Limits")
 	_slider("kill_limit", "Kill limit", 1, 50, 1, func(v: float) -> String:
@@ -115,17 +138,15 @@ func _build() -> void:
 		return "%d" % int(v))
 	_slider("time_limit", "Time limit", 0, 1800, 30, func(v: float) -> String:
 		return "No limit" if v <= 0.0 else UIPalette.clock(v))
-	# Shown only under the letters condition, like the kill limit and the lives
-	# count above it. It is also the dial most likely to be wrong out of the box
-	# — see the note on `MatchConfig.letter_drop_chance` — so it is deliberately
-	# in front of the host rather than buried under "Feel".
-	_slider("letter_drop_chance", "Letter drop chance", 0.0, 1.0, 0.01,
-		func(v: float) -> String: return "%d%% of deaths" % roundi(v * 100.0))
-	# Beside the drop chance and under the same condition, because the two are
-	# one balance question: how many cards there are, and what it costs to keep
-	# one. Zero reads as "Instant" rather than as "0.0 s" — it is a real setting
-	# (the mode without the hold), not a slider someone has dragged off the end.
-	_slider("letter_hold_time", "Letter hold", 0.0, 30.0, 0.5,
+	# Shown only under the collect race, like the kill limit and the lives count
+	# above it, and **the only letters dial left**. The drop chance that used to
+	# sit in front of it is gone: one letter is out at a time and the next death
+	# deals the next one, so how many cards there are is no longer a number
+	# anybody sets. What it costs to keep one still is, and this is it.
+	#
+	# Zero reads as "Instant" rather than as "0.0 s" — it is a real setting (the
+	# mode without the capture), not a slider someone has dragged off the end.
+	_slider("letter_hold_time", "Capture time", 0.0, 30.0, 0.5,
 		func(v: float) -> String:
 			return "Instant" if v <= 0.0 else "%.1f s" % v)
 	# Not under the letters condition, and that is the point of where it sits:
@@ -770,6 +791,11 @@ func _write_field(field: String, config: MatchConfig) -> void:
 	var value: Variant = config.get(field)
 	if control is OptionButton:
 		var picker := control as OptionButton
+		if field == "win_condition":
+			# The one picker whose entries are not one-to-one with its values:
+			# both letter ordinals show the same B·O·G entry. See `_build`.
+			picker.selected = _condition_choice(int(value))
+			return
 		# Most pickers stand for an int (an enum, or a count with an offset).
 		# The map picker stands for a string id, so it carries the id list that
 		# pairs with its items and is selected by lookup instead of arithmetic.
@@ -794,6 +820,24 @@ func _write_field(field: String, config: MatchConfig) -> void:
 		_write_readout(field, slider.value)
 	elif control is Label:
 		(control as Label).text = str(value)
+
+
+## The index of the single **B·O·G** entry in the "Ends on" picker — the last
+## one, because the four in front of it are `WinCondition`'s first four in
+## order.
+const BOG_CHOICE := 3
+
+
+## Which "Ends on" entry stands for a win condition.
+##
+## `CAPTURE` has no entry of its own and never will: it is Teams B·O·G, and the
+## B·O·G entry is what shows for it (D-051, and the letters round). Everything
+## else is its own ordinal, clamped so a condition appended to the enum in some
+## later build shows as something rather than as nothing selected.
+static func _condition_choice(condition: int) -> int:
+	if MatchConfig.is_bog(condition):
+		return BOG_CHOICE
+	return clampi(condition, 0, BOG_CHOICE)
 
 
 func _write_readout(field: String, value: float) -> void:
@@ -824,10 +868,14 @@ func _apply_visibility(config: MatchConfig) -> void:
 		and config.win_condition == MatchConfig.WinCondition.KILL_LIMIT
 	_fields["lives"]["row"].visible = not practice \
 		and config.win_condition == MatchConfig.WinCondition.LIVES
-	_fields["letter_drop_chance"]["row"].visible = not practice \
-		and config.win_condition == MatchConfig.WinCondition.LETTERS
+	# The collect race's own dial, and only its own: Teams B·O·G is a carry to a
+	# vault and has no clock to set.
 	_fields["letter_hold_time"]["row"].visible = not practice \
 		and config.win_condition == MatchConfig.WinCondition.LETTERS
+	# What the single B·O·G entry means, shown whenever it is the one picked —
+	# under either ordinal, and on the range too, where the condition itself
+	# stays visible.
+	_bog_note.visible = MatchConfig.is_bog(config.win_condition)
 	# The rows that have no condition of their own and are still meaningless
 	# here: the clock is off and the respawn is fixed at a second.
 	for field: String in PRACTICE_HIDDEN:
@@ -870,14 +918,17 @@ func _push(field: String, value: Variant) -> void:
 		return
 	var next := Net.config.duplicate_config()
 	next.set(field, value)
-	# Capture B·O·G is teams-only, and `MatchConfig._clamp_all` turns Teams on
-	# whenever it is picked (D-051). That clamp cannot tell which of the two was
-	# just changed, so the other direction is decided here, where it can: a host
-	# who picks Free-for-all while Capture is selected gets a free-for-all, on
-	# the kill limit, rather than a picker that snaps back to Teams.
-	if field == "mode" and int(value) == MatchConfig.Mode.FREE_FOR_ALL \
-			and next.win_condition == MatchConfig.WinCondition.CAPTURE:
-		next.win_condition = MatchConfig.WinCondition.KILL_LIMIT
+	# **No special case for the letter conditions.** There used to be one here:
+	# `_clamp_all` forced Teams on whenever Capture was picked, could not tell
+	# which of the two fields had just moved, and so this function owned the
+	# other direction — a host who picked Free-for-all under Capture was quietly
+	# moved to the kill limit. That was two halves of one rule in two files,
+	# facing each other.
+	#
+	# Now the mode decides the flavour and the clamp owns the whole rule (D-051,
+	# and the letters round): flipping the Match type under B·O·G swaps which
+	# letters game is being played and stays on B·O·G, which is what the picker
+	# has been saying all along.
 	Net.update_config(next)
 
 

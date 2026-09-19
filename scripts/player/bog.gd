@@ -489,6 +489,15 @@ var elder_robe: ElderRobe
 ## The gold card over this Bog's head while it carries a letter, for everyone
 ## but its owner (D-050). Switched by whoever decides what is carried.
 var carrier_marker: CarrierMarker
+## The capture performance: the letter this Bog is pulling out of the air and
+## down into its pouch, while a **timed** hold is running (the letters round).
+##
+## Beside the marker and the gear rather than inside either, because it is a
+## third answer to a different question. The marker says *who* is carrying, over
+## the head and through walls; the gear says what is *in the hands*; this says
+## what the hands are *doing*, in world space between them. It watches
+## `MatchState` itself and needs nobody to switch it.
+var capture_rig: CaptureRig
 var team: int = MatchConfig.TEAM_NONE
 ## Which weapon this Bog brought to the match, as a `Loadout.Weapon` (D-069).
 ##
@@ -653,6 +662,7 @@ func _ready() -> void:
 	body_mesh = _find_body_mesh()
 	_equip_spear()
 	_build_carrier_marker()
+	_build_capture_rig()
 
 
 ## The mesh `tools/import_body.gd` names "Bog", under the skeleton. Looked for by name
@@ -779,6 +789,21 @@ func _equip_spear() -> void:
 	held_gear.name = "HeldGear"
 	add_child(held_gear)
 	held_gear.attach_to(skeleton)
+
+
+## After `_equip_spear`, and that order is load-bearing: the rig reads both
+## hands off `held_gear` every frame, so the gear has to have found its bones
+## before anything asks it where they are.
+##
+## On **every** Bog on **every** peer, exactly like the carrier marker above and
+## for a sharper version of its reason. A capture is ten seconds of standing in
+## the open with no weapon, and what it buys the other seven players is that
+## they can see it happening from across a clearing — so a rig built only for
+## the local player would be the vulnerability with its tell removed.
+func _build_capture_rig() -> void:
+	capture_rig = CaptureRig.new()
+	capture_rig.name = "CaptureRig"
+	add_child(capture_rig)
 
 
 ## Put the Elder's robe on this Bog, or take it off again.
@@ -1076,6 +1101,17 @@ func is_grounded() -> bool:
 ## one question about it.
 func is_emoting() -> bool:
 	return emoting
+
+
+## Is this Bog standing a letter down into its pouch — a hold with a clock on
+## it, as opposed to a Capture B·O·G carry (D-131)? Asked here and not in the
+## animator for the reason every other question the animator asks goes through
+## the body (`is_drawing`, `is_emoting`, `crouch_pose`): `BogAnimator` names no
+## autoload, so the headless `--script` tools that load it to read its tables
+## (`tools/clip_check.gd`, `tools/grip_poses.gd`) can compile it in a process
+## where `MatchState` does not exist.
+func is_capturing() -> bool:
+	return MatchState.letter_hold_is_timed(peer_id)
 
 
 func is_drawing() -> bool:

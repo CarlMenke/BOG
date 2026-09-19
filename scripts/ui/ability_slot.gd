@@ -192,6 +192,12 @@ func _ready() -> void:
 	custom_minimum_size = Vector2(SIZE, SIZE)
 	_cap.text = SettingsPanel.primary_key(action)
 	_name.text = label_text
+	# A rebind from the pause menu mid-match moves the key under this cap; the
+	# cap re-reads the live map rather than waiting for the tile to next change
+	# kind (D-137).
+	Settings.changed.connect(func(key: String, _value: Variant) -> void:
+		if key == "keybinds" and not action.is_empty():
+			_cap.text = SettingsPanel.primary_key(action))
 
 
 ## Make this slot stand for something else.

@@ -14,9 +14,16 @@ extends Node3D
 ##
 ## The layout is one bar along the foot (D-118): the wordmark keeps the top-left
 ## corner and everything you can press lives in a single row at the bottom, name
-## field at the left end and the five ways out of here centred in the rest of
+## field at the left end and the six ways out of here centred in the rest of
 ## it. It is built in `main_menu.tscn` with anchors and containers; nothing here
 ## moves a control at runtime.
+##
+## **The wordmark is not a control any more.** "BOG" used to be a 148 px
+## `Label` in the top-left; it is now three real letter cards floating over the
+## campfire in the backdrop itself (`MenuLetters`), and the only thing left in
+## that corner is the quip under them. So the top-left of this screen is the
+## one part of it this file cannot move: it is three metres of glade away, and
+## `BogBackdrop.FRAMING[HERO]` is where it is composed.
 
 ## Long enough to read, short enough that nobody wonders if it has hung. `Net`
 ## puts its own eight-second clock on the connection itself.
@@ -31,8 +38,11 @@ const CONNECT_HINT := "Connecting..."
 ## every time, and six of them means the screen is not quite the same screen
 ## twice — which is the cheapest possible reason to look at it again.
 ##
-## Kept short enough to sit on one line under a 148 px wordmark at 1280 wide,
-## and kept in the game's own voice: nobody in it is a hero.
+## Kept short enough to sit on one line under the wordmark at 1280 wide, and
+## kept in the game's own voice: nobody in it is a hero. The wordmark it sits
+## under is three floating letter cards now rather than a label, so the quip is
+## anchored where they project (`BogBackdrop.FRAMING[HERO]` prints the box)
+## instead of being stacked under a label in the same container.
 const QUIPS: PackedStringArray = [
 	"Throw first, apologise later.",
 	"Nothing personal. Just spears.",
@@ -47,6 +57,7 @@ const QUIPS: PackedStringArray = [
 @onready var _host_button: Button = %HostButton
 @onready var _join_button: Button = %JoinButton
 @onready var _practice_button: Button = %PracticeButton
+@onready var _how_to_play_button: Button = %HowToPlayButton
 @onready var _settings_button: Button = %SettingsButton
 @onready var _quit_button: Button = %QuitButton
 @onready var _join_panel: Control = %JoinPanel
@@ -56,6 +67,7 @@ const QUIPS: PackedStringArray = [
 @onready var _notice_title: Label = %NoticeTitle
 @onready var _notice_body: Label = %NoticeBody
 @onready var _settings: SettingsPanel = %Settings
+@onready var _tutorial: Tutorial = %Tutorial
 @onready var _version: Label = %Version
 @onready var _quip: Label = %Quip
 
@@ -96,6 +108,13 @@ func _ready() -> void:
 	_host_button.pressed.connect(_on_host)
 	_join_button.pressed.connect(_on_join_toggled)
 	_practice_button.pressed.connect(_on_practice)
+	# Straight to the panel's own `open`, the way SETTINGS is wired: the card
+	# keeps its own state (which page, whether it has been seen before) and
+	# this screen's only business with it is saying when to appear. It is on
+	# the menu as well as in the lobby because the lobby is a place you arrive
+	# at with five other people waiting, and reading six cards is not something
+	# to do while they watch.
+	_how_to_play_button.pressed.connect(_tutorial.open)
 	_settings_button.pressed.connect(_settings.open)
 	_quit_button.pressed.connect(_on_quit)
 	_connect_button.pressed.connect(_on_connect)

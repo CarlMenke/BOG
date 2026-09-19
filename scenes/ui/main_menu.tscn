@@ -1,9 +1,10 @@
-[gd_scene load_steps=9 format=3 uid="uid://bgubmainmenu0"]
+[gd_scene load_steps=10 format=3 uid="uid://bgubmainmenu0"]
 
 [ext_resource type="Script" path="res://scripts/ui/main_menu.gd" id="1_menu"]
 [ext_resource type="Script" path="res://scripts/ui/bog_backdrop.gd" id="2_backdrop"]
 [ext_resource type="Theme" path="res://resources/ui/bog_theme.tres" id="3_theme"]
 [ext_resource type="PackedScene" path="res://scenes/ui/settings_panel.tscn" id="4_settings"]
+[ext_resource type="PackedScene" path="res://scenes/ui/tutorial.tscn" id="5_tutorial"]
 
 [sub_resource type="Gradient" id="Gradient_side"]
 offsets = PackedFloat32Array(0, 0.42, 1)
@@ -77,17 +78,11 @@ stretch_mode = 0
 layout_mode = 1
 anchors_preset = 0
 offset_left = 112.0
-offset_top = 120.0
+offset_top = 412.0
 offset_right = 872.0
-offset_bottom = 340.0
+offset_bottom = 452.0
 mouse_filter = 2
 theme_override_constants/separation = 2
-
-[node name="Title" type="Label" parent="UI/Root/Wordmark"]
-layout_mode = 2
-theme_type_variation = &"DisplayLabel"
-theme_override_font_sizes/font_size = 148
-text = "BOG"
 
 [node name="Quip" type="Label" parent="UI/Root/Wordmark"]
 unique_name_in_owner = true
@@ -231,6 +226,13 @@ size_flags_vertical = 4
 theme_type_variation = &"NavButton"
 text = "PRACTICE RANGE"
 
+[node name="HowToPlayButton" type="Button" parent="UI/Root/Bar/Nav"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+theme_type_variation = &"NavButton"
+text = "HOW TO PLAY"
+
 [node name="SettingsButton" type="Button" parent="UI/Root/Bar/Nav"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -253,3 +255,6 @@ mouse_filter = 2
 [node name="Settings" parent="UI/Root" instance=ExtResource("4_settings")]
 unique_name_in_owner = true
 layout_mode = 1
+
+[node name="Tutorial" parent="UI/Root" instance=ExtResource("5_tutorial")]
+unique_name_in_owner = true

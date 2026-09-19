@@ -1,7 +1,7 @@
 class_name RangeTarget
 extends StaticBody3D
 ## A ringed wooden board on a stake: the range's basic non-Bog target, and the
-## base the gong and the glowworm orb take their plumbing from.
+## base the gong takes its plumbing from.
 ##
 ## **Damage lands only on Bogs, and it still does.** `MatchState.report_damage`
 ## is the one door, keyed by `peer_id`, and nothing here goes through it. A board
@@ -11,7 +11,7 @@ extends StaticBody3D
 ## answers is a target.
 ##
 ## A duck-typed method check rather than a cast against this class, deliberately:
-## what the three targets share is a contract, not an implementation, and a
+## what a board and a gong share is a contract, not an implementation, and a
 ## station or a later map should be able to answer it without inheriting a
 ## plank. What *is* inherited here is only the plumbing that must not be written
 ## three times — the group, the radius, the one RPC, and the host-side scoring
@@ -95,8 +95,6 @@ static func _from_marker(marker: Marker3D, into: Node) -> Node3D:
 			made = RangeTarget.new()
 		"gong":
 			made = Gong.new()
-		"orb_launcher":
-			made = OrbLauncher.new()
 		_:
 			return null
 	made.name = marker.name

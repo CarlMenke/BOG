@@ -12,10 +12,11 @@ extends Node
 ##     Godot --path . --resolution 1600x900 --script tools/snapshot.gd -- \
 ##         res://tools/ui_range.tscn out.png 40 <mode>
 ##
-## Modes: menu, menu_join, menu_notice, settings, settings_network,
-##        lobby, lobby_full, lobby_teams, lobby_client, lobby_map, lobby_capture,
-##        lobby_character, lobby_weapons, lobby_skins, lobby_ffa_skins,
-##        lobby_chat, lobby_feel, widths, capture_config.
+## Modes: menu, menu_join, menu_notice, menu_letters, settings,
+##        settings_network, lobby, lobby_full, lobby_teams, lobby_client,
+##        lobby_map, lobby_capture, lobby_character, lobby_weapons,
+##        lobby_skins, lobby_ffa_skins, lobby_chat, lobby_feel, lobby_letters,
+##        widths, capture_config.
 ##
 ## **Four of those open the Weapon and Character page**, which is where the
 ## weapon strip and the skin grid live now: `lobby_character` is the plain shot
@@ -24,9 +25,19 @@ extends Node
 ## existed; what each of them is *about* has not changed, only which screen that
 ## thing is on.
 ##
-## `widths` and `capture_config` print a verdict and are in the gate (D-076).
-## `lobby_character` prints what its portrait frames — measurements, not a
-## verdict, and only at a warmup of 60. Everything else is a photograph.
+## `widths`, `capture_config`, `menu_letters` and `lobby_letters` print a
+## verdict and are in the gate (D-076). `lobby_character` prints what its
+## portrait frames — measurements, not a verdict, and only at a warmup of 60.
+## Everything else is a photograph.
+##
+## **The two letter modes are the composition's only witness.** The menu's
+## wordmark is three objects in a glade now rather than a label in a container,
+## so "is the B·O·G clear of the Bog" and "is the row clear of the lobby's
+## faces" stopped being things an anchor could guarantee and became things a
+## camera has to be asked. Both project through the real `BogBackdrop` camera
+## and print in fractions of the frame, `lobby_character`'s form and for its
+## reason: the window a screenshot is taken at is not the window a player
+## runs.
 
 const MENU_SCENE := preload("res://scenes/ui/main_menu.tscn")
 const LOBBY_SCENE := preload("res://scenes/ui/lobby.tscn")
@@ -85,6 +96,10 @@ func _ready() -> void:
 	match _mode:
 		"menu", "menu_join", "menu_notice", "settings", "settings_network":
 			_open_menu()
+		"menu_letters":
+			# The plain menu. The mode is not a different screen, it is the
+			# same screen with a tape measure held up to it.
+			_open_menu()
 		"lobby_full":
 			_open_lobby(7, false, true)
 		"lobby_teams":
@@ -120,6 +135,12 @@ func _ready() -> void:
 			# The one panel whose open state is not a stored boolean: the chat
 			# unfolds while the caret is in its input box.
 			_open_lobby(4, false, true)
+		"lobby_letters":
+			# The full ring, because the question the mode asks is whether the
+			# letters hang clear of **faces**, and a three-Bog lobby spreads
+			# the arc's ends apart and puts nobody where the row is. Seven
+			# stand-ins plus you is the widest the ring gets.
+			_open_lobby(7, false, true)
 		"lobby_feel", "widths", "capture_config":
 			_open_lobby(3, false, true)
 		_:
@@ -145,6 +166,8 @@ func _open_menu() -> void:
 		panel.open()
 		if _mode == "settings_network":
 			await _show_public_address(panel)
+	elif _mode == "menu_letters":
+		await _report_menu_letters(menu)
 
 
 ## Put a plausible playit address in the Network row and scroll down to it.
@@ -231,6 +254,8 @@ func _open_lobby(extra: int, teams: bool, as_host: bool) -> void:
 		await _capture_config(lobby)
 	if _mode == "lobby_character":
 		await _report_portrait(lobby)
+	elif _mode == "lobby_letters":
+		await _report_lobby_letters(lobby)
 
 
 ## The lobby modes whose subject lives on the Weapon and Character page.
@@ -256,6 +281,240 @@ func _open_character_page(lobby: Node) -> void:
 		push_warning("ui_range: the lobby has no Weapon and Character button")
 		return
 	button.pressed.emit()
+
+
+# ------------------------------------------------- the letters (the round) ---
+
+## How tall the Bog is taken to be when his box is drawn, in metres. The
+## antenna tips measure 1.778 (`BogBackdrop`'s portrait block) and the box is
+## rounded up off them, because what this is checking is whether anything of
+## him touches the wordmark and an antenna is part of him.
+const BOG_BOX_TOP := 1.80
+
+## The clear band the lobby's ring has to stand in, as fractions of the width.
+## 400 and 1140 of the 1600 px base viewport — the roster column's inner edge
+## and the match rail's — which is `tools/weapon_select.gd`'s band and this
+## file's for the same reason: the letters hang in the middle of it.
+const LOBBY_BAND := Vector2(0.250, 0.7125)
+
+
+## What the menu's wordmark frames, and whether the hero Bog is standing in it.
+##
+## The composition `BogBackdrop.FRAMING[HERO]` was solved for has three claims
+## in it and this is where all three are checked rather than admired: the row
+## sits in the frame's upper left, the Bog stands clear of it to the right, and
+## his feet are above the button bar. Every one of them is a relationship
+## between a thing in a glade and a control anchored in pixels, so the screen
+## is the only place they can be compared and the camera is the only honest way
+## to compare them — the same argument `_ring_box` makes in
+## `tools/weapon_select.gd`.
+##
+## The bar's edge is **read off the bar** rather than written down: it is
+## anchored to the bottom of a viewport whose size this tool does not choose.
+func _report_menu_letters(menu: Node) -> void:
+	var backdrop := menu.get_node_or_null("%Backdrop") as BogBackdrop
+	if backdrop == null:
+		print("menu_letters: FAIL (the menu has no backdrop)")
+		return
+	# A handful of frames, not one: the rig builds its three cards in its own
+	# `_ready` and the bob has to have moved them at least once, or the box
+	# below is the box at rest and not the box the shot will show.
+	for i in 6:
+		await get_tree().process_frame
+	var camera := backdrop.get_node_or_null("BackdropCamera") as Camera3D
+	var letters := backdrop.get_node_or_null("Fire/MenuLetters") as MenuLetters
+	if camera == null or letters == null:
+		print("menu_letters: FAIL (no camera, or no letters over the fire)")
+		return
+
+	var frame := get_viewport().get_visible_rect().size
+	for i in letters.letter_count():
+		_print_box("menu_letters", MatchState.letter_name(MatchState.LETTERS[i]),
+			letters.letter_rect(camera, i), frame)
+	var row := letters.row_rect(camera)
+	if row.size == Vector2.ZERO:
+		print("menu_letters: FAIL (the rig built no glyphs to measure)")
+		return
+	_print_box("menu_letters", "the row", row, frame)
+
+	var hero := _first_bog(backdrop)
+	if hero == null:
+		print("menu_letters: FAIL (nobody is standing in the glade)")
+		return
+	var bog_box := _capsule_rect(camera, hero)
+	_print_box("menu_letters", "the hero Bog", bog_box, frame)
+
+	var air := (bog_box.position.x - row.end.x) / frame.x
+	print("menu_letters: %.3f of the width between the row and the Bog" % air)
+
+	var feet := camera.unproject_position(hero.global_position).y / frame.y
+	var bar := menu.get_node_or_null("UI/Root/Bar") as Control
+	var rail := (bar.global_position.y / frame.y) if bar != null else 1.0
+	print("menu_letters: his feet at %.3f down, the button bar begins at %.3f"
+		% [feet, rail])
+
+	var faults := PackedStringArray()
+	if row.intersects(bog_box):
+		faults.append("the Bog is standing in the wordmark")
+	if row.position.x < 0.0 or row.position.y < 0.0 \
+			or row.end.x > frame.x or row.end.y > frame.y:
+		faults.append("the row is off the frame")
+	if feet >= rail:
+		faults.append("his feet are behind the bar")
+	print("menu_letters: %s" % ("PASS" if faults.is_empty()
+		else "FAIL (%s)" % ", ".join(faults)))
+
+
+## What the lobby's letters frame, and whose face they are in front of.
+##
+## The lobby is the awkward one and the numbers say why. That camera is pitched
+## 17 degrees down at a ring standing 3.5 m *behind* the fire, so a Bog's face
+## projects **higher** on screen than anything the same height over the flame —
+## which means the row clears the ring by hanging **low**, and raising
+## `MenuLetters.HOVER_HEIGHT` walks it up into the chins rather than out of
+## them. That is the opposite of what anybody guesses, so it is printed: the
+## last line says which world height on the nearest Bog the row's top is level
+## with, and that number is the one to watch if the hover ever moves.
+func _report_lobby_letters(lobby: Node) -> void:
+	var backdrop := lobby.get_node_or_null("%Backdrop") as BogBackdrop
+	if backdrop == null:
+		print("lobby_letters: FAIL (the lobby has no backdrop)")
+		return
+	for i in 6:
+		await get_tree().process_frame
+	var camera := backdrop.get_node_or_null("BackdropCamera") as Camera3D
+	var letters := backdrop.get_node_or_null("Fire/MenuLetters") as MenuLetters
+	if camera == null or letters == null:
+		print("lobby_letters: FAIL (no camera, or no letters over the fire)")
+		return
+
+	var frame := get_viewport().get_visible_rect().size
+	var row := letters.row_rect(camera)
+	if row.size == Vector2.ZERO:
+		print("lobby_letters: FAIL (the rig built no glyphs to measure)")
+		return
+	_print_box("lobby_letters", "the row", row, frame)
+
+	var bogs := backdrop.get_node_or_null("Bogs")
+	if bogs == null:
+		print("lobby_letters: FAIL (the glade has no Bogs)")
+		return
+	var lowest_head := -INF
+	var nearest: Bog = null
+	var nearest_gap := INF
+	var counted := 0
+	for child: Node in bogs.get_children():
+		var body := child as Bog
+		if body == null or not body.visible:
+			continue
+		counted += 1
+		var head := camera.unproject_position(
+			body.global_position + Vector3.UP * 1.778).y
+		lowest_head = maxf(lowest_head, head)
+		var box := _capsule_rect(camera, body)
+		print("lobby_letters: %s head at %.3f down, plate top at %.3f down"
+			% [body.display_name, head / frame.y,
+				_plate_top(camera, body) / frame.y])
+		var gap := absf(box.get_center().x - row.get_center().x)
+		if gap < nearest_gap:
+			nearest_gap = gap
+			nearest = body
+
+	if nearest != null:
+		print("lobby_letters: the row's top is level with %.2f m on %s"
+			% [_height_at(camera, nearest, row.position.y), nearest.display_name])
+
+	var faults := PackedStringArray()
+	if counted < 8:
+		faults.append("%d Bogs in the ring, not 8" % counted)
+	if row.position.x < LOBBY_BAND.x * frame.x \
+			or row.end.x > LOBBY_BAND.y * frame.x:
+		faults.append("the row is outside the panels' clear band")
+	if row.position.y < lowest_head:
+		faults.append("the row reaches above a head")
+	print("lobby_letters: %s" % ("PASS" if faults.is_empty()
+		else "FAIL (%s)" % ", ".join(faults)))
+
+
+## One box, printed in fractions of the frame.
+func _print_box(mode: String, what: String, box: Rect2, frame: Vector2) -> void:
+	print("%s: %s at %.3f..%.3f across, %.3f..%.3f down"
+		% [mode, what, box.position.x / frame.x, box.end.x / frame.x,
+			box.position.y / frame.y, box.end.y / frame.y])
+
+
+## The box one Bog covers, from the capsule the game itself calls his width.
+##
+## Swept along the **camera's own right** at the feet and at the antennae,
+## rather than taken from the mesh's `get_aabb()`, for the reason
+## `tools/weapon_select.gd` gives at length: a skinned mesh's bounding box is
+## the bind pose plus a skinning margin, and one of its corners projects a
+## thousand pixels off the side of the screen.
+func _capsule_rect(camera: Camera3D, body: Node3D) -> Rect2:
+	var side := camera.global_transform.basis.x * Bog.CAPSULE_RADIUS
+	var out := Rect2()
+	var first := true
+	for height: float in [0.0, BOG_BOX_TOP]:
+		var centre := body.global_position + Vector3.UP * height
+		for edge: Vector3 in [centre - side, centre + side]:
+			var at := camera.unproject_position(edge)
+			if first:
+				out = Rect2(at, Vector2.ZERO)
+				first = false
+			else:
+				out = out.expand(at)
+	return out
+
+
+## The top edge of a Bog's nameplate, in viewport pixels.
+##
+## A billboarded `Label3D` reports a cube whose every axis is the text's
+## diagonal, so this **over**-states how high the plate reaches — which is the
+## safe direction for a clearance check and not worth the correction
+## `tools/weapon_select.gd` makes for a measurement it asserts on.
+func _plate_top(camera: Camera3D, body: Node3D) -> float:
+	var plate := body.get_node_or_null("Nameplate") as Node3D
+	if plate == null:
+		return INF
+	var top := INF
+	for node: Node in plate.find_children("", "Label3D", true, false):
+		var label := node as Label3D
+		var box := label.get_aabb()
+		for corner in 8:
+			top = minf(top, camera.unproject_position(
+				label.global_transform * box.get_endpoint(corner)).y)
+	return top if top < INF else camera.unproject_position(plate.global_position).y
+
+
+## Which height up this Bog projects to `row_y` on screen, in metres.
+##
+## Walked rather than solved. The answer wanted is "where on him does the
+## wordmark cross", a centimetre is finer than anybody can read off a
+## screenshot, and 181 `unproject_position` calls once per run is cheaper than
+## a closed form somebody has to check the algebra of.
+func _height_at(camera: Camera3D, body: Node3D, row_y: float) -> float:
+	var best := 0.0
+	var closest := INF
+	for step in 181:
+		var height := float(step) * 0.01
+		var at := camera.unproject_position(body.global_position + Vector3.UP * height)
+		var off := absf(at.y - row_y)
+		if off < closest:
+			closest = off
+			best = height
+	return best
+
+
+## The first Bog standing in a backdrop, which in the menu is the only one.
+func _first_bog(backdrop: BogBackdrop) -> Bog:
+	var bogs := backdrop.get_node_or_null("Bogs")
+	if bogs == null:
+		return null
+	for child: Node in bogs.get_children():
+		var body := child as Bog
+		if body != null and body.visible:
+			return body
+	return null
 
 
 ## Print what the portrait actually frames, so the shot beside it is not the

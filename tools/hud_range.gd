@@ -21,7 +21,8 @@ extends Node
 ##        hud_elder, killfeed, scoreboard, scoreboard_letters, pause, results,
 ##        results_letters, dead, spectate,
 ##        hud_letters_teams, scoreboard_letters_teams, results_letters_teams,
-##        reload_timer, weapon_tiles, range, range_kill.
+##        reload_timer, weapon_tiles, controls, minimap, tutorial,
+##        range, range_kill.
 ##
 ## `hud_health` is your own health bar part-empty (D-062). `hud` has it full,
 ## which is the state it spends most of a match in and the least interesting one
@@ -52,6 +53,19 @@ extends Node
 ##     ... --resolution 1600x900 --script tools/snapshot.gd -- \
 ##         res://tools/hud_range.tscn out/weapon_tiles.png 40 weapon_tiles
 ##
+## `minimap` and `tutorial` are the letters round's two verdict modes and both
+## are pictures worth having as well. `minimap` stages the corner map's three
+## kinds of blip at measured bearings — a loose card twelve metres north-east, an
+## enemy carrying one eighteen west, a teammate eight south — and reads the count
+## of each back off `Minimap.debug_counts()` rather than off the photograph, so
+## the thing asserted is what the map *found* and not what a compression
+## artefact left behind. `tutorial` proves the once-per-machine flag both ways
+## and then stands the panel up on its third card, which is the busiest of the
+## six:
+##
+##     ... --resolution 1600x900 --script tools/snapshot.gd -- \
+##         res://tools/hud_range.tscn out/tutorial.png 60 tutorial
+##
 ## The three `*_letters_teams` modes are the letters pictures under Teams, where
 ## the lamps, a team row on the scoreboard and a team row on the results table
 ## all show a team's pooled letters rather than one player's (D-049).
@@ -67,6 +81,7 @@ extends Node
 
 const RANGE_SCENE := preload("res://tools/combat_range.tscn")
 const HUD_SCENE := preload("res://scenes/ui/hud.tscn")
+const TUTORIAL_SCENE := preload("res://scenes/ui/tutorial.tscn")
 
 ## Well clear of the combat range's own 900s.
 const EXTRA_BASE := 640
@@ -84,11 +99,36 @@ const EXTRA := [
 ## that set three of the four would look right and prove nothing.
 const LETTER_MODES := ["hud_letters", "hud_hold", "scoreboard_letters",
 	"results_letters", "hud_letters_teams", "scoreboard_letters_teams",
-	"results_letters_teams"]
+	"results_letters_teams", "minimap"]
 ## The letters modes played as Teams. A subset of `LETTER_MODES`, never a
 ## separate list, so a Teams picture cannot forget to be a letters one.
+##
+## `minimap` is in here for a reason that is not a picture: a teammate only
+## exists in Teams — `Net.player_team` is `TEAM_NONE` for everyone in a
+## free-for-all, and the map draws an ally dot on nobody — so the one mode whose
+## verdict counts allies has to be played as a team game to have any.
 const TEAM_LETTER_MODES := ["hud_letters_teams", "scoreboard_letters_teams",
-	"results_letters_teams"]
+	"results_letters_teams", "minimap"]
+
+## Where the minimap mode puts its three blips, relative to the local Bog.
+## Bearings first and distances second: what the map has to get right is that a
+## card to the north-east draws up and to the right of you when you are facing
+## north, and all three are well inside `Minimap.RANGE_M` so a miscount cannot
+## be blamed on the rim.
+const MINIMAP_CARD := Vector3(8.49, 0.0, -8.49)
+const MINIMAP_THIEF := Vector3(-18.0, 0.0, 0.0)
+const MINIMAP_MATE := Vector3(0.0, 0.0, 8.0)
+## The card the loose blip carries and the one the thief is holding. Two
+## different letters, so a map that drew one blip twice would read as a PASS on
+## the counts and a FAIL on the picture.
+const MINIMAP_LOOSE_LETTER := MatchState.LETTER_B
+const MINIMAP_HELD_LETTER := MatchState.LETTER_O
+
+## Which card the `tutorial` mode photographs. The third — the capture
+## performance — because it is the only one of the six with a pouch, a sunburst
+## and a HUD lamp in it, so a frame of it exercises every primitive the other
+## five are drawn from.
+const TUTORIAL_CARD := 2
 
 ## `reload_timer`'s recharge, and how far the printed seconds may sit from the
 ## real remaining time. A tenth is the task's own tolerance and is also what the
@@ -184,6 +224,12 @@ func _stage() -> void:
 		"controls":
 			_stage_kills()
 			_run_controls()
+		"minimap":
+			_stage_kills()
+			_run_minimap()
+		"tutorial":
+			_stage_kills()
+			_run_tutorial()
 		"range", "range_kill":
 			_stage_kills()
 			_run_range()
@@ -343,12 +389,18 @@ func _stock_the_bar() -> void:
 
 ## Collect a letter card for real, and then stand there holding it.
 ##
-## The card comes out of an actual death with `letter_drop_chance` forced to 1
-## so the roll cannot come up a shield, and it is claimed by the player's own
-## body walking into the `Pickup` area. That is the same chain
+## The card comes out of an actual death and is claimed by the player's own body
+## walking into the `Pickup` area. That is the same chain
 ## `tools/combat_range.gd letter` exercises, and it is why neither of them
 ## writes into `MatchState._letter_holds` by hand: a hold staged directly would
 ## draw identically and would prove nothing about the thing being drawn.
+##
+## **There is no dial to force any more** (the letters round). This used to set
+## `letter_drop_chance` to 1 so the roll could not come up a shield; the roll is
+## gone with the field, because a death in a LETTERS match with no letter in
+## play now drops the next one as the *whole* drop. The first kill here is
+## therefore a certainty rather than a very likely thing, which is a better
+## harness for free.
 func _stage_hold() -> void:
 	var player := MatchState.local_bog()
 	var victim := _a_dummy()
@@ -357,7 +409,6 @@ func _stage_hold() -> void:
 	if MatchState.phase != MatchState.Phase.PLAYING:
 		push_warning("hud_range: nothing to hold — the match has not started yet")
 		return
-	Net.config.letter_drop_chance = 1.0
 	# The drop lands where the blow struck rather than at the body, so the card
 	# can be put down in front of the player without moving anybody.
 	MatchState.report_kill(victim, Net.local_id(), Bog.Cause.SPEAR,
@@ -489,6 +540,12 @@ const CONTROL_RETIRED := ["throw_spear", "draw_bow", "swing_sword"]
 ## * no two of them share a key, which is the check that was missing;
 ## * and the three actions D-070 retired are gone rather than orphaned.
 func _run_controls() -> void:
+	# **The project's map, not this machine's.** Since the key-binding round,
+	# `Settings` puts the player's saved binds on the live `InputMap` at startup
+	# — so without this line the check below would be marking somebody's own
+	# choices, and a player who deliberately put two things on one key would
+	# fail a gate about the defaults on their own machine.
+	InputMap.load_from_project_settings()
 	var failures := PackedStringArray()
 	var owner_of := {}
 
@@ -548,6 +605,186 @@ func _control_key(event: InputEvent) -> String:
 	if event is InputEventMouseButton:
 		return "mouse %d" % (event as InputEventMouseButton).button_index
 	return ""
+
+
+# ----------------------------------------------------------------- the map ---
+
+## The corner map, **counted rather than photographed** (the letters round).
+##
+## Three blips of three different kinds are staged at three measured bearings
+## and the verdict is read off `Minimap.debug_counts()`. Read off the map's own
+## gather and not off the picture on purpose: the thing that can go wrong here
+## is a rule — an enemy with no letter drawn, an ally drawn in a free-for-all,
+## a card counted that is past the rim — and every one of those is a *number*
+## that a 180 px circle scaled into a screenshot cannot be interrogated for.
+## The picture is still worth taking, and this mode takes one; it just is not
+## what the gate is asserting.
+##
+## Played as Teams, because a teammate does not exist in a free-for-all — see
+## `TEAM_LETTER_MODES`.
+func _run_minimap() -> void:
+	var map := _hud.get_node_or_null("%Minimap") as Minimap
+	var player := MatchState.local_bog()
+	if map == null or player == null:
+		print("hud_range: no minimap or local Bog - minimap FAIL")
+		return
+	var crew := _dummies()
+	if crew.size() < 2:
+		print("hud_range: %d dummy Bogs on the range, the map needs 2 - minimap FAIL"
+			% crew.size())
+		return
+
+	var my_team := Net.player_team(Net.local_id())
+	var origin := player.global_position
+	var mate: int = crew[0]
+	var thief: int = crew[1]
+	Net.players[mate]["team"] = my_team
+	Net.players[thief]["team"] = 1 - my_team
+	Net.roster_changed.emit()
+	_stand(mate, origin + MINIMAP_MATE)
+	_stand(thief, origin + MINIMAP_THIEF)
+	# A real hold row through the real local apply, so `letter_carriers()` and
+	# `letter_hold_letter()` answer exactly the way they do in a match.
+	MatchState._do_begin_hold(thief, MINIMAP_HELD_LETTER, Net.config.letter_hold_time)
+	# And one card on the ground, put there by hand. For once that is the
+	# honest way round and it is worth saying why, because everything else in
+	# this file goes the long way: `place_pickup` refuses a letter by design (a
+	# card from outside the drop table is D-033's economy broken by a map), the
+	# *map* is what is under test, and a blip cannot tell how its card arrived.
+	# A **hold** is the one thing this file still will not stage by hand,
+	# because a hold has a clock and a clock is a thing that can be wrong.
+	MatchState._spawn_drop(Pickup.Kind.LETTER, MINIMAP_LOOSE_LETTER,
+		origin + MINIMAP_CARD)
+
+	await RenderingServer.frame_pre_draw
+	await RenderingServer.frame_pre_draw
+	map.refresh()
+	var counts := map.debug_counts()
+
+	var failures := PackedStringArray()
+	for row: Array in [["allies", 1], ["letters", 1], ["carriers", 1]]:
+		if int(counts.get(row[0], -1)) != int(row[1]):
+			failures.append("%s read %d, wanted %d"
+				% [row[0], int(counts.get(row[0], -1)), int(row[1])])
+	if not map.visible:
+		failures.append("the map is hidden in a B·O·G match")
+	if not MatchConfig.is_bog(Net.config.win_condition):
+		failures.append("the win condition is not B·O·G")
+	for line: String in failures:
+		print("  " + line)
+	print("hud_range: minimap allies=%d letters=%d carriers=%d %s"
+		% [int(counts.get("allies", -1)), int(counts.get("letters", -1)),
+			int(counts.get("carriers", -1)),
+			"PASS" if failures.is_empty() else "FAIL"])
+
+
+## Stand a dummy on a spot and leave it there.
+##
+## The velocity goes with the position: a Bog teleported sideways keeps last
+## frame's momentum and walks off its bearing while the shot is being composed,
+## which is the one way a staged geometry can drift between the count and the
+## photograph.
+func _stand(peer_id: int, at: Vector3) -> void:
+	var bog: Bog = MatchState.bogs.get(peer_id)
+	if not is_instance_valid(bog):
+		return
+	bog.global_position = at
+	bog.velocity = Vector3.ZERO
+
+
+## Every living Bog on the range but the player's own, in peer order. Found
+## rather than named, for `_a_dummy`'s reason: the combat range owns those ids
+## and a copy of them in this file is a second place to change.
+func _dummies() -> Array[int]:
+	var out: Array[int] = []
+	for peer_id: int in MatchState.bogs:
+		if peer_id == Net.local_id():
+			continue
+		var bog: Bog = MatchState.bogs[peer_id]
+		if is_instance_valid(bog) and bog.alive:
+			out.append(peer_id)
+	out.sort()
+	return out
+
+
+# ------------------------------------------------------------ the tutorial ---
+
+## HOW TO PLAY, opened over a running match (the letters round).
+##
+## The verdict is about the **flag** and not about the drawing. Six cards of
+## dots and dashed lines either look right or do not, and that is a question for
+## a screenshot; what no picture can show is whether the thing opens itself once
+## and then never again, which is the half of this feature that decides whether
+## anybody ever reads it. So `maybe_auto_open` is driven three times — unseen,
+## closed, seen — and the panel is only stood up for the camera afterwards.
+##
+## `tutorial_seen` is **put back** at the end. `Settings` writes to disk on
+## every change and the gate runs on somebody's own machine: a check that left
+## the flag true would have quietly decided that the owner never sees the thing
+## it is checking.
+func _run_tutorial() -> void:
+	var panel := TUTORIAL_SCENE.instantiate() as Tutorial
+	if panel == null:
+		print("hud_range: tutorial.tscn is not a Tutorial - tutorial FAIL")
+		return
+	add_child(panel)
+
+	var failures := PackedStringArray()
+	if Tutorial.CARDS.size() != 6:
+		failures.append("there are %d cards, wanted 6" % Tutorial.CARDS.size())
+
+	var was: Variant = Settings.get_value("tutorial_seen")
+	Settings.set_value("tutorial_seen", false)
+	panel.maybe_auto_open()
+	await RenderingServer.frame_pre_draw
+	if not panel.visible:
+		failures.append("maybe_auto_open left an unseen tutorial shut")
+	panel.close()
+	if not bool(Settings.get_value("tutorial_seen")):
+		failures.append("closing the tutorial did not mark it seen")
+	panel.maybe_auto_open()
+	if panel.visible:
+		failures.append("maybe_auto_open reopened a tutorial that was already seen")
+	Settings.set_value("tutorial_seen", was)
+
+	panel.open(TUTORIAL_CARD)
+	await RenderingServer.frame_pre_draw
+	await RenderingServer.frame_pre_draw
+	if not panel.visible:
+		failures.append("open() left the panel hidden")
+	var title := panel.get_node_or_null("%Title") as Label
+	var wanted := String(Tutorial.CARDS[TUTORIAL_CARD]["title"])
+	if title == null or not title.text.contains(wanted):
+		failures.append("card %d is titled \"%s\", wanted %s" % [TUTORIAL_CARD + 1,
+			"nothing" if title == null else title.text, wanted])
+
+	# **Every card is drawn**, one frame each, before the verdict. The first
+	# build shipped with this mode photographing card three only, and card two
+	# — the one with the scrolling dashed line — froze the lobby for the owner
+	# and a friend within minutes: a drawing loop whose step rounded to nothing.
+	# A card that never reaches its own `_draw` in the gate is a card nobody has
+	# looked at, so each one is opened, drawn, and its title read back.
+	for card in Tutorial.CARDS.size():
+		panel.open(card)
+		await RenderingServer.frame_pre_draw
+		await RenderingServer.frame_pre_draw
+		var card_title := panel.get_node_or_null("%Title") as Label
+		var card_wanted := String(Tutorial.CARDS[card]["title"])
+		if card_title == null or not card_title.text.contains(card_wanted):
+			failures.append("card %d drew as \"%s\", wanted %s" % [card + 1,
+				"nothing" if card_title == null else card_title.text, card_wanted])
+	panel.open(TUTORIAL_CARD)
+	await RenderingServer.frame_pre_draw
+
+	for line: String in failures:
+		print("  " + line)
+	if not failures.is_empty():
+		print("hud_range: tutorial FAIL")
+		return
+	print("hud_range: every one of the %d cards drew" % Tutorial.CARDS.size())
+	print("hud_range: %d cards, shown once and reopenable, standing on card %d"
+		% [Tutorial.CARDS.size(), TUTORIAL_CARD + 1])
+	print("hud_range: tutorial PASS")
 
 
 func _run_weapon_tiles() -> void:

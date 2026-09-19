@@ -19,7 +19,7 @@ extends Node
 ##   attribute an arrow to a peer without reaching inside it.
 ## - **Hits and kills** — `MatchState.hit_landed` and `player_killed`, which
 ##   already fire on every peer.
-## - **Target hits** — the boards, the gong and the orbs, straight into
+## - **Target hits** — the boards and the gong, straight into
 ##   `record_target_hit`. They count into the same weapon row as a hit on a Bog:
 ##   a throw is a throw.
 ##
@@ -198,7 +198,7 @@ func record_hit(peer_id: int, weapon: String, distance: float) -> void:
 	_credit(peer_id, weapon, distance)
 
 
-## Host only. A weapon landed on a board, the gong or an orb. The same row as a
+## Host only. A weapon landed on a board or on the gong. The same row as a
 ## hit on a Bog, plus the points the target is worth.
 func record_target_hit(peer_id: int, cause: int, points: int,
 		distance: float) -> void:

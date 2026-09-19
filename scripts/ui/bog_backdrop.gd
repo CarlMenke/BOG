@@ -39,17 +39,23 @@ enum Formation { HERO, RING }
 @export var glade_seed: int = 40219
 ## Radius of the arc the Bogs stand on, in metres.
 ##
-## **3.0, down from 4.0, and the arc with it** — see `FRAMING`. The pair is one
-## number as far as the lobby is concerned: what they decide together is how
-## wide on screen eight Bogs and their nameplates are, and that has to fit
-## between the roster column and the match rail rather than behind them.
+## **4.0 -> 3.0 -> 3.5, and the arc and the eye with it** — see `FRAMING`. The
+## three are one number as far as the lobby is concerned: what they decide
+## together is how wide on screen eight Bogs and their nameplates are, and that
+## has to fit between the roster column and the match rail rather than behind
+## them. The last move is the owner's, to stand the ring back off the fire so
+## the letters have air around them; the eye went back 18 per cent to pay for
+## the width it cost.
 @export var ring_radius: float = 3.5
 ## How much of the circle they occupy. They fill the *far* arc, so the near side
 ## stays open and the camera looks into the group rather than at its backs.
 ##
-## 98, down from 150. Eight Bogs at 3.0 m over 98 degrees stand 0.73 m apart,
-## which is a hand's width of air between shoulders — tighter than the old
-## 1.05 m and still a ring rather than a queue.
+## 98, down from 150. Eight Bogs over 98 degrees stand 0.73 m apart at a 3.0 m
+## radius and 0.85 m at the 3.5 m they stand on now — a hand's width of air
+## between shoulders either way, tighter than the old 1.05 m and still a ring
+## rather than a queue. It is left alone when the radius moves, on purpose: the
+## arc is what decides whether this is a group or a line-up, and the width on
+## screen is `FRAMING[RING]`'s eye to answer.
 @export_range(40.0, 300.0) var ring_arc_degrees: float = 98.0
 
 ## Trees and undergrowth, by how far out they sit. Pines read as silhouette at
@@ -69,13 +75,49 @@ const FLOOR_DRESSING := ["Mushroom_Common", "Rock_Medium_1", "Rock_Medium_2",
 ## into the upper third of the screen — the only band of a lobby that is not
 ## covered in panels.
 ##
-## **HERO is a long lens on purpose.** The Bog stands on the far side of the
-## fire, so the fire is nearer the camera than he is and is therefore drawn
-## larger than life by any wide lens — at 42 degrees from 4.5 m the flame was
-## the subject and he was the thing behind it. Pulling the eye back to 6.7 m and
-## closing down to 24 brings the two distances within ten per cent of each
-## other, which is what puts the fire at his feet instead of across his chest.
-## It flattens him, and a hero shot is the one place that is a gift.
+## **HERO is a long lens on purpose.** The fire and the Bog are within a metre
+## of each other in depth, and a wide lens draws the nearer of two such things
+## larger than life — at 42 degrees from 4.5 m the flame was the subject and he
+## was the thing behind it. 24 degrees from 7.5 m brings the two distances
+## within five per cent of each other, which is what puts the fire beside him
+## instead of across his chest. It flattens him, and a hero shot is the one
+## place that is a gift.
+##
+## **HERO was re-aimed for the letters** (the owner: *"the campfire should be
+## moved to the left in the menu and the BOG hovers above it"*). The fire is no
+## longer the centre of the picture; the fire, the three letter cards over it
+## and the Bog beside it are, and they are arranged left to right in that
+## order. Three numbers moved together, and the reason each one is what it is:
+##
+##   eye  (3.60, 2.15, 5.70) -> (3.90, 2.20, 6.15)
+##   look (-1.01, 0.87, -1.20) -> (1.54, 0.83, 0.25)
+##   the hero slot (-0.46, 0, -2.00) -> (1.72, 0, -0.69) -> (1.86, 0, -1.28)
+##
+## The eye goes back 7 per cent because the hero left the far side of the fire
+## and came round beside it: at the old distance he stood 7.0 m from the lens
+## instead of 9.0 and was drawn a third larger, and a third larger is a Bog
+## with his antennae off the top of the frame. The `look` slides right and up
+## because aiming right moves the *picture* left — `_portrait_view` spells that
+## trick out — and everything here has to move left to leave the right third
+## for him.
+##
+## **Measured through the lens, not solved on paper.** The block that used to be
+## here was hand-projected arithmetic and the hero's box in it was wrong by
+## thirty pixels a side, because it carried a capsule radius the Bog does not
+## have. So every number below is now a line `tools/ui_range.gd`'s
+## `menu_letters` mode printed, and the mode prints them on every run so they
+## cannot quietly rot. At the 1600x900 base viewport, before and after the hero
+## stepped right and back:
+##
+##   B  x 104..261    O  x 317..502    G  x 563..696     all  y 116..383
+##   the row          x 104..696, y 116..383
+##   the hero capsule x 838..1067, y 116..632   ->   x 930..1149, y 108..593
+##
+## That is 234 px of clear air between the wordmark and the Bog, up from 142;
+## the row inside the frame's upper-left quadrant with a 104 px margin off the
+## left edge (the `Quip` under it starts at 112, so the two share an edge); and
+## the Bog's feet at y 593, which is 171 px clear of the button bar at y 764,
+## up from 132. Nothing the player can press is standing in front of anybody.
 ##
 ## `clear_radius` is the hole in the middle of the scatter. In RING it has to
 ## be wider than the ring itself: the first version planted boulders at three
@@ -94,13 +136,13 @@ const FLOOR_DRESSING := ["Mushroom_Common", "Rock_Medium_1", "Rock_Medium_2",
 ## amount, and the two stay matched with nothing to tune.
 const FRAMING := {
 	Formation.HERO: {
-		"eye": Vector3(3.60, 2.15, 5.70),
-		"look": Vector3(-1.01, 0.87, -1.20),
+		"eye": Vector3(3.90, 2.20, 6.15),
+		"look": Vector3(1.54, 0.83, 0.25),
 		"fov": 24.0,
 		"clear_radius": 2.6,
 	},
 	Formation.RING: {
-		"eye": Vector3(0.0, 3.71, 9.95),
+		"eye": Vector3(-0.03, 4.25, 11.74),
 		"look": Vector3(0.18, 0.70, 0.0),
 		"fov": 36.0,
 		"clear_radius": 5.6,
@@ -119,15 +161,32 @@ const FRAMING := {
 ## Three numbers were moved together to fit it, and *not* the panels, because the
 ## panels are the sizes the layout was chosen at:
 ##
-##   ring_radius        4.0  ->  3.0     narrower, and nearer the fire
-##   ring_arc_degrees   150  ->   98     the ends come round out of the corners
-##   eye                (0, 3.10, 8.20) -> (0, 3.71, 9.95)
+##   ring_radius        4.0  ->  3.0  ->  3.5    the ring stood back off the fire
+##   ring_arc_degrees   150  ->   98            the ends come round out of the corners
+##   eye  (0, 3.10, 8.20) -> (0, 3.71, 9.95) -> (-0.03, 4.25, 11.74)
 ##
 ## The arc and the radius are what buy the width back *without* shrinking a Bog:
 ## the group's world span goes 9.1 m to 6.4 m, so the eye only has to come back
 ## from 8.7 m to 10.6 m rather than the 70% further a pull-back alone would have
 ## needed. A Bog loses about a fifth of its height on screen and keeps a face
 ## twice the size of the name over it.
+##
+## **Then the radius went to 3.5 and put the ring back outside the band.** The
+## owner stood the group off the fire so the letters have air around them, and
+## widening the circle by a sixth widened the picture by the same sixth: the
+## measurement below went from 409..1137 to **370..1172**, which is 30 px over
+## the roster column at one end and 32 px behind the match rail at the other.
+##
+## The radius is the owner's and the panels are the layout's, so the third
+## number is the one that moved: the eye goes back **18 per cent** along its own
+## eye->look line, from 10.4 m to 12.3 m, which is `(-0.03, 4.25, 11.74)`. That
+## is a 689 px span inside a 740 px band with 31 px of margin at the left and
+## 20 px at the right, and it costs 13 per cent of a Bog's height on screen. The
+## alternative was to close `ring_arc_degrees` to about 81, which would have
+## held the span at the same size with no pull-back at all — and was not taken,
+## because at 3.5 m an 81-degree arc stands eight Bogs 0.70 m apart with their
+## shoulders touching, and a ring the owner widened to get air in it is not a
+## ring to take the air back out of.
 ##
 ## The `look` carries an **x of 0.18**, which is the other half of "inside the
 ## band". The band's centre is 770 and the screen's is 800, because the rail
@@ -143,7 +202,8 @@ const FRAMING := {
 ## prints the box. Eight Bogs all called "Bramblewick", which is the widest name
 ## the range carries:
 ##
-##   ring of 8: x 409.0 .. 1137.0, plate top 228.5      band is 400 .. 1140
+##   ring of 8: x 431.2 .. 1120.3, plate top 204.0      band is 400 .. 1140
+##   ring of 5: x 431.2 .. 1120.3, plate top 201.7      names below y 100
 ##
 ## A five-Bog ring (`lobby_teams`) reads identically — the arc's *ends* do not
 ## move with the count, so the span is the same and only the spacing opens up —
@@ -298,8 +358,70 @@ const CAMERA_CLEARANCE := 6.0
 const FIRE_ENERGY := 3.0
 const FIRE_FLICKER := 0.22
 
+## **The moon, over the viewer's shoulder.** The owner: *"for the lobby and the
+## main menu, there should be some faint moon lighting coming from above the
+## camera, currently it's just tough with the one main center light that is
+## really orange. This new moon lighting should be about 1/3 the strength of
+## the campfire lighting."*
+##
+## The colour is the island's own moon (`Arena.MOON_COLOR`), so the menu and the
+## match are lit by one night and retuning either retunes both — the same
+## argument that has this scene loading `arena_env.tres` rather than an
+## environment of its own (D-009).
+##
+## **The direction is computed, not written down**, because there are two
+## cameras and "above the camera" is a different bearing for each: see
+## `_moon_direction`. It replaces a moon that pointed at the island's fixed
+## `(-0.42, 0.38, -0.82)` — in front of the lens and to the left, which is the
+## one place a fill light cannot reach a face that is turned toward the lens.
+const MOON_COLOR := Color(0.62, 0.72, 1.0)
+
+## How far the moon is tipped down from the horizon, in degrees.
+##
+## 52. Under about 40 the light skims the ground and the Bogs' own shadows run
+## the length of the glade toward the camera; over about 60 it is a toplight and
+## the eye sockets go dark, which is the one thing a fill light is here to stop.
+## At 52 the terminator on a Bog's head sits just under the antennae, the nose
+## casts nothing, and the ground in front of the group picks up enough blue to
+## read as ground rather than as the edge of the firelight.
+const MOON_PITCH_DEGREES := 52.0
+
+## The moon's **directional** energy, and it is not the fire's number over three.
+##
+## "A third of the campfire" is a ratio between two lights measured in different
+## units: the fire is an `OmniLight3D` at energy 3.0 with a 1.6 falloff over an
+## 11 m range, so what actually lands on a body depends on how far away it is
+## standing, and the directional moon lands the same everywhere. The only honest
+## comparison is the one on screen, so it was taken there. The menu was rendered
+## three times with the flicker held at zero — fire alone, moon alone at energy
+## 1.0, and both lights off — and a 90x115 px patch of the hero Bog's belly was
+## averaged in each, converted out of sRGB to linear and weighted to luma. The
+## third pass is the sky ambient, and it is subtracted from the other two so
+## what is compared is what each *light* put on him:
+##
+##   both lights off (sky ambient alone)   0.00006 linear luma
+##   the fire alone, over ambient          0.05105
+##   the moon at energy 1.0, over ambient  0.03797
+##
+## So a third of the fire on the body is `0.05105 / 3 / 0.03797` = **0.448**, and
+## that is where 0.45 comes from rather than from 3.0 over three. The same table
+## says what the neighbours would be: 0.30 is 0.22 of the fire and 0.60 is 0.45.
+## 0.30 was rendered as well and it is a good picture — warmer, a shade more
+## night — but the owner asked for a third and a third is 0.45, so this is the
+## number and that render is the one to go back to if the glade ever reads as an
+## overcast afternoon with a bonfire in it.
+##
+## Two things the ratio does not say, and both are why this looks like a bigger
+## change than a third: the moon arrives from behind the lens, so it lands on
+## every surface the camera can see and the fire only rakes the near side of
+## them; and the glade beyond the fire's 11 m had no direct light at all before,
+## so the treeline goes from ambient-only to lit. The fire is still the key on
+## the subject by three to one, which is what was asked for.
+const MOON_ENERGY := 0.45
+
 var _camera: Camera3D
 var _fire: OmniLight3D
+var _letters: MenuLetters
 var _bog_root: Node3D
 var _bogs: Array[Bog] = []
 ## `[{name, team, weapon}, ...]`, in the order they should stand.
@@ -329,9 +451,11 @@ var _plate_home: float = -1.0
 
 func _ready() -> void:
 	_build_environment()
+	_build_moon()
 	_build_ground()
 	_build_glade()
 	_build_fire()
+	_build_letters()
 
 	_bog_root = Node3D.new()
 	_bog_root.name = "Bogs"
@@ -482,26 +606,54 @@ func _equip(bog: Bog, weapon: int) -> void:
 
 func _slot_transform(index: int, count: int) -> Transform3D:
 	if formation == Formation.HERO or count <= 1:
-		# Stood on the *far* side of the fire from the camera, facing back across
-		# it. The fire is then between him and the lens, which is the whole of
-		# the lighting: it is the only warm source in the glade, so whichever
-		# side of it he stands on is the side that gets a face. He used to stand
-		# in front of it and be a silhouette with a rim on it — handsome, and a
-		# menu whose subject you could not actually see. Turned four degrees off
-		# the camera, into the frame, so the pose reads as three-quarter rather
-		# than as a mugshot.
+		# **Beside the fire, not behind it**, which is the composition the owner
+		# picked for the letters round: fire centre-left with B·O·G floating
+		# over it, and the Bog standing to its right lit from the side.
 		#
-		# Four, and not the eleven and a half it used to be. From this spot the
-		# lens is at `yaw_towards(FRAMING[HERO].eye - here)` = 208.5 degrees, and
-		# the old 197 was far enough off it to read as a Bog looking past you
-		# rather than at you — at 24 degrees of field of view there is very
-		# little frame left for him to be looking *into*. Four is still a
-		# three-quarter, and it is his eyeline that carries it now.
+		# He used to stand 2.05 m *beyond* the flame, facing back across it, so
+		# that the only warm source in the glade was square in his face. That
+		# was the right answer while the fire was the centre of the picture; it
+		# is the wrong one now, because the letters own the space over the fire
+		# and a Bog behind them is a Bog with a wordmark across his chest. So
+		# he comes round the flame instead of over it.
 		#
-		# 2.05 m out. It used to be 1.65, which was as close to the flame as the
-		# pose survives; a little further back reads as standing at a fire rather
-		# than over it, and the light still reaches him.
-		return Transform3D(Basis(Vector3.UP, deg_to_rad(204.5)), Vector3(-0.46, 0.0, -2.00))
+		# Along the **camera's own right** — which is what "beside" means once
+		# the lens is off-axis. The same distance straight out along +X would
+		# walk him toward the lens as well, and that costs twice: he is drawn
+		# larger and his feet drop toward the button bar. The camera's right is
+		# the one direction that buys separation in the *frame* rather than
+		# separation in some other direction.
+		#
+		# **2.20 m right and 0.50 m back**, from 1.85 and 0. The owner: *"the
+		# BOG body in main menu needs to be moved over to the right a little
+		# more"* and *"also back the BOG away from the camera a little bit as
+		# well."* Both are one step along a camera axis, so both are solved the
+		# same way and land at `2.20 * right + 0.50 * forward`, which is
+		# `(1.86, 0, -1.28)` in the glade. Measured through the lens by
+		# `ui_range menu_letters`, and this is what the two moves bought:
+		#
+		#   the hero capsule  x 807..1093 -> 894..1163,  y 108..676 -> 128..663
+		#   air to the wordmark    112 px -> 199 px
+		#   his feet          y 632 (0.702 down) -> y 593 (0.659)
+		#
+		# The 0.50 m back is 6.7 per cent more distance, so he is drawn 6 per
+		# cent smaller and his feet rise 39 px — 171 px of clearance over the
+		# button bar at 764 now, up from 132. It also takes the fire from 1.85 m
+		# to 2.26 m off him, which is a quarter less key on the body; the moon
+		# arriving over the camera's shoulder is what pays that back, and the
+		# two changes landed together for that reason.
+		#
+		# **177.7 degrees**, and it is two numbers, re-solved for the new spot
+		# because the rule is a rule and not an angle. From here the lens bears
+		# 195.4 and the flame bears 124.5 — 71 degrees apart, down from 86,
+		# because stepping back off a fire closes the angle between it and the
+		# lens — and this is a quarter of that turn off the lens, toward the
+		# flame. A quarter is the whole of the lighting: the key then lands 53
+		# degrees off his facing, on the far cheek from the lens, which is a
+		# short-side key and is why the face has a shadow side at all. Square to
+		# the camera it would be flat, and turned the other way the fire would
+		# be lighting the side we can already see.
+		return Transform3D(Basis(Vector3.UP, deg_to_rad(177.7)), Vector3(1.86, 0.0, -1.28))
 
 	# Fill the far arc, centred on the back of the ring. One Bog is at the
 	# middle of the arc, two straddle it, and so on outward.
@@ -562,6 +714,7 @@ func focus_on_local(on: bool) -> void:
 	_focused = on
 	_refresh_plates()
 	_refresh_bogs()
+	_refresh_letters()
 	_apply_view(_focus_view(), FOCUS_SECONDS)
 
 
@@ -611,6 +764,17 @@ func _bog_wanted(index: int) -> bool:
 func _refresh_bogs() -> void:
 	for i in _bogs.size():
 		_bogs[i].visible = _bog_wanted(i)
+
+
+## The wordmark is not in the portrait either, and for `_bog_wanted`'s reason
+## one step further on. The page is a picture of **one body**: the ring goes,
+## the subject's own nameplate goes, and three glowing letters hanging over the
+## fire behind his ear are the same kind of thing — scenery that belongs to the
+## room rather than to the Bog being dressed. They come straight back when the
+## page closes, because nothing was moved, only hidden.
+func _refresh_letters() -> void:
+	if _letters != null:
+		_letters.visible = not _focused
 
 
 ## How high above its own Bog this slot's nameplate hangs. See `PLATE_RANKS`.
@@ -777,16 +941,75 @@ func _build_environment() -> void:
 	env.environment = load("res://resources/config/arena_env.tres")
 	add_child(env)
 
-	# The sky draws its moon at LIGHT0's direction, so this light *is* the moon.
-	# Direction, colour and energy are the handoff values from D-009: fill only,
-	# because the fire is the key light.
+
+## Where the moon hangs, as a unit vector **pointing at it** from the glade —
+## the island's convention (`Arena.MOON_DIRECTION`), so the two read the same
+## way round.
+##
+## Behind the camera and above it, which is the whole of the owner's note. The
+## camera's own forward is flattened to the ground plane first and then the
+## vector is tipped back up by `MOON_PITCH_DEGREES`: flattening is what makes
+## this one rule rather than two, because the menu lens is 12 degrees down and
+## the lobby's is 17, and a moon derived from the unflattened forward would sit
+## five degrees lower over the lobby for no reason anybody could see.
+##
+## It is per formation and not one number because the two cameras do not share a
+## bearing: the menu looks north-west across the fire at the hero, the lobby
+## looks north at the ring. One fixed direction is "over the shoulder" for at
+## most one of them, and for the other it is a sidelight.
+##
+## **The sky's moon disc follows this** (`arena_sky.tres` has
+## `moon_follow_light`), so re-aiming the light moves the disc — and out of
+## shot, which is where it already was. The disc sits 52 degrees up; the menu
+## frame reaches 0 degrees above the horizon and the lobby's 1.2, so neither
+## camera has ever seen it. What does change is the radiance cubemap the ambient
+## is read from, by the small amount a 0.038-radian disc moving across a night
+## sky is worth.
+func _moon_direction() -> Vector3:
+	var eye: Vector3 = FRAMING[formation]["eye"]
+	var look: Vector3 = FRAMING[formation]["look"]
+	var ahead := Vector3(look.x - eye.x, 0.0, look.z - eye.z)
+	if ahead.length_squared() < 0.0001:
+		ahead = Vector3.FORWARD
+	ahead = ahead.normalized()
+	var pitch := deg_to_rad(MOON_PITCH_DEGREES)
+	return (-ahead * cos(pitch) + Vector3.UP * sin(pitch)).normalized()
+
+
+## The fill light, and the only cool one: a moon over the viewer's shoulder.
+##
+## **Placed and then aimed**, rather than given a rotation, for the reason
+## `Arena._build_environment` gives: the sky shader reads LIGHT0's *direction*
+## and draws its moon there, so a rotation set by hand and a direction written
+## in a constant are two claims that can disagree. Standing the node on the
+## vector and telling it to look at the origin leaves exactly one claim.
+func _build_moon() -> void:
 	var moon := DirectionalLight3D.new()
 	moon.name = "Moon"
-	moon.light_color = Color(0.62, 0.72, 1.0)
-	moon.light_energy = 0.30
-	moon.shadow_enabled = true
-	moon.look_at_from_position(Vector3.ZERO, -Vector3(-0.42, 0.38, -0.82), Vector3.UP)
 	add_child(moon)
+	moon.position = _moon_direction() * 80.0
+	moon.look_at(Vector3.ZERO, Vector3.UP)
+	moon.light_color = MOON_COLOR
+	moon.light_energy = MOON_ENERGY
+	# Low, and lower than the island's 0.35. Moonlight on a damp Bog reads as a
+	# wet highlight the moment the specular term is allowed to compete with the
+	# fire's, and a wet hero is a plastic hero. 0.2 keeps a rim on the antennae
+	# and gives up the cheek.
+	moon.light_specular = 0.2
+	moon.shadow_enabled = true
+	# The whole glade is 26 m across and the subject is inside 4 m of the fire,
+	# so a 90 m shadow range spends its map on trees. At 40 m the Bogs' own
+	# shadows are the crisp thing and the treeline is the soft thing, which is
+	# the right way round.
+	moon.directional_shadow_max_distance = 40.0
+	moon.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+	# Softened, because this is a fill: a hard-edged second shadow crossing the
+	# fire's would say there are two suns.
+	moon.shadow_blur = 1.6
+	# Half the island's, for the same reason the energy is what it is: the fire
+	# owns the halo in the fog here (`_build_fire` sets 2.0) and a moon that
+	# lights the mist as strongly turns the glade's air grey.
+	moon.light_volumetric_fog_energy = 0.5
 
 
 func _build_ground() -> void:
@@ -904,6 +1127,46 @@ func _build_fire() -> void:
 	_fire.light_volumetric_fog_energy = 2.0
 	_fire.position = Vector3(0.0, 0.55, 0.0)
 	pit.add_child(_fire)
+
+
+## B·O·G floating over the fire, on the fire (D-098: one home per concern —
+## the rig knows how to be three letters and nothing about where a fire is).
+##
+## **A child of `Fire`, so it cannot drift off it.** The whole point of the
+## arrangement is that the letters hover over the flame; parented to the pit,
+## moving the fire moves them, and there is no second position to keep in step.
+## It also means `HOVER_HEIGHT` is height over the *fire*, which is the number
+## anybody looking at the screen would measure.
+##
+## The rig is turned to wear the camera's own yaw, which lies the row flat in
+## the image plane. Facing the eye point instead would be the obvious thing and
+## it is wrong by ten degrees here, because the lens is aimed to the right of
+## the fire rather than at it: the row would run away from the camera and the B
+## would be drawn 13 per cent smaller than the G. Three letters of a wordmark
+## at three sizes is a wordmark nobody drew.
+func _build_letters() -> void:
+	var pit := get_node_or_null("Fire") as Node3D
+	if pit == null:
+		return
+	var eye: Vector3 = FRAMING[formation]["eye"]
+	var look: Vector3 = FRAMING[formation]["look"]
+	_letters = MenuLetters.new()
+	_letters.name = "MenuLetters"
+	# Before `add_child`, so `MenuLetters._build` measures its glyph widths
+	# along the row it is actually going to stand on.
+	_letters.rotation.y = Bog.yaw_towards(
+		Vector3(look.x - eye.x, 0.0, look.z - eye.z))
+	pit.add_child(_letters)
+
+
+## Send the letters out of the top of frame and come back when the last one has
+## gone; `Lobby._on_match_start` awaits this before the scene changes, on every
+## peer. A backdrop with no rig returns at once rather than making the caller
+## think about it.
+func letters_leave() -> void:
+	if _letters == null:
+		return
+	await _letters.leave()
 
 
 func _add_flame_cone(parent: Node3D, radius: float, height: float, centre_y: float,

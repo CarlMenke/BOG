@@ -19,6 +19,19 @@ extends Node3D
 ## `claim_pickup` — so the feed rows and the markers come from the signals a
 ## match fires, not from this file calling the feed.
 ##
+## **Teams here is Teams *plus the collect race*, which the lobby no longer
+## offers**, and that is deliberate rather than stale. Since the letters round
+## there is one B·O·G whose flavour the mode picks, so a Teams match a player
+## can start is Capture (`MatchConfig._clamp_all`) — but the clamp only runs on
+## a config that arrives through `apply_dict`, and this file writes `Net.config`
+## straight, exactly as `match_rules` does. What that buys is the one thing a
+## Capture carry cannot show: a **timed** hold with teammates in the room, which
+## is where the duplicate rule (D-049) and the countdown marker (D-050) both
+## live. Both are live code — Capture reaches the first through `award_letter`
+## — and this is the only harness that watches either of them on a screen.
+##
+## The `ffa` run is the shipping Free-for-all flavour and needs no such note.
+##
 ## What it asserts (both modes):
 ##   duplicate — a card for a letter already banked is consumed on touch, starts
 ##               no hold, adds no feed row and raises no marker.
@@ -144,8 +157,13 @@ func _pick_up() -> void:
 		"top row is '%s'" % _top_row())
 
 	# ...and then walks over a second B, which is a duplicate: wasted on touch.
-	var before := _feed.get_child_count()
+	#
+	# `before` is read *after* the card lands and before it is claimed: a card
+	# appearing is news of its own since the letters round (`letter_appeared`
+	# puts "B appeared" in the feed), and what this row count is about is the
+	# duplicate — the touch that consumes it has to add nothing.
 	var dupe := MatchState._spawn_drop(Pickup.Kind.LETTER, MatchState.LETTER_B, SPOTS[NEAR_ENEMY])
+	var before := _feed.get_child_count()
 	MatchState.claim_pickup(dupe, NEAR_ENEMY)
 	var bog := MatchState.bogs[NEAR_ENEMY] as Bog
 	_verdict("duplicate", not MatchState._pickups.has(dupe)

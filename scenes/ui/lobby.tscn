@@ -1,10 +1,11 @@
-[gd_scene load_steps=10 format=3 uid="uid://bgublobby0001"]
+[gd_scene load_steps=11 format=3 uid="uid://bgublobby0001"]
 
 [ext_resource type="Script" path="res://scripts/ui/lobby.gd" id="1_lobby"]
 [ext_resource type="Script" path="res://scripts/ui/bog_backdrop.gd" id="2_backdrop"]
 [ext_resource type="Theme" path="res://resources/ui/bog_theme.tres" id="3_theme"]
 [ext_resource type="PackedScene" path="res://scenes/ui/match_settings.tscn" id="4_settings"]
 [ext_resource type="PackedScene" path="res://scenes/ui/chat_panel.tscn" id="5_chat"]
+[ext_resource type="PackedScene" path="res://scenes/ui/tutorial.tscn" id="6_tutorial"]
 
 [sub_resource type="Gradient" id="Gradient_top"]
 offsets = PackedFloat32Array(0, 1)
@@ -365,3 +366,6 @@ layout_mode = 2
 theme_override_constants/h_separation = 10
 theme_override_constants/v_separation = 10
 columns = 3
+
+[node name="Tutorial" parent="UI/Root" instance=ExtResource("6_tutorial")]
+unique_name_in_owner = true

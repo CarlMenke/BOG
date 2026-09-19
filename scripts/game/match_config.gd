@@ -198,28 +198,20 @@ const TEAM_NONE := -1
 ## range wins: half a second is already a short fuse.
 @export_range(0.5, 5.0) var magnet_fuse: float = 0.5
 
-## How often a death drops a letter card instead of an ability, in the letters
-## win condition only. Everything else that falls out of a corpse is a shield
-## or a magnet, split evenly.
+## **The capture time**: how long a Bog stands with a letter card before the
+## letter is actually theirs, in the Free-for-all flavour of B·O·G. Touching the
+## card starts the capture; finishing it is what scores (D-035).
 ##
-## A lobby dial rather than a constant, because the honest arithmetic says this
-## default is probably too stingy and nobody should need a rebuild to find out.
-## Duplicates are wasted (D-033), so collecting three distinct letters is the
-## coupon-collector problem: 3·(1 + 1/2 + 1/3) ≈ 5.5 cards *into one pair of
-## hands*, and in a contested lobby most cards land in someone else's. At 0.08
-## that is hundreds of deaths. The number the user asked for is the number that
-## ships; the slider is how it gets corrected in five seconds instead of a
-## release.
-@export_range(0.0, 1.0) var letter_drop_chance: float = 0.08
-
-## How long a Bog has to hold a letter card up before the letter is actually
-## theirs. Touching the card starts the hold; finishing it is what scores
-## (D-035).
+## There is no drop-chance dial beside it any more, and that is what this number
+## now has to carry on its own. A letter no longer rolls out of a corpse at some
+## percentage: exactly one card is out at any moment, the next death puts the
+## next letter down, and so the only question left about a card is what it costs
+## to keep one. This is that question, which is why it is still a dial — ten
+## seconds standing still in the open is a long time, and the first real lobby is
+## the only thing that can say whether it is too long.
 ##
-## This is the whole tension of the letters mode and it is a dial rather than a
-## constant for the same reason `letter_drop_chance` is: ten seconds standing
-## still in the open is a long time, and the first real lobby is the only thing
-## that can say whether it is too long.
+## Teams does not read it. That flavour is Capture B·O·G, where a card is carried
+## rather than stood with, and what ends a carry is a vault and not a clock.
 ##
 ## **Zero is legal and means "grant it on touch"** — the mode without the hold,
 ## which is what it was before, and the setting to reach for if the hold turns
@@ -260,7 +252,7 @@ const TEAM_NONE := -1
 
 ## How often a death drops the Elder's robe, **in every mode**.
 ##
-## Unlike `letter_drop_chance` above, this is not gated on a win condition. The
+## Unlike the letter card, this is not gated on a win condition. The
 ## Elder is not a scoring mechanic — it is a weapon, and a weapon that only
 ## exists in one of four modes is a weapon nobody learns. So the robe rolls out
 ## of the same corpse in a kill-limit match as in a letters one (D-038).
@@ -443,7 +435,7 @@ const _FIELDS := [
 	"shield_use_delay", "shield_lifetime", "shield_max_active",
 	"magnet_use_delay", "magnet_radius", "magnet_hold",
 	"magnet_pull_strength", "magnet_fuse",
-	"letter_drop_chance", "letter_hold_time",
+	"letter_hold_time",
 	"capture_return_time", "capture_steal_time", "capture_carrier_speed",
 	"elder_drop_chance", "lightning_delay", "lightning_cooldown", "lightning_radius",
 	"potion_drop_chance", "heal_amount", "heal_channel",
@@ -529,9 +521,8 @@ func _clamp_all() -> void:
 	magnet_hold = clampf(magnet_hold, 0.2, 5.0)
 	magnet_pull_strength = clampf(magnet_pull_strength, 1.0, 60.0)
 	magnet_fuse = clampf(magnet_fuse, 0.5, 5.0)
-	letter_drop_chance = clampf(letter_drop_chance, 0.0, 1.0)
 	# Zero survives this on purpose — it is the "grant on touch" setting, not a
-	# value to be raised into a hold nobody asked for.
+	# value to be raised into a capture nobody asked for.
 	letter_hold_time = clampf(letter_hold_time, 0.0, 30.0)
 	capture_return_time = clampf(capture_return_time, 3.0, 60.0)
 	capture_steal_time = clampf(capture_steal_time, 1.0, 5.0)
@@ -559,14 +550,26 @@ func _clamp_all() -> void:
 	# mid-`_ready`, with no way to recover.
 	if not MapCatalog.is_valid(map):
 		map = MapCatalog.DEFAULT
-	# Capture B·O·G is a Teams mode by nature: a base belongs to a team, and a
-	# free-for-all has eight people and no bases (D-051). Forced here rather
-	# than refused, so every path into a config — the lobby, a peer's
-	# dictionary, a harness — comes out playable. The lobby does the reverse
-	# half itself: picking Free-for-all while this is selected moves the
-	# condition back to the kill limit (`MatchSettingsPanel._push`).
-	if win_condition == WinCondition.CAPTURE:
-		mode = Mode.TEAMS
+	# **There is one letters game, called B·O·G, and the mode decides its
+	# flavour.** Free-for-all is the collect race (D-033, D-035): one card out at
+	# a time, captured by standing with it. Teams is capture-the-flag (D-051,
+	# D-092): three cards at home points, carried into a vault. They are two
+	# ordinals because they are two sets of rules on the wire and the enum is
+	# append-only — but they are not two things a host picks between, which is
+	# why the lobby offers a single **B·O·G** entry and this decides which
+	# ordinal it means.
+	#
+	# Both halves are here rather than one here and one in the lobby. The panel
+	# used to own the Capture→Free-for-all direction (`MatchSettingsPanel._push`)
+	# because this function cannot tell which field was just changed — and it
+	# still cannot, but it no longer needs to: whichever of the two moved, the
+	# mode is the answer, so there is one rule instead of two halves that have to
+	# be kept facing each other. Every path into a config — the lobby, a peer's
+	# dictionary, a harness — comes out playable and comes out the same.
+	if win_condition == WinCondition.LETTERS and mode == Mode.TEAMS:
+		win_condition = WinCondition.CAPTURE
+	elif win_condition == WinCondition.CAPTURE and mode == Mode.FREE_FOR_ALL:
+		win_condition = WinCondition.LETTERS
 	# TIME_ONLY with no clock would never end.
 	if win_condition == WinCondition.TIME_ONLY and time_limit <= 0:
 		time_limit = 600
@@ -640,6 +643,17 @@ static func scores_letters(condition: int) -> bool:
 	return condition == WinCondition.LETTERS or condition == WinCondition.CAPTURE
 
 
+## The same question asked in the word the game now uses for it: **is this
+## B·O·G?** One game, two flavours, two ordinals on the wire — and everything
+## outside the rules themselves (the guide line, the minimap, the tutorial, the
+## HUD) wants the game and not the flavour. An alias rather than a rename
+## because `scores_letters` says something true about scoring that the lamps and
+## the ranking still ask, and one of the two names being the other's body means
+## they can never drift apart.
+static func is_bog(condition: int) -> bool:
+	return scores_letters(condition)
+
+
 ## Human-readable one-liner for the lobby header.
 func summary() -> String:
 	var parts: Array[String] = []
@@ -651,10 +665,12 @@ func summary() -> String:
 			parts.append("%d lives" % lives)
 		WinCondition.TIME_ONLY:
 			parts.append("timed")
-		WinCondition.LETTERS:
-			parts.append("Collect B·O·G")
-		WinCondition.CAPTURE:
-			parts.append("Capture B·O·G")
+		# One name for one game. The flavour is the mode, and the mode is
+		# already the first thing this line prints — "Free-for-all  ·  B·O·G"
+		# and "2 Teams  ·  B·O·G" say which of the two it is without the
+		# summary having to name it twice.
+		WinCondition.LETTERS, WinCondition.CAPTURE:
+			parts.append("B·O·G")
 	if time_limit > 0:
 		parts.append("%d:%02d" % [time_limit / 60, time_limit % 60])
 	if mode == Mode.TEAMS and random_teams:

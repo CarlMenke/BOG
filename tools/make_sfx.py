@@ -609,6 +609,86 @@ def range_plate():
     return body + grit * envelope(n, 0.001, 0.75, 6.0) * 0.55
 
 
+# ---------------------------------------------------------------- letters ---
+
+def letter_appears():
+    """A letter dropping into the world (the letters round).
+
+    Played in 2D on every machine the moment a card lands, because in the
+    free-for-all there is only ever **one** letter out at a time and the whole
+    race turns on everybody learning about it at the same instant. That is what
+    rules out everything percussive: a sound that arrives with an edge on it
+    reads as something happening *to you* — a hit taken, a spear landing — and
+    what this has to say is "look up".
+
+    So it is a bell with the strike taken off. Two partials a twelfth apart,
+    the upper one quieter and decaying first, over a 60 ms fade-in: no attack
+    transient at all, which is exactly what `range_orb` and `refill_chime`
+    argue for one screen up and is doubly right here, where the clip is played
+    flat in both ears rather than at a point in the world.
+
+    Inharmonic by a hair (1497 against a true 1494) so the two voices beat very
+    slowly against each other — the shimmer that says "struck metal" rather
+    than "sine wave", the same trick `range_gong` makes its whole living from.
+    """
+    n = seconds(0.9)
+    t = np.linspace(0.0, n / RATE, n)
+    # A twelfth, not an octave: an octave is the same note and reads as one
+    # voice, and the point of two is that the ear hears an object.
+    low = np.sin(2.0 * np.pi * 498.0 * t) * np.exp(-t * 2.6)
+    high = 0.45 * np.sin(2.0 * np.pi * 1497.0 * t) * np.exp(-t * 4.4)
+    tone = low + high
+    # The breath the bell sits on, and the reason there is one: two clean sines
+    # in a forest read as a menu sound. Low-passed to nothing above a whisper.
+    air = lowpass(noise(n, 7301), 700.0) * envelope(n, 0.20, 0.75, 2.0) * 0.14
+    # 60 ms in and a long fall. The attack is the whole decision.
+    return (tone + air) * envelope(n, 0.065, 0.80, 2.2)
+
+
+def letter_captured():
+    """A capture completing — the sunburst's chime (the letters round).
+
+    `letter_appears`'s answer, and deliberately the opposite shape of the same
+    material: that one is one bell fading in and this one is three notes
+    arriving. A capture is the payout at the end of ten seconds of standing in
+    the open with no weapon, and what the ear has to get from it is *finished*,
+    which a single tone cannot say — `refill_chime` makes the same argument
+    about a count and is why this is an arpeggio rather than a chord.
+
+    Brighter than the appearance by about an octave and shorter by a fifth, so
+    the pair read as a question and an answer rather than as two versions of
+    one sound. Played in 3D at the pouch, so unlike its sibling it is a thing
+    that happened *somewhere* and the people nearby can tell where.
+
+    The shimmer on the tail is what keeps it from sounding like a lift arriving:
+    two detuned voices sliding up and dying immediately, `range_orb`'s trick at
+    a tenth of its depth.
+    """
+    n = seconds(0.7)
+    t = np.linspace(0.0, n / RATE, n)
+    out = np.zeros(n)
+    # A major triad up again, an octave above `refill_chime`'s: the same
+    # "gained" the range's furniture says, said in the register the letters
+    # already own. Each voice enters a twelfth of the clip after the last, so
+    # the three are distinct and the whole figure is over in a third of it.
+    for i, freq in enumerate([1046.5, 1318.5, 1568.0]):
+        start = int(n * 0.085 * i)
+        m = n - start
+        u = np.linspace(0.0, m / RATE, m)
+        voice = np.zeros(n)
+        # A quiet second partial per note, so each one is a struck thing rather
+        # than a tone generator.
+        voice[start:] = (np.sin(2.0 * np.pi * freq * u)
+                         + 0.22 * np.sin(2.0 * np.pi * freq * 2.01 * u)) * np.exp(-u * 6.5)
+        out += voice * (1.0 - 0.18 * i)
+    shimmer = (sweep(n, 1800.0, 4200.0, 0.55) + 0.7 * sweep(n, 2350.0, 5300.0, 0.55))
+    out += shimmer * np.exp(-t * 11.0) * 0.16
+    # Gentle on the front for its sibling's reason — nothing about a prize
+    # should sound like an impact — but a third of the fade, because this one
+    # is confirming something that already happened.
+    return out * envelope(n, 0.020, 0.72, 2.4)
+
+
 def thunder_crack():
     """The Elder's bolt landing. The loudest thing in the game, on purpose.
 
@@ -686,6 +766,8 @@ EFFECTS = {
     "refill_chime": refill_chime,
     "rack_swap": rack_swap,
     "range_plate": range_plate,
+    "letter_appears": letter_appears,
+    "letter_captured": letter_captured,
     "thunder_crack": thunder_crack,
     "thunder_roll": thunder_roll,
 }

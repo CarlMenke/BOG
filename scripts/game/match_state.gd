@@ -92,6 +92,21 @@ signal steal_progress(peer_id: int, letter: int, from_team: int, done: float)
 ## because nobody did it.
 signal letter_dropped(peer_id: int, letter: int)
 signal letter_returned(letter: int)
+## A letter card has landed somewhere, on every peer, in **either** flavour of
+## B·O·G: rolled out of a corpse, re-dropped by a dead carrier, put out at a home
+## point, or stood on a vault.
+##
+## The one signal that fires wherever a card *appears*, whoever made it appear
+## and whatever it means. Everything that has to react to a card existing hangs
+## off it — the soft bell, the feed's "B appeared", the guide line's first look
+## at a new target — and none of those can be built out of the four event signals
+## above, because each of those is about one cause and a card has four.
+##
+## `at` is the world point the card was put at, carried rather than looked up,
+## because by the time a listener asks the `Pickup` for its position the node may
+## not have entered the tree yet: this fires from `_spawn_pickup`, which is the
+## same message that builds it.
+signal letter_appeared(letter: int, at: Vector3)
 ## One player has become, or stopped being, the Elder. Carries the peer for the
 ## same reason the two above do: `_elders` already holds the answer by the time
 ## this fires, and a signal carrying a copy of it is a copy waiting to disagree.
@@ -184,9 +199,18 @@ var _pickups: Dictionary = {}
 ## on the item that replaced the one it was about.
 var _next_pickup_id: int = 1
 
-## peer_id -> {letter: int, ends_at: float}, on every peer. A row exists exactly
-## while that Bog is holding a card up, which is what `is_holding_letter` asks
-## and what `BogCombat` gates the throw on (D-035).
+## peer_id -> {letter: int, ends_at: float, started_at: float, seconds: float},
+## on every peer. A row exists exactly while that Bog is holding a card up,
+## which is what `is_holding_letter` asks and what `BogCombat` gates the throw
+## on (D-035).
+##
+## `seconds` is what the hold was started with and is the one thing that says
+## which of the two kinds of hold this is: a finite number is a timed capture
+## (D-035) and `INF` is a Capture B·O·G carry (D-051). `letter_hold_is_timed`
+## is the only place that comparison is written down. With `started_at` it also
+## gives the capture performance a fraction from 0 to 1 that survives a host
+## dragging `letter_hold_time` mid-match, which `ends_at` against the dial does
+## not.
 ##
 ## `ends_at` is in local `_now()` seconds on whichever machine wrote it, so the
 ## host's row and a client's row for the same hold differ by the latency of one
@@ -197,6 +221,25 @@ var _next_pickup_id: int = 1
 ## is the presence of the row, never `remaining <= 0`, so nothing pops back into
 ## a hand before the host says so.
 var _letter_holds: Dictionary = {}
+
+## Host only. How far into **B, then O, then G** the collect race has got.
+##
+## The Free-for-all flavour of B·O·G puts exactly one card in the world at a
+## time and the next death puts out the next letter, so which letter that is has
+## to be remembered somewhere: a uniform roll over the three (what the drop table
+## used to do) would deal the same letter twice in a row about a third of the
+## time, and the rule the tutorial teaches — *"B, then O, then G"* — would be a
+## sentence nobody could verify by watching.
+##
+## An index into `LETTERS` rather than a mask of what has been dealt, because it
+## is a *cycle* and not a set: it wraps, it is advanced only by a card that is
+## genuinely new, and a re-dropped card (`_interrupt_letter_hold`) must not touch
+## it — that is the same letter coming back, not the next one.
+##
+## It lives beside `_letter_holds` and is cleared wherever `_team_letters` is,
+## because those two and this are the same piece of state: what this match has
+## done with the letters. Host only — clients never deal a card.
+var _letter_cycle: int = 0
 
 ## team -> three-bit mask, on every peer: the letters a team has banked between
 ## all of its members, which is what a Teams match is won on (D-049). Empty in a
@@ -420,6 +463,10 @@ func reset() -> void:
 	bogs.clear()
 	stats.clear()
 	_team_letters.clear()
+	# Every match opens on B. Beside `_team_letters` because it is the same
+	# state — what this match has done with the letters — and a cycle left where
+	# the last match ended would open the next one on O.
+	_letter_cycle = 0
 	# The nodes themselves belong to the arena's `spawned_items` and go with it;
 	# this is only the index. Holding freed pickups across a match would make
 	# `claim_pickup` chase instance ids that no longer resolve.
@@ -461,6 +508,8 @@ func _set_phase(next: Phase) -> void:
 func _begin_warmup() -> void:
 	stats.clear()
 	_team_letters.clear()
+	# A rematch is a fresh match: it opens on B like the first one did.
+	_letter_cycle = 0
 	_capture.clear()
 	_capture_pending = is_capture()
 	# **People only.** A dummy left on the roster from a previous range session
@@ -1343,20 +1392,54 @@ func _same_team(a: int, b: int) -> bool:
 ## spawned where it was is an item that falls too. A self-kill does drop. A
 ## death is a death, and making suicide the one death that costs the map an item
 ## is a rule nobody would guess and everybody would notice.
+##
+## **The letter is not excepted from that**, even though it is the one drop that
+## is never allowed to be lost. A void death deals no card, and the next ordinary
+## death deals it instead — the cycle has not moved, so nothing is skipped and
+## the same letter is still next. A card belonging to a carrier who fell is a
+## different matter and comes back on a pad; that is `_interrupt_letter_hold`,
+## which runs before this and is the reason a letter can never leave the match.
 func _drop_loot(cause: Bog.Cause, point: Vector3) -> void:
 	if cause == Bog.Cause.VOID:
 		return
+
+	# **One letter at a time, B then O then G**, in the collect race and nowhere
+	# else. The user's rule, and it replaces `letter_drop_chance` entirely: when
+	# no letter is in play, this death *is* the letter — the whole drop, with no
+	# roll and no shield beside it — and the cycle steps on. While one is in play
+	# (lying there, or being stood with) the death falls through to the ordinary
+	# table, which no longer has a letter in it at all: the card that is already
+	# out is the only one there is to fight over.
+	#
+	# Why this rather than a chance: a percentage made a letters match a lottery
+	# nobody could read. At 8% a card was hundreds of deaths away and at 100% the
+	# floor was carpeted in them, and in neither case could a player say what the
+	# next kill would produce. This they can — *there is a B out there, and when
+	# somebody takes it the next death drops the O* — which is a sentence the
+	# tutorial can teach and the guide line can point at.
+	#
+	# The letter is dropped before the ground query below, and settles its own
+	# spot, because the two have different answers for "there is no floor here":
+	# ordinary loot is skipped, a letter is never allowed to leave the match.
+	if config().win_condition == MatchConfig.WinCondition.LETTERS \
+			and not letter_active():
+		_drop_next_letter(point)
+		return
+
 	var spot := _drop_spot(point)
 	if spot == Vector3.INF:
 		return
 
-	# **The roll order is letter, then robe, then potion, then the remainder
-	# split evenly between shield and magnet**, and it is written down here
-	# because it is exactly the kind of thing that silently changes the balance
-	# of the game when somebody reorders it for tidiness. The three named chances
-	# are taken off the top in that order and what is left is halved; move the
-	# robe in front of the letter and a letters match quietly drops fewer cards
-	# than the dial in the lobby says it does.
+	# **The roll order is robe, then potion, then the remainder split evenly
+	# between shield and magnet**, and it is written down here because it is
+	# exactly the kind of thing that silently changes the balance of the game
+	# when somebody reorders it for tidiness. The two named chances are taken off
+	# the top in that order and what is left is halved.
+	#
+	# **The letter is not in this table any more.** It was a named share at the
+	# front of it until the one-letter rule above took over; a card is now either
+	# the whole drop or not in it at all, which is why nothing here mentions one
+	# and why this table is the same table in every mode.
 	#
 	# **The potion is a named chance and not a third share of the remainder**
 	# (D-067). Splitting what is left three ways would have taken the shield
@@ -1366,36 +1449,54 @@ func _drop_loot(cause: Bog.Cause, point: Vector3) -> void:
 	# even split would have given, and it is now a slider rather than an
 	# arithmetic accident.
 	#
-	# Letters only exist as a drop in the mode that scores them; in every other
-	# mode that chance is zero. **The robe is not gated on anything** — the Elder
-	# is a weapon rather than a scoring mechanic, and a weapon that only exists
-	# in one of four modes is a weapon nobody learns (D-038).
+	# **The robe is not gated on anything** — the Elder is a weapon rather than a
+	# scoring mechanic, and a weapon that only exists in one of four modes is a
+	# weapon nobody learns (D-038).
 	#
 	# The last branch reads the dials rather than the enum on purpose: the two
 	# halves of the remainder stay halves whatever the first two numbers turn out
 	# to be, including a host who has dragged both sliders to the top.
-	var letters_on := config().win_condition == MatchConfig.WinCondition.LETTERS
-	var letter_chance := config().letter_drop_chance if letters_on else 0.0
 	var robe_chance := config().elder_drop_chance
 	var potion_chance := config().potion_drop_chance
-	var named := letter_chance + robe_chance + potion_chance
+	var named := robe_chance + potion_chance
 	var remainder := maxf(0.0, 1.0 - named)
 	var roll := randf()
 	var kind := Pickup.Kind.MAGNET
-	var letter := 0
-	if roll < letter_chance:
-		kind = Pickup.Kind.LETTER
-		# Uniform over B, O and G, with no reference to anybody's progress
-		# (D-033). A card is a card.
-		letter = LETTERS[randi() % LETTERS.size()]
-	elif roll < letter_chance + robe_chance:
+	if roll < robe_chance:
 		kind = Pickup.Kind.ELDER_ROBE
 	elif roll < named:
 		kind = Pickup.Kind.POTION
 	elif roll < named + remainder * 0.5:
 		kind = Pickup.Kind.SHIELD
 
-	_spawn_drop(kind, letter, spot)
+	_spawn_drop(kind, 0, spot)
+
+
+## Host only. Put the cycle's next letter down at a death point, and step the
+## cycle on. The whole of what a death drops while no letter is in play.
+##
+## **A letter may never leave the match**, so where `_drop_loot` skips a drop it
+## cannot settle, this puts the card on a spawn pad instead — the same argument
+## `_interrupt_letter_hold` makes, and deliberately the same code: the pads are
+## the one set of points on any map guaranteed to be standable and reachable, and
+## a card that turns up somewhere slightly arbitrary is a far smaller problem
+## than a race with nothing to race for. The difference matters more here than
+## there, because now there is only ever *one* card: lose it over a gorge and the
+## mode is over, with `letter_active()` false for ever and every later death
+## dropping the same letter into the same gorge.
+##
+## It also makes this work with no world at all, which is what `tools/match_rules.gd`
+## runs in (`_drop_spot` returns INF there, and `_next_spawn` answers a pad).
+func _drop_next_letter(point: Vector3) -> void:
+	var letter := next_letter()
+	# Advanced here rather than where the card is collected, because what the
+	# cycle counts is letters *dealt*: a card nobody ever picks up still had its
+	# turn, and the death that replaces it deals the one after.
+	_letter_cycle = (_letter_cycle + 1) % LETTERS.size()
+	var spot := _drop_spot(point)
+	if spot == Vector3.INF:
+		spot = _next_spawn().origin
+	_spawn_drop(Pickup.Kind.LETTER, letter, spot)
 
 
 ## Put one item on the ground at `spot`, on every peer, and return the id it was
@@ -1515,6 +1616,12 @@ func _spawn_pickup(id: int, kind: int, letter: int, spot: Vector3,
 	root.add_child(pickup)
 	pickup.drop(id, kind as Pickup.Kind, letter, spot, keeps)
 	_pickups[id] = pickup
+	# Every card, every cause, every mode — this is the one message that builds
+	# one, so it is the one honest place to say a letter appeared. Emitted after
+	# the node is in the index, so a listener that immediately asks
+	# `loose_letter_pickups()` sees the card it was just told about.
+	if kind == Pickup.Kind.LETTER:
+		letter_appeared.emit(letter, spot)
 
 
 ## A living Bog has walked into a drop. Called by the **host's** copy of the
@@ -1939,8 +2046,21 @@ func _end_letter_hold(peer_id: int) -> void:
 
 
 @rpc("authority", "call_remote", "reliable")
+## `started_at` and `seconds` ride beside `ends_at` and cost nothing on the
+## wire: `seconds` is already an argument of this message and `started_at` is
+## this machine's own clock, so every peer writes the pair from what it was
+## already told. They are what the capture performance is driven by — a fraction
+## from 0 to 1, which cannot be worked out from `ends_at` alone without knowing
+## how long the hold was in the first place, and the dial is no answer to that
+## (a carry's `seconds` is INF, and a host can move `letter_hold_time`
+## mid-match).
 func _do_begin_hold(peer_id: int, letter: int, seconds: float) -> void:
-	_letter_holds[peer_id] = {"letter": letter, "ends_at": _now() + seconds}
+	_letter_holds[peer_id] = {
+		"letter": letter,
+		"ends_at": _now() + seconds,
+		"started_at": _now(),
+		"seconds": seconds,
+	}
 	letter_hold_changed.emit(peer_id)
 	letter_picked_up.emit(peer_id, letter)
 
@@ -1974,8 +2094,9 @@ func is_holding_letter(peer_id: int) -> bool:
 
 
 ## Seconds left on this Bog's hold, or 0.0 if it is not holding one. Never
-## negative, so a HUD can divide by `Net.config.letter_hold_time` and get a
-## fraction it can sweep a ring with.
+## negative, so a HUD can divide by `letter_hold_total` and get a fraction it can
+## sweep a ring with — or ask `letter_hold_fraction`, which is that division with
+## the carry and the clock skew already thought about.
 func letter_hold_remaining(peer_id: int) -> float:
 	if not _letter_holds.has(peer_id):
 		return 0.0
@@ -1988,6 +2109,130 @@ func letter_hold_letter(peer_id: int) -> int:
 	if not _letter_holds.has(peer_id):
 		return 0
 	return int(_letter_holds[peer_id]["letter"])
+
+
+## How long this hold was set to run for: the capture time it started with, `INF`
+## for a carry, and 0.0 for a Bog that is not holding anything.
+##
+## The row's own number rather than `config().letter_hold_time`, and that is the
+## whole reason it is stored. A host who drags the dial mid-match would otherwise
+## move the denominator under every capture already running — a pouch that jumps
+## backwards, a ring that fills past full — and the carry's INF is not in the
+## dial at all.
+##
+## The two keys are read with a fallback because `_do_begin_hold` is not quite
+## the only thing that writes a row: several harnesses stage a hold by putting
+## one here by hand (`tools/combat_range.gd`, `tools/hud_range.gd`, and
+## `tools/preview_capture.gd` since the letters round), and a staged row that is
+## one key short must read as a hold rather than take the whole autoload down on
+## the frame a pouch asks about it. The deadline is what is left to read it off.
+func letter_hold_total(peer_id: int) -> float:
+	if not _letter_holds.has(peer_id):
+		return 0.0
+	var hold: Dictionary = _letter_holds[peer_id]
+	if hold.has("seconds"):
+		return float(hold["seconds"])
+	var deadline := float(hold["ends_at"])
+	return INF if is_inf(deadline) else config().letter_hold_time
+
+
+## Is this a hold with a clock on it, as opposed to a Capture B·O·G carry?
+##
+## The one question that separates the two things `_letter_holds` holds (D-035,
+## D-051), asked here so nothing downstream has to know that INF is how a carry
+## is written. The capture performance, the pouch and the guide line all branch
+## on it: a timed hold is an arm in the air and a letter sinking into a pouch, a
+## carry is a card in the fist and a run for the vault.
+func letter_hold_is_timed(peer_id: int) -> bool:
+	if not _letter_holds.has(peer_id):
+		return false
+	return is_finite(letter_hold_total(peer_id))
+
+
+## How far through a timed hold this Bog is, 0 at the touch and 1 at the payout.
+## 0.0 for a carry and for a Bog holding nothing.
+##
+## Counted **up from `started_at`** rather than down from `ends_at`, which are
+## the same number until the host's copy and a client's disagree — and then the
+## one that reads right is this one: a client whose clock ran out early sits at
+## 1.0 with the letter in the pouch and waits, instead of sweeping back to 0.
+## The same rule `is_holding_letter` obeys, for the same reason.
+func letter_hold_fraction(peer_id: int) -> float:
+	if not letter_hold_is_timed(peer_id):
+		return 0.0
+	var hold: Dictionary = _letter_holds[peer_id]
+	var seconds := letter_hold_total(peer_id)
+	# A capture time of zero never starts a hold at all (`_begin_letter_hold`
+	# grants on touch), so this is only reachable from a staged row — and a hold
+	# with no length is a hold that is over.
+	if seconds <= 0.0:
+		return 1.0
+	var started := float(hold.get("started_at", float(hold["ends_at"]) - seconds))
+	return clampf((_now() - started) / seconds, 0.0, 1.0)
+
+
+## Everybody with a letter in hand, timed hold or carry alike. The order is the
+## dictionary's, which is nobody's business but a listener's.
+##
+## Carriers rather than holds, because what every caller wants is a Bog to point
+## at: the guide line's red thread to an enemy with the letter, the minimap's
+## blip with a glyph beside it. Which kind of hold it is, if they care, is
+## `letter_hold_is_timed`.
+func letter_carriers() -> Array[int]:
+	var out: Array[int] = []
+	for peer_id: int in _letter_holds:
+		out.append(peer_id)
+	return out
+
+
+## Every letter card lying in the world that nobody has taken: the collect
+## race's one loose card, and in Capture B·O·G the cards at their home points,
+## the ones dropped by dead carriers **and** the ones standing in vaults.
+##
+## Vault cards are in on purpose. A banked card is a real object standing
+## somewhere (D-092) — it can be seen, it can be stolen, and a minimap that drew
+## every card except the three that decide the match would be lying by omission.
+## A caller that needs to tell them apart asks `banked_team_of(card.letter)`,
+## which is the question they actually mean: *is that one mine already?*
+##
+## Live and untaken, checked here rather than trusted: `_pickups` keeps a row
+## until something prunes it, and a card claimed on this frame is still in it.
+func loose_letter_pickups() -> Array[Pickup]:
+	var out: Array[Pickup] = []
+	for id: int in _pickups:
+		var item: Pickup = _pickups[id]
+		if not is_instance_valid(item) or item.is_taken():
+			continue
+		if item.kind == Pickup.Kind.LETTER:
+			out.append(item)
+	return out
+
+
+## Is a letter in play at all — lying somewhere, or in somebody's hands?
+##
+## What the one-letter rule is written on (see `_drop_loot`). Both halves are
+## needed and neither is enough: a card is taken off the ground the instant
+## somebody walks into it, so a check on `_pickups` alone would deal a second
+## letter to the next death while the first was being captured — and a check on
+## `_letter_holds` alone would deal one on every death while the card lay there
+## untouched.
+##
+## True in Capture B·O·G too, where the three cards are always in play. Nothing
+## reads it there, because `_drop_loot` asks the condition first, but the answer
+## it gives is still the true one.
+func letter_active() -> bool:
+	if not _letter_holds.is_empty():
+		return true
+	return not loose_letter_pickups().is_empty()
+
+
+## The letter the next death will put out: the head of the **B, O, G** cycle.
+##
+## Host only in the sense that only the host's `_letter_cycle` is ever advanced;
+## asking on a client answers B, which is honest — a client has no business
+## predicting a deal it does not make.
+func next_letter() -> int:
+	return LETTERS[_letter_cycle % LETTERS.size()]
 
 
 # ---------------------------------------------------------- capture B·O·G ---

@@ -15,18 +15,24 @@ extends Node3D
 ## one hand. So the rule generalised rather than forking — there are two
 ## `BoneAttachment3D`s and every carried object hangs off exactly one of them:
 ##
-##   right hand   the spear shaft; a letter card, during a hold (D-035); the
+##   right hand   the spear shaft; a letter card, while one is being *carried*
+##                somewhere (D-035, and only a carry since the letters round —
+##                a timed capture floats its letter on `CaptureRig` and puts a
+##                pouch in the other fist instead); the
 ##                Elder's crackle, which is what an Elder has instead of a
 ##                spear (D-038); the nocked arrow, while the bow is drawn; or
 ##                the great sword, for the length of a swing (D-068)
-##   left hand    the bow; or the heal potion, for the length of a drink
-##                (D-075)
+##   left hand    the bow; the heal potion, for the length of a drink (D-075);
+##                or the loot pouch, for the length of a timed letter capture
+##                (the letters round)
 ##
-## **The left hand's two are exclusive and it is `BogCombat` that says so**, not
-## this file and not the fact that they share an attachment. A drink empties
+## **The left hand's three are exclusive and it is `BogCombat` that says so**,
+## not this file and not the fact that they share an attachment. A drink empties
 ## both fists — `has_bow()` and `has_spear()` have carried `not is_channelling()`
 ## since D-067 — so a bottle and a bow can no more be out together than a bow
-## and a great sword can.
+## and a great sword can. A capture empties them for the same reason one hand
+## over: a letter hold disarms (D-035), so the pouch arrives in a fist the
+## weapon has already left.
 ##
 ## **A great sword is two-handed and still hangs off one attachment** (D-068).
 ## The rule is one *object* per hand, not one hand per object: the sword is
@@ -366,6 +372,18 @@ var _potion: Node3D
 var _potion_model_scale: float = POTION_SCALE
 var _potion_grip_offset: Vector3 = POTION_GRIP_OFFSET
 var _potion_grip_rotation: Vector3 = POTION_GRIP_ROTATION
+## The loot pouch, in the bow fist for the length of a **timed** letter capture
+## (the letters round). This fist's third object, and the third statement of
+## the same sentence: one node owns it, `BogCombat._refresh_hand` says which of
+## the three is in it, and a bow, a bottle and a pouch can no more be out
+## together than a bow and a great sword can (D-065).
+var _pouch: Node3D
+## The grip `set_pouch_grip` was last handed. Three fields, the potion's shape
+## exactly: the pouch is built at true metres so its scale is 1, but the hook
+## exists for the same tool and would be a lie if it could not move all three.
+var _pouch_model_scale: float = POUCH_SCALE
+var _pouch_grip_offset: Vector3 = POUCH_GRIP_OFFSET
+var _pouch_grip_rotation: Vector3 = POUCH_GRIP_ROTATION
 ## The nocked arrow, in the right fist while the bow is drawn.
 var _arrow: Node3D
 ## The Elder's crackle, while the bolt is ready (D-038). On the same attachment
@@ -454,6 +472,16 @@ func _attach_bow(skeleton: Skeleton3D) -> void:
 	_bow_attachment.add_child(_potion)
 	set_potion_grip(POTION_SCALE, POTION_GRIP_OFFSET, POTION_GRIP_ROTATION)
 	_potion.visible = false
+
+	# The third thing this fist can hold (the letters round), built here with
+	# the other two and for their reason: a capture happens a handful of times
+	# a match and a sack rebuilt for each of them buys nothing a `visible` flag
+	# does not. Kept hidden, like everything else on this attachment —
+	# `_refresh_hand` decides, and it decides on the first frame.
+	_pouch = PouchMesh.build()
+	_bow_attachment.add_child(_pouch)
+	set_pouch_grip(POUCH_SCALE, POUCH_GRIP_OFFSET, POUCH_GRIP_ROTATION)
+	_pouch.visible = false
 
 	_bow_string = _bow.find_child(STRING_NODE, true, false) as MeshInstance3D
 	if _bow_string == null or _bow_string.mesh == null \
@@ -1467,3 +1495,135 @@ func set_potion_grip(model_scale: float, offset: Vector3,
 	_potion_grip_offset = offset
 	_potion_grip_rotation = rotation_degrees
 	_orient_potion()
+
+
+# ---------------------------------------------------------------- the pouch --
+
+## How big the pouch is in the fist. One, and it is the only prop here that
+## gets to say that.
+##
+## `PouchMesh` is built from primitives in world metres rather than imported
+## from a `.glb` modelled at whatever size an artist happened to work at, so
+## the size *is* the constants in that file and there is nothing to correct
+## here. The field and the `set_pouch_grip` argument exist anyway, because the
+## preview sweeps a grip the same way it sweeps the bottle's and a hook with a
+## hole in it is the one that goes stale.
+const POUCH_SCALE := 1.0
+
+## Where the mouth of the pouch sits in the left fist, in hand-local metres.
+##
+## **A first guess, and it is labelled one.** `POTION_PALM` is the only point
+## anybody has measured in this fist — `preview_carry._fist_centre` run over
+## the drinking mitten (D-075) — so it is where this starts, and
+## `tools/preview_capture.tscn` prints the mouth's world position beside the
+## hand's on every run precisely so the number can be read off a render rather
+## than argued about here.
+##
+## What is already known to be wrong about it is the five centimetres. The
+## bottle's palm point carries a deliberate push *out of the Bog*, because a
+## belly-height bottle centred in the fist spends half of itself inside the
+## stomach; a pouch hangs **below** the hand rather than against the body, so
+## it is the one prop in this fist that does not need that push and the guess
+## keeps it only because dropping it unmeasured would be a second guess rather
+## than a better one.
+##
+## D-074's rule survives intact and is why this is not simply `fist_offset()`:
+## a palm point means nothing except in the pose the prop is held in, and this
+## is the other hand in a third pose again — the arm hanging at the hip while
+## the right one is up in the air.
+const POUCH_GRIP_OFFSET := Vector3(0.015, 0.110, 0.030)
+
+## Which way the pouch hangs out of the fist.
+##
+## `PouchMesh` is built mouth-at-the-origin with the sack down its own −Y, and
+## `mixamorig_LeftHand`'s +Y runs up the arm and out through the fingers — so a
+## flat 180 deg about X maps the sack onto the hand's +Y, which is *down* in
+## the world for the whole of a capture, because the capture pose is the left
+## arm hanging while the right one reaches. That is the entire derivation: the
+## pouch hangs down the fingers because the fingers are already pointing at the
+## ground.
+##
+## The 15 deg off it is the owner's *"maybe a little up and out"* — it kicks
+## the bottom of the sack away from the thigh, so the silhouette at the hip is
+## a pouch beside a leg rather than a lump on one. Fifteen because that is
+## about the angle at which the cord tails clear the hem and no more; past
+## thirty it swings forward far enough to read as being held out.
+const POUCH_GRIP_ROTATION := Vector3(165.0, 0.0, 0.0)
+
+
+func _orient_pouch() -> void:
+	if _pouch == null:
+		return
+	# The stored offset and not a re-derivation of it, `_orient_potion`'s shape
+	# exactly and for its reason: a tool sweeping a grip hands in an offset
+	# that is deliberately not the one the constants say, and a function that
+	# recomputed it would quietly throw the sweep away.
+	var grip := Basis.from_euler(_pouch_grip_rotation * (PI / 180.0))
+	_pouch.transform = Transform3D(
+		grip.scaled(Vector3.ONE * _pouch_model_scale), _pouch_grip_offset)
+
+
+## Hang the loot pouch on the bow fist, or take it away.
+##
+## **This does not touch the bow or the bottle**, exactly as `set_potion` does
+## not touch the bow and `set_letter` touches neither. Which of this fist's
+## three is in it belongs to `BogCombat._refresh_hand`, which asks
+## `MatchState.letter_hold_is_timed` — the same question this whole performance
+## hangs off — and a second opinion here is how the hand and the clock end up
+## disagreeing.
+func set_pouch(carried: bool) -> void:
+	if _pouch != null:
+		_pouch.visible = carried
+
+
+func has_pouch() -> bool:
+	return _pouch != null and _pouch.visible
+
+
+## Exposed for `tools/preview_capture.tscn`, which sweeps these before they are
+## pasted into the constants above — the same escape hatch `set_grip`,
+## `set_sword_grip` and `set_potion_grip` are.
+func set_pouch_grip(model_scale: float, offset: Vector3,
+		rotation_degrees: Vector3) -> void:
+	if _pouch == null:
+		return
+	_pouch_model_scale = model_scale
+	_pouch_grip_offset = offset
+	_pouch_grip_rotation = rotation_degrees
+	_orient_pouch()
+
+
+## Where the letter's descent ends, in world metres: the centre of the pouch's
+## mouth.
+##
+## The pouch's own origin, because `PouchMesh` is built with the mouth *at* the
+## origin — so the point `CaptureRig` aims at and the point the fabric opens at
+## are one number and there is no second offset to keep in step (D-098).
+##
+## Falls back to the bow fist itself on a rig with no left hand, rather than to
+## zero: a letter that sank into the middle of the map would be a far louder
+## bug than one that sank into a wrist, and the fallback is the same "a Bog
+## with a spear and no bow is still a playable Bog" that `_attach_bow` takes.
+func pouch_mouth_global() -> Vector3:
+	if _pouch != null:
+		return _pouch.global_position
+	return bow_hand_transform().origin
+
+
+## Where the two fists are, in world metres and orientation.
+##
+## Exposed because `CaptureRig` floats a letter between them and is not a child
+## of either — it is a `top_level` node reading two anchors off the bones every
+## frame, which is what lets the card trail a running Bog instead of being
+## welded to a wrist. The attachments stay private: what a caller outside this
+## file may have is where the hand *is*, never a node to hang something off,
+## because hanging things off these is the one job this file has (D-065).
+##
+## Identity via this node's own transform when the rig has no such bone, so a
+## caller gets the Bog rather than the origin of the world.
+func hand_transform() -> Transform3D:
+	return _attachment.global_transform if _attachment != null else global_transform
+
+
+func bow_hand_transform() -> Transform3D:
+	return _bow_attachment.global_transform if _bow_attachment != null else global_transform

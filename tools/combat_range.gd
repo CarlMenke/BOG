@@ -1450,7 +1450,6 @@ func _start_session() -> void:
 	if _mode == "health":
 		config.respawn_delay = HEALTH_RESPAWN
 		config.elder_drop_chance = 1.0
-		config.letter_drop_chance = 0.0
 	# Every death in `potion` has to roll a potion and nothing else, which is
 	# what the drop table being **named shares off the top** buys: one slider at
 	# 1.0 and the roll has one outcome (D-067). The channel is shortened for the
@@ -1459,7 +1458,6 @@ func _start_session() -> void:
 		config.respawn_delay = HEALTH_RESPAWN
 		config.potion_drop_chance = 1.0
 		config.elder_drop_chance = 0.0
-		config.letter_drop_chance = 0.0
 		config.heal_channel = POTION_CHANNEL
 	# The `draw` mode watches a charge *creep*, because what it is comparing is
 	# two skeletons at the same instant and a draw that is over in a second is a
@@ -1476,7 +1474,6 @@ func _start_session() -> void:
 	if _mode == "sword":
 		config.respawn_delay = 60.0
 		config.elder_drop_chance = 0.0
-		config.letter_drop_chance = 0.0
 		config.potion_drop_chance = 0.0
 	# Three bolts inside one run, and no loot rolled off the one death in it:
 	# a robe or a letter dropped at a dummy's feet is a claim nobody asked for.
@@ -1484,7 +1481,6 @@ func _start_session() -> void:
 		config.lightning_cooldown = 0.2
 		config.lightning_radius = 1.5
 		config.elder_drop_chance = 0.0
-		config.letter_drop_chance = 0.0
 
 
 func _dummy_count() -> int:
@@ -1798,10 +1794,12 @@ func _physics_process(_delta: float) -> void:
 ## Put one letter card down at the player's feet and let them walk into it.
 ##
 ## Deliberately *not* handed over the way `_stock` hands over a shield. The
-## card comes out of a real death, through `MatchState._drop_loot`'s own roll
-## with `letter_drop_chance` forced to 1 so it cannot come up a magnet, and it is
-## claimed by the player's own body entering the `Pickup` area. That makes this
-## the only place the whole chain runs in a world with geometry in it — which
+## card comes out of a real death, through `MatchState._drop_loot`, which under
+## the collect race deals the cycle's next letter as the whole drop when no
+## letter is in play — so the one death below cannot come up a magnet, with no
+## dial to force. It is then claimed by the player's own body entering the
+## `Pickup` area. That makes this the only place the whole chain runs in a world
+## with geometry in it — which
 ## matters because the failure it guards is not a script error: an `Area3D` that
 ## tries to stop monitoring from inside `body_entered` logs a plain `ERROR` and
 ## the smoke gate walks straight past it.
@@ -1813,7 +1811,6 @@ func _drop_a_letter() -> void:
 	if player == null:
 		return
 	Net.config.win_condition = MatchConfig.WinCondition.LETTERS
-	Net.config.letter_drop_chance = 1.0
 	# Long enough that the frame is still mid-hold whenever the snapshot lands.
 	Net.config.letter_hold_time = 30.0
 	MatchState.report_kill(DUMMY_BASE, 1, Bog.Cause.SPEAR,

@@ -312,9 +312,10 @@ func _build_face(tint: Color) -> void:
 		sprite.pixel_size = 0.0017
 		sprite.position = Vector3(0.0, PEDESTAL_HEIGHT * 0.62, -PEDESTAL_RADIUS - 0.02)
 		sprite.modulate = Color(1.0, 1.0, 1.0)
-		# Lit from inside, like every other thing this map asks you to read at
+		# Lit from inside, like every other thing this map asked you to read at
 		# night (D-058): a picture that depends on a torch being near it is a
-		# picture nobody can see on a 90 m map with nine lanterns.
+		# picture nobody can see across a 90 m map. The range is daylit now and
+		# the rule still holds — a well is read from the far end of a lane.
 		sprite.shaded = false
 		sprite.double_sided = false
 		add_child(sprite)

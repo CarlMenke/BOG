@@ -1,18 +1,24 @@
 class_name RangeMap
 extends StaticMap
-## Glowworm Grounds — the practice range (D-113).
+## Highsun Grounds — the practice range (D-113).
 ##
-## A cleared bog at night where the Elders train: a lodge at the south end, the
-## lanes and the yards laid out north of it, and nothing but void off the north
-## and east edges. It is the seventh built map and it is built the way the other
-## six are (D-042, D-056, D-082) — `const` tables, geometry before `super()`,
-## dressing after, no random draw anywhere, so every peer builds the same bog by
-## construction rather than by a shared seed.
+## A cleared bog under a high sun where the Elders train: a lodge at the south
+## end, the lanes and the yards laid out north of it, and nothing but void off
+## the north and east edges. It is the seventh built map and it is built the way
+## the other six are (D-042, D-056, D-082) — `const` tables, geometry before
+## `super()`, dressing after, no random draw anywhere, so every peer builds the
+## same bog by construction rather than by a shared seed.
+##
+## It was **Glowworm Grounds** while it was a bog at night, and the name went
+## with the hour. The sun is thirty-two degrees up now, so a place named for the
+## only things that glowed in the dark is a place named for something nobody can
+## see. The glowworms themselves stay: they are the drifting motes in
+## `range_ambience.gd`, which is air rather than furniture.
 ##
 ## It is also the first map that is not an arena. There are no two fair halves
 ## here and no sightline budget: a range exists to give you a sixty-metre bow
-## lane, a gong at the spear's flat twenty-eight, and a dummy standing at a
-## distance you can read off a post. What it is held to instead is the jump arc
+## lane, a gong at the spear's flat twenty-eight, and a dummy standing on a
+## distance its own table put it on. What it is held to instead is the jump arc
 ## and the marker contract, and both are checked (§ the gate, below).
 ##
 ## Two things in this file are **not** unit 2's to remove, and the gate fails if
@@ -40,15 +46,12 @@ extends StaticMap
 ##         standing one is not, ten centimetres of crown showing as the tell a
 ##         pop-up dummy wants. Also under `parkour_report.GROUND_HOP` (1.30), so
 ##         it is a step and never a barrier.
-##   0.60  `RAIL`. The lane divider, and thigh high on a 1.80 m Bog. It marks a
-##         lane rather than walling one in: a standing Bog sees over it from
-##         anywhere on the range, a hop clears it without thinking about it, and
-##         the shooter three lanes away is a body rather than a hat. It was
-##         `FENCE` and the render is what argued it down — see `_build_lanes`.
-##   1.80  `FENCE`. Over standing eyes and over the hop's 1.69 m of rise; a leap
-##         lifts 2.30 m, so you can get on top of one. Nothing divides a lane at
-##         this height any more: the two gallery backstops are all that is left
-##         of it, and a backstop is meant to stop a missed shot.
+##   1.80  `BACKSTOP`. Over standing eyes and over the hop's 1.69 m of rise; a
+##         leap lifts 2.30 m, so you can get on top of one. The two gallery
+##         backstops are the only things on the map at this height, and a
+##         backstop is a thing that stops a missed shot rather than a thing that
+##         divides a lane. It was `FENCE` while the lanes had fences in them,
+##         and it is renamed because nothing on this map fences anything now.
 ##   3.00  `LEDGE`. Past the leap, inside the one-tick dive (4.23 m) — so from
 ##         flat ground it is dive-only, and the 1.2 m kerb against its face is
 ##         the honest route up.
@@ -66,11 +69,12 @@ extends StaticMap
 ##   lodge     a 24 x 12 m deck 1.2 m up under a hall roof, the eight pads on
 ##             it, two ramps down to the apron. The apron in front of it is the
 ##             hub: racks west, wells east, every zone entered off it.
-##   lanes     three throwing lanes, 6 m wide, 32 m long, sharing their fences.
-##             Distance posts every 5 m, dummies at 8 / 15 / 22 m, boards at
-##             8 and 22, and the gong at 28 m on the middle lane.
-##   long      the bow lane. 12 m wide, 60 m long, posts every 10, a dummy at
-##             45 and the orb launcher at the far end. Nothing stands in it.
+##   lanes     three throwing lanes, 6 m wide, 32 m long, read off what stands
+##             in them rather than off anything between them: dummies at
+##             8 / 15 / 22 m, boards at 8 and 22, one pop-up cover block each,
+##             and the gong at 28 m on the middle lane.
+##   long      the bow lane. 12 m wide, 60 m long, a dummy at 45 m and a board
+##             at 30. Nothing else stands in it, which is the point of it.
 ##   gallery   three waist walls at 12 / 16 / 20 m with pop-up dummies behind
 ##             them and strafers on the open ground between.
 ##   melee     a 10 m pit sunk 1.5 m with one ramp in, circlers and a rusher.
@@ -112,8 +116,7 @@ const PEAT_THICK := 0.8
 ## The cover grammar, derived in the header. Nothing in this file states a
 ## height that is not one of these or built out of them.
 const COVER := 1.25
-const FENCE := 1.80
-const RAIL := 0.60
+const BACKSTOP := 1.80
 const LEDGE := 3.00
 const UNJUMPABLE := 4.50
 const DECK := 1.20
@@ -150,15 +153,15 @@ const PAD_FAN := deg_to_rad(10.0)
 
 # ------------------------------------------------------------------- lanes ---
 
-## The three throwing lanes share their fences: four lines at these x, so the
-## lanes are 6 m wide and there is no dead metre between them.
+## The three throwing lanes, as the four lines that divide them: 6 m apart, so
+## the lanes are 6 m wide and there is no dead metre between them. **Nothing is
+## built on these lines any more** — see `_build_lanes`. They are the arithmetic
+## every lane's centre, cover block, dummy and board is derived from, and a lane
+## is read off the things standing in it.
 const LANE_LINES: PackedFloat32Array = [-32.0, -26.0, -20.0, -14.0]
 ## Where a thrower stands, and how long a lane runs.
 const LANE_FIRING_Z := 26.0
 const LANE_LENGTH := 32.0
-## Distance marks, in metres out from the firing line. Five-metre steps, as the
-## scope asks; the posts stand on the fence lines so nothing is ever in a lane.
-const LANE_MARKS: PackedFloat32Array = [5.0, 10.0, 15.0, 20.0, 25.0, 30.0]
 ## Where the dummies stand, and where the boards do.
 const LANE_DUMMIES: PackedFloat32Array = [8.0, 15.0, 22.0]
 const LANE_BOARDS: PackedFloat32Array = [8.0, 22.0]
@@ -174,7 +177,6 @@ const BOARD_OFFSET := 1.8
 const LONG_LINES: PackedFloat32Array = [-6.0, 6.0]
 const LONG_FIRING_Z := 30.0
 const LONG_LENGTH := 60.0
-const LONG_MARKS: PackedFloat32Array = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0]
 const LONG_DUMMY := 45.0
 const LONG_BOARD := 30.0
 
@@ -190,7 +192,7 @@ const GALLERY_WALLS: Array[Dictionary] = [
 	{"x": 13.0, "range": 20.0, "length": 6.0},
 ]
 const WALL_THICK := 0.5
-## The two backstops behind the gallery, at `FENCE`, so a missed shot stops
+## The two backstops behind the gallery, at `BACKSTOP`, so a missed shot stops
 ## somewhere rather than sailing into the void.
 const GALLERY_BACKSTOPS: Array[Vector2] = [Vector2(9.0, 15.0), Vector2(17.0, 23.0)]
 const GALLERY_BACK_Z := 3.0
@@ -335,14 +337,13 @@ const WELLS: Array[Dictionary] = [
 ## what the lanes are doing is a control that has to be found, understood and
 ## then put back before the lane means what the post beside it says it means.
 ## Authored, the west lane is always three standing bodies at 8, 15 and 22 m and
-## you can walk to it and throw; and with the behaviours fixed the lanterns stop
-## being a status display and go back to being distance marks, which is what
-## they were built as.
+## you can walk to it and throw, and what a lane is doing is what it was doing
+## the last time you stood in it.
 ##
 ## The stats reset survives, because it is the one switch that is about *you*
 ## rather than about the range, and it is now a plain timber signboard on the
-## lodge deck: a post, a board, carved letters and an `Area3D`. No lantern, no
-## light, no chime — the feedback is the panel in the corner of the HUD going to
+## lodge deck: a post, a board, carved letters and an `Area3D`. No light and no
+## chime — the feedback is the panel in the corner of the HUD going to
 ## zero, which is the thing you were looking at when you decided to reset it.
 const SIGNBOARD := {"at": Vector3(-11.0, DECK, 40.5), "action": "reset_stats",
 	"zone": "lodge"}
@@ -403,7 +404,7 @@ const BOARDS: Array[Dictionary] = [
 	{"at": Vector3(5.0, DECK + 1.4, 45.4), "kind": "best_time"},
 ]
 
-# ---------------------------------------------------------------- the night ---
+# ------------------------------------------------------------------ torches ---
 
 ## Torches. Ten, of which three cast — the island runs about fourteen with
 ## roughly half casting on a smaller map, and the cost that matters is the
@@ -421,24 +422,17 @@ const TORCHES: Array[Dictionary] = [
 	{"at": Vector2(-10.0, -43.0), "shadows": false},
 ]
 
-## A glowworm lantern: an emissive sphere on a post, and **no light attached**.
-## Twenty-four of them cost twenty-four spheres and nothing else, which is the
-## only reason there can be twenty-four; the torches are what actually lights
-## the ground, and a lantern that lit anything would wash the distance marks
-## into one even smear. Lantern Wharf's quay lamps make the same argument.
-##
-## **Dimmer and warmer than they were**: 3.0 rather than 6.0, and both tints
-## pulled toward the sun. At night they were the map's only marks and 6x was
-## what made a head at sixty metres a dot rather than a smudge. At this hour
-## there is a sky behind them, and a lantern at 6x under it is a white pill with
-## no colour in it — the glow threshold catches it and the bloom finishes the
-## job. At 3x they are lit glass against a warm sky, which is what a glowworm
-## lantern at dusk looks like and is still the brightest thing on any post.
-const LANTERN_HEIGHT := 2.2
-const LANTERN_RADIUS := 0.18
-const LANTERN_GREEN := Color(0.68, 1.0, 0.56)
-const LANTERN_AMBER := Color(1.0, 0.74, 0.34)
-const LANTERN_ENERGY := 3.0
+## There were twenty-four glowworm lanterns on this map — unshaded emissive
+## spheres on the tops of the distance posts — and they are gone with the posts.
+## **A bare unshaded primitive is not a prop.** The rule the range now keeps is
+## written up in the decision record with this change: anything a player looks
+## at, walks past or shoots is a textured, themed object that belongs to the
+## place, built out of this map's three materials; unshaded emissive geometry is
+## for *effects* — a torch flame, a burst, the ambience's drifting motes — and
+## never for objects. A glowing ball on a stick reads as a placeholder somebody
+## forgot to replace, it breaks the timber-stone-peat grammar everything else on
+## the range keeps, and on a map whose whole job is teaching you to read a
+## distance it is the brightest thing in frame and it is teaching nothing.
 
 ## Props, out of the Stylized Nature MegaKit. Dressing, so none of it is
 ## collision, and none of it stands in a lane, inside a landing radius or within
@@ -470,7 +464,6 @@ var _stone_st: SurfaceTool
 var _peat_material: StandardMaterial3D
 var _timber_material: StandardMaterial3D
 var _stone_material: StandardMaterial3D
-var _lantern_materials: Array[StandardMaterial3D] = []
 
 
 func _ready() -> void:
@@ -519,7 +512,6 @@ func _ready() -> void:
 	# Dressing and behaviour. Nothing below this line is collision.
 	var dressing := _group("Dressing")
 	_build_torches(dressing)
-	_build_lanterns(dressing)
 	_build_props(dressing)
 	RangeAmbience.build(_group("Air"), Vector2(WEST, EAST), Vector2(NORTH, SOUTH))
 
@@ -531,8 +523,8 @@ func _ready() -> void:
 	# And the thing that reads the markers above and stands everything on them:
 	# brains on the `DummyStations`, signposts on the `Stations`, the parkour
 	# clock on the `Plates`, and — through its own guarded hooks — the wells,
-	# racks and refill stone on the `Wells`/`Racks`, and the boards, orbs and
-	# gong on the `Targets`. It waits for `PLAYING` by itself, so the order of
+	# racks and refill stone on the `Wells`/`Racks`, and the boards and the gong
+	# on the `Targets`. It waits for `PLAYING` by itself, so the order of
 	# these two lines is not load-bearing; what is load-bearing is that both are
 	# after `super()`, because neither is collision.
 	add_child(RangeDirector.new())
@@ -541,8 +533,13 @@ func _ready() -> void:
 ## Where the sun actually ended up, printed out of the built scene.
 ##
 ## This map claims, in `range.tscn` and in `range_env.tres`, that the sun is
-## nine degrees up on a bearing thirty degrees east of north, and every argument
-## about where the shadows fall is made from those two numbers. It was wrong for
+## thirty-two degrees up on a bearing thirty degrees east of north, and every
+## argument about where the shadows fall is made from those two numbers. The
+## elevation moved from nine to thirty-two when the owner asked for the sun
+## higher in the air; the **bearing did not move**, because thirty degrees east
+## of north is the one thing on this map that is load-bearing about the light
+## (see `range.tscn`): every lane runs due north, and a sun on a lane's axis is
+## a sun in the archer's sight. It was wrong for
 ## a whole pass and nothing noticed: the `Sun` node's `Transform3D` was written
 ## as the basis's three **columns**, and a `.tscn` stores its three **rows**, so
 ## the built light was 7.8 degrees up on a bearing thirty degrees *west* — sixty
@@ -557,7 +554,7 @@ func _ready() -> void:
 ## rather than being trusted: `SUN_ELEVATION` and `SUN_BEARING` are what the
 ## transform is derived from, this reads the transform back, and the gate greps
 ## the line.
-const SUN_ELEVATION := 9.0
+const SUN_ELEVATION := 32.0
 const SUN_BEARING := 30.0
 
 func _check_sun_and_sky() -> void:
@@ -687,34 +684,24 @@ func _build_lodge() -> void:
 
 # ------------------------------------------------------------------- lanes ---
 
-## Three throwing lanes that share their fences, so four lines of posts make six
-## metres of lane three times over with no dead ground between them.
+## Three throwing lanes, and **nothing built on the lines that divide them**.
 ##
-## The divider is `RAIL` — **0.60 m, one rail, and not two at 0.9 and 1.8**.
-## Built at `FENCE` it was correct by the cover grammar and wrong in the
-## picture: eight lines of 1.8 m timber running 32 m north from the firing line
-## is over a standing Bog's eyes, so from the apron the range read as a stockade
-## and from inside a lane you could see your own lane and nothing else. A range
-## is a place you learn distance in, and every other lane's dummy is part of
-## that lesson. At 0.60 the rail is thigh high on a 1.80 m Bog: a hop (1.69 m of
-## rise) clears it without a thought, a standing Bog sees over it from anywhere,
-## and it still says where the lane is, which is the whole of what a lane
-## divider has to do. The posts stay 2.2 m because they carry the lanterns, so
-## the distance marks are unchanged.
+## There were four lines of 2.2 m timber posts every five metres with a 0.60 m
+## rail running the length of each, and the whole of that is off the map. The
+## owner asked for the fences gone, and eight lines of timber running 32 m north
+## from a firing line is a fence however low you argue the rail down to: the
+## divider was already `FENCE` once and already lost that argument to a render,
+## and this is the same argument won properly. What the posts were *for*
+## survives in what stands **in** a lane — a dummy on its mark, a board beside
+## it, a cover block half a metre in front of the pop-up — which is the honest
+## way to read a distance anyway. A dummy at fifteen metres is the thing you are
+## aiming at; a post beside it is a thing you are aiming past.
 ##
-## The cover blocks stay at `COVER`: those are there to hide a pop-up, which is
-## a different job and the one height on the map that is measured against a
-## crouching Bog's eyes.
+## So this builds one thing, the cover, at `COVER`: waist high, measured against
+## a crouching Bog's eyes, there to hide a pop-up rather than to mark a lane.
+## That is the line this change draws — cover and backstop are the map's grammar
+## and stay; a divider is a fence and goes.
 func _build_lanes() -> void:
-	var far := LANE_FIRING_Z - LANE_LENGTH
-	for line: float in LANE_LINES:
-		for mark: float in LANE_MARKS:
-			_post(_timber_st, Vector2(line, LANE_FIRING_Z - mark), 0.09, LANTERN_HEIGHT)
-		_post(_timber_st, Vector2(line, LANE_FIRING_Z), 0.09, LANTERN_HEIGHT)
-		# One rail, at `RAIL`. See the header: a lane is marked, not walled.
-		_slab(_timber_st, Vector2(line - 0.05, far), Vector2(line + 0.05, LANE_FIRING_Z),
-			RAIL - 0.06, RAIL)
-
 	# One waist-high block per lane, half a metre short of the 15 m dummy, so
 	# the pop-up brain has something to pop up from.
 	for i: int in 3:
@@ -725,16 +712,16 @@ func _build_lanes() -> void:
 
 
 ## The bow lane, on the spine. Nothing stands in it at all: the point of sixty
-## metres is that it is sixty metres of nothing.
+## metres is that it is sixty metres of nothing, and with the twenty-six posts
+## and the two rails off its lines that is now literally true.
+##
+## It builds no geometry and it is still a function, because the bow lane is
+## still a **zone**: its dummy at 45 m, its board at 30 and the strip
+## `_prop_allowed` keeps the reed out of are all derived from `LONG_LINES` and
+## `LONG_FIRING_Z`, and the ninth zone is a place on this map whether or not
+## anything is standing on it. Dropping the call would quietly say the bow lane
+## had stopped existing.
 func _build_long_lane() -> void:
-	var far := LONG_FIRING_Z - LONG_LENGTH
-	for line: float in LONG_LINES:
-		var z := LONG_FIRING_Z
-		while z >= far - 0.01:
-			_post(_timber_st, Vector2(line, z), 0.09, LANTERN_HEIGHT)
-			z -= 5.0
-		_slab(_timber_st, Vector2(line - 0.05, far), Vector2(line + 0.05, LONG_FIRING_Z),
-			RAIL - 0.06, RAIL)
 	zones += 1
 
 
@@ -750,7 +737,7 @@ func _build_gallery() -> void:
 	for span: Vector2 in GALLERY_BACKSTOPS:
 		var mid := (span.x + span.y) * 0.5
 		_block(_stone_st, Vector2(mid, GALLERY_BACK_Z), Vector2(span.y - span.x, WALL_THICK),
-			FENCE, "gallery", "backstop %+.0f" % mid)
+			BACKSTOP, "gallery", "backstop %+.0f" % mid)
 	zones += 1
 
 
@@ -932,8 +919,13 @@ func _build_markers() -> void:
 	_build_dummy_markers()
 
 
-## The boards, the gong and the orb launcher. A board stands `BOARD_OFFSET` off
-## its lane's centre line so it never hides the dummy at the same distance.
+## The boards and the gong. A board stands `BOARD_OFFSET` off its lane's centre
+## line so it never hides the dummy at the same distance.
+##
+## There was a ninth target here, `Target_orb_launcher`: a housing at the far
+## end of the bow lane that threw unshaded emissive spheres on a parabola across
+## it. It is gone, with the two scripts behind it. It was the one thing on the
+## range you shot at that was not a thing — see the note above `TORCHES`.
 func _build_target_markers() -> void:
 	var root := _marker_root("Targets")
 	for i: int in 3:
@@ -948,9 +940,6 @@ func _build_target_markers() -> void:
 	_marker(root, "Target_board_large",
 		Vector3(2.5, 0.0, LONG_FIRING_Z - LONG_BOARD), PI,
 		{"kind": "board_large", "zone": "long", "range_m": LONG_BOARD})
-	_marker(root, "Target_orb_launcher",
-		Vector3(0.0, 1.4, LONG_FIRING_Z - LONG_LENGTH), PI,
-		{"kind": "orb_launcher", "zone": "long", "range_m": LONG_LENGTH})
 
 
 ## The dummy stations. The lanes' and the bow lane's are generated off the same
@@ -1073,34 +1062,6 @@ func _build_torches(parent: Node3D) -> void:
 		group.add_child(torch)
 
 
-## The glowworm lanterns on the distance posts. Emissive spheres and no light:
-## see `LANTERN_HEIGHT`. Green on the throwing lanes, amber on the bow lane, so
-## which lane you are looking down is legible from the lodge.
-func _build_lanterns(parent: Node3D) -> void:
-	var group := _group("Lanterns", parent)
-	var mesh := SphereMesh.new()
-	mesh.radius = LANTERN_RADIUS
-	mesh.height = LANTERN_RADIUS * 2.0
-	mesh.radial_segments = 10
-	mesh.rings = 5
-	for i: int in 3:
-		for mark: float in LANE_MARKS:
-			_lantern(group, mesh, Vector3(LANE_LINES[i], LANTERN_HEIGHT,
-				LANE_FIRING_Z - mark), 0)
-	for mark: float in LONG_MARKS:
-		_lantern(group, mesh, Vector3(LONG_LINES[0], LANTERN_HEIGHT,
-			LONG_FIRING_Z - mark), 1)
-
-
-func _lantern(parent: Node3D, mesh: Mesh, at: Vector3, tint: int) -> void:
-	var node := MeshInstance3D.new()
-	node.mesh = mesh
-	node.material_override = _lantern_materials[tint]
-	node.position = at
-	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	parent.add_child(node)
-
-
 ## Reed, bloom, snag and pebble out of the MegaKit, in MultiMeshes. Dressing, so
 ## none of it is collision; and nothing goes in a lane, in a landing's radius or
 ## within four metres of a pad, which `_prop_allowed` is the whole of.
@@ -1161,13 +1122,15 @@ func _build_props(parent: Node3D) -> void:
 			Vector3(at.x, -0.6, at.y)))
 		far[model] = into
 	# **And they cast no shadow**, which they used to. Under an 11-degree moon due
-	# north they stood north of the map and shadowed away from it. Under a
-	# 9-degree sun north-north-east they stand *up-sun* of it and a shadow at 9
-	# degrees is 6.31 times the height of the thing casting it: a fifteen-metre
-	# snag four metres past the north lip lays ninety-five metres of darkness
-	# south-south-west across the whole range, and thirty-four of them lay it in
-	# bands. The top-down render is what showed it — two thirds of the bog under
-	# the shadow of trees that are not even on the map. It is the same argument
+	# north they stood north of the map and shadowed away from it. Under a sun
+	# north-north-east they stand *up-sun* of it, and a shadow is 1.60 times the
+	# height of the thing casting it at 32 degrees (it was 6.31 at nine): a
+	# fifteen-metre snag four metres past the north lip still lays twenty-four
+	# metres of darkness south-south-west onto the range, and thirty-four of them
+	# lay it in bands. Raising the sun shortened the problem and did not solve it,
+	# which is why this line stays. The top-down render is what showed it — two
+	# thirds of the bog under the shadow of trees that are not even on the map at
+	# nine degrees, the north end of it at thirty-two. It is the same argument
 	# `range.tscn` makes about the west bank's azimuth, applied to dressing:
 	# scenery outside the play space does not get to decide the light inside it.
 	# The cost is the shafts these threw through the volumetric fog, which were
@@ -1300,7 +1263,10 @@ func _ramp(st: SurfaceTool, lo: Vector2, hi: Vector2, low_y: float, high_y: floa
 
 
 ## A square post. Square rather than round because it is eight triangles instead
-## of forty-eight and there are eighty of them on this map.
+## of forty-eight, and there were eighty of them on this map before the lane
+## posts came off. The forty-eight left are the void railing's and the one
+## signpost at its gap, and the reason still holds: a post is a stick, not a
+## lathe job.
 func _post(st: SurfaceTool, at: Vector2, half: float, height: float) -> void:
 	_slab(st, at - Vector2(half, half), at + Vector2(half, half), 0.0, height)
 
@@ -1359,27 +1325,18 @@ func _group(named: String, under: Node3D = null) -> Node3D:
 ## **Every one of these is about twice as bright as the island's ground, and
 ## that is measured rather than preferred.** The first pass used the Hollow's
 ## own values — peat at 0.085 albedo under a 0.30 moon — and the render came
-## back with the bottom half of the frame at literal black: the lanterns and the
-## moon read beautifully and the ground they were standing on did not exist. On
+## back with the bottom half of the frame at literal black: the moon read
+## beautifully and the ground under it did not exist. On
 ## the island that is correct, because torches are the key light (D-009) and the
 ## island is 50 m across, so everything that matters is inside a torch pool. A
 ## torch pool is 10.5 m and this map is 90 m long: nine tenths of the ground
 ## here has no torch anywhere near it, and a range whose ground you cannot see
 ## is not a range. So the peat is a wet brown you can read a 1.25 m block
-## against, and the moon does the work — see `range.tscn`'s `Sun`.
+## against, and the sun does the work — see `range.tscn`'s `Sun`.
 func _build_materials() -> void:
 	_peat_material = _matte(Color(0.21, 0.165, 0.125), 0.96, 0x9E01, 0.9)
 	_timber_material = _matte(Color(0.23, 0.175, 0.125), 0.9, 0x9E02, 3.5)
 	_stone_material = _matte(Color(0.52, 0.53, 0.47), 0.82, 0x9E03, 2.2)
-	for tint: Color in [LANTERN_GREEN, LANTERN_AMBER]:
-		var glow := StandardMaterial3D.new()
-		glow.albedo_color = tint
-		glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		glow.emission_enabled = true
-		glow.emission = tint
-		glow.emission_energy_multiplier = LANTERN_ENERGY
-		glow.disable_receive_shadows = true
-		_lantern_materials.append(glow)
 
 
 func _matte(tint: Color, rough: float, seed: int, frequency: float) -> StandardMaterial3D:

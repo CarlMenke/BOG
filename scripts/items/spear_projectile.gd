@@ -271,17 +271,19 @@ func _resolve(hit: Dictionary) -> void:
 	var normal: Vector3 = hit["normal"]
 	var collider: Object = hit["collider"]
 
-	# The practice range's boards, gong and orbs, asked about **before** the Bog
+	# The practice range's boards and gong, asked about **before** the Bog
 	# cast (D-116). Damage still lands only on Bogs — a board has no health, it
 	# has rings — so a target does not go through `report_damage` at all, and the
 	# question is a duck-typed one rather than a cast against a class so that
 	# anything at all can answer it.
 	#
 	# What becomes of the shaft is the target's to decide, and it decides it by
-	# living or dying: a board survives, so the spear stands in it; an orb frees
-	# itself inside `range_hit`, so the shaft goes with it rather than hanging in
-	# mid-air after the thing it hit is gone — which is the failure `_glance_off`
-	# was written about.
+	# living or dying: a board survives, so the spear stands in it; a target that
+	# frees itself inside `range_hit` takes the shaft with it rather than leaving
+	# it hanging in mid-air after the thing it hit is gone — which is the failure
+	# `_glance_off` was written about. Nothing on the range frees itself today (the
+	# glow orb that did is gone), and the branch stays because `range_hit` is a
+	# duck-typed contract and the next target to answer it may.
 	#
 	# Nothing here travels. Every peer's own copy of this shaft reached this
 	# point on the same tick from the same replicated launch, so every peer

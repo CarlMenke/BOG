@@ -34,7 +34,9 @@ extends Node3D
 ## `scripts/world/static_map.gd` is the contract such a scene answers to.
 ##
 ## Both branches end the same way: containers built, `spawn_points` filled,
-## `MatchState` told where the floor is, and `register_arena` called.
+## `MatchState` told where the floor is, `register_arena` called, and then the
+## two things that need a finished map — the Capture rings, and the navmesh the
+## guide line and the minimap are drawn on (`_build_navigation`).
 ##
 ## Nothing here is replicated either way. Every peer builds the same island
 ## because every peer builds it from `Net.config.map_seed`, which is part of the
@@ -106,6 +108,7 @@ func _ready() -> void:
 	# and it is what starts the warmup.
 	MatchState.register_arena(_players, spawn_points)
 	_build_capture_bases()
+	_build_navigation()
 
 
 # -------------------------------------------------------------- procedural ---
@@ -413,3 +416,35 @@ func _build_capture_bases() -> void:
 		layout.vaults.size(),
 		"declared by the map" if layout.bases_declared else "fallback from the spawn pads",
 		"declared by the map" if layout.letters_declared else "fallback between the bases"])
+
+
+# -------------------------------------------------------------- navigation ---
+
+## The navmesh and the guide line, on every peer, for that peer alone.
+##
+## Added here for the same reason the capture rings are: this is the one node
+## that knows the map has finished being built, whichever branch built it, and
+## both of these need the collision that `_build_static` or the island
+## generator has just put on layer 1. `NavBake` waits two more physics frames
+## of its own before it parses, because a static map builds its `Collision`
+## body inside its own `_ready` and a body is not in the broadphase until the
+## frame after it is added.
+##
+## **Nothing here is replicated and nothing here is a rule.** The bake is local
+## and cosmetic in exactly the sense a ragdoll is (D-010): every peer bakes its
+## own navmesh off geometry it already has, in its own time, and the result is
+## read by one dashed line on one screen and by that screen's minimap. The host
+## still decides everything that counts (D-007) — it has no navmesh at all and
+## does not need one.
+##
+## Both are added whatever the mode. `GuideTargets` is what knows the line has
+## nothing to say outside B·O·G; `NavBake` is what the minimap asks for the
+## shape of the map, which is a question the mode does not change.
+func _build_navigation() -> void:
+	var nav := NavBake.new()
+	nav.name = "NavBake"
+	add_child(nav)
+
+	var guide := GuideLine.new()
+	guide.name = "GuideLine"
+	add_child(guide)

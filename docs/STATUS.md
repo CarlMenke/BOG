@@ -23,11 +23,11 @@ island and out to a results screen, and two automated checks now walk that path:
 one in a single process, one across two processes over a real socket.
 
 ```
-bash tools/smoke_test.sh        # 178 checks, ~7 minutes, all green; finds Godot by itself
+bash tools/smoke_test.sh        # 191 checks, ~10 minutes, all green; finds Godot by itself
 bash tools/net_test.sh          # two processes, one socket; ~45 s, run by hand
 ```
 
-`smoke_test.sh` is the gate; it is at **178 of 178**. `net_test.sh` is kept out
+`smoke_test.sh` is the gate; it is at **191 of 191** (the letters round, 2026-09-18). `net_test.sh` is kept out
 of it to keep the gate fast; run it by hand after touching networking, the lobby
 or the results screen. It passes all twelve stages (200 + 34 assertions), ten of
 which end in a rematch, with the engine quiet in both processes — the error it
@@ -55,7 +55,88 @@ internet without every player installing Tailscale — is done (D-028) and needs
 real tunnel and a real second machine to confirm. What is left below is
 play-testing, not build or release work.
 
-### Where the work is right now — the feel round
+### Where the work is right now — the letters round
+
+**One letters game, and everything around it**, argued out with the owner on
+2026-09-18 and built by six Opus agents in parallel against
+`docs/PLAN_LETTERS.md`, then integrated and gated in one pass. Landed as
+**D-129..D-134**; `docs/PLAN.md` Phase 11 carries the item state.
+
+- **The core truth** (**D-129**). Free-for-all is the collect race, Teams is
+  capture-the-flag, and the Match type switch is the only thing that picks: the
+  "Ends on" picker offers one **B·O·G** entry and `_clamp_all` turns `LETTERS`
+  into `CAPTURE` under Teams and back. In the race **one letter is alive at a
+  time** — every death deals the next letter, B then O then G, when none is out
+  or being captured — and `letter_drop_chance` is gone. The hold row carries its
+  own clock (`started_at`, `seconds`), and `letter_hold_is_timed` is the one
+  question that tells a capture from a carry.
+- **The guide line** (**D-130**). `scripts/world/nav/`: a navmesh baked per
+  client per map from layer-1 colliders (588–1019 polygons, 83–285 ms, on every
+  map), jump and drop links from `JumpArc` (lifted out of `parkour_report`, whose
+  numbers did not move), and a two-pass dashed ribbon — gold to a loose card, red
+  to an enemy carrier, blue to a teammate or your own vault — trunk-merged in
+  Capture, fading under 2 m of path and back above 3. Local and cosmetic; nothing
+  replicates. `tools/nav_check.tscn` bakes every map in the gate and walks a
+  route pad to pad. **The one bug the gate caught**: since 4.4 the server builds
+  a map's iteration asynchronously, and on every map the first path was asked a
+  frame before the iteration with the polygons landed; `NavBake` now runs its
+  map with synchronous iterations and forces the sync. **Known and left**: the
+  link generator is conservative — the quarry's 1.2 m kerbs produce no links,
+  so the line routes around a step a player would hop.
+- **The capture performance** (**D-131**). A timed hold is no longer a card in
+  a fist: `HeldGear.set_pouch` hangs a procedural wool pouch in the left hand,
+  `BogAnimator`'s `capture` layer raises the arm (the `Capture` role, drawn with
+  `CastIdle` until a take is fetched — searches to try: *reaching up*, *hold
+  torch*, *victory idle*, *praying*), and `CaptureRig` floats the letter from
+  above the hand down into the pouch mouth over the hold, 1.6× → 0.25×, with a
+  fourteen-ray `Sunburst` and `letter_captured.wav` when it lands. The steal is
+  the same rig in reverse. A Capture carry keeps the card in the fist.
+  `tools/preview_capture.tscn -- f=0.5` prints both anchors; the pouch grip
+  constants were written down, not solved, and want a render.
+- **The minimap and the tutorial** (**D-132**). A heading-up circle top-right,
+  on under B·O·G only, the navmesh outline as its ground, teammates, loose
+  letters and carriers — never an enemy without a letter. Six drawn, looping
+  tutorial cards behind HOW TO PLAY on the menu, opened once per machine on the
+  first B·O·G lobby (`Settings.tutorial_seen`). The lamp says CAPTURING.
+- **The menu's wordmark stands in the glade** (**D-133**). Three real letters
+  over the fire, bobbing and swaying, kerned off their meshes; the hero Bog
+  beside the fire; one rig at one size for the menu (5.7 m / 24°) and the lobby
+  (9.95 m / 36°); the letters dip and launch out of frame on Start before the
+  fade. `HOVER_HEIGHT` is 1.35 and not the planned 1.55, because the lobby's
+  camera is pitched down at a ring standing *behind* the fire and raising the
+  row walks it into the faces. `ui_range menu_letters` / `lobby_letters` print
+  the boxes and fail on overlap.
+- **Finger grips** (**D-134**). Five one-frame poses measured out of the clip
+  library (`tools/grip_poses.tscn`, committed as `art/generated/grip_poses.res`;
+  the fists sit 41–44° off the open hand, so the takes do animate the mitten)
+  on two filtered blends over the emote. A scene tool and not a `--script`,
+  because the animator's dependency chain names the autoloads.
+
+**What the single gate run found**, in order: the grip tool could not compile
+`BogAnimator` under `--script` (fixed by asking `Bog.is_capturing()` and making
+the tool a scene); three fingertip leaf bones have no track in any clip (the
+tool skips them, nine joints a hand); the lobby ring was already outside the
+panel band from the commit before this round (`ring_radius` 3.0 → 3.5, never
+re-measured); a duplicate-card harness measured its feed before the card's own
+"appeared" row; and the navigation race above; and, on the fourth run, a type inference off
+a *new* member of a class in a reference cycle (`Bog.is_capturing`,
+`Bog.capture_rig`) failing on a cold cache — which took `preview_capture`'s
+own script down and hung the gate, so `check()` now runs every tool under a
+wall clock and the locals are typed by hand. Everything else — 185 checks
+including every new one — passed first time.
+
+**And a second wave the same evening, off the first build** (**D-135..D-137**):
+the range by day — fences, lantern spheres and the shootable orbs gone, the sun
+at 32°, renamed **Highsun Grounds**, and the rule that nothing in the world is
+a bare unshaded primitive; a moon over the viewer's shoulder in the menu and
+the lobby at a *measured* third of the fire (`MOON_ENERGY 0.45`), the hero a
+step right and back, and the lobby camera 18% further out so the 3.5 m ring
+sits inside the panel band again; and rebindable controls in Settings, saved as
+the difference from the project's defaults.
+
+**Nobody has played any of this.** Same sentence as the two rounds before.
+
+### Previously — the feel round
 
 **Thirteen pieces of playtest feedback**, grouped by the code they touch into
 six units, implemented in parallel and landed as **D-119..D-124**.
@@ -135,7 +216,7 @@ round of 2026-09-17 (**D-112..D-118**) that it is built on top of, which had
 been sitting in the working tree. Nobody has played any of it: every number
 above is a render, a headless tool line or a gate check.
 
-### Previously — the practice range
+### Before that — the practice range
 
 **Glowworm Grounds** (`range`) is built and in the gate, as **D-112..D-116** and
 `docs/PLAN.md` Phase 9. It is the seventh map and the first that is not an
@@ -664,6 +745,11 @@ Three tiers, because three different kinds of claim need three different proofs
 | `tools/preview_bog.tscn` | the rebuilt body playing clips from the library, six BOGs across a clip, one row per clip key — the sheet the clip choice is made from |
 | `tools/skin_thumbs.gd` | the picker's fourteen 128² tiles, rendered rather than painted (D-109): one BOG in `Idle`, the camera aimed off `mixamorig_Head`, one shot per skin, the centre square cut. **Not** in the gate and **not headless** — it needs a real window to render into. `"$GODOT" --path . --resolution 512x512 --script tools/skin_thumbs.gd` (a trailing `-- muck rime` does just those), then `--import` so Godot sees the new PNGs |
 | `tools/preview_*.tscn` | it *looks* right. Needs a person, always will |
+| `tools/nav_check.tscn` | every map bakes a navmesh from its layer-1 colliders and walks a route from the first pad to the last; prints the census per map — polygons, links, bounds, route length and how many leaps it took (D-130). **In the gate**, headless, every map in turn; `-- <map id>` for one |
+| `tools/preview_capture.tscn` | the capture performance measured on one Bog: pouch in the left fist, no card in the right, the pouch mouth below the raised hand, the floating letter on the line between them; prints both anchors and the descent in world metres so the pouch grip can be read off a render (D-131). `-- f=0.5` freezes the fraction. **In the gate** headless and as a snapshot |
+| `tools/grip_poses.tscn` | writes `art/generated/grip_poses.res` — five one-frame finger poses measured out of the clip library — and prints how far each closed hand sits from the open one (D-134). Runs after the import; **commit what it writes**. **In the gate**, headless |
+| `tools/hud_range.tscn minimap` / `tutorial` | the corner map's blips counted off `Minimap.debug_counts()` — an ally, a loose card and an enemy carrier, and no enemy without a letter — and the how-to-play cards opened once, marked seen on close, reopenable (D-132). **In the gate** as snapshots |
+| `tools/ui_range.tscn menu_letters` / `lobby_letters` | the menu's letter row and the hero's capsule projected into frame fractions and required not to overlap; the same rig in the lobby required inside the panels' band and below every ring Bog's head (D-133). **In the gate** as snapshots |
 
 **`playthrough` is the one that catches integration.** Every other harness looks
 at a single seam, and a defect that lives *between* two of them is invisible to
