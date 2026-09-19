@@ -35,6 +35,11 @@ const BOW_LOOSE := preload("res://audio/sfx/bow_loose.wav")
 ## the blade and the swing would read as a different swing.
 const SWORD_SWING := preload("res://audio/sfx/sword_swing.wav")
 const SWORD_HIT_BODY := preload("res://audio/sfx/sword_hit_body.wav")
+## A bare fist landing (D-124, D-149). It borrowed `SWORD_HIT_BODY` until the
+## punch had a clip of its own, and a fist that sounds like a metre of steel is
+## a fist that reads as worth more than the fifth of a body it takes. Two
+## layers, no ring and no tail — see `fist_hit` in `tools/make_sfx.py`.
+const FIST_HIT := preload("res://audio/sfx/fist_hit.wav")
 const SHIELD_DEPLOY := preload("res://audio/sfx/shield_deploy.wav")
 const MAGNET_THROW := preload("res://audio/sfx/magnet_throw.wav")
 const MAGNET_ARM := preload("res://audio/sfx/magnet_arm.wav")

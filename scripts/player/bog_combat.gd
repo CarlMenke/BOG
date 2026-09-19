@@ -2916,11 +2916,13 @@ func _host_punch(aim: Vector3) -> void:
 	_swing_range_targets(centre, fist, PUNCH_REACH, Bog.Cause.FIST, PUNCH_ARC)
 
 
-## The punch landing, on every machine.
+## The punch landing, on every machine. `FIST_HIT` rather than the sword's hit,
+## which is what this borrowed while the fist had no clip of its own (D-149):
+## a punch is a fifth of a body and has to sound like one.
 @rpc("authority", "call_remote", "reliable")
 func _do_punch(point: Vector3, connected: bool) -> void:
 	if connected:
-		AudioDirector.play_3d_varied(AudioDirector.SWORD_HIT_BODY, point)
+		AudioDirector.play_3d_varied(AudioDirector.FIST_HIT, point)
 	# Its own name on the signal, so the range's launch/hit bookkeeping can tell
 	# a fist from a weapon — and `RangeStats.WEAPONS` deliberately has no "fist"
 	# row, so `record_launch` drops it on the floor.

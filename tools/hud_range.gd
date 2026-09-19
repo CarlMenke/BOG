@@ -349,10 +349,15 @@ func _deal_team_letters(mine: Dictionary) -> void:
 
 
 ## A feed with one row in it proves nothing. Emitted rather than reported so
-## the causes can be mixed — a spear kill, a fall, and one involving the local
-## player, which is the row that has to stand out.
+## the causes can be mixed — a spear kill, a fall, a punch, and one involving
+## the local player, which is the row that has to stand out.
+##
+## Five rows, which is `KillFeed.MAX_ROWS` exactly: the fist was added when it
+## got a glyph of its own (D-149) and a sixth would push the spear kill off the
+## bottom before the shot was taken.
 func _stage_kills() -> void:
 	MatchState.player_killed.emit(EXTRA_BASE + 3, EXTRA_BASE, Bog.Cause.SPEAR)
+	MatchState.player_killed.emit(EXTRA_BASE + 3, EXTRA_BASE + 2, Bog.Cause.FIST)
 	MatchState.player_killed.emit(EXTRA_BASE + 1, EXTRA_BASE + 1, Bog.Cause.VOID)
 	MatchState.player_killed.emit(EXTRA_BASE + 2, 1, Bog.Cause.SPEAR)
 	MatchState.player_killed.emit(1, EXTRA_BASE, Bog.Cause.SPEAR)

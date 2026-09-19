@@ -393,6 +393,41 @@ def sword_hit_body():
     return edge + thud + ring * 0.75 + tear
 
 
+def fist_hit():
+    """A bare fist arriving in a Bog (D-124). Until now it borrowed
+    `sword_hit_body`, which is a metre of steel, and a punch that sounds like a
+    sword is a punch that reads as worth five times what it takes.
+
+    Everything here is the argument that this is the *smallest* impact in the
+    library, and the two layers say so in the two ways a body can:
+
+      slap  the knuckles landing. Mid-band and nothing else — the top is a
+            weapon on stone and the bottom is already in the thump — so it is
+            `range_plate`'s band-split noise at a tenth of its brightness, and
+            gone in twenty milliseconds. It is what makes this read as skin
+            rather than as anything with an edge on it.
+      thump the mass behind it, and there is very little: one arm, where the
+            spear has a whole shaft's flight and the sword a Bog turning
+            through a revolution. So it runs 205 down to 105 Hz where
+            `spear_hit_body` runs 150 down to 62 — it starts higher and, more
+            to the point, it *ends* higher, because a light thing stopping in
+            flesh never reaches the bottom a heavy one does. And it is 0.16 s
+            against that clip's 0.26.
+
+    No ring and no tail, which is the whole of the difference from the sword:
+    nothing about a fist is stiff enough to ring and nothing about it follows
+    through — the arm is back on the 0.5 s cycle. Short for `range_orb`'s
+    reason as well as for honesty: `BogCombat.PUNCH_CYCLE` is 0.5 s and five
+    punches kill, so this is heard twice a second for as long as a fist fight
+    lasts, and anything longer would overlap itself.
+    """
+    n = seconds(0.16)
+    thump = sweep(n, 205.0, 105.0, 0.5) * envelope(n, 0.004, 0.92, 2.8)
+    slap = lowpass(noise(n, 91), 2600.0) - lowpass(noise(n, 91), 420.0)
+    slap *= envelope(n, 0.002, 0.88, 6.0) * 0.8
+    return thump + slap
+
+
 def death():
     """A Bog expiring. Falling, slightly comic, over quickly."""
     n = seconds(0.55)
@@ -752,6 +787,7 @@ EFFECTS = {
     "bow_loose": bow_loose,
     "sword_swing": sword_swing,
     "sword_hit_body": sword_hit_body,
+    "fist_hit": fist_hit,
     "shield_deploy": shield_deploy,
     "magnet_throw": magnet_throw,
     "magnet_arm": magnet_arm,

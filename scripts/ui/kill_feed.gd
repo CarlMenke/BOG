@@ -148,6 +148,12 @@ static func _cause_glyph(cause: int) -> String:
 			# arrow, because it is the one kill in the game that is worth
 			# reading the feed to find out about (D-038).
 			return "⚡"
+		Bog.Cause.FIST:
+			# The sword's argument one step further in (D-124). A fist is the
+			# one kill in this game that took five blows and no weapon at all,
+			# and a generic arrow would tell the player they were speared by
+			# somebody who was not even holding a spear.
+			return "✊"
 		Bog.Cause.VOID:
 			return "pushed off"
 		Bog.Cause.FALL:
