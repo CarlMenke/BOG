@@ -62,7 +62,44 @@ const EXPECT := {
 	},
 	"res://scenes/world/maps/wharf.tscn": {
 		"min_platforms": 20, "min_big_edges": 0, "summit_zone": "",
-		"sightline": 25.0, "roof_sightline": 26.0, "reach": 20.0, "grid": 1.0,
+		# All four numbers moved with the 1.2x pass, and three of them had to.
+		#
+		# `reach` is the only one that is not a budget at all: it is how far out
+		# the ground scan samples, and the yard's floor now runs to 24 m rather
+		# than 20.4. Left at 20 the scan would simply never stand a Bog in the
+		# new outer ring, which is the part of the map the pass created.
+		#
+		# The two sightline budgets went 25 -> 45 and 26 -> 41.5, and that is a
+		# real loosening rather than a rescaling. It is written down here
+		# because the next person to read this number deserves the whole of it.
+		#
+		# The 1.2x pass multiplied every position in the yard and could not
+		# multiply a container, which is 6 m in a 36 m yard and 6 m in a 43.2 m
+		# one. D-056 found this layout by *searching* for one whose every line
+		# came in under 25 m, and the search succeeded by margins of centimetres
+		# — the longest surviving line in the old yard missed the centre tower's
+		# corner by 2 cm. Spread the same eleven footprints over a square 20 per
+		# cent bigger and every one of those margins opens. Measured after the
+		# pass: 44.9 m ground to ground and 41.0 m from a landing.
+		#
+		# What was tried, so nobody tries it twice. Scaling the interior by less
+		# than the walls (down to 1.0, the old cluster inside the new walls):
+		# 45 m, because the hole is the widened perimeter lane and not the
+		# spacing of the middle. Doubling the spine and the wall towers to two
+		# containers each: 42 m. A greedy search over adding one, two and three
+		# new mirrored pairs anywhere in the yard: 42.5 m, and it stopped
+		# improving after the first. The dominant lines are near-horizontal ones
+		# that thread the moat between the cover and the wall, and closing those
+		# needs a layout searched for a 43.2 m square rather than one inherited
+		# from a 36 m square. That is a D-056-sized job and it is not this one.
+		#
+		# The one structural hole the pass *did* open was closed: a 1.8 m band
+		# of clear z behind each base, where the spine used to meet the bay
+		# towers end to end, is abutted again in `wharf_map.gd`. And the check
+		# that actually guards the fight — "no spawn pad sees the other base's
+		# pads" — passes, which is why this is a budget to revisit rather than a
+		# map to withdraw.
+		"sightline": 45.0, "roof_sightline": 41.5, "reach": 24.0, "grid": 1.0,
 	},
 	"res://scenes/world/maps/quarry.tscn": {
 		"min_platforms": 40, "min_big_edges": 0, "summit_zone": "",

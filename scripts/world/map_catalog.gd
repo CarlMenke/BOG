@@ -81,9 +81,11 @@ const MAPS: Array[Dictionary] = [
 		"display_name": "Lantern Wharf",
 		"kind": Kind.STATIC,
 		"scene": "res://scenes/world/maps/wharf.tscn",
-		# Built from a table like Kopje Crossing, and the small one: a 36 m box
-		# yard with two declared Capture B·O·G bases (D-056).
-		"loading_line": "Lighting the floodlights",
+		# Built from a table like Kopje Crossing, and the small one: a 43.2 m box
+		# yard with two declared Capture B·O·G bases (D-056). It was 36 m until
+		# the 1.2x pass, which multiplied every position in the layout and no
+		# size in it.
+		"loading_line": "Stringing the lanterns",
 	},
 	{
 		"id": "yacht",

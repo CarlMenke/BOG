@@ -15431,3 +15431,41 @@ else. The skin stays locked at Start, and the difference is the reason: a
 respawn rebuilds the thing that carries a weapon, while a body stands there all
 match and swapping it would leave seven players aiming at somebody they no
 longer recognise.
+
+## D-134 — Lantern Wharf is a fifth bigger, has its lanterns, and paid for the room in sightlines
+The owner: *"the wharf needs to be maybe 20% bigger as well as a very nice
+dressing revamp"*, to the depth Whisperbloom Hollow has.
+
+**Bigger.** `HALF` 18 → 21.6 (36 m → 43.2 m square), by multiplying
+*positions* and nothing else — a crate stays a crate — and re-deriving every
+flush contact from the steel it touches: the perimeter is eight containers a
+side instead of seven, the bay and wall towers are flush to the wall again, the
+crates re-seated, the forklift re-parked. The spine is placed by its *abutment*
+with the bay towers, because scaling it opened a 1.8 m band of clear z the full
+width behind each base. Crossroads 3.6 → 4.8 m, base bay 6.6 → 8.4 m; spawns,
+bases, letters, paint, floodlights (range and energy up with the throw) and the
+port all follow. `base_radius` deliberately does not.
+
+**The price, accepted by the owner.** D-056 found this layout by *searching*
+for one whose every ground sightline came in under 25 m, and it held that by
+centimetres. Spread the same eleven fixed-size footprints over a square a fifth
+bigger and those margins open: 44.9 m, threading the widened moat between the
+cover and the wall. Scaling the interior less (still 45), doubling the spine
+and wall towers (42) and a greedy search for up to three new mirrored pairs
+(42.5) were all measured and rejected. `parkour_report`'s budget for the wharf
+is therefore **raised from 25/26 m to 45/41.5 m — a genuine loosening, not a
+rescaling** — and the bow is better here than it was. The check that guards the
+fight, that no spawn pad sees the other base's pads, still passes. Re-earning
+25 m needs a layout searched for 43.2 m, which is a D-056-sized job and is not
+this one.
+
+**Dressed.** Everything below `super()`, all MultiMesh, zero collision, on the
+floor under 0.3 m, flat on wall faces above 2.6 m or on the 7.8 m wall tops:
+fifteen festoon strings with 135 bulbs and five shadowless lamps that sway —
+the thing the map is named after and did not have — 158 pieces of quay gear
+(nets, tarps, floats, tyre fenders, rope coils, fish crates, bitts, gulls), 48
+container codes off a real 5×7 glyph table (the first texture on this map with
+a handedness, which is why its material is mirrored in u and nothing else is),
+four moored boats and a lit far shore, midges under the lit strings, and hooks
+for quay water north and south and for rigging. Eleven new draw calls, seven
+shared materials, no new shadow casters; collision unchanged.

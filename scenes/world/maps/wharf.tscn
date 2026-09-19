@@ -9,8 +9,25 @@
 ; forklifts, three dozen drums, pallets and pipe stock. It then calls `super()`,
 ; which sweeps all of that into world-space trimesh collision on layer 1, and
 ; then adds the dressing: floor paint, door bars, two cranes over the walls, four
-; floodlights on the wall corners, the Factory Kit plant (D-084) and a City Kit
-; town outside the wall that is in `StaticMap.BACKDROP_GROUP` and never collision.
+; floodlights on the wall corners, fifteen strings of festoon lanterns with five
+; lamps on them, the quay gear (nets, tarps, floats, tyre fenders, rope coils,
+; fish crates, mooring bitts and perched gulls), sprayed container codes, the
+; Factory Kit plant (D-084) and the port outside the wall — stacks, a coaster,
+; a transit shed, five gantries, four fishing boats, a lighthouse and a lit town
+; on the far shore, all of it in `StaticMap.BACKDROP_GROUP` and never collision.
+;
+; ## The 1.2x pass
+;
+; The yard was 36 m square and is 43.2 m. `HALF` went 18 -> 21.6 in the script
+; and every position in it was multiplied by the same 1.2, except the handful of
+; flush contacts (a crate against a box, a tower against the wall) which were
+; re-derived from the steel they touch, and the spine, which is placed by its
+; abutment with the bay towers. The markers below moved with them: every spawn,
+; both bases and all three letters are the old number times 1.2 — the corner
+; pockets 15.5 -> 18.6 and 13.5 -> 16.2, the bay pads 8.5 -> 10.2 and 16 -> 19.2,
+; the bases and O and G 15.5 -> 18.6. `base_radius` did *not* scale: the capture
+; ring is a rule of the mode rather than a feature of the map, and 4 m still
+; fits the bay, which is 8.4 m across now rather than 6.6.
 ;
 ; So this file is what `static_map.gd` asks for:
 ;
@@ -26,9 +43,12 @@
 ;                the ground can never disagree. Serialised ROW-major, as every
 ;                `.tscn` stores a `Transform3D`.
 ;   Spawns       eight pads, four at each end — two in the corner pockets and
-;                two in the bays either side of the base — alternating north and south
-;                so a two-player match opens with the two players at opposite
-;                ends. Each faces the middle.
+;                two in the bays either side of the base — alternating north and
+;                south so a two-player match opens with the two players at
+;                opposite ends. Each faces the middle. All eight are checked
+;                against the physics the match will use by `tools/preview_map`,
+;                which is what proves they are still on solid floor inside the
+;                bigger walls.
 ;   Bases        Team 1 north, Team 2 south, each in the bay between two towers
 ;                against its back wall, behind the spine tower (D-051).
 ;   Letters      B, O, G on the middle line: B at the crossroads in the centre,
@@ -67,45 +87,45 @@ directional_shadow_blend_splits = true
 
 ; 0  north-west corner pocket, Team 1
 [node name="Spawn0" type="Marker3D" parent="Spawns"]
-transform = Transform3D(-0.65678, 0, -0.75408, 0, 1, 0, 0.75408, 0, -0.65678, -15.5, 0.12, -13.5)
+transform = Transform3D(-0.65678, 0, -0.75408, 0, 1, 0, 0.75408, 0, -0.65678, -18.6, 0.12, -16.2)
 
 ; 1  south-east corner pocket, Team 2
 [node name="Spawn1" type="Marker3D" parent="Spawns"]
-transform = Transform3D(0.65678, 0, 0.75408, 0, 1, 0, -0.75408, 0, 0.65678, 15.5, 0.12, 13.5)
+transform = Transform3D(0.65678, 0, 0.75408, 0, 1, 0, -0.75408, 0, 0.65678, 18.6, 0.12, 16.2)
 
 ; 2  north-east corner pocket, Team 1
 [node name="Spawn2" type="Marker3D" parent="Spawns"]
-transform = Transform3D(-0.65678, 0, 0.75408, 0, 1, 0, -0.75408, 0, -0.65678, 15.5, 0.12, -13.5)
+transform = Transform3D(-0.65678, 0, 0.75408, 0, 1, 0, -0.75408, 0, -0.65678, 18.6, 0.12, -16.2)
 
 ; 3  south-west corner pocket, Team 2
 [node name="Spawn3" type="Marker3D" parent="Spawns"]
-transform = Transform3D(0.65678, 0, -0.75408, 0, 1, 0, 0.75408, 0, 0.65678, -15.5, 0.12, 13.5)
+transform = Transform3D(0.65678, 0, -0.75408, 0, 1, 0, 0.75408, 0, 0.65678, -18.6, 0.12, 16.2)
 
 ; 4  north, the bay west of the base, Team 1
 [node name="Spawn4" type="Marker3D" parent="Spawns"]
-transform = Transform3D(-0.88312, 0, -0.46916, 0, 1, 0, 0.46916, 0, -0.88312, -8.5, 0.12, -16)
+transform = Transform3D(-0.88312, 0, -0.46916, 0, 1, 0, 0.46916, 0, -0.88312, -10.2, 0.12, -19.2)
 
 ; 5  south, the bay east of the base, Team 2
 [node name="Spawn5" type="Marker3D" parent="Spawns"]
-transform = Transform3D(0.88312, 0, 0.46916, 0, 1, 0, -0.46916, 0, 0.88312, 8.5, 0.12, 16)
+transform = Transform3D(0.88312, 0, 0.46916, 0, 1, 0, -0.46916, 0, 0.88312, 10.2, 0.12, 19.2)
 
 ; 6  north, the bay east of the base, Team 1
 [node name="Spawn6" type="Marker3D" parent="Spawns"]
-transform = Transform3D(-0.88312, 0, 0.46916, 0, 1, 0, -0.46916, 0, -0.88312, 8.5, 0.12, -16)
+transform = Transform3D(-0.88312, 0, 0.46916, 0, 1, 0, -0.46916, 0, -0.88312, 10.2, 0.12, -19.2)
 
 ; 7  south, the bay west of the base, Team 2
 [node name="Spawn7" type="Marker3D" parent="Spawns"]
-transform = Transform3D(0.88312, 0, -0.46916, 0, 1, 0, 0.46916, 0, 0.88312, -8.5, 0.12, 16)
+transform = Transform3D(0.88312, 0, -0.46916, 0, 1, 0, 0.46916, 0, 0.88312, -10.2, 0.12, 19.2)
 
 [node name="Bases" type="Node3D" parent="."]
 
 ; Team 1, north
 [node name="Team1" type="Marker3D" parent="Bases"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -15.5)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -18.6)
 
 ; Team 2, south
 [node name="Team2" type="Marker3D" parent="Bases"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 15.5)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 18.6)
 
 [node name="Letters" type="Node3D" parent="."]
 
@@ -113,7 +133,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 15.5)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
 
 [node name="O" type="Marker3D" parent="Letters"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -15.5, 0, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -18.6, 0, 0)
 
 [node name="G" type="Marker3D" parent="Letters"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15.5, 0, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 18.6, 0, 0)

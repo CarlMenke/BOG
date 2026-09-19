@@ -17,9 +17,10 @@ extends RefCounted
 ## for every one of these on every client:
 ##
 ##   moths     4 emitters x 26 = 104 particles, one per floodlight beam
+##   midges    5 emitters x 20 = 100 particles, one per lit festoon
 ##   mist      1 emitter  x 30 = 30 large, very faint billboards
 ##   gulls     1 emitter  x  9 = 9 silhouettes over the north water
-##   fog       1 FogVolume, a 41 m box 1.8 m tall
+##   fog       1 FogVolume, a 49 m box 1.8 m tall
 ##
 ## 143 particles against the island's 800-odd, and one of them is a fog volume
 ## rather than geometry. The difference is that this map is 36 m across and the
@@ -49,9 +50,22 @@ extends RefCounted
 ##                          of the yard is audible before it is visible — the
 ##                          job the island's `wind` loop does over the rim, done
 ##                          by the thing this map has instead of wind.
+##   `ambient_quay_water.wav` the water itself, slack and close: a swell working
+##                          under a quay wall and sucking back out of it. Placed
+##                          twice, outside the north and south walls at the
+##                          water's edge, so the sea has a *direction* — which
+##                          on a map symmetric to a fault is one of the few
+##                          orientation cues a player standing still can get,
+##                          and the only one he can get with his eyes shut.
+##   `ambient_rigging.wav`  the coaster at the north quay: a halyard against a
+##                          mast, a fender creaking, a hull moving on its lines.
+##                          One emitter at the ship, quiet and far, which is the
+##                          sound equivalent of the silhouette over the wall.
 const LOOPS := {
 	"harbour": "res://audio/ambience/ambient_harbour.wav",
 	"lamp": "res://audio/ambience/ambient_lamp_hum.wav",
+	"water": "res://audio/ambience/ambient_quay_water.wav",
+	"rigging": "res://audio/ambience/ambient_rigging.wav",
 }
 
 ## How tall the mist volume is, and how fast its density halves going up.
@@ -82,8 +96,13 @@ const MIST_FALLOFF := 1.25
 ## passed in rather than recomputed here: the moths belong to the beams, and the
 ## honest answer to "where are the beams" is "wherever `_build_floodlights` put
 ## them".
+## `lantern_pools` are the sag points of the lit festoons, handed over by
+## `WharfMap._build_lanterns` so the midges can be hung in them without this
+## file having to know what a catenary is. It defaults to empty because the
+## midges are the only thing that reads it, and a map that has no festoons
+## should get no midges rather than an error.
 static func build(parent: Node3D, half: float, lamp_heads: Array[Vector3],
-		aim_at: Array[Vector3]) -> void:
+		aim_at: Array[Vector3], lantern_pools: Array[Vector3] = []) -> void:
 	var root := Node3D.new()
 	root.name = "Ambience"
 	parent.add_child(root)
@@ -94,7 +113,65 @@ static func build(parent: Node3D, half: float, lamp_heads: Array[Vector3],
 	_build_mist(root, half)
 	_build_moths(root, lamp_heads, aim_at, rng)
 	_build_gulls(root, half, rng)
-	_build_audio(root, lamp_heads)
+	_build_midges(root, lantern_pools, rng)
+	_build_audio(root, lamp_heads, half)
+
+
+# ------------------------------------------------------------------ midges ---
+
+## Harbour midges under the festoons: the warm counterpart to the moths in the
+## floodlight beams, and the thing that makes a hanging bulb read as a hanging
+## bulb rather than as an emissive sphere.
+##
+## One emitter per lit string — five of them, twenty particles each — against
+## the moths' four by twenty-six. They are deliberately *smaller, warmer and
+## slower* than the moths: a moth in a sodium cone is a flicker of grey at four
+## metres a second, and a midge under a festoon is a slow orange speck. Sharing
+## the moths' emitter would have been cheaper by five nodes and wrong by both.
+##
+## The whole cost of this file is now 243 particles against the island's 800,
+## and every one of these five sits inside a light pool that already exists, so
+## nothing here adds a draw the map was not already paying for.
+static func _build_midges(parent: Node3D, pools: Array[Vector3],
+		rng: RandomNumberGenerator) -> void:
+	for i: int in pools.size():
+		var process := ParticleProcessMaterial.new()
+		process.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+		process.emission_sphere_radius = 1.5
+		process.direction = Vector3(0.0, 1.0, 0.0)
+		process.spread = 180.0
+		process.initial_velocity_min = 0.08
+		process.initial_velocity_max = 0.45
+		# A shade of lift, so the swarm hangs under the bulb instead of raining
+		# out of it. Midges over water do exactly this.
+		process.gravity = Vector3(0.0, 0.05, 0.0)
+		process.damping_min = 0.25
+		process.damping_max = 0.8
+		process.turbulence_enabled = true
+		process.turbulence_noise_strength = 0.65
+		process.turbulence_noise_scale = 2.6
+		process.scale_min = 0.5
+		process.scale_max = 1.0
+		process.color_ramp = _fade_ramp(Color(1.0, 0.76, 0.42), 0.55)
+
+		var quad := QuadMesh.new()
+		quad.size = Vector2(0.075, 0.075)
+		quad.material = _glow_material(Color(1.0, 0.74, 0.40), 2.4)
+
+		var midges := GPUParticles3D.new()
+		midges.name = "Midges%d" % i
+		midges.draw_pass_1 = quad
+		midges.process_material = process
+		midges.amount = 20
+		midges.lifetime = 7.0
+		midges.randomness = 1.0
+		# Preprocessed a full lifetime, like every other emitter here, so the
+		# first frame a player sees is a settled swarm and not a puff.
+		midges.preprocess = 7.0
+		midges.position = pools[i] + Vector3(0.0, -0.9, 0.0)
+		midges.rotation.y = rng.randf_range(0.0, TAU)
+		midges.visibility_aabb = AABB(Vector3(-4, -4, -4), Vector3(8, 8, 8))
+		parent.add_child(midges)
 
 
 # -------------------------------------------------------------------- mist ---
@@ -311,7 +388,7 @@ static func _build_gulls(parent: Node3D, half: float, rng: RandomNumberGenerator
 ## not on disk — `ambience.gd::_build_audio` exactly, including the lesson in
 ## its header: name the files the audio branch will actually commit, because a
 ## typo here ships a map with no sound and nothing that says so.
-static func _build_audio(parent: Node3D, heads: Array[Vector3]) -> void:
+static func _build_audio(parent: Node3D, heads: Array[Vector3], half: float) -> void:
 	var bed: String = LOOPS["harbour"]
 	if ResourceLoader.exists(bed):
 		var stream := load(bed) as AudioStream
@@ -343,6 +420,36 @@ static func _build_audio(parent: Node3D, heads: Array[Vector3]) -> void:
 		player.autoplay = true
 		player.position = heads[i]
 		parent.add_child(player)
+
+	_loop_at(parent, "water", "Ambient_waterN", Vector3(0.0, -1.0, -(half + 9.0)), 34.0, -10.0)
+	_loop_at(parent, "water", "Ambient_waterS", Vector3(0.0, -1.0, half + 9.0), 34.0, -10.0)
+	# At the coaster, which `wharf_map.gd` puts 40.8 m off the north quay.
+	_loop_at(parent, "rigging", "Ambient_rigging", Vector3(10.8, 8.0, -40.8), 22.0, -19.0)
+
+
+## One positioned loop, or nothing at all if its file is not on disk.
+##
+## Added rather than folded into the two players above, because those two are
+## each doing something particular — the bed is unattenuated and the hum is
+## one per lamp head — and this is the plain case that the water and the rigging
+## both are. Three copies of the same eight lines was the alternative.
+static func _loop_at(parent: Node3D, key: String, named: String, at: Vector3,
+		unit_size: float, volume_db: float) -> void:
+	var path: String = LOOPS[key]
+	if not ResourceLoader.exists(path):
+		return
+	var stream := load(path) as AudioStream
+	if stream == null:
+		return
+	var player := AudioStreamPlayer3D.new()
+	player.name = named
+	player.stream = stream
+	player.bus = "Ambience"
+	player.unit_size = unit_size
+	player.volume_db = volume_db
+	player.autoplay = true
+	player.position = at
+	parent.add_child(player)
 
 
 # -------------------------------------------------------------- materials ---
