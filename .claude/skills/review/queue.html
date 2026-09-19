@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BOG review queue</title>
+<style>
+  :root {
+    --bg: #f7f6f3; --panel: #fffefb; --line: #e2ded6; --ink: #21201c;
+    --dim: #6b6862; --accent: #7a6a3f; --good: #3f7a4f; --bad: #9a4b32;
+    --other: #4a6480; --mine: #6a4f7a; --chip: #efece5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17171a; --panel: #1f1f23; --line: #32323a; --ink: #e9e7e1;
+      --dim: #97948d; --accent: #c8b27a; --good: #79b68b; --bad: #d98d72;
+      --other: #8fb0d0; --mine: #b094c4; --chip: #2a2a30;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.5 "Segoe UI", system-ui, sans-serif;
+    padding: 0 0 92px;
+  }
+  header { padding: 28px 24px 18px; max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 24px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .sub { color: var(--dim); font-size: 13px; }
+  .warn {
+    margin: 14px 0 0; padding: 10px 13px; border-radius: 8px;
+    background: var(--chip); border-left: 3px solid var(--accent); font-size: 13px;
+  }
+  main { max-width: 900px; margin: 0 auto; padding: 0 24px; }
+  section { margin: 26px 0; }
+  .ghead { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+  .ghead h2 { font-size: 16px; margin: 0; }
+  .gwhere { color: var(--dim); font-size: 13px; margin: 0 0 12px; }
+  .t {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 13px 15px; margin-bottom: 9px;
+  }
+  .t.answered { border-left: 3px solid var(--good); }
+  .t.answered[data-v="no"] { border-left-color: var(--bad); }
+  .t.answered[data-v="else"] { border-left-color: var(--other); }
+  .t.answered[data-v="mine"] { border-left-color: var(--mine); }
+  .trow { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .id { font-weight: 600; font-size: 13px; color: var(--accent); text-decoration: none; }
+  .id:hover { text-decoration: underline; }
+  .pri {
+    font-size: 11px; padding: 1px 7px; border-radius: 99px;
+    background: var(--chip); color: var(--dim);
+  }
+  .ttl { font-weight: 500; flex: 1 1 320px; }
+  .look { color: var(--dim); font-size: 13px; margin: 6px 0 8px; }
+  .landed {
+    font-size: 12px; color: var(--dim); margin: 0 0 10px;
+    font-family: ui-monospace, Consolas, monospace;
+  }
+  .landed b { font-family: "Segoe UI", system-ui, sans-serif; font-weight: 500; }
+  .landed .none { color: var(--bad); }
+  .btns { display: flex; gap: 7px; flex-wrap: wrap; }
+  button {
+    font: inherit; font-size: 13px; padding: 5px 13px; border-radius: 7px;
+    border: 1px solid var(--line); background: transparent; color: var(--ink);
+    cursor: pointer;
+  }
+  button:hover { background: var(--chip); }
+  button[aria-pressed="true"] { color: #fff; border-color: transparent; }
+  .v-yes[aria-pressed="true"] { background: var(--good); }
+  .v-no[aria-pressed="true"] { background: var(--bad); }
+  .v-else[aria-pressed="true"] { background: var(--other); }
+  .v-mine[aria-pressed="true"] { background: var(--mine); }
+  textarea {
+    width: 100%; margin-top: 9px; min-height: 42px; resize: vertical;
+    font: inherit; font-size: 13px; padding: 7px 9px; border-radius: 7px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+  }
+  textarea::placeholder { color: var(--dim); }
+  footer {
+    position: fixed; left: 0; right: 0; bottom: 0; background: var(--panel);
+    border-top: 1px solid var(--line); padding: 13px 24px;
+  }
+  .fin {
+    max-width: 900px; margin: 0 auto; display: flex; gap: 14px;
+    align-items: center; justify-content: space-between; flex-wrap: wrap;
+  }
+  .count { font-size: 13px; color: var(--dim); }
+  .fbtns { display: flex; gap: 8px; }
+  #copy { background: var(--accent); color: #fff; border-color: transparent; padding: 7px 18px; }
+  #copy.done { background: var(--good); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>BOG review queue</h1>
+  <div class="sub" id="sub"></div>
+  <div class="warn" id="note" hidden></div>
+</header>
+
+<main id="groups"></main>
+
+<footer><div class="fin">
+  <span class="count" id="count"></span>
+  <span class="fbtns">
+    <button id="clear">Clear all</button>
+    <button id="copy">Copy for Claude</button>
+  </span>
+</div></footer>
+
+<script>
+// The review skill replaces the next line wholesale. Shape:
+//   { date, build, note, groups: [ { key, name, where,
+//     tickets: [ { id, title, look, pri, url,
+//                  landed: [ { sha, subject } ] } ] } ] }
+// `landed` comes from `python tools/ticket_commits.py --json <ids>`; a ticket
+// with none says so on the card, because that is a thing to fix on the ticket.
+const QUEUE = __QUEUE_JSON__;
+
+const KEY = "bog-review-" + QUEUE.date;
+let state = {};
+try { state = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) {}
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} };
+
+const total = QUEUE.groups.reduce((n, g) => n + g.tickets.length, 0);
+let sub = QUEUE.date + " · " + total + " tickets waiting on you · "
+        + QUEUE.groups.length + " groups";
+if (QUEUE.build) sub += " · build: " + QUEUE.build;
+document.getElementById("sub").textContent = sub;
+if (QUEUE.note) {
+  const n = document.getElementById("note");
+  n.textContent = QUEUE.note;
+  n.hidden = false;
+}
+
+const VERDICTS = [
+  ["yes", "Works"],
+  ["no", "Not yet"],
+  ["else", "Something else"],
+  ["mine", "Too annoying — you check it"],
+];
+
+const root = document.getElementById("groups");
+for (const g of QUEUE.groups) {
+  const s = document.createElement("section");
+  const h = document.createElement("div");
+  h.className = "ghead";
+  const h2 = document.createElement("h2");
+  h2.textContent = g.key + " · " + g.name;
+  h.appendChild(h2);
+  s.appendChild(h);
+  const w = document.createElement("p");
+  w.className = "gwhere";
+  w.textContent = g.where;
+  s.appendChild(w);
+
+  for (const t of g.tickets) {
+    const card = document.createElement("div");
+    card.className = "t";
+    card.id = "card-" + t.id;
+
+    const row = document.createElement("div");
+    row.className = "trow";
+    const a = document.createElement("a");
+    a.className = "id"; a.textContent = t.id; a.target = "_blank";
+    a.href = t.url || ("https://linear.app/bogdevelopment/issue/" + t.id);
+    const pri = document.createElement("span");
+    pri.className = "pri"; pri.textContent = t.pri || "";
+    const ttl = document.createElement("span");
+    ttl.className = "ttl"; ttl.textContent = t.title;
+    row.append(a, pri, ttl);
+    card.appendChild(row);
+
+    if (t.look) {
+      const l = document.createElement("p");
+      l.className = "look"; l.textContent = t.look;
+      card.appendChild(l);
+    }
+
+    const landed = document.createElement("p");
+    landed.className = "landed";
+    if (t.landed && t.landed.length) {
+      const b = document.createElement("b");
+      b.textContent = "landed: ";
+      landed.appendChild(b);
+      landed.append(t.landed.map(c => c.sha).join(", "));
+      landed.title = t.landed.map(c => c.sha + "  " + c.subject).join("\n");
+    } else {
+      const n = document.createElement("span");
+      n.className = "none";
+      n.textContent = "no commit names this ticket — sha is on the ticket";
+      landed.appendChild(n);
+    }
+    card.appendChild(landed);
+
+    const btns = document.createElement("div");
+    btns.className = "btns";
+    for (const pair of VERDICTS) {
+      const v = pair[0];
+      const b = document.createElement("button");
+      b.className = "v-" + v; b.textContent = pair[1];
+      b.setAttribute("aria-pressed", "false");
+      b.onclick = () => {
+        const cur = (state[t.id] || {}).v;
+        state[t.id] = Object.assign({}, state[t.id], { v: cur === v ? null : v });
+        save(); paint(t.id);
+      };
+      btns.appendChild(b);
+    }
+    card.appendChild(btns);
+
+    const ta = document.createElement("textarea");
+    ta.placeholder = "Notes — your words go straight onto the ticket";
+    ta.oninput = () => {
+      state[t.id] = Object.assign({}, state[t.id], { n: ta.value });
+      save(); tally();
+    };
+    card.appendChild(ta);
+
+    s.appendChild(card);
+  }
+  root.appendChild(s);
+}
+
+function paint(id) {
+  const card = document.getElementById("card-" + id);
+  const v = (state[id] || {}).v;
+  card.classList.toggle("answered", !!v);
+  card.dataset.v = v || "";
+  card.querySelectorAll(".btns button").forEach(b => {
+    b.setAttribute("aria-pressed", String(b.className === "v-" + v));
+  });
+  const ta = card.querySelector("textarea");
+  const want = (state[id] || {}).n || "";
+  if (ta.value !== want) ta.value = want;
+  tally();
+}
+
+function tally() {
+  const done = Object.values(state).filter(s => s && s.v).length;
+  document.getElementById("count").textContent = done + " of " + total + " answered";
+  const c = document.getElementById("copy");
+  c.classList.remove("done");
+  c.textContent = "Copy for Claude";
+}
+
+function report() {
+  const L = ["Review verdicts, " + QUEUE.date + ":", ""];
+  const WORD = {
+    yes: "confirmed",
+    no: "not there yet",
+    else: "something else",
+    mine: "too annoying to test — verify it yourself and close it if you can",
+  };
+  for (const g of QUEUE.groups) {
+    const rows = g.tickets.filter(t => state[t.id] && (state[t.id].v || state[t.id].n));
+    if (!rows.length) continue;
+    L.push("## " + g.key + " · " + g.name);
+    for (const t of rows) {
+      const s = state[t.id];
+      let line = "- " + t.id + ": " + (s.v ? WORD[s.v] : "no verdict");
+      if (s.n && s.n.trim()) line += " — \"" + s.n.trim().replace(/\s+/g, " ") + "\"";
+      L.push(line);
+    }
+    L.push("");
+  }
+  const untouched = QUEUE.groups.flatMap(g => g.tickets)
+    .filter(t => !state[t.id] || (!state[t.id].v && !state[t.id].n)).map(t => t.id);
+  if (untouched.length) L.push("Not looked at: " + untouched.join(", "));
+  return L.join("\n");
+}
+
+document.getElementById("copy").onclick = async () => {
+  const text = report();
+  const c = document.getElementById("copy");
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (e) {
+    const ta = document.createElement("textarea");
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    document.execCommand("copy"); ta.remove();
+  }
+  c.textContent = "Copied — paste it to Claude"; c.classList.add("done");
+};
+
+document.getElementById("clear").onclick = () => {
+  if (!confirm("Clear every verdict and note on this page?")) return;
+  state = {}; save();
+  QUEUE.groups.flatMap(g => g.tickets).forEach(t => paint(t.id));
+};
+
+QUEUE.groups.flatMap(g => g.tickets).forEach(t => paint(t.id));
+</script>
+</body>
+</html>
