@@ -23,11 +23,14 @@ island and out to a results screen, and two automated checks now walk that path:
 one in a single process, one across two processes over a real socket.
 
 ```
-bash tools/smoke_test.sh        # 205 checks, ~10 minutes, all green; finds Godot by itself
+bash tools/smoke_test.sh        # ~10 minutes, all green; finds Godot by itself. Its own last
+                                # line is the count: `smoke: N checks, 0 failures`
 bash tools/net_test.sh          # two processes, one socket; ~100 s, run by hand
 ```
 
-`smoke_test.sh` is the gate; it is at **205 of 205** (D-148..D-166, 2026-09-19). `net_test.sh` is kept out
+`smoke_test.sh` is the gate; it is at **219 of 219** (D-148..D-177, 2026-09-19), and this is the
+only place in this file that says so — the run's own last line, `smoke: N checks, 0
+failures`, is the source, and a number written down anywhere else drifts. `net_test.sh` is kept out
 of it to keep the gate fast; run it by hand after touching networking, the lobby
 or the results screen. It passes all thirteen stages (263 + 53 assertions; stage 12 walks a peer out of a running match and back into it as a spectator, D-164; stage 4 carries the Teams skin rules over the socket, and stage 9's hit, a headshot since D-130, is at `body_centre()` now, D-155), ten of
 which end in a rematch, with the engine quiet in both processes — the error it
@@ -77,12 +80,15 @@ play-testing, not build or release work.
   to an enemy carrier, blue to a teammate or your own vault — trunk-merged in
   Capture, fading under 2 m of path and back above 3. Local and cosmetic; nothing
   replicates. `tools/nav_check.tscn` bakes every map in the gate and walks a
-  route pad to pad. **The one bug the gate caught**: since 4.4 the server builds
-  a map's iteration asynchronously, and on every map the first path was asked a
-  frame before the iteration with the polygons landed; `NavBake` now runs its
-  map with synchronous iterations and forces the sync. **Known and left**: the
-  link generator is conservative — the quarry's 1.2 m kerbs produce no links,
-  so the line routes around a step a player would hop.
+  route pad to pad. **The two bugs D-167 caught**, both of which the gate was
+  green through: links asked of an unsynced navigation map were answered with
+  the world origin rather than with an error, so seven maps baked 28 links and
+  all 28 ends sat at (0, 0, 0); and `_reachable` gated the rise on a plain
+  jump while measuring the gap with a dive, which refused exactly the 1.69 to
+  2.30 m band Kopje Crossing's flank climbs are built in. `NavBake._map_answers`
+  now asks the map a question instead of waiting a fixed number of frames, and
+  `_is_shortcut` asks what the walk costs before keeping a leap: **1920 links
+  now, 34 to 492 per map, none at the origin**.
 - **The capture performance** (**D-131**). A timed hold is no longer a card in
   a fist: `HeldGear.set_pouch` hangs a procedural wool pouch in the left hand,
   `BogAnimator`'s `capture` layer raises the arm (the `Capture` role, drawn with
@@ -91,8 +97,18 @@ play-testing, not build or release work.
   above the hand down into the pouch mouth over the hold, 1.6× → 0.25×, with a
   fourteen-ray `Sunburst` and `letter_captured.wav` when it lands. The steal is
   the same rig in reverse. A Capture carry keeps the card in the fist.
-  `tools/preview_capture.tscn -- f=0.5` prints both anchors; the pouch grip
-  constants were written down, not solved, and want a render.
+  *Rebuilt at **D-172** after a timed capture was watched: the descent is a
+  quadratic Bezier bowed 0.22 m along the Bog's facing and started above the
+  head and out in front of it, so the card clears the axis by 0.547 m instead
+  of passing through the chest at 0.194 m; the sack is half again as big
+  (`BODY_RADIUS` 0.065 → 0.095, 19 cm across and 24 cm tall) and carried 0.365 m
+  in front of the body; and it has life in it — `PouchSwing` in `HeldGear`
+  chases the apparent gravity on a spring, so a Bog setting off leaves the bag
+  behind, a Bog stopping throws it forward, and the capture landing knocks it
+  the way the letter came in. Nothing about the swing is replicated: its inputs
+  are a bone attachment and `body_yaw`, which every peer already has.*
+  `tools/preview_capture.tscn -- f=0.5` prints both anchors, `-- solve` the
+  grip's paste line. The sack is still a primitive and BOG-17 is the real one.
 - **The minimap and the tutorial** (**D-132**). A heading-up circle top-right,
   on under B·O·G only, the navmesh outline as its ground, teammates, loose
   letters and carriers — never an enemy without a letter. Six drawn, looping
@@ -194,7 +210,10 @@ Phase 10 carries the item-by-item state. What each unit landed:
 - **Fists, the emote and the sword** (**D-124**). **H** holsters: no prop in the
   fists, 10% more speed, and LMB **punches** for 20. The dance empties the hands.
   The great sword's click is a three-slash chain at 50 a slash, and the spin it
-  replaced is now the **sprint attack** at 0.8 of run speed.
+  replaced is now the **sprint attack** at 0.8 of run speed. *Since **D-168** a
+  connected swing draws its own hit volume: `SwordSwipe` sweeps the 150° sector
+  `_sword_victims` was already resolved against, out of the same locals the host
+  hit with, so there is one geometry and not two.*
 
 **The two stand-ins retired the same evening (D-125).** `SlideJump` is
 `Doing A Forward Flip While Running` (1.10 s, `lift` 0.333, `apex` 0.600,
@@ -259,6 +278,14 @@ and all twenty-seven stand up; and the **six signposts** that switched a zone's
 behaviour are gone along with `AudioDirector.RANGE_CHIME` and its wav, so a
 lane's lesson is authored in the map and the only thing to walk into is the
 stats signboard.*
+
+*And the light is **D-169**'s since 2026-09-19: the sun came down 3.0 → 2.25
+and off the amber, and the warm `Bounce` from under the southern horizon is now
+a `Clouds` fill on the same bearing swung 24 degrees **up** through it, in
+(0.84, 0.82, 1.0) at 0.68 — a violet cast subtracting from the peat's orange,
+landing on every face the key misses and on the lodge deck the roof holds in
+shadow all day. Ambient went 1.15 → 1.36 with it, and the open peat's median
+reads 59.8 against the 58 D-135 set as the floor.*
 
 The one thing it changed about an ordinary match: the **hit marker flashes on
 every landed hit, on every map**, because `hitmarker.wav` has done so since
@@ -378,6 +405,9 @@ What exists now:
   markers onto the `Animation`, and files it in `art/generated/bog_clips.res`
   (one `.res` per clip under `art/generated/clips/`). Every library key is a
   role: `Walk`, `Run`, `CrouchIdle`, `BowDraw`, `SwordCombo`, `Slide`.
+  A row may also carry **`mirror_of`** (D-171) and no FBX at all: it is built
+  by reflecting the role it names in that row's own `face` plane and rolling
+  the result back onto a right-foot plant, and filed like any download.
 - **`untwist` is D-110**, and only `SpearCarry` and `BowCarry` carry it. A
   carry clip plays as an upper-body layer over `Spine1`…`Head`, so its own
   spine twist lands on whatever the legs are doing — the head was 51° and 58°
@@ -431,10 +461,10 @@ is off in Teams — the nameplate keeps the colour. `Bog.set_team_tint` now gets
 a real team from only two places: `tools/team_tint.tscn`, which is the check
 that the shader still works, and backdrop entries with no `skin` key.
 
-**One thing only the user can do** (PLAN 8.8), one row in `clips.json` plus
-the fetch: the Magic pack's `Standing Run Left`, so the running strafes stop
-sliding at 1.12 of body speed (D-098 says what the import needs: a
-`mirror_of` rule for the right-hand twin). The other half of that item is
+**One thing only the user can do** (PLAN 8.8, BOG-16): fetch the Magic pack's
+`Standing Run Left` and `Standing Walk Left`, so the sideways strafes stop
+sliding at 1.11 of body speed. The import's half is built: `mirror_of` makes
+the right-hand twin from the left (D-171). The other half of that item is
 done — the one-handed carry idle is `SpearCarry`, and the spear's trunk
 clearance is a measurement again (D-103).
 
@@ -772,9 +802,10 @@ Three tiers, because three different kinds of claim need three different proofs
 | `tools/combat_range.tscn bow` | the bow, in numbers (D-065): a letter hold refuses the draw and empties the bow hand, a snap shot let go one frame after the key went down takes exactly `bow_damage_snap` and flies the snap dials, and a full draw takes `bow_damage_full` and flies the full ones. Neither flight is read off the arrow — the speed and the drop are fitted off six ticks of its own positions. **In the gate**, headless |
 | `tools/combat_range.tscn draw` | the charge as a *tell*: one float published onto a **remote** Bog, and the two skeletons agreeing about how far the string is back to within a centimetre at five charge levels — with the control that the draw moved the hands 0.41 m, so agreeing means something (D-065). Also prints how far off the Bog's facing the composed bow points, which was **91°** when this weapon shipped and is 1° now that `BogAim` turns the torso onto the crosshair (D-066). **In the gate**, headless; through `snapshot.gd` it renders the two Bogs side by side |
 | `tools/preview_bow.tscn` | the bow in the hand across the charge: `-- measure` solves the grip off the draw clip and prints the three constants `HeldGear` carries, and the default sheet is six Bogs from brace to full draw with the string bending under the blend shape (D-065). `-- measure` also checks what the **carry tilt** buys on its own: the lowest limb tip over the twelve clips a Bog walks around in, which has to stay 0.15 m off the ground and reaches 0.284 m where `Run` used to plough by 0.158 (D-066). That is half the answer since D-070 — a carried bow wears a *pose* as well now, and `preview_carry` is what composes it — and it is kept because it is the half that says the tilt is still earning its keep. **In the gate**, headless |
-| `tools/combat_range.tscn strafe` | the feet, round the compass (D-066): eight bearings at walking and running speed on a Bog held facing one way, with the slower of its two toes measured every tick. Forward and backward plant at 0.28 of body speed or better and no leg passes 1.25, against 1.36 for the one-dimensional space this replaced — and the crouch, which is still one clip behind a line, is the control that spreads 0.21 to 1.41. Since D-071 it also holds the **strafe axis** itself: the four sideways legs plant at 0.85 or better (running sideways is 0.43 and 0.30 where it was 0.98 and 0.93), and the two halves of that axis have to be the **same move**, within 0.20 of each other. The second of those is the one that earns its place — Mixamo's aim-strafe families are handed, so a downloaded right strafe passes the first line by a hundredth and fails the second at 0.54. **In the gate**, headless with `--fixed-fps 60`; `-- strafing` is the picture |
+| `tools/combat_range.tscn strafe` | the feet, round the compass (D-066): eight bearings at walking and running speed on a Bog held facing one way, with the slower of its two toes measured every tick. Forward and backward plant at 0.28 of body speed or better and no leg passes 1.25, against 1.36 for the one-dimensional space this replaced — and the crouch, which is still one clip behind a line, is the control that spreads 0.21 to 1.41. It also holds the **strafe axis** itself, and since **D-171** the two right halves *are* reflections of their left twins, built by `mirror_of` at import: the same-move gap is 0.01 and the worst leg on the compass is 1.17. What that does not fix is the sideways legs, which still slide 1.10 and 1.11 — not a blend fault and not a rate fault but the clips' own bearing, since `StrafeLeft` travels 24.1° off forward and a body going sideways over such a clip slides `2·sin((90−β)/2)` by arithmetic that predicts 1.09 against the measured 1.12. It closes only on a genuine lateral clip (BOG-16's fetch, predicted 0.24). **In the gate**, headless with `--fixed-fps 60`; `-- strafing` is the picture |
 | `tools/combat_range.tscn spine` | the torso that aims (D-066), swept round the whole horizon and through the camera's whole pitch range at a full draw: the bow holds within 3° of bearing and 5° in space of the crosshair (against D-065's **91°**), tracks 123° of elevation, and two arrows fired from one spot at the two ends of that range leave from the *same point* 122° apart — D-025 and D-045 asserted against the thing most likely to break them. **In the gate**, headless; `-- aiming` is the picture |
-| `tools/combat_range.tscn sword` | the great sword, end to end (D-068). It opens with a **rehearsal** — one swing at nobody, with the blade read off the bone attachment at the release — because nothing in the mode can be placed until that number exists: `Swing` turns the body through a revolution inside the skeleton, and at the release the blade is **55–66° off the Bog's own facing**, so a sweep along `-basis.z` would point at empty grass. Then the fists are checked on all 112 ticks of a swing, the kill is required to land `SWING_RELEASE_TIME` after the click and *within three ticks of the blade's own full extension*, 0.35 m inside the reach dies and 0.35 m outside lives, and an Elder takes nothing and wards. **In the gate**, headless |
+| `tools/combat_range.tscn sword` | the great sword, end to end (D-068). It opens with a **rehearsal** — one swing at nobody, with the blade read off the bone attachment at the release — because nothing in the mode can be placed until that number exists: `Swing` turns the body through a revolution inside the skeleton, and at the release the blade is **55–66° off the Bog's own facing**, so a sweep along `-basis.z` would point at empty grass. Then the fists are checked on all 112 ticks of a swing, the kill is required to land `SWING_RELEASE_TIME` after the click and *within three ticks of the blade's own full extension*, 0.35 m inside the reach dies and 0.35 m outside lives, and an Elder takes nothing and wards. A fifth verdict, `swipe`, is D-168's: two dummies twelve degrees either side of the arc's edge, one swing, the inside one dies and the outside one lives — with the bearings taken from the fan that was **drawn**, so "what you see is what hits" is a measurement rather than a claim, and it fails if the fan's radius has drifted from `sword_reach + CAPSULE_RADIUS` or its half-angle from `SWORD_ARC`. **In the gate**, headless |
+| `tools/combat_range.tscn -- swipe` | the picture of that fan (D-168): a slash and then the spin on one Bog, a dummy inside each fan and outside the other's, with the tick each fan appeared on printed so a warmup is read off a run rather than guessed. `pov` puts the camera back on the swinger's own shoulder, which is the shot the 0.80 m curtain exists for. **Not** in the gate |
 | `tools/combat_range.tscn chain` | the swing as a movement tech, measured the way D-052 measured the hop and against the same ceiling (D-068). A Bog at a dead stop chains seven swings — 0.00, then 2.00 after the first, then **7.02** from the last, which is 1.30x run and is exactly `HOP_SPEED_CAP` — and a Bog that builds 7.02 with ten timed hops first has to *keep* it when it swings. Neither may pass the cap. **In the gate**, headless and deliberately **not** `--fixed-fps`: the spin and the recharge are wall-clock deadlines |
 | `tools/preview_sword.tscn` | the great sword in the hands (D-068): `-- measure` solves the grip as an equation — a two-handed hilt has to reach from the fist that holds it to the fist that joins it, so the sword's **size is a measurement of the swing** (1.26 m, from fists 0.096–0.231 m apart) — and prints the three constants `HeldGear` carries, the point's 1.412 m reach at the release, and how far the blade dips. That offset moved 3 cm at D-074 and neither the scale nor the rotation did: the sword's grip starts from `HeldGear.fist_offset()`, which is the spear's palm point, so correcting where a Bog's fist actually is corrected all three props at once. The default sheet is seven Bogs across the swing, each set back by the advance it has covered by then, with a compass ring and a hip-line spoke under every one. `-- carry` is **gone** (D-070) along with the `SWORD_CARRY_TILT` it swept: a great sword is carried in `GreatSwordIdle` now, whose fists were drawn holding this exact prop, so the grip solved here is the grip for the swing *and* for the carry and a tilt had nothing left to do. `preview_carry` measures what replaced it. **In the gate**, headless |
 | `tools/combat_range.tscn cast` | the Elder's half of the same question, and a different question (D-064): the bolt appears `MatchConfig.lightning_delay` after the click, the composed arm is 83% of the way out when it does, and the tick it appears on is the tick that arm stops going forward — which on `Cast` is a third of a second before it is furthest forward |
@@ -788,9 +819,11 @@ Three tiers, because three different kinds of claim need three different proofs
 | `tools/weapon_select.tscn` | the lobby weapon pick as a **roster row** (D-069): the default for a row that never heard of weapons, a request through the host and back on the rebroadcast, a bogus ordinal refused into a spear, the lock the moment Start is pressed, three rematches keeping it, the real lobby's shape since D-107 (strip and panels up together, no collapse button, the fold defaults, the count live behind a fold, both toggles dropping to `SHRINK_END`, the chat's three states and a submit that keeps the caret, and a second lobby instanced as a client with the config gone), and three **remote** backdrop Bogs each holding only what its row says — and, since D-070, *standing* in only what its row says: the ring asserts each Bog's `carry_pick` is pointing at its own weapon's pose, and that a change of pick moves the stance on the same call that moves the prop. Since D-109 the same `lobby` stage also drives the **skin** strip — a free-for-all pick round-tripping through the roster and coming back on the Bog in the ring (read off `get_active_material`, so it is what the renderer will draw), two teams starting in different bodies, a pick moving the *team's* entry and not the picker's own row, the other team's swatch disabled and a request for it refused at the host, a team switch as a change of clothes with nothing sent, and the ring's ceiling re-measured at eight Bogs and at five so a taller swatch cannot creep back over their faces. 184 checks. The half that is a *Bog* — the gate, the hand and the three overrides — is `match_rules`. **In the gate**, headless |
 | `tools/team_tint.tscn` | every Bog's body is in its team's nameplate colour, free-for-all is the body's own imported colour, the Elder's robe stays purple, a corpse keeps its colour, and a lobby team switch repaints the Bog (D-046). **In the gate**, headless; through `snapshot.gd` it renders the lineup |
 | `tools/letter_carriers.tscn` | a letter card that starts a hold puts "Name picked up G" in the feed and a wasted duplicate puts nothing; carriers behind a wall, enemy included, have a gold card marker over their heads drawn through it and above the nameplate, your own hold marks nothing on your screen, and the marker goes on bank and on death; the same in free-for-all (`-- ffa`) (D-050). **In the gate**, headless; through `snapshot.gd` it renders the Bog's own view with the feed |
-| `tools/capture_preview.tscn` | a Capture B·O·G match in the real arena: both team bases drawn, three letter cards at home, every Bog on its own team's pad (D-051). **In the gate** on Kopje Crossing, headless; takes a map id; through `snapshot.gd` it renders the view from above Team 1's base. The mode's rules are `match_rules`, and the base/letter layout on every map is checked by `playthrough` |
-| `tools/map_thumbs.tscn` | the lobby carousel's seven 480x270 map photographs (D-162), baked through the real `arena.tscn` into `art/generated/map_thumbs/<id>.png` from each `MapCatalog` row's `thumb_camera`. **Not** in the gate and **not headless**. `"$GODOT" --path . --resolution 960x540 tools/map_thumbs.tscn` (a trailing `-- quarry` does just that map; `-- <id> candidates` sweeps angles into `out/`), then `--import` |
+| `tools/capture_preview.tscn` | a Capture B·O·G match in the real arena: both team bases drawn, three letter cards at home, every Bog on its own team's pad (D-051). **In the gate** on Kopje Crossing and, since D-175, on the three maps that declare their own bases — Lantern Wharf, Halcyon Wake and Twin Quarry — headless; takes a map id; through `snapshot.gd` it renders the view from above Team 1's base. The mode's rules are `match_rules`, and the base/letter layout on every map is checked by `playthrough` |
+| `tools/map_thumbs.tscn` | the lobby carousel's seven 480x270 map photographs (D-162), baked through the real `arena.tscn` into `art/generated/map_thumbs/<id>.png` from each `MapCatalog` row's `thumb_camera`, and stamped into `art/generated/map_thumbs/stamps.json` (D-175) so `thumb_check` can tell a stale photograph from a current one. **Not** in the gate and **not headless**. `"$GODOT" --path . --resolution 960x540 tools/map_thumbs.tscn` (a trailing `-- quarry` does just that map; `-- <id> candidates` sweeps angles into `out/`), then `--import` |
+| `tools/thumb_check.tscn` | every map in the lobby's carousel is still a picture of *that* map (D-175). Baking seven arenas needs a real window and the best part of a minute, which is not a thing a gate can do, so this recomputes the seven stamps instead — a hash of each map's scene, its script(s), its environment and its resolved catalog row — and fails naming the map and printing the one-argument run that fixes it. **In the gate**, headless, under a second |
 | `tools/range_views.tscn` | Highsun Grounds at eye height, with the range's items built (which `preview_map` does not). Its `probe` view stands a Bog-sized capsule on all eight pads and walks one out from every rack: no pad blocked, no pad arming a swap, and the depth of floor in front of each rack (D-161). **In the gate** as a snapshot |
+| `tools/range_light.tscn` | the range's light where a player stands in it (D-169), which `range_views` cannot show — it only photographs the deck and the complaint was about the open bog. Four cameras a player actually stands at, medians out of 255 over a fixed patch, which is how every number in D-169 was found rather than chosen. **Not** in the gate |
 | `tools/camera_range.tscn` | the PvP camera rig, driven the way a mouse drives it and asked five questions every frame (D-174): `clip` (the lens is never inside the scenery, asked three ways), `aim` (`BogCombat._aim_point` is the point a ray out of the *actual* `Camera3D` hits, which is what makes the crosshair truthful), `frame` (the lens never leaves the pivot-to-lens segment — D-083's invariant, now geometry rather than a rule), `calm` (how the lens *moves*: three zeroes, with the pull-ins printed rather than judged) and `faces` (the body follows the camera, except through the idle yaw slack and the four committed states). Eight legs, 2,240 frames. **In the gate**, headless with `--fixed-fps 60`, about two seconds |
 | `tools/shoulder_shots.gd` | `snapshot.gd` with the aim button held from frame 0 and a crosshair painted at centre, for choosing the aiming shoulder from renders (D-159). Not in the gate |
 | `tools/fps_readout.tscn` | the FPS readout (D-148): off out of the box, following the Settings toggle in both directions with a real frame rate in it, kept by `settings.cfg`, and hidden whenever a render tool has set the suppression flag, so no `preview_*` shot carries it. **In the gate**, headless, about five seconds |
@@ -800,21 +833,21 @@ Three tiers, because three different kinds of claim need three different proofs
 | `tools/ragdoll_stability.tscn` | a corpse is still a corpse 150 ticks later |
 | `tools/combat_range.tscn` | the real match path: a spear, a shield, a magnet, a letter, the Elder's bolt |
 | `tools/net_loopback.tscn` | two processes, one socket, including a *client* using all three abilities, dying and respawning, a weapon picked on the client and decided by the host (D-069), and ten rematches with the client in the lobby for half of them (D-044). **In the gate** through `net_test.sh`, bound to 127.0.0.1 on a random port |
-| `tools/preview_map.tscn` | Rust, Kopje Crossing, Lantern Wharf and Halcyon Wake: renders one, and checks every spawn pad with the physics. **In the gate** for all four |
 | `tools/island_report.tscn` | Whisperbloom Hollow as numbers: footprint, slope, every scatter layer's placed count, tree heights, spawn spacing and the capture bases (D-055). **In the gate** on four seeds |
 | `tools/parkour_report.tscn` | every platform on a built map has its rock, fits a Bog, and is reachable from the ground (D-042); on Lantern Wharf also that no jump reaches a tower or wall top, no sightline runs past 25 m (26 m from a roof), and no pad sees the other base's pads (D-056); on Halcyon Wake every deck reachable, the mast out of reach, sightlines under 21 m on the main deck and 38 m from a landing, and nothing but the void over every edge of the deck (D-057). **In the gate** for all three |
 | `tools/bake_tiles.gd` | the ability bar's seven tiles, photographed from the real `.glb`s under one camera, one light rig and one framing rule — the geometric mean of a silhouette's on-screen width and height is 66% of the tile, capped at 88% on the longer side, slender props laid on the diagonal (D-076). `-- check` re-measures the **committed** PNGs and is **in the gate**, headless, because what has to hold on every machine is that the pictures in the repository obey the rule rather than that this machine's GPU can reproduce them; `-- sheet` writes `out/tiles_sheet.png`, the seven side by side, which is the only way to answer "do they read as a set" |
 | `tools/combat_range.tscn` | the real match path: a spear, a mushroom, a lure, a letter, the Elder's bolt |
 | `tools/net_loopback.tscn` | two processes, one socket, including a *client* using all three abilities, dying and respawning, and ten rematches with the client in the lobby for half of them (D-044). **In the gate** through `net_test.sh`, bound to 127.0.0.1 on a random port |
-| `tools/preview_map.tscn` | Rust, Kopje Crossing, Lantern Wharf, Halcyon Wake and Twin Quarry: renders one, and checks every spawn pad with the physics. **In the gate** for all five |
+| `tools/preview_map.tscn` | Rust, Kopje Crossing, Lantern Wharf, Halcyon Wake, Twin Quarry and Highsun Grounds: renders one, and checks every spawn pad with the physics. **In the gate** for all six |
 | `tools/island_report.tscn` | Whisperbloom Hollow as numbers: footprint, slope, every scatter layer's placed count, tree heights, spawn spacing and the capture bases (D-055). **In the gate** on four seeds |
 | `tools/parkour_report.tscn` | every platform on a built map has its rock, fits a Gub, and is reachable from the ground (D-042); on Lantern Wharf also that no jump reaches a tower or wall top, no sightline runs past 25 m (26 m from a roof), and no pad sees the other base's pads (D-056); on Halcyon Wake every deck reachable, the mast out of reach, sightlines under 21 m on the main deck and 38 m from a landing, and nothing but the void over every edge of the deck (D-057); on Twin Quarry that each team's bench is reachable from the pit floor by its two haul ramps and by nothing else, that no jump reaches a 10.2 m column top or the rim, and that no sightline runs past 30 m on the floor or 43 m from a landing (D-082). **In the gate** for all four |
 | `tools/clip_check.gd` | the rebuilt character's import layer (D-095): the body 1.80 m tall with its feet on the floor and 49 bones, every row of `clips.json` in the shared library, every track of every clip on a body bone with the hips locked to the axis, the loop mode from the table, and four clips from four suites posing the body within 0.12 mm of where their own skeleton poses it. **In the gate**, headless, about ten seconds |
 | `tools/preview_bog.tscn` | the rebuilt body playing clips from the library, six BOGs across a clip, one row per clip key — the sheet the clip choice is made from |
 | `tools/skin_thumbs.gd` | the picker's fourteen 128² tiles, rendered rather than painted (D-109): one BOG in `Idle`, the camera aimed off `mixamorig_Head`, one shot per skin, the centre square cut. **Not** in the gate and **not headless** — it needs a real window to render into. `"$GODOT" --path . --resolution 512x512 --script tools/skin_thumbs.gd` (a trailing `-- muck rime` does just those), then `--import` so Godot sees the new PNGs |
 | `tools/preview_*.tscn` | it *looks* right. Needs a person, always will |
-| `tools/nav_check.tscn` | every map bakes a navmesh from its layer-1 colliders and walks a route from the first pad to the last; prints the census per map — polygons, links, bounds, route length and how many leaps it took (D-130). **In the gate**, headless, every map in turn; `-- <map id>` for one |
-| `tools/preview_capture.tscn` | the capture performance measured on one Bog: pouch in the left fist, no card in the right, the pouch mouth below the raised hand, the floating letter on the line between them; prints both anchors and the descent in world metres so the pouch grip can be read off a render (D-131). `-- f=0.5` freezes the fraction. **In the gate** headless and as a snapshot |
+| `tools/nav_check.tscn` | every map bakes a navmesh from its layer-1 colliders and walks a route from the first pad to the last; prints the census per map — polygons, links, bounds, route length and how many leaps it took (D-130). Since D-167 it also asserts per map that no link end sits at the world origin, that at least eight links were found and that the cap was not reached, prints one summary line for the gate to grep (`7 maps, 1920 links, 0 at the world origin`), and prints what a path query costs — because a thing that is only asserted when it fails is a thing that goes quiet the day it breaks. **In the gate**, headless, every map in turn; `-- <map id>` for one |
+| `tools/nav_render.tscn` | the plan of one map (D-167): the walkable wash, every link amber for a leap and blue for a drop with a pip on the end it arrives at, and the first pad to the last put through `GuidePath` so it is the polyline a player is actually shown. Counting was what missed the bug; fourteen links all ending at one point is invisible in a census and obvious in a drawing. **In the gate** on Kopje Crossing, as a snapshot |
+| `tools/preview_capture.tscn` | the capture performance measured on one Bog: pouch in the left fist, no card in the right, the pouch mouth below the raised hand, the floating letter above and no further back than the bag; prints both anchors and the descent in world metres so the pouch grip can be read off a render (D-131). Since **D-172** it samples `descent_point` end to end and requires every sample to clear the Bog's own axis — the old "on the line between them" check passed for the whole of the time that line ran through the chest. `-- f=0.5` freezes the fraction; `-- swing` traces the carried bag for a second, knocks it with the game's own push and judges what follows against that baseline (carried 6.4°, knocked to 22.2°, back inside 3.7° a second later); `-- solve` prints the paste line for `POUCH_GRIP_OFFSET`; `-- sheet front|side|settle` is the picture. **In the gate** headless — including "the bag has life in it" — and as a snapshot |
 | `tools/grip_poses.tscn` | writes `art/generated/grip_poses.res` — five one-frame finger poses measured out of the clip library — and prints how far each closed hand sits from the open one (D-134). Runs after the import; **commit what it writes**. **In the gate**, headless |
 | `tools/hud_range.tscn minimap` / `tutorial` | the corner map's blips counted off `Minimap.debug_counts()` — an ally, a loose card and an enemy carrier, and no enemy without a letter — and the how-to-play cards opened once, marked seen on close, reopenable (D-132). **In the gate** as snapshots |
 | `tools/ui_range.tscn menu_letters` / `lobby_letters` | the menu's letter row and the hero's capsule projected into frame fractions and required not to overlap; the same rig in the lobby required inside the panels' band and below every ring Bog's head (D-133). **In the gate** as snapshots |
@@ -878,20 +911,12 @@ and the tool quietly uses its defaults. Pass them literally.
 
 ## Known issues
 
-
 What is left here is limitations of the source art rather than faults in the
 code, and D-029 argues each one out rather than pretending it is fixed:
 
 - **`CrouchWalk`'s feet slip 53%** at the game's crouch speed (Walk 9.4%, Run
   16.3%). The clip is authored at 1.273 m/s and would need its rate nearly
   doubled to plant, for 0.17 m/s of gain.
-- **`JumpTwo`'s ground roll is authored below the floor** — the skin reaches
-  0.247 m under the plane in the clip's first 0.15 s of roll. Those hips keys
-  sit below the clip's first key, so the pipeline's vertical rule cannot lift
-  them; `ROLL_CLIP_START` is 1.62 rather than the 1.48 the air scrub hands over
-  at, which skips the most-sunk stretch (within 0.10 m of the floor from there)
-  at the cost of the first two frames of the tumble. A few centimetres of
-  sinking remain through the rest of the roll.
 - **A sliding Bog is hard to hit.** The slide capsule is vertically right but a
   vertical capsule cannot follow a prone body whose head is half a metre forward
   of the axis.
@@ -908,6 +933,11 @@ constant and 0.0 turns it off.
 
 ## Things worth knowing that are not obvious from the code
 
+- **A map's contract is written down once, in `.claude/skills/build-map/SKILL.md`**
+  (D-173) — the catalog row, the nodes `static_map.gd` reads, the markers the
+  match looks for, the collision-before-`super()` line and the gate rows a new
+  map owes. The first six maps each re-derived it from the code; nobody has to
+  again. The construction itself is the `map-builder` agent's.
 - **When in doubt, open a ragdoll joint up.** A cone-twist driven past its limit
   adds energy rather than clamping. Too floppy looks rubbery; too tight explodes.
   That is true of the limit's *strength* as well as its span:
@@ -937,10 +967,11 @@ constant and 0.0 turns it off.
   itself on the next import (D-029, D-095).
 - **Mixamo's aim-strafe families are handed** — every right strafe in every
   pack is a −37 to −47 degree diagonal, while its left twin can be a true
-  lateral (D-071). The rebuilt library has no mirrored clip yet, so the
-  running strafes are diagonal poles blended by the plane and slide at 1.12
-  of body speed; the fix is the Magic pack's `Standing Run Left` plus a
-  `mirror_of` rule in `clips.json` (D-098, PLAN 8.8).
+  lateral (D-071). The `mirror_of` rule exists since D-171 and the right
+  strafes are reflections of the left, but the source clips still travel 24
+  degrees off forward, so the running strafes slide at 1.11 of body speed
+  until the Magic pack's `Standing Run Left` and `Standing Walk Left` are
+  fetched (BOG-16).
 - **Nothing in the animation tree runs a clock it does not own.** Every node is
   either a looping cycle, a OneShot that restarts on fire, or scrubbed every
   frame — because an `AnimationNodeAnimation` sitting in a blend runs from tree
