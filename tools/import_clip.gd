@@ -301,8 +301,24 @@ func _file_in_library(file: String, table: Dictionary, anim: Animation) -> void:
 
 
 static func _library_key(file: String, table: Dictionary) -> String:
-	var role: String = _row_for(file, table).get("role", file)
-	return role if table.per_role.get(role, 0) == 1 else file
+	var row := _row_for(file, table)
+	var role: String = row.get("role", file)
+	if table.per_role.get(role, 0) != 1:
+		return file
+	# A search row (`mixamo_query`) is one row for however many takes are on
+	# disk, so the table cannot count its candidates; the directory can.
+	if row.has("mixamo_query") and _candidates_on_disk(row["file"]) > 1:
+		return file
+	return role
+
+
+## How many fetched takes a search row has in `assets/source/anims/`.
+static func _candidates_on_disk(prefix: String) -> int:
+	var n := 0
+	for name in DirAccess.get_files_at("res://assets/source/anims"):
+		if name.get_extension() == "fbx" and (name.get_basename() == prefix or name.begins_with(prefix + "-")):
+			n += 1
+	return n
 
 
 ## A row fetched by search (`mixamo_query`) lands as `<file>-<Mixamo name>`, so

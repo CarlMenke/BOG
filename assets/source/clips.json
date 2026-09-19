@@ -930,10 +930,15 @@
    "mixamo_name": null,
    "mixamo_id": null,
    "mixamo_query": "punch",
+   "mixamo_keep": [
+    "Cross Punch"
+   ],
    "in_place": false,
    "loop": false,
    "face": "hips",
-   "markers": {}
+   "markers": {
+    "hit": 0.367
+   }
   },
   {
    "file": "SlideJump",
@@ -942,10 +947,17 @@
    "mixamo_name": null,
    "mixamo_id": null,
    "mixamo_query": "flip",
+   "mixamo_keep": [
+    "Doing A Forward Flip While Running"
+   ],
    "in_place": false,
    "loop": false,
    "face": "none",
-   "markers": {}
+   "markers": {
+    "lift": 0.333,
+    "apex": 0.6,
+    "land": 0.867
+   }
   },
   {
    "file": "Slide",

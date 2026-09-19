@@ -76,5 +76,7 @@ travel / length for a cycle); `bob` is the hips' vertical range.
 | ThrowRun-ThrowGrenadeWhileRunning | 2.933 | 3.721 | 0.017 |
 | ThrowWalk-ThrowingAGrenadeWhileWalking | 2.767 | 1.071 | 0.021 |
 | Twerk-DancingTwerk | 15.200 | 0.000 | 0.145 |
+| SlideJump-DoingAForwardFlipWhileRunning | 1.100 | 1.729 | 0.487 |
+| Punch-CrossPunch | 0.867 | 0.000 | 0.017 |
 | Walk-StandardWalk | 1.167 | 0.715 | 0.032 |
 | WalkBack-WalkingBackwards-2 | 1.200 | 0.533 | 0.030 |
