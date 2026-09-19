@@ -101,15 +101,12 @@ def transcribe(audio, model, device_label, model_name):
     count = 0
     next_report = 600.0
     with open(out, "wb") as f:
-        f.write(("
-".join(header) + "
-").encode("utf-8"))
+        f.write(("\n".join(header) + "\n").encode("utf-8"))
         for seg in segments:
             text = seg.text.strip()
             if not text:
                 continue
-            f.write(f"[{_hms(seg.start)}] {text}
-".encode("utf-8"))
+            f.write(f"[{_hms(seg.start)}] {text}\n".encode("utf-8"))
             f.flush()
             count += 1
             if seg.start >= next_report:
