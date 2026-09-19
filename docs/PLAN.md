@@ -5,7 +5,9 @@
 A match-based 3rd-person multiplayer game in Godot 4.7.2. Players are BOGs — small yellow
 aliens — fighting on a floating enchanted-forest island with instant-kill thrown spears.
 
-This is the single source of truth for scope. Every item is tracked to completion.
+This was the source of truth for scope until 2026-09-18. It is now a frozen build
+log: the open items moved to Linear (workspace BOG) that day and new work goes
+there, not here. See `CLAUDE.md`. Every item below is tracked to completion.
 Design rationale for non-obvious choices lives in `docs/DECISIONS.md`; how the
 pieces fit together is `docs/ARCHITECTURE.md`.
 

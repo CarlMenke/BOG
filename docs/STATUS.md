@@ -4,7 +4,8 @@ Resume point for BOG. Read this first, then `docs/ARCHITECTURE.md` (how it fits
 together), `docs/PLAN.md` (the full task list, with checkboxes) and
 `docs/DECISIONS.md` (why things are the way they are).
 
-Last updated: 2026-09-18.
+Last updated: 2026-09-18. What comes next is in Linear (workspace BOG), not
+here: see `CLAUDE.md`.
 
 ---
 
