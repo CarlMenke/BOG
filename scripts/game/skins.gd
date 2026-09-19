@@ -34,15 +34,27 @@ extends RefCounted
 ##
 ## The folders under `art/skins/` that are **not** here are not oversights:
 ## `example` is D-100's worked example of how a recolour is made, `elder` is a
-## garment worn by being the Elder (D-038), and `shirt` is a garment still on
-## its way (docs/SKIN_PIPELINE.md). None is a thing a player picks.
-##
-## Two batches: the first thirteen recolours (D-108) and, after `void`, the
-## eleven of 2026-09-18, which are baked rather than extracted
-## (`tools/bake_skin.py`) because Tripo regenerated the sculpt for them.
+## garment worn by being the Elder (D-038), `shirt` is a garment still on its
+## way (docs/SKIN_PIPELINE.md), and the eleven in `PARKED` below are a second
+## batch waiting on a redo of their downloads (D-128). None is a thing a player
+## picks today.
 const NAMES := ["bog", "bogina", "boo", "clank", "crag", "gilt", "glub", "gum",
-	"muck", "rime", "roar", "slag", "toad", "void",
-	"bloom", "buzz", "chip", "crack", "dash", "fudge", "gourd", "koi", "ooze", "volt", "wrap"]
+	"muck", "rime", "roar", "slag", "toad", "void"]
+
+## The second batch, **parked** (D-128): bloom, buzz, chip, crack, dash, fudge,
+## gourd, koi, ooze, volt, wrap. Their folders under `art/skins/` are complete
+## -- README, a baked `basecolor.png`, a thumb -- and they are not in `NAMES`
+## because the bake that made them (`tools/bake_skin.py`) does not reach the
+## first batch's eyes. Tripo regenerated the sculpt for this batch (9 124
+## vertices against the body's 15 872, its own UV layout), so its paint could
+## not be worn as it was, and a texture registered onto a different mesh is
+## registered, not identical. The owner's call: the first thirteen are perfect
+## because their paint *is* the body's layout, and the way back to that is a
+## Tripo retexture of the original mesh, not a better registration. To wear
+## them: get downloads at 15 872 vertices, `python tools/extract_skins.py`,
+## append the names here (after `void`, never in the middle), render thumbs.
+const PARKED := ["bloom", "buzz", "chip", "crack", "dash", "fudge", "gourd", "koi",
+	"ooze", "volt", "wrap"]
 
 ## The plain body. See above.
 const DEFAULT := 0
@@ -136,7 +148,7 @@ static func thumb_of(skin: Variant) -> Texture2D:
 ## Team 0 is the plain body and every team after it takes the next name in the
 ## list, which is a rule rather than a table because the only thing it has to
 ## guarantee is that no two teams start on the same one. The modulo cannot
-## actually wrap — `MatchConfig` allows eight teams and there are twenty-five
+## actually wrap — `MatchConfig` allows eight teams and there are fourteen
 ## skins — but it is there so that adding a ninth team is a bad default rather
 ## than an index error.
 static func default_for_team(team: int) -> int:

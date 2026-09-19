@@ -8,9 +8,15 @@ with the texture embedded.
 
 The second batch (2026-09-18: BLOOM, BUZZ, CHIP, CRACK, DASH, FUDGE, GOURD,
 KOI, OOZE, VOLT, WRAP) did **not** keep the mesh — Tripo regenerated the sculpt
-at 9 124 vertices in its own UV layout — so its textures are baked onto the
+at 9 124 vertices in its own UV layout — so its textures were baked onto the
 body's layout by `tools/bake_skin.py` rather than extracted; the script below
 tells the two apart by vertex count and does the right thing for each (D-126).
+The bake is not the first batch's perfection and the batch is **parked**
+(D-128). **To redo it:** in Tripo, run each prompt as a *retexture of the
+original BOG sculpt* — the same job the first thirteen were — and check the
+download before anything else: `python tools/extract_skins.py --dry-run NAME`
+must print **15872** in the verts column. A download at any other count is a
+regenerated sculpt and will go the bake route again.
 `PLUSH/` is an empty folder with no download in it, and `SHIRT/` holds the
 garment spike's dressed body and cut (`tools/fit_garment.py`), not a skin.
 

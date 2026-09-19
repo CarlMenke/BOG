@@ -53,7 +53,15 @@ download's vertex count is not the body's 15 872. It bakes onto
     "$GODOT" --headless --path . --script tools/export_body_ref.gd
 
 Baked or extracted, a skin is the same folder with the same three files, and
-the game cannot tell them apart.
+the game cannot tell them apart. **A player can.** The bake reached 1.9 mm of
+fit and eyes that read as eyes, and beside the first batch — whose paint *is*
+the body's layout, texel for texel — they are not the same thing: a face
+registered onto another face is a face moved millimetres, and millimetres show
+in an iris. So the second batch is parked (D-128) until its downloads are
+redone the way the first batch's were: a Tripo *retexture* of the original
+sculpt that comes back at the body's 15 872 vertices, which `extract_skins.py`
+then wears directly. The bake stays as the route for a download that cannot
+be redone, with that caveat on it.
 
 ## A clothing mesh
 
@@ -81,10 +89,12 @@ Not all of them, and the list is not this directory. `scripts/game/skins.gd`
 
     bog  bogina  boo  clank  crag  gilt  glub  gum
     muck  rime  roar  slag  toad  void
-    bloom  buzz  chip  crack  dash  fudge  gourd  koi  ooze  volt  wrap
 
-Twenty-five: the twenty-four recolours plus **`bog`, the plain body**, which is a
-skin called "no texture at all" and is the default. `art/skins/bog/` is a folder
+Fourteen: the thirteen recolours plus **`bog`, the plain body**, which is a
+skin called "no texture at all" and is the default. The second batch —
+`bloom`, `buzz`, `chip`, `crack`, `dash`, `fudge`, `gourd`, `koi`, `ooze`,
+`volt`, `wrap` — is **parked** in `Skins.PARKED` (D-128): complete folders,
+not pickable, for the reason the next section ends on. `art/skins/bog/` is a folder
 like the rest and holds a README and a thumb and nothing else;
 `Skins.texture_of` answers `null` for it, which is `Bog.wear_skin`'s own word
 for "put the imported texture back".

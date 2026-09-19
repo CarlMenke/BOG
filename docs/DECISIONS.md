@@ -15241,3 +15241,56 @@ grounded weight is exactly zero.
   `_full_body_shots` because `BogCombat._can_act` refuses both while a string is
   back. A future move that is full body *and* legal during a draw has to be
   added to that list, and the list says so.
+
+## D-128 — The second skin batch is parked: a registered face is not the body's paint, and the way back is a retexture of the original mesh
+The owner, after playing with the eleven of D-126 for an evening: *"the eyes on
+the texture are still messed up, and I'm only saying this because the ones on
+the first batch are literally perfect, that's what we are going for. You don't
+acquire literally perfect by moving centimetre by millimetre, you get it by
+first-shotting the original method."* And then: *"this isn't very important,
+let's disable the whole second batch for now and leave some good docs about
+why."*
+
+**He is right about what the two batches are.** The first thirteen downloads
+are the BOG sculpt itself — 15 872 vertices, the body's UV layout — wearing new
+paint; `extract_skins.py` lifts the texture out and `Bog.wear_skin` puts it on,
+and nothing in between can move a texel, which is why an iris lands where the
+iris is. The second batch is the same creature drawn again by Tripo, 9 124
+vertices in a layout of its own, and D-126's bake is a *registration* of one
+mesh onto the other: 1.9 mm of mean fit, eyes that read as eyes, and still a
+face moved millimetres relative to the paint that was made for it. Millimetres
+are below what a residual reports and above what an eye forgives. There was
+no version of the bake that would have been the first batch, because the first
+batch is not a good fit; it is the absence of a fit.
+
+**So the batch is parked, not deleted, and not redone tonight.** The eleven
+names come out of `Skins.NAMES` — off the tail, so every index below them
+means what it meant, and a roster row or a `settings.cfg` still carrying 14–24
+sanitises to the plain body — and into `Skins.PARKED`, which
+`tools/weapon_select.gd` reads to pin the pickable list at fourteen and to
+insist none of the parked names has crept back. The folders under
+`art/skins/` stay complete (README, baked `basecolor.png`, thumb), so the day
+their downloads are redone nothing has to be rebuilt but the PNG. The bake
+tool stays too, with its caveat written on it: it is the route for a download
+that cannot be redone, and it does not reach perfect.
+
+**The way back is written where the downloads land.** `assets/source/skins/
+README.md`: run each prompt in Tripo as a *retexture of the original sculpt*,
+the job the first thirteen were, and check the download before anything else
+with `python tools/extract_skins.py --dry-run NAME` — the verts column must
+read **15872**. Anything else is a regenerated sculpt and would go the bake
+route again. Then extract, append the names after `void`, render thumbs, and
+move the gate's count to twenty-five.
+
+### Rejected
+
+- **Tuning the bake further** — a face-weighted fit, keeping the body's own
+  eyes and teeth under the paint, a higher sample density. Each would have
+  moved the eyes by less, and none would have made them the texture's eyes.
+  The owner's rule stands: get the simple route to work first, and only then
+  is there something worth adjusting.
+- **Deleting the eleven folders.** They are finished work in every respect
+  but one, and the PNGs are already in history; keeping them costs a listing
+  and saves an afternoon when the downloads come back right.
+- **Leaving them pickable with a note.** A player does not read notes, and a
+  skin on the ring is a claim that it is right.

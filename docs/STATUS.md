@@ -109,15 +109,18 @@ own fade, as a product — and `tools/movement_check.tscn` gained an `air_draw`
 verdict that reads a 1.0° swing where there was 91.8°, with the ground
 unchanged to the degree.
 
-**Eleven more skins (D-126)** — bloom, buzz, chip, crack, dash, fudge, gourd,
-koi, ooze, volt, wrap — landed 2026-09-18 and are pickable after `void`. They
-are **baked**, not extracted: Tripo regenerated the sculpt for this batch
-(9 124 vertices in its own UV layout), so `tools/bake_skin.py` registers the
-body onto each download — whole, then bone by bone through the body's own
-skin weights, then a smooth pull — and paints the body's layout from it
-(1.9 mm mean fit, normals agreeing). `python tools/extract_skins.py` takes that route by itself for any
-download whose vertex count is not the body's. The `PLUSH` folder Carl added
-is empty and `SHIRT` is a garment (the pipeline spike), so neither is a skin.
+**Eleven more skins (D-126), parked (D-128).** bloom, buzz, chip, crack, dash,
+fudge, gourd, koi, ooze, volt and wrap have complete folders under
+`art/skins/` and are **not pickable**. Tripo regenerated the sculpt for this
+batch (9 124 vertices in its own UV layout), so their paint could not be worn
+as it was; `tools/bake_skin.py` registers the body onto each download and
+paints the body's layout from it (1.9 mm fit), and the result is good and is
+not the first batch, whose paint *is* the body's layout. The owner's call is
+to get the second batch the way the first was made — a Tripo retexture of the
+original mesh, 15 872 vertices, worn straight through `extract_skins.py` —
+rather than tune a registration; until then `Skins.PARKED` holds the names and
+the gate pins the pickable list at fourteen. `PLUSH` is an empty folder and
+`SHIRT` is a garment (the pipeline spike), so neither is a skin.
 
 The gate is at **178 of 178** and green, and `net_test.sh` passed after the
 round with the engine quiet in both processes. D-124 touched replicated fields
@@ -304,17 +307,17 @@ What exists now:
 Skins are folders under `art/skins/` (D-100): the robe is the clothing
 example, `example/` the recolour (`tools/make_recolour.gd`,
 `Bog.wear_skin`), and `art/skins/README.md` says how to add the next one.
-**Twenty-four team skins** sit beside them — bogina, boo, clank, crag, gilt,
-glub, gum, muck, rime, roar, slag, toad, void (D-108), then bloom, buzz, chip,
-crack, dash, fudge, gourd, koi, ooze, volt, wrap (D-126) — each a Tripo
-retexture of the same sculpt, made from its `.glb` by `python
-tools/extract_skins.py`: extracted when the download is the body's own mesh,
-**baked** through `tools/bake_skin.py` when Tripo has regenerated the sculpt
-(the second batch). The downloads live under `assets/source/skins/` behind a
+**Thirteen team skins** sit beside them — bogina, boo, clank, crag, gilt,
+glub, gum, muck, rime, roar, slag, toad, void (D-108) — each a Tripo retexture
+of the same sculpt, extracted from its `.glb` by `python
+tools/extract_skins.py`; a second batch of eleven (D-126) is baked through
+`tools/bake_skin.py` because Tripo regenerated the sculpt for it, and is
+**parked** out of the pickable list until its downloads are redone on the
+original mesh (D-128). The downloads live under `assets/source/skins/` behind a
 `.gdignore` and are untracked; the 2048² PNGs are what is committed. **The
 lobby picks them** (D-109): `scripts/game/skins.gd` is the pickable list — the
-twenty-four plus `bog`, the plain body at index zero — and the strip is one
-line of 40 px swatches under the weapon blurb. In free-for-all a skin is one more roster key
+thirteen plus `bog`, the plain body at index zero — and the strip is one line
+of 40 px swatches under the weapon blurb. In free-for-all a skin is one more roster key
 with `weapon`'s whole lifecycle; in **Teams it belongs to the team**, lives in
 `Net.team_skins` indexed by team, can be changed by any member, and no two
 teams may wear the same one. `Net.skin_for(peer_id)` is the one call every

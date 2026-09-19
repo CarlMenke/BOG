@@ -630,7 +630,10 @@ weight; then a smoothed non-rigid pull, to 1.9 mm) and paints every texel of
 the body's layout from the nearest points of the download's paint that face
 the texel's way. It bakes onto
 `build/body_ref.glb`, the body as Godot imports it, written by
-`tools/export_body_ref.gd`.
+`tools/export_body_ref.gd`. A baked skin is a registered face, not the body's
+own paint, and the eleven are **parked** in `Skins.PARKED` rather than in
+`Skins.NAMES` until their downloads are redone on the original mesh
+(**D-128**); the bake remains the route for a download that cannot be.
 
 Grips are solved by their own tools against the new hands — `preview_bow`,
 `preview_sword`, `preview_carry` — and the sheets are the judge; the ragdoll

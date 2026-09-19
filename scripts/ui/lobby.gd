@@ -91,14 +91,15 @@ const WEAPON_ICON := 56
 ## picture of a body instead of a coloured pip, which is what the owner asked
 ## for and what a 40 px swatch of a 2048² texture could never be.
 ##
-## **Three columns of them.** Fourteen skins was five rows of three (the last
+## **Three columns of them.** Fourteen skins is five rows of three (the last
 ## short), 3 x 120 + 2 x 10 = **380 px** wide and 5 x 120 + 4 x 10 = **640 px**
 ## tall, in a column that is 380 wide and 756 tall at the base viewport — so it
-## fit without scrolling, and the `ScrollContainer` it sits in was what made a
-## fifteenth skin, or a shorter window, somebody else's problem rather than a
-## redesign. That day came: twenty-five skins is nine rows, 1160 px, and the
-## grid scrolls. Four columns would have been 510 px of a 1600 px screen and
-## left the portrait nowhere to stand; two would have scrolled at fourteen.
+## fits without scrolling today and the `ScrollContainer` it sits in is what
+## makes a fifteenth skin, or a shorter window, somebody else's problem rather
+## than a redesign (it was nine rows and scrolled for the hours the second batch
+## was pickable, D-126/D-128). Four columns would have been 510 px of a 1600 px
+## screen and left the portrait nowhere to stand; two would have scrolled at
+## fourteen.
 ##
 ## `SKIN_THUMB` is the picture and it is the **whole** cell, not an inset one.
 ## The old swatch inset its face by 2 px so the button's own stylebox showed all

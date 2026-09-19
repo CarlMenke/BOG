@@ -264,6 +264,11 @@ argued against.
                `BogAim` lerps its yaw by `BogAnimator.plane_lost()` and
                `movement_check` holds a draw through a jump: 1.0° of swing,
                2.3° on the worst landing frame (**D-127**)
+  - [ ] 10.9c  **The second skin batch, parked.** Eleven baked skins (`Skins.PARKED`)
+               wait on Tripo retextures of the original 15 872-vertex mesh; when
+               the downloads come back at that count, `extract_skins.py`, append
+               the names after `void`, `skin_thumbs`, and the gate's count goes
+               to twenty-five (**D-128**)
   - [x] 10.11a **Its own clip.** `Punch` shipped drawn with `Cast` through
                `clip_or`; the same evening `Cross Punch` was chosen from the 68
                `"punch"` takes and its `hit` placed at the fist's arrival
