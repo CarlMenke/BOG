@@ -204,6 +204,30 @@ const HOP_MIN_AIRTIME := 0.2
 const HOP_MIN_SPEED := 0.9
 const HOP_ALIGNMENT := 0.7
 
+## Jump fatigue (D-156). The bunny hop above is about the speed a chain of jumps
+## keeps; this is about the height it stops getting. Hopping was free — every
+## ground take-off got the whole of `jump_velocity()` — so the fastest way to
+## cross a map was also the hardest thing in it to hit, which is what the owner
+## saw on Kopje Crossing and called completely broken.
+##
+## Generous on purpose, and the numbers say where the generosity is: the first
+## two jumps of a chain are untouched, so nobody clearing a gap, getting onto a
+## rock or hopping a spear ever meets the rule at all. It is the third hop in a
+## row that comes up short, and it comes up 15% short rather than half.
+##
+## Indexed by how many chained jumps a take-off *follows*, clamped to the last
+## entry: a jump from a standing start is index 0, the one after it index 1, the
+## third hop of a run index 2, and everything after that the tail.
+const JUMP_CHAIN_SCALES: Array[float] = [1.0, 1.0, 0.85, 0.7]
+## A jump taken this soon after touching down is another link in the chain.
+## Later than this the chain stops growing but keeps what it has — a pause is a
+## rest, and a rest should never make the next jump *worse* than carrying on.
+const JUMP_CHAIN_WINDOW := 1.0
+## And this long stood on the ground is the reset: chain back to zero, next jump
+## full. Longer than the window because the two say different things — one is
+## "that was another hop", the other "you have stopped hopping".
+const JUMP_CHAIN_RESET := 1.5
+
 ## The great sword's spinning advance, in metres: the swing clip's own
 ## authored travel, read off its metadata by `BogAnimator` (D-098). The body
 ## produces the metres the clip was drawn covering, which is what keeps the
@@ -677,6 +701,19 @@ var _slide_cooldown: float = 0.0
 var _roll_lock: float = 0.0
 ## Counts down on the ground after a landing. See LANDING_GRACE.
 var _landing_grace: float = 0.0
+## How many chained jumps the next take-off follows (D-156). See
+## JUMP_CHAIN_SCALES.
+##
+## Local, like `_landing_grace` and the hop budget beside it, and for the same
+## reason: only the peer that owns a Bog runs the movement half of
+## `_physics_process` (D-004), so only that peer ever jumps it and there is no
+## second opinion to disagree with. Every other screen gets the shorter arc the
+## way it gets all the rest of the motion, on `sync_velocity`.
+var _jump_chain: int = 0
+## How long the Bog has stood on the floor, in seconds, zeroed the moment it
+## leaves it. The ground-side counterpart of `_airtime`, and the only clock the
+## chain is read against. Starts rested.
+var _ground_time: float = JUMP_CHAIN_RESET
 ## How long the Bog has been off the ground, in seconds, reset on touchdown.
 ## Read by `_detect_landing` to decide whether an airtime was long enough to be
 ## worth rolling out of — see ROLL_MIN_AIRTIME.
@@ -1085,9 +1122,16 @@ func _tick_timers(delta: float) -> void:
 	if is_on_floor():
 		_coyote = COYOTE_TIME
 		_airtime = 0.0
+		_ground_time += delta
+		# Standing about long enough is the rest that gives the height back
+		# (D-156). Here rather than in `_handle_jump` so that it is true of a Bog
+		# that has stopped jumping, not only of the next one it takes.
+		if _ground_time >= JUMP_CHAIN_RESET:
+			_jump_chain = 0
 	else:
 		_coyote = maxf(0.0, _coyote - delta)
 		_airtime += delta
+		_ground_time = 0.0
 	# Frozen rather than decayed while the roll lock is running. `_handle_jump`
 	# refuses a jump during the roll and promises it fires on the frame the lock
 	# ends; a 0.14 s buffer running inside a 0.45 s lock would always be empty
@@ -1664,6 +1708,18 @@ func jump_velocity() -> float:
 	return JUMP_VELOCITY * elder_scale(Net.config.elder_jump_multiplier)
 
 
+## What jump fatigue is worth to the next ground take-off (D-156): 1.0 for the
+## first two of a chain, then JUMP_CHAIN_SCALES.
+##
+## Deliberately **not** folded into `jump_velocity()` above. That number is what
+## the lobby's apex readout, `tools/match_rules.gd` and every map's parkour and
+## reach report ask for, and all of them mean "how high can a Bog get from
+## here" — which is the first jump of a chain and has to stay 9.0. This is what
+## the third one in a row is worth, and `_handle_jump` is the only multiplier.
+func jump_chain_scale() -> float:
+	return JUMP_CHAIN_SCALES[mini(_jump_chain, JUMP_CHAIN_SCALES.size() - 1)]
+
+
 ## How high a leap that left the ground at `launch` m/s gets, in metres.
 ##
 ## Static, and public, because the *lobby* needs it: `elder_jump_multiplier` is a
@@ -1754,7 +1810,15 @@ func _handle_jump() -> void:
 		# move in the game a crouch pressed on touchdown.
 		_hop_gain()
 	_landing_grace = 0.0
-	velocity.y = jump_velocity() * (SLIDE_JUMP_IMPULSE_SCALE if from_slide else 1.0)
+	# Another link in the chain if it came soon enough after the landing (D-156),
+	# counted before the lift is read so that this take-off pays what the chain
+	# is worth *including* itself. A slide jump is a link like any other — it is
+	# a jump out of a move that began on the ground — and keeps its own
+	# multipliers on top (D-123).
+	if _ground_time <= JUMP_CHAIN_WINDOW:
+		_jump_chain += 1
+	velocity.y = jump_velocity() * jump_chain_scale() \
+		* (SLIDE_JUMP_IMPULSE_SCALE if from_slide else 1.0)
 	# Before the emit, so anything listening already sees the new value. The
 	# animator does not use the signal — it is local-only — but it does watch
 	# this counter, on every peer.
@@ -2237,6 +2301,11 @@ func revive_at(spawn: Transform3D, life_number: int = -1) -> void:
 	_airtime = 0.0
 	_roll_lock = 0.0
 	_landing_grace = 0.0
+	# Rested (D-156). A chain is a thing a player is doing, and dying is the end
+	# of doing it: a Bog that came back three hops deep would leave its spawn pad
+	# at 70% of a jump for no reason anybody could see.
+	_jump_chain = 0
+	_ground_time = JUMP_CHAIN_RESET
 	# On every peer, because `revive_at` runs on every peer: a Bog that came back
 	# still spinning would have a sword in its fists on a spawn pad (D-068), and
 	# on its own machine it would spend the rest of the swing sliding off the pad

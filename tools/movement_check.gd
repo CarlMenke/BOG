@@ -23,7 +23,7 @@ extends Node3D
 ## keyboard, and everything downstream of those three fields is the shipping
 ## code.
 ##
-## The five verdicts:
+## The six verdicts:
 ##
 ##   draw        a full draw walks at WALK_SPEED * DRAW_SPEED_SCALE
 ##   air_draw    a full draw carried into a jump keeps pointing where the body
@@ -32,6 +32,9 @@ extends Node3D
 ##               1.2x the slide along the slide's own direction, with 1.12x lift
 ##   landing     a run-speed landing with crouch held is sliding on the tick it
 ##               touches down, and never plays Land or LandHard
+##   jump_chain  four hops taken the tick after each landing: the first two are
+##               full, the third and fourth come up short, and a rest on the
+##               ground gives the whole jump back
 ##   remote      the slide jump's serial reaches a Bog this machine does not
 ##               own, through the replication config that ships in bog.tscn,
 ##               and its animator picks the slide jump's leap
@@ -67,6 +70,15 @@ const SETTLE_TICKS := 90
 const SAMPLE_TICKS := 30
 ## How close a measured speed has to be to the number it is meant to be, in m/s.
 const SPEED_TOLERANCE := 0.05
+## Ticks a jump is watched for, up and down again: a full one is 0.375 s of rise
+## and rather less of fall, and this is comfortably over a second.
+const HOP_TICKS := 90
+## Ticks of standing still that count as a rest, which has to clear
+## `Bog.JUMP_CHAIN_RESET` (1.5 s) with room for the landing tick.
+const CHAIN_REST_TICKS := 120
+## How close a measured apex has to be to the height it is meant to reach, in
+## metres. The step this case is looking for is 15% of 1.76 m.
+const HEIGHT_TOLERANCE := 0.03
 
 var _bog: Bog
 var _remote: Bog
@@ -96,6 +108,7 @@ func _ready() -> void:
 	await _check_air_draw()
 	await _check_slide_jump()
 	await _check_landing()
+	await _check_jump_chain()
 	await _check_remote()
 
 	print("movement_check: %d checks, %d failures" % [_checks, _failures])
@@ -572,6 +585,85 @@ func _check_landing() -> void:
 	_ok("LandHard was never played", not hard_shot)
 	_ok("the Slide one-shot was", slide_shot)
 	print("movement_check: landing %s" % _verdict())
+
+
+# ------------------------------------------------------------- jump chain ---
+
+## Four jumps in a row, taken the tick after each landing: the first two get the
+## whole of `jump_velocity()` and the third and fourth come up short by
+## `Bog.JUMP_CHAIN_SCALES` (D-156). Then a rest gives the height back.
+func _check_jump_chain() -> void:
+	await _reset()
+	# `_reset` rests for exactly JUMP_CHAIN_RESET, and the Bog spends the first
+	# few ticks of it falling the 0.2 m off the spawn — so it would arrive here
+	# a hair short of rested and hop one already counted.
+	await _ticks(CHAIN_REST_TICKS)
+	var heights: Array[float] = []
+	for _i in Bog.JUMP_CHAIN_SCALES.size():
+		heights.append(await _hop())
+
+	var launch := _bog.jump_velocity()
+	print("movement_check: jump chain reaches %.3f, %.3f, %.3f, %.3f m (a full jump is %.3f)"
+		% [heights[0], heights[1], heights[2], heights[3], _tick_apex(launch)])
+	for i in heights.size():
+		var scale := float(Bog.JUMP_CHAIN_SCALES[i])
+		var want := _tick_apex(launch * scale)
+		_ok("hop %d reaches %.3f m at %.2f of a jump (want %.3f)"
+			% [i + 1, heights[i], scale, want],
+			absf(heights[i] - want) < HEIGHT_TOLERANCE)
+	_ok("the first two are the same height (%.3f, %.3f)" % [heights[0], heights[1]],
+		absf(heights[0] - heights[1]) < HEIGHT_TOLERANCE)
+	_ok("the third is lower than the second (%.3f under %.3f)" % [heights[2], heights[1]],
+		heights[2] < heights[1] - 0.05)
+
+	# And the rest is the reset. Long enough to clear JUMP_CHAIN_RESET with the
+	# landing tick's own fraction of a second in it.
+	await _ticks(CHAIN_REST_TICKS)
+	var rested := await _hop()
+	print("movement_check: a %.1f s rest jumps %.3f m again"
+		% [float(CHAIN_REST_TICKS) / 60.0, rested])
+	_ok("a rest gives the whole jump back (%.3f)" % rested,
+		absf(rested - _tick_apex(launch)) < HEIGHT_TOLERANCE)
+	print("movement_check: jump_chain %s" % _verdict())
+
+
+## One jump from where the Bog is standing, and how high above that floor it
+## got, in metres. Returns on the tick the feet are back down, so the call after
+## this one is the next link in the chain.
+func _hop() -> float:
+	var floor_y := _bog.global_position.y
+	_bog.request_jump()
+	var top := 0.0
+	var airborne := false
+	for _i in HOP_TICKS:
+		await get_tree().physics_frame
+		top = maxf(top, _bog.global_position.y - floor_y)
+		if not _bog.is_on_floor():
+			airborne = true
+		elif airborne:
+			break
+	return top
+
+
+## How high a leap launched at `launch` gets in this engine, integrated the way
+## the Bog is integrated: the take-off tick moves at the whole launch speed
+## (`_apply_gravity` returns early on the floor and `_handle_jump` runs after
+## it), and every tick after that takes its gravity first and then moves.
+##
+## Not `Bog.apex_for`, which is the continuous answer and is 0.08 m away from
+## what sixty discrete ticks reach — larger than the 15% this case is looking
+## for is on the third hop.
+static func _tick_apex(launch: float) -> float:
+	var gravity := float(ProjectSettings.get_setting("physics/3d/default_gravity", 24.0))
+	var tick := 1.0 / float(Engine.physics_ticks_per_second)
+	var vy := launch
+	var y := vy * tick
+	var top := y
+	while vy > 0.0:
+		vy -= gravity * tick
+		y += vy * tick
+		top = maxf(top, y)
+	return top
 
 
 # ----------------------------------------------------------------- remote ---

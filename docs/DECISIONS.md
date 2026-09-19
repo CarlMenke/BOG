@@ -16715,3 +16715,60 @@ bodies, so the shoulder and the neck are driven rather than frozen. And
 at this bias, which is chaos rather than a trend (0.12 reads 0.82, 0.08 reads
 1.07) — the run is deterministic, so it passes, but it is the number to watch if
 anything near the ragdoll moves next. (BOG-12.)
+
+## D-156 — The third hop in a row comes up short, and the first two never do
+Bunny-hopping was free. D-052 gave a chain of well-timed hops its speed on
+purpose, and nothing ever took anything back: every ground take-off got the
+whole of `jump_velocity()`, so the fastest way across a map was also the
+hardest thing on it to hit. The owner watched it on Kopje Crossing with two
+players — "the bunny hoppers is completely broken" — and asked for jump
+fatigue, generously.
+
+**Generous is the whole design, and it is where the numbers are.**
+`JUMP_CHAIN_SCALES` is `[1.0, 1.0, 0.85, 0.7]`, indexed by how many chained
+jumps a take-off follows: the first two of a chain are untouched, so a player
+clearing a gap, getting onto a rock or hopping a spear never meets the rule at
+all. The third is 0.85 and the fourth and later 0.70 — measured, 1.764 m, 1.764,
+1.284, 0.881 against a full jump's 1.763. It is height and never speed: the hop
+budget, its cap and the sword's share of it (D-068) are exactly what they were,
+and `bhop` still reaches 7.02 m/s on all three subjects.
+
+**Two clocks, saying two different things.** `_ground_time` is the ground-side
+counterpart of `_airtime`, zeroed the moment the feet leave. A jump taken
+within `JUMP_CHAIN_WINDOW` (1.0 s) of touching down is another link.
+`JUMP_CHAIN_RESET` (1.5 s) stood on the floor is the reset, chain back to zero.
+The gap between them is deliberate and is what keeps the rule generous: between
+1.0 and 1.5 s the chain stops *growing* but keeps what it has, so a pause is a
+rest and can never make the next jump worse than carrying on would have. The
+reset is ticked in `_tick_timers` rather than asked at the jump, so it is true
+of a Bog that has stopped hopping and not only of the next one it takes.
+
+**A slide jump is a link like any other** and keeps its own multipliers on top
+(D-123): it is a jump out of a move that began on the ground, and exempting it
+would make crouch-jump the way to hop forever. In practice it is rarely
+fatigued, because a slide needs a run-up and a run-up is longer than the window.
+The dive is untouched — `_air_jump_spent` is once per airtime already, which is
+its own fatigue, and it does not go through `_handle_jump` at all.
+
+**`jump_velocity()` is not where this lives.** That number is what the lobby's
+apex readout, `tools/match_rules.gd` and every map's parkour and reach report
+ask for, and all of them mean "how high can a Bog get from here" — the first
+jump of a chain, which has to stay 9.0 or a reachable ledge becomes a lie.
+`jump_chain_scale()` is the fatigue, and `_handle_jump` is its only multiplier.
+The chain is a local field beside `_landing_grace`, for the reason all movement
+state is (D-004): only the peer that owns a Bog runs the movement half of
+`_physics_process`, so there is one writer and no second opinion, and the
+shorter arc reaches the other seven screens the way the rest of the motion does.
+A respawn is rested — a Bog that came back three hops deep would leave its pad
+at 70% of a jump for no reason anybody could see.
+
+`tools/movement_check.gd` gained a sixth verdict, `jump_chain`: four hops each
+pressed the tick after the last landing, read as heights, then a rest. Its
+expectation is integrated tick by tick rather than taken from `Bog.apex_for` —
+the continuous apex is 0.08 m above what sixty discrete ticks reach, which is
+larger than the 15% the third hop is being measured for.
+
+**Known and left:** `BogAnimator` scrubs the leap clip by `jump_velocity()`,
+which stays full, so a fatigued hop enters the lift-to-apex window 15% or 30%
+in instead of at its start. The same on every peer, and the fix is an animator
+told which launch it got. (BOG-28.)
