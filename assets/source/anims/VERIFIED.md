@@ -6,6 +6,10 @@ where the body is 1.00 unit tall: multiply by the final body height for metres.
 `travel` is the horizontal distance the hips cover over the clip (the authored speed is
 travel / length for a cycle); `bob` is the hips' vertical range.
 
+This is the snapshot as it stood on the day. Two files below are no longer in the folder:
+`StrafeRight-RunningStrafeToTheRight-1` and `StrafeWalkRight-WalkingStrafeToTheRight-1` were
+retired when the strafe axis's right half became a reflection of its left (`mirror_of`, D-071).
+
 | file | length s | travel | bob |
 |---|---|---|---|
 | AirLoop-MidAirFallingIdle | 0.700 | 0.000 | 0.001 |

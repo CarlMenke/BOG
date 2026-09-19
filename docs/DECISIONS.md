@@ -17799,3 +17799,137 @@ the leg 0.2333 rad against a 0.2334 cap. The two claims that were there before a
 unchanged and still pass: running 45-degree steps matched on 6 of 6 turns inside 6
 ticks (worst 4), and 186 committed frames of spin and emote at 0.000 degrees of
 drift. (BOG-60, for BOG-33.)
+
+## D-171 — The strafe axis is a bearing, not a blend and not a rate: the mirror is built, the lateral is still owed
+Carl, 2026-09-18 (late): *"i think the new third person pvp camera and model
+system made it so that if i only press a or d, the animations are a little
+uneasy and its worse when its sprinting."* Three things could have caused that
+and the ticket named them in order. Two were measured and cleared. The third is
+the clip, and it is the same clip D-071 asked for and D-098 costed.
+
+### The blend point does not drift. It is exactly on the axis.
+
+A temporary harness drove pure A and pure D on a real Bog and read
+`parameters/stand/blend_position` every tick for a second, with the view held
+and with it turning:
+
+    leg                               mean off-axis   worst   forward shown
+    walk / sprint, A and D, still          0.00°       0.00°     0.000 m/s
+    walk / sprint, A and D, turning        0.00°       0.00°     0.000 m/s
+
+Zero, and it could not be otherwise: `_wish_direction` is view-relative, the
+body is welded to the view at `TURN_SPEED`'s 800°/s, and a 120°/s drag never
+opens a gap between them. The only drift is where the body is genuinely mid-turn
+— 56° for a quarter second when the idle yaw slack hands 60° back on the first
+step (D-177), 36° through a 90° flick — and in both the Bog really is turning,
+so a diagonal is the honest pose. A dead band there would hide the squaring-up
+the slack was added for. So **nothing was added to `bog_animator.gd`**, and the
+blend stays on replicated velocity through `facing()`: one code path for the Bog
+you drive and the seven you watch (D-004), which a blend on input would have
+split.
+
+### The rate is already the clip's own, and slowing it trades a skate for a float
+
+Every point plays at game speed over `authored_speed` (D-095), so the sideways
+poles are already planted for their own travel. Scaling that rate at the two
+sideways points and re-running `strafe`:
+
+    sideways rate     run right   run left
+    1.00 (shipped)      1.12        1.11
+    0.70                0.97        0.98
+    0.407               0.93        0.94
+    1.30                1.29        1.29   (past the 1.25 limit)
+
+0.407 is the scale that minimises the skate, and it buys 1.12 → 0.93 by cycling
+the legs at 41% of the speed the body travels. That is the float the ticket
+warned about, bought to cover a skate. Rejected.
+
+### It is a bearing, and the arithmetic is exact
+
+`clip_measure` on the shipped library: `StrafeLeft` travels **+24.1°** off
+forward, `StrafeRight` **-24.0°**, the walk pair **±46°**. A body going sideways
+over a clip whose travel is `β` off forward slides at `2·sin((90-β)/2)`:
+
+    pair        bearing   predicted   measured
+    run         24.1°       1.09        1.12
+    walk        46.0°       0.75        0.76
+
+Two decimals on both rows, which is what makes the rest of this arithmetic worth
+trusting: a lateral at D-071's 76.5° puts the same leg at **0.24**.
+
+Re-importing the four in their authored frame (`face: none`) was tried first,
+because D-096 found Mixamo authors the world's forward. The travel does come out
+at exactly ±90° — and the stance comes with it: hips 77° and chest 66° turned on
+the run pair, 84°/44° on the walk pair. Mixamo's "Running Strafe To The Left" is
+a body *turning to run where it is going*. Under the camera-locked rig (D-174)
+that is a Bog showing its back while it sidesteps, which is D-097's "a BOG whose
+model faces 43° away from where its player aims reads as broken" twice over.
+Reverted. `chest` remains the best of the three: `hips` would leave the run pair
+at 12.8°.
+
+### So the mirror is built, and it is what the fetched clip lands on
+
+D-098 asked for `mirror_of` in `import_clip.gd` and it did not exist; D-071 had
+it in the retired Blender pipeline. It exists now. A row with `mirror_of` and no
+FBX is built when the role it names is imported, and filed like a download.
+
+Two things in it are the whole of why it lands square.
+
+**The plane is the one the row's own `face` squares to**, not the hip line
+D-071 used. The BOG's rest shoulder line sits 0.4° off square to its rest hip
+line — a real asymmetry in the mesh — so a chest-squared strafe reflected in the
+*hip* plane comes back 0.8° off the chest, inside `clip_check`'s one degree and
+only just. Reflected in its own plane, a squared clip reflects to a squared clip
+at 0.0° and the bearing reflects with it.
+
+**The reflection is rolled to start on a right-foot plant again**, by the
+source's own `step_left` — the mirror's right foot *is* the source's left. Every
+Mixamo cycle starts on a right plant (D-097 measured it on 22 of 24), so an
+unrolled reflection is half a stride out of phase with every other cycle in its
+plane, and the diagonals feel it: walk forward-right slid 0.37 against the
+downloaded right strafe, **0.94** against an unrolled reflection, and 0.41 rolled
+— its left twin's number exactly. The roll resamples rather than re-times,
+because the importer's key reduction does not leave every track on one grid
+(`StrafeWalkLeft` has 33 hip keys in 0.933 s and its last does not repeat its
+first), and sampling leaves a closed loop behind whatever it found.
+
+The reflection itself is taken in world space and pushed back down into the
+tracks. A per-key negation in each bone's own frame is only correct on a rig
+whose every joint frame is mirror-symmetric, and the left and right rests here
+are reflections of each other rather than copies.
+
+`StrafeRight` and `StrafeWalkRight` are now those reflections, and the two
+downloads they replace are gone from `assets/source/anims/`. Sixteen legs:
+
+    leg              before   after        leg              before   after
+    run right         1.12     1.10        walk right        0.76     0.76
+    run left          1.11     1.11        walk left         0.76     0.76
+    run fwd-right     0.69     0.67        walk fwd-right    0.37     0.41
+    run back-right    0.89     0.91        walk back-right   1.18     1.17
+    compass worst     1.18     1.17        mirror gap        0.01     0.01
+
+Nothing is worse than its left twin and the worst leg improved. What the mirror
+buys is not a number today: it is that the axis is one motion by construction,
+so the lateral clip when it lands serves both poles from one file.
+
+### What is still owed
+
+The sideways legs still slide 1.10 and 1.11, and no code fixes that. Two files:
+the Magic pack's `Standing Run Left` (+76.5° by the chest) and `Standing Walk
+Left` (+94.4°), the only two near-laterals in any pack D-071 measured. They
+replace the two `Strafe*Left` rows; the right halves are already reflections and
+need nothing. Predicted at those bearings: **0.24** and **0.08**. BOG-16 stays
+open on that fetch.
+
+### Rejected
+
+- **A dead band round the sideways axis**, and **blending on input rather than
+  velocity**. The steady-state drift is 0.00°; there is nothing to band, and
+  blending on input would give the local Bog a different pose source from the
+  seven remote ones for a transient that is the body honestly turning.
+- **`face: none` on the four strafes.** True lateral travel, bought with a
+  stance turned 66–84° into it.
+- **Slowing the sideways points** to 0.407 of their planted rate. 1.12 → 0.93,
+  paid for with legs cycling at 41% of the body's speed.
+- **Mirroring in the rest hip plane** (D-071's line). 0.8° off the chest on a
+  clip whose chest is the line the gate holds square. (BOG-16.)

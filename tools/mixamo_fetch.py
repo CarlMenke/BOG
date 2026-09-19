@@ -141,11 +141,16 @@ def main():
     # be read back out. Such a row is skipped rather than sent over with a null
     # id, which the browser half would turn into a search for "undefined". It is
     # named on the way past so the skip is visible rather than silent.
+    #
+    # A `mirror_of` row is skipped for a different reason and silently: it has
+    # no take to fetch at all, being the reflection of another row built at
+    # import (D-071, D-098).
     by_hand = [c["file"] for c in table["clips"] if c.get("mixamo_by_hand")]
     clips = [
         {"file": c["file"], "id": c.get("mixamo_id"), "name": c.get("mixamo_name"),
          "query": c.get("mixamo_query"), "keep": c.get("mixamo_keep"), "inplace": c["in_place"]}
-        for c in table["clips"] if not c.get("mixamo_by_hand")
+        for c in table["clips"]
+        if not c.get("mixamo_by_hand") and not c.get("mirror_of")
     ]
     js = TEMPLATE.replace("__CLIPS__", json.dumps(clips, indent=2)).replace("__FPS__", str(table["fps"]))
     OUT.parent.mkdir(exist_ok=True)

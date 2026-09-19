@@ -19,7 +19,10 @@ extends EditorScenePostImport
 ##      place and the physics body does the moving;
 ##   4. sets the loop mode and writes the event markers from the clip table;
 ##   5. saves it to `art/generated/clips/<file>.res` and files it in the shared
-##      library `art/generated/bog_clips.res` under its role.
+##      library `art/generated/bog_clips.res` under its role;
+##   6. builds any clip the table says is this one's reflection (`mirror_of`,
+##      D-071) and files that the same way — a mirrored row has no file of its
+##      own, so the two halves of an axis are one motion by construction.
 ##
 ## The clip table, `assets/source/clips.json`, is the single source of
 ## truth for what a file is: its role, whether it loops, how it faces, where
@@ -156,7 +159,213 @@ func _post_import(scene: Node) -> Object:
 		file, anim.length, anim.get_meta("authored_speed"), high - low, fix_deg,
 		twist.x, twist.y,
 		anim.get_marker_names().size(), "loop" if anim.loop_mode != Animation.LOOP_NONE else "once"])
+
+	# And any clip the table says is this one's reflection (D-071, D-098). A
+	# mirrored row has no FBX of its own, so it is built here, off the clip that
+	# has just been saved and after everything that was done to it — the two
+	# halves of an axis are then the same move by construction instead of by
+	# download, and a re-import of the source rebuilds both together.
+	for other: Dictionary in table.rows.values():
+		if String(other.get("mirror_of", "")) == String(row.get("role", "")):
+			_mirror_into(other, anim, skeleton, table)
 	return scene
+
+
+# ------------------------------------------------------------------ mirror ---
+
+## Build the row's clip as the left-to-right reflection of `source`, and file it
+## exactly as a downloaded one (D-071 named this `mirror_of` and D-098 asked for
+## it here). Mixamo has no true lateral *right* clip and never will — its strafe
+## families are authored round a chest turned to the actor's own right, so every
+## right strafe in every pack is a -37 to -47 degree diagonal while its left twin
+## ranges from +27 to +126 (D-071 measured three downloads to find that out).
+## A pole that has to mean -90 is therefore built, not fetched.
+##
+## The plane is the rig's own sagittal plane, fitted rather than assumed: the
+## normal is the **rest** body line the row's `face` names, so a rest pose that
+## is rebuilt moves the reflection with it rather than leaving it measuring
+## against a remembered axis.
+##
+## Which line, and not always the hips, is the whole of why the mirror lands
+## square. The BOG's rest shoulder line sits 0.4° off square to its rest hip
+## line — a real asymmetry in the mesh, not a measurement — so a strafe squared
+## on its chest and then reflected in the *hip* plane comes back 0.8° off the
+## chest, which is inside `clip_check`'s one degree and only just. Reflected in
+## the plane its own `face` rule squares to, a squared clip reflects to a
+## squared clip exactly, and the travel bearing reflects exactly with it.
+##
+## The reflection is taken in world space and pushed back down into the tracks,
+## rather than negated key by key in each bone's own frame. A bone's keys are in
+## its parent's frame and the left and right rests are reflections of each other
+## rather than copies, so a per-key negation is only correct on a rig whose every
+## joint frame happens to be mirror-symmetric; forward kinematics out, reflect,
+## and inverse-kinematics back in is correct on any rig and costs one FK pass per
+## distinct key time.
+func _mirror_into(row: Dictionary, source: Animation, skeleton: Skeleton3D,
+		table: Dictionary) -> void:
+	var file: String = row.get("file", "")
+	var anim := source.duplicate(true) as Animation
+	var tracks := _tracks_by_bone(anim)
+	var rest := _positions(source, skeleton, tracks, -1.0)
+	var line: Array = LINES.get(row.get("face", "hips"), LINES.hips)
+	var plane := _flat(rest[skeleton.find_bone(line[0])] - rest[skeleton.find_bone(line[1])])
+	var reflect := _reflection(plane)
+	# Which bone each bone takes its pose from: its twin across the plane, or
+	# itself for the spine, the head and the hips.
+	var twin := PackedInt32Array()
+	for b in skeleton.get_bone_count():
+		var other := skeleton.find_bone(_twin_bone(skeleton.get_bone_name(b)))
+		twin.append(other if other >= 0 else b)
+
+	# One forward-kinematics pass per distinct key time, shared by every track
+	# that has a key there — which on a Mixamo clip is all of them, because the
+	# export is baked at one rate.
+	var posed := {}
+	for bone: String in tracks:
+		var b := skeleton.find_bone(bone)
+		if b < 0:
+			continue
+		var parent := skeleton.get_bone_parent(b)
+		for kind: String in ["pos", "rot"]:
+			var track: int = tracks[bone][kind]
+			if track < 0:
+				continue
+			for k in anim.track_get_key_count(track):
+				var t := anim.track_get_key_time(track, k)
+				if not posed.has(t):
+					posed[t] = _world(source, skeleton, tracks, t)
+				var world: Array[Transform3D] = posed[t]
+				var here := _reflect(world[twin[b]], reflect)
+				var local := here if parent < 0 \
+					else _reflect(world[twin[parent]], reflect).affine_inverse() * here
+				if kind == "pos":
+					anim.track_set_key_value(track, k, local.origin)
+				else:
+					anim.track_set_key_value(track, k, local.basis.get_rotation_quaternion())
+
+	# A reflection swaps which foot is which, and that is not only a renaming:
+	# **every Mixamo cycle starts on a right-foot plant** (D-097 measured it on
+	# 22 of 24), so a reflected one starts on a left-foot plant and is half a
+	# stride out of phase with every other cycle in its plane. The blend space
+	# feels that on the diagonals, where a strafe is mixed with a walk or a run:
+	# the walk-forward-right leg slid 0.37 of body speed against the downloaded
+	# right strafe and 0.94 against an unrolled reflection of the left one.
+	#
+	# So the reflection is rolled round its own loop until it starts on a right
+	# plant again, and where that is, is derived rather than typed: the mirror's
+	# right foot *is* the source's left, so the roll is the source's own
+	# `step_left`. Sampled rather than re-timed key by key, because the importer
+	# does not leave every track on one grid and the roll has to leave a closed
+	# loop behind it whatever grid it found.
+	_roll(anim, _step_roll(source))
+
+	# The row's own loop and markers, not the source's: after the reflection and
+	# the roll the feet have traded places and moved, and the table is where that
+	# is written down (D-097).
+	for marker in anim.get_marker_names():
+		anim.remove_marker(marker)
+	anim.loop_mode = Animation.LOOP_LINEAR if row.get("loop", false) else Animation.LOOP_NONE
+	for marker in row.get("markers", {}):
+		var at := float(row.markers[marker])
+		if at < 0.0 or at > anim.length:
+			push_error("import_clip: %s marker '%s' at %.3f is outside 0..%.3f" % [file, marker, at, anim.length])
+			continue
+		anim.add_marker(marker, at)
+
+	var travel: Vector3 = reflect * (source.get_meta("travel", Vector3.ZERO) as Vector3)
+	anim.resource_name = file
+	anim.set_meta("role", row.get("role", ""))
+	anim.set_meta("travel", travel)
+	anim.set_meta("authored_speed", source.get_meta("authored_speed", 0.0))
+	anim.set_meta("bearing", rad_to_deg(Vector3.FORWARD.signed_angle_to(-travel, Vector3.UP)) if travel.length() > 0.05 else 0.0)
+	anim.set_meta("hips_bob", source.get_meta("hips_bob", 0.0))
+	anim.set_meta("facing_fix", -float(source.get_meta("facing_fix", 0.0)))
+	anim.set_meta("untwist", -(source.get_meta("untwist", Vector2.ZERO) as Vector2))
+	anim.set_meta("start_offset", reflect * (source.get_meta("start_offset", Vector3.ZERO) as Vector3))
+
+	var clip_path := CLIP_DIR + file + ".res"
+	var err := ResourceSaver.save(anim, clip_path)
+	if err != OK:
+		push_error("import_clip: could not save %s (%d)" % [clip_path, err])
+		return
+	anim.take_over_path(clip_path)
+	_file_in_library(file, table, anim)
+	print("import_clip: %-52s %6.3f s  %.3f m/s  bob %.3f  mirror of %-18s %d markers  %s" % [
+		file, anim.length, anim.get_meta("authored_speed"), anim.get_meta("hips_bob"),
+		source.get_meta("role", ""), anim.get_marker_names().size(),
+		"loop" if anim.loop_mode != Animation.LOOP_NONE else "once"])
+
+
+## The matrix that reflects in the plane through the origin with unit normal
+## `n`: `I - 2nn'`. Improper, so a rotation conjugated by it — `M B M` — comes
+## back proper, which is what makes `_reflect` a rigid transform again.
+static func _reflection(n: Vector3) -> Basis:
+	return Basis(
+		Vector3(1.0 - 2.0 * n.x * n.x, -2.0 * n.x * n.y, -2.0 * n.x * n.z),
+		Vector3(-2.0 * n.y * n.x, 1.0 - 2.0 * n.y * n.y, -2.0 * n.y * n.z),
+		Vector3(-2.0 * n.z * n.x, -2.0 * n.z * n.y, 1.0 - 2.0 * n.z * n.z))
+
+
+## How far a reflection of `source` has to be rolled to start on a right-foot
+## plant again: the source's own `step_left`. Zero for anything that is not a
+## marked locomotion cycle, which is the honest answer — there is no stride to
+## be out of phase with.
+static func _step_roll(source: Animation) -> float:
+	if source.loop_mode == Animation.LOOP_NONE or not source.has_marker("step_left"):
+		return 0.0
+	return source.get_marker_time("step_left")
+
+
+## Turn a looping clip `by` seconds round its own loop, in place: what was at
+## `by` is at 0 afterwards.
+##
+## Every key is resampled rather than re-timed, and two extra samples are taken
+## at 0 and at the length. Re-timing alone would be enough on a clip whose
+## tracks all sit on one grid with a closing key, and the importer's own key
+## reduction means not every clip is one (`StrafeWalkLeft` has 33 hip keys in
+## 0.933 s and its last does not repeat its first). Sampling costs nothing here
+## — the values come off the track the engine is about to throw away — and it
+## leaves a closed loop behind whatever it found, because the sample at the
+## length and the sample at 0 are the same instant of the cycle.
+static func _roll(anim: Animation, by: float) -> void:
+	var length := anim.length
+	if by <= 0.0 or length <= 0.0:
+		return
+	for t in anim.get_track_count():
+		var kind := anim.track_get_type(t)
+		if kind != Animation.TYPE_POSITION_3D and kind != Animation.TYPE_ROTATION_3D:
+			continue
+		var times := PackedFloat32Array([0.0, length])
+		for k in anim.track_get_key_count(t):
+			times.append(fposmod(anim.track_get_key_time(t, k) - by, length))
+		times.sort()
+		# Every value before any key is removed: once the keys are gone there is
+		# nothing left to interpolate.
+		var values := []
+		for s in times:
+			var at := fposmod(s + by, length)
+			values.append(anim.position_track_interpolate(t, at) if kind == Animation.TYPE_POSITION_3D
+				else anim.rotation_track_interpolate(t, at))
+		for k in range(anim.track_get_key_count(t) - 1, -1, -1):
+			anim.track_remove_key(t, k)
+		for i in times.size():
+			if i > 0 and times[i] - times[i - 1] < 1e-5:
+				continue
+			anim.track_insert_key(t, times[i], values[i])
+
+
+static func _reflect(t: Transform3D, m: Basis) -> Transform3D:
+	return Transform3D((m * t.basis * m).orthonormalized(), m * t.origin)
+
+
+## A bone's twin across the plane, by the way Mixamo spells the side, and the
+## bone's own name when it has no twin.
+static func _twin_bone(bone: String) -> String:
+	if bone.contains("Left"):
+		return bone.replace("Left", "Right")
+	if bone.contains("Right"):
+		return bone.replace("Right", "Left")
+	return bone
 
 
 ## Mean yaw of a body line (left bone to right bone) over the clip, in degrees

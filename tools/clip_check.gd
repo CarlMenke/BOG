@@ -92,10 +92,14 @@ func _initialize() -> void:
 	# draws it, and the animator plays a named stand-in until they do
 	# (`BogAnimator.clip_or`). What must still fail here is a row whose clip was
 	# fetched and did not reach the library, which is every other row.
+	#
+	# A `mirror_of` row has no FBX and never will — it is built from the clip it
+	# reflects (D-071, D-098) — so it is never pending: if the reflection did not
+	# reach the library that is a failure, exactly as it is for a fetched row.
 	var fetched := DirAccess.get_files_at(ANIMS)
 	var pending := PackedStringArray()
 	for row in table:
-		if not _row_fetched(fetched, row):
+		if not row.has("mirror_of") and not _row_fetched(fetched, row):
 			pending.append(row.file)
 			continue
 		var present := by_file.has(row.file)
