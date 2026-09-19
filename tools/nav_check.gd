@@ -41,6 +41,12 @@ const ARENA_SCENE := preload("res://scenes/world/arena.tscn")
 ## cell, so fifty is a floor and not a target.
 const MIN_POLYGONS := 50
 
+## And below this the link builder found nothing. Every map in the game has
+## ledges, kerbs or a deck to drop off — the smallest honest count of the seven
+## is the range's, and eight is well under it and far above the nought a
+## builder reading an unsynced navigation map produces (D-167).
+const MIN_LINKS := 8
+
 ## Wall clock, not frames: the island is one blocking build frame of unknown
 ## length and the bake itself runs on a worker thread, so counting frames would
 ## be counting the wrong thing (the same point D-012 makes about the snapshot
@@ -54,6 +60,9 @@ const ROUTE_FRAMES := 30
 
 var _checks: int = 0
 var _failures: int = 0
+var _maps: int = 0
+var _links_total: int = 0
+var _links_at_origin: int = 0
 
 
 func _ready() -> void:
@@ -66,6 +75,11 @@ func _ready() -> void:
 	for id: String in MapCatalog.ids():
 		if only.is_empty() or only.has(id):
 			await _run_map(id)
+	# One line the gate can grep for the whole of D-167, because the per-map
+	# assertions only speak when they fail and "no link ends at the origin" is a
+	# thing that has to be said out loud to stay true.
+	print("nav_check: %d maps, %d links, %d at the world origin"
+		% [_maps, _links_total, _links_at_origin])
 	print("nav_check: %s" % ("FAIL" if _failures > 0 else "PASS"))
 	get_tree().quit(1 if _failures > 0 else 0)
 
@@ -121,20 +135,62 @@ func _run_map(id: String) -> void:
 			id, NavigationServer3D.map_get_iteration_id(map),
 			NavigationServer3D.map_get_regions(map).size(), waited,
 			NavigationServer3D.map_get_closest_point(map, pads[0].origin)])
-	var jumps := GuidePath.link_segments(route, nav.link_points())
+	var link_points := nav.link_points()
+	var at_origin := 0
+	for point: Vector3 in link_points:
+		if point.length() < 0.01:
+			at_origin += 1
+	_maps += 1
+	_links_total += links
+	_links_at_origin += at_origin
+	var jumps := GuidePath.link_segments(route, link_points)
 	var bounds := nav.bounds()
-	print("nav_check: %s %d polygons, %d links, %.0f x %.0f m; pad 1 to pad %d is %.1f m over %d jumps"
+	print("nav_check: %s %d polygons, %d links, %.0f x %.0f m; pad 1 to pad %d is %.1f m over %d jumps, %.2f ms a query"
 		% [id, polygons, links, bounds.size.x, bounds.size.z, pads.size(),
-			GuidePath.polyline_length(route), jumps])
+			GuidePath.polyline_length(route), jumps, _query_msec(nav, pads)])
 
 	_want("%s: at least %d navmesh polygons (%d)" % [id, MIN_POLYGONS, polygons],
 		polygons >= MIN_POLYGONS)
 	_want("%s: two spawn pads to path between (%d)" % [id, pads.size()], pads.size() >= 2)
 	_want("%s: a route from the first pad to the last (%d points)" % [id, route.size()],
 		route.size() >= 2)
+	# The links, and the one failure that looks like success. Until D-167 every
+	# link on every map ended at the world origin, because the builder asked an
+	# unsynced navigation map where the ground was and (0, 0, 0) is what an
+	# unsynced map answers — a census of "14 links" and a gate of green while the
+	# line went over nothing. A link end within a centimetre of the origin is
+	# that, and no map here has walkable ground there anyway.
+	_want("%s: no link end sits at the world origin (%d of %d)"
+		% [id, at_origin, link_points.size()], at_origin == 0)
+	_want("%s: at least %d jump links (%d)" % [id, MIN_LINKS, links], links >= MIN_LINKS)
+	# The cap is a ceiling on what one navigation map should carry, not a budget
+	# to spend: a bake that reaches it has stopped part way through the border
+	# edges, so which half of the map got links is whatever order they came out
+	# of a dictionary in.
+	_want("%s: the link cap was not reached (%d of %d)" % [id, links, JumpLinks.MAX_LINKS],
+		links < JumpLinks.MAX_LINKS)
 	_want("%s: the outline image was rasterised" % id,
 		nav.outline_image() != null and nav.outline_image().get_width() > 1)
 	await _teardown(arena)
+
+
+## What one guide-line path costs, averaged over every ordered pair of spawn
+## pads. Printed rather than asserted: the links are what make a query expensive
+## — a navigation map carrying hundreds of them is the point of D-167 — and the
+## number wanted is "a fraction of a millisecond", against a `GuideLine` that
+## re-solves a few times a second on one client.
+func _query_msec(nav: NavBake, pads: Array[Transform3D]) -> float:
+	if pads.size() < 2:
+		return 0.0
+	var queries := 0
+	var started := Time.get_ticks_usec()
+	for from: Transform3D in pads:
+		for to: Transform3D in pads:
+			if from == to:
+				continue
+			nav.find_path(from.origin, to.origin)
+			queries += 1
+	return float(Time.get_ticks_usec() - started) / (1000.0 * float(maxi(queries, 1)))
 
 
 func _await_bake(nav: NavBake, id: String) -> bool:

@@ -18,7 +18,9 @@ extends RefCounted
 ##
 ## Both may answer, and a link is two-way only when the leap home also makes
 ## it: a three-metre drop is one way, a knee-high one is a step you can take
-## back.
+## back. Whatever answers is then asked one more question — would walking do?
+## — because a navmesh eroded by the agent's radius has a border round every
+## barrel on the map, and a leap over a barrel is not a route (`_is_shortcut`).
 ##
 ## What can be jumped is `JumpArc`, which is the same arithmetic
 ## `tools/parkour_report.gd` holds the maps to, so the line never promises a
@@ -61,12 +63,29 @@ const JUMP_STEP := 0.5
 ## back onto the edge it started from and calls that a jump.
 const LAND_SNAP_XZ := 0.4
 
-## Two links whose ends are both within a metre of another's are the same link
+## Two links whose ends are both within this of another's are the same link
 ## drawn twice — the sampler finds a wide ledge again from every sample along
-## it. And a ceiling, because a navigation map carrying thousands of links costs
-## more to path over than the path is worth.
-const DEDUPE := 1.0
+## it. Wider than `SAMPLE_STEP` on purpose, so a long kerb gets a way up every
+## three metres instead of one per sample: the route that wants the fourth one
+## walks a metre and a half to the third and nobody sees the difference, and it
+## halves what the navigation map carries. And a ceiling, because a map holding
+## thousands of links costs more to path over than the path is worth.
+const DEDUPE := 2.0
 const MAX_LINKS := 800
+
+## How much walking a link has to save before it is worth having. Every navmesh
+## here is eroded by the agent's radius, so every rock, barrel and lamp post
+## stands in a hole of its own with a border all the way round it — and each of
+## those borders reads to the sampler as a gap with ground on the far side,
+## because it *is* one. Jumping a barrel is not wrong, it is just not a route;
+## the player walks round it in two steps. Four metres is about the shortest
+## detour a person notices, and on the seven maps it is the difference between a
+## thousand links and three hundred.
+const SHORTCUT_SAVED := 4.0
+## How near a walked route has to end to where it was sent before it counts as
+## having got there. A navigation map answers an impossible query with a route
+## to the nearest point it could reach, not with nothing.
+const WALK_ARRIVED := 1.0
 
 const LAYER_WORLD := 1
 
@@ -210,7 +229,7 @@ static func _try_jump(at: Vector3, outward: Vector3, map: RID,
 		var landing := NavigationServer3D.map_get_closest_point(map, probe)
 		var sideways := Vector2(landing.x - probe.x, landing.z - probe.z).length()
 		if sideways < LAND_SNAP_XZ and _reachable(distance, landing.y - at.y):
-			_add(starts, ends, at, landing)
+			_add(map, starts, ends, at, landing)
 			return
 		distance += JUMP_STEP
 
@@ -229,20 +248,27 @@ static func _try_drop(at: Vector3, outward: Vector3, map: RID,
 		return
 	if NavigationServer3D.map_get_closest_point(map, landing).distance_to(landing) > DROP_SNAP:
 		return
-	_add(starts, ends, at, landing)
+	_add(map, starts, ends, at, landing)
 
 
 ## Can a Bog leap `flat` metres out and `rise` metres up? The capsule's radius
 ## comes off the gap because the leading edge has to clear the lip and not the
 ## centre — the same allowance `parkour_report` makes when it classifies a gap.
+##
+## The height a leap can gain is `dive_apex` and not `apex`, and asking for the
+## plain jump's was the second half of D-167: the distance was being measured
+## with `leap_reach` while the height was gated on a jump with no dive in it, so
+## nothing between 1.69 m and 2.30 m of rise could ever be linked. Kopje
+## Crossing's two flank climbs (D-160) are rungs of 1.9 and 2.1 m — both of them
+## dives, both of them spelled out in that record — so the map's newest way to
+## the top was the exact band the link builder refused. `leap_reach` returns
+## -1.0 above the dive's apex, so it is the one gate needed.
 static func _reachable(flat: float, rise: float) -> bool:
-	if rise > JumpArc.apex():
-		return false
 	var reach := JumpArc.leap_reach(rise)
 	return reach >= 0.0 and flat - Bog.CAPSULE_RADIUS <= reach
 
 
-static func _add(starts: PackedVector3Array, ends: PackedVector3Array,
+static func _add(map: RID, starts: PackedVector3Array, ends: PackedVector3Array,
 		from: Vector3, to: Vector3) -> void:
 	if starts.size() >= MAX_LINKS:
 		return
@@ -251,8 +277,32 @@ static func _add(starts: PackedVector3Array, ends: PackedVector3Array,
 			return
 		if starts[i].distance_to(to) <= DEDUPE and ends[i].distance_to(from) <= DEDUPE:
 			return
+	if not _is_shortcut(map, from, to):
+		return
 	starts.append(from)
 	ends.append(to)
+
+
+## Is this leap worth drawing, or would a walk do?
+##
+## The map is asked what the walk between the two ends costs before the leap is
+## kept — one short path query per candidate, and the only honest way to tell a
+## route from a flourish, because whether hopping a kerb helps depends entirely
+## on how far away the ramp is and nothing in the geometry of the kerb says.
+## The query is cheap and local: the ends are at most six metres apart, and no
+## link is on the map yet when this runs, so what it measures is the pure walk.
+##
+## A pair the map cannot walk between at all is the most useful link there is —
+## and it does not come back as an empty path, it comes back as a route to the
+## nearest point the walk could reach, which is why the arrival is checked.
+static func _is_shortcut(map: RID, from: Vector3, to: Vector3) -> bool:
+	var walk := NavigationServer3D.map_get_path(map, from, to, true)
+	if walk.size() < 2 or walk[walk.size() - 1].distance_to(to) > WALK_ARRIVED:
+		return true
+	var walked := 0.0
+	for i in range(1, walk.size()):
+		walked += walk[i - 1].distance_to(walk[i])
+	return walked - from.distance_to(to) >= SHORTCUT_SAVED
 
 
 static func _ray(space_state: PhysicsDirectSpaceState3D, from: Vector3,

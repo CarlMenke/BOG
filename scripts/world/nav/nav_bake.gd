@@ -63,6 +63,11 @@ const EDGE_MAX_LENGTH := 4.0
 
 const LAYER_WORLD := 1
 
+## How many physics frames the navigation map is given to start serving the mesh
+## it was just handed before the links are given up on. Twenty is a third of a
+## second and about twenty times what any map here has needed.
+const MAP_SYNC_FRAMES := 20
+
 ## The minimap's ground layer, in pixels on the map's long side. 512 is one
 ## texture upload of a quarter of a megabyte, done once per match, and at
 ## Kopje Crossing's 96 m that is 19 cm to the pixel — finer than the 180 px
@@ -230,28 +235,25 @@ func _finish() -> void:
 		NavigationServer3D.map_set_use_async_iterations(map, false)
 	if _navmesh != null:
 		_region.navigation_mesh = _navmesh
-	# One physics frame for the region to reach the map; the links below ask the
-	# map where the nearest walkable point is, and before the sync the answer is
-	# "nowhere".
-	await get_tree().physics_frame
+	# And then wait for the map to actually be serving that mesh, because the
+	# links below ask it where the nearest walkable point is and before the sync
+	# the answer is the world origin. This is the whole of D-167: a frame's wait
+	# and a `map_force_update` were both here already and neither was enough —
+	# the region registered, the cell sizes agreeing, the iteration counter
+	# ticking, and `map_get_closest_point` still answering (0, 0, 0) — so every
+	# jump link on every map ended at the origin or was thrown away. What works
+	# is not a longer guess but asking the map the question and believing the
+	# answer.
+	if _navmesh != null and _navmesh.get_polygon_count() > 0:
+		if not await _map_answers(map, _navmesh.get_vertices()[0]):
+			push_warning("nav_bake: map '%s' never synced; no jump links" % Net.config.map)
+		else:
+			_link_count = JumpLinks.build(_navmesh, get_world_3d().direct_space_state, _links)
 	if not is_inside_tree():
 		return
-	# And then the sync is **forced**, synchronously. Since 4.4 the server builds
-	# a map's iteration on a worker and swaps it in when it is done, so a frame
-	# or two after the mesh is assigned the map can still be serving the empty
-	# iteration it had before — `map_get_closest_point` answered the origin on
-	# every map and `map_get_path` nothing, with the region registered and the
-	# cell sizes agreeing. `map_force_update` builds the iteration now, on this
-	# thread, and returns with the polygons in it.
-	if map.is_valid():
-		NavigationServer3D.map_force_update(map)
-
-	if _navmesh != null and _navmesh.get_polygon_count() > 0:
-		_link_count = JumpLinks.build(_navmesh, get_world_3d().direct_space_state, _links)
 	_rasterise()
 
-	# And one more, so the links are on the map too by the time anybody paths —
-	# forced again for the same reason as above, now that the links exist.
+	# And one more, so the links are on the map too by the time anybody paths.
 	await get_tree().physics_frame
 	if not is_inside_tree():
 		return
@@ -262,6 +264,35 @@ func _finish() -> void:
 	print("nav_bake: %s %d polygons, %d links, %d ms"
 		% [Net.config.map, polygon_count(), _link_count, _baked_msec])
 	baked.emit(_baked_msec)
+
+
+## Wait until `map` will answer a question about the mesh just assigned to it:
+## the nearest walkable point to a vertex of that mesh is that vertex, give or
+## take a cell. Before the sync the answer is the world origin, which is a
+## plausible-looking `Vector3` and not an error, and that is why this is asked
+## rather than assumed.
+##
+## A physics frame and a forced update per attempt, because the two do different
+## things — the frame flushes the server's command queue, where the region's new
+## mesh is still sitting, and the forced update then builds the iteration out of
+## it on this thread rather than on a worker.
+##
+## Every one of the seven maps takes exactly two attempts, which is the whole
+## story: what this replaces was one frame and one forced update, one attempt,
+## and it missed by a single frame on every map in the game every time. The
+## budget is there so a map that somehow never syncs loses its links and a
+## warning rather than hanging the match.
+func _map_answers(map: RID, probe: Vector3) -> bool:
+	if not map.is_valid():
+		return false
+	for attempt in MAP_SYNC_FRAMES:
+		await get_tree().physics_frame
+		if not is_inside_tree():
+			return false
+		NavigationServer3D.map_force_update(map)
+		if NavigationServer3D.map_get_closest_point(map, probe).distance_to(probe) <= CELL_SIZE:
+			return true
+	return false
 
 
 func _map() -> RID:
