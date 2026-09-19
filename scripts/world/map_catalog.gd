@@ -164,7 +164,7 @@ const MAPS: Array[Dictionary] = [
 		"practice": true,
 		# Standing well back, because the pads are all on the lodge apron and
 		# the lanes they are pointed down are the map.
-		"thumb_camera": {"yaw": 35.0, "pitch": -40.0, "zoom": 2.2, "look_at": 0.10},
+		"thumb_camera": {"yaw": 35.0, "pitch": -40.0, "zoom": 1.3, "look_at": 0.10},
 		"loading_line": "Walking out the lanes",
 	},
 	# A static map is one more entry and nothing else in this file changes —

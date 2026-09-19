@@ -517,6 +517,12 @@ check "a great sword swing kills" "sword PASS" \
 also "a great sword swing kills" "hand PASS"
 also "a great sword swing kills" "release PASS"
 also "a great sword swing kills" "reach PASS"
+# `swipe` is D-168 and is the edge two players could not see: a dummy twelve
+# degrees inside the fan dies and one twelve degrees outside it lives, with both
+# bearings computed from the fan that was actually drawn, and the fan's own radius
+# and half-angle required to be the reach the hit used plus a body's radius and
+# `SWORD_ARC` itself.
+also "a great sword swing kills" "swipe PASS"
 also "a great sword swing kills" "elder PASS"
 # The sword in both fists, and the blade out of the floor (D-068). The great
 # sword is two-handed, so its size is not a number anybody picked: it is
@@ -1197,8 +1203,9 @@ also "map thumbs are current" "thumb_check: 7 maps, 0 stale"
 # structural claims out of one run, and each of them is a thing three files have
 # to agree about: the pouch is in the left fist (`HeldGear`), the card is *not*
 # in the right one (`BogCombat._refresh_hand` — a carry only, now), the pouch
-# mouth is below the raised hand, and the floating letter is on the line between
-# the two (`CaptureRig`). It also prints both anchors and the descent in world
+# mouth is below where the letter starts, and the letter stays above and in front
+# of the bag for the whole descent and never comes nearer the Bog's own axis than
+# the capsule is wide (`CaptureRig`, D-172). It also prints both anchors and the descent in world
 # metres, which is how `POUCH_GRIP_OFFSET` and `POUCH_GRIP_ROTATION` — the only
 # grip constants in this repo written down rather than solved — get read off a
 # render and corrected. Headless, about four seconds.
@@ -1556,6 +1563,9 @@ also "range spawns and collision" "27 dummies (27 live, 0 reserved), 4 wells, 3 
 # basis's three *rows* and the Sun had been written as its columns, which is a
 # transpose and therefore invisible on the due-north moon this map used to have.
 also "range spawns and collision" "sun 32.0 deg up, bearing 30.0 deg E of N (0.0 off design)"
+# The fill is a hand-written basis in a row-major `.tscn` too (D-169), so it is
+# printed back out of the built scene for the same reason the sun is.
+also "range spawns and collision" "fill 24.0 deg up, bearing 210.0 deg E of N (0.0 off design)"
 # And the range's own promises, which are about the jump arc rather than about
 # sightlines: every landing on the parkour course is reachable from the ground by
 # hops and leaps alone, the course offers the one-tick dive as a shortcut and
@@ -1582,6 +1592,16 @@ check "range lodge fittings" "range_views: probe PASS" \
 # headless run can; whether the sack hangs right is a person's call.
 check "the capture looks like one" "snapshot: wrote"     "$GODOT" --path "$GODOT_ROOT" --resolution 1600x900 --script tools/snapshot.gd --     res://tools/preview_capture.tscn "$GODOT_LOG_DIR/capture_hand.png" 40 f=0.5
 also "the capture looks like one" "capture PASS"
+# And that the bag has life in it (D-172). A carried bag is never still — the
+# idle breathes, the fist moves, the spring answers — so this watches one for a
+# second before touching it, knocks it with `CaptureRig.landing_push`, and
+# judges what follows against that baseline rather than against an angle: the
+# letter landing takes it further over than being carried does, it comes back
+# through the other side, and it settles. The first spring written here never
+# settled at all, because it sat on the capture clip's own frequency, and no
+# picture could have shown that. Headless, about five seconds.
+check "the bag has life in it" "swing PASS" \
+    "$GODOT" --headless --path "$GODOT_ROOT" tools/preview_capture.tscn -- swing
 # Walks the menu into a real match and asks Input.mouse_mode what happened. It
 # grabs the physical mouse for about a second on the way through, which is the
 # only way to prove the thing it proves: every other check here stands the arena
