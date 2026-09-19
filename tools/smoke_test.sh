@@ -1227,9 +1227,17 @@ check "the ability tiles are one set" "bake_tiles: PASS" \
 # it is now measured standing beside a *folded* roster rather than an expanded
 # one, so the stack's stretch ratio hands it more of the width than it used to
 # get.
+#
+# 150 frames, not 60, here and for `capture_config` below. `snapshot.gd` counts
+# *physics* frames -- wall time -- and the harness inside awaits *process*
+# frames, two per win condition plus the lobby's own opening, so the budget has
+# to hold that many rendered frames. At 60 it did until the character page grew
+# to twenty-five skin tiles (D-126) and the lobby's frame rate dropped below the
+# line where a second holds enough of them: the verdict then simply never
+# printed, on about one run in two.
 check "every slider can be dragged" "widths: PASS" \
     "$GODOT" --path "$GODOT_ROOT" --resolution 1600x900 --script tools/snapshot.gd -- \
-    res://tools/ui_range.tscn "$GODOT_LOG_DIR/widths.png" 60 widths
+    res://tools/ui_range.tscn "$GODOT_LOG_DIR/widths.png" 150 widths
 # Capturing a config to the clipboard (D-076), through the real button, the real
 # fields and the real `DisplayServer` clipboard.
 #
@@ -1247,7 +1255,7 @@ check "every slider can be dragged" "widths: PASS" \
 # `saved` keeps it for the session and applies it back over every field.
 check "a config reaches the clipboard" "capture: PASS" \
     "$GODOT" --path "$GODOT_ROOT" --resolution 1600x900 --script tools/snapshot.gd -- \
-    res://tools/ui_range.tscn "$GODOT_LOG_DIR/capture_config.png" 60 capture_config
+    res://tools/ui_range.tscn "$GODOT_LOG_DIR/capture_config.png" 150 capture_config
 also "a config reaches the clipboard" "capture: fields PASS"
 also "a config reaches the clipboard" "capture: clipboard PASS"
 also "a config reaches the clipboard" "capture: saved PASS"

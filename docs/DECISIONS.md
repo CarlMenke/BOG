@@ -14956,3 +14956,288 @@ what was left of the spin's clip, and it now runs between chains. The spin's
 own cycle comes out at 1.567 against a 1.867 s clip, so its earliest second
 click is still the tick the spin ends — gated by `is_spinning()` rather than by
 the dial, and the bunny-hop budget it feeds is measured unchanged.
+
+## D-125 — The two stand-ins retire: a running forward flip for the slide jump and a cross for the fist, chosen from 101 fetched takes
+D-123 and D-124 shipped `SlideJump` and `Punch` as rows with a search
+(`mixamo_query`) and no FBX, drawn by `RunJump` and `Cast` through
+`BogAnimator.clip_or`. The owner ran `tools/mixamo_fetch.py` the same evening,
+and because a search row fetches *every* result, 33 `flip` takes and 68
+`punch` takes landed in Downloads. This record is the choice.
+
+### How the choice was made
+
+By name first: a slide jump is a forward leap in stride, so the backflips,
+the flips off walls, the capoeira escapes and the reaction clips were out
+before anything was measured; a punch is one straight blow for a 0.5 s cycle,
+so the combos, the elbows, the received hits and the speed-bag were out.
+Fourteen of the 68 punch files were 208 720 bytes exactly — Mixamo's
+one-frame export, the same dud D-096 met five times — and were skipped on
+size. Five flips and eight punches were copied into `assets/source/anims/`,
+given `.import`s by `tools/clip_imports.sh`, imported, measured with
+`tools/clip_measure.gd` and rendered as rows of `tools/preview_bog.tscn`.
+
+    clip                                     len    m/s   hips  pitch hipyaw  twist  seam
+    SlideJump-DoingAForwardFlipWhileRunning  1.100  2.830 0.792  47.8    0.7    1.2  0.103
+    SlideJump-BigFrontFlip                   1.667  2.754 0.977  49.9   -2.7   -0.9  0.544
+    SlideJump-RunToTwistFlipToRun            2.200  2.277 0.730  52.5    2.1   -3.5  0.247
+    SlideJump-FrontFlipToKick                2.800  1.147 0.679  39.9    9.4    2.2  0.795
+    SlideJump-SpinningFlipKick               3.700  0.534 0.486  43.7   34.2   -5.1  0.590
+
+    Punch-CrossPunch                         0.867  0.000 0.509   4.2   -0.1    2.9  0.019
+    Punch-JabPunch                           1.033  0.000 0.489   3.4   -0.1   12.6  0.006
+    Punch-HookPunchWithTheRearHand           1.000  0.000 0.534   6.5   -0.2   -0.1  0.029
+    Punch-RightHookPunchFromIdle             1.100  0.000 0.489   7.7   -0.0   22.3  0.083
+    (ACrossPunch 2.0 s, HookWithTheLeadHand 1.27 s, QuickLeftHandedPunch 1.1 s,
+     ShortHookPunchToTheHead 1.3 s: longer, turned 42–61°, or both)
+
+**`SlideJump` is `Doing A Forward Flip While Running`.** The only take that
+is a flip *in stride*: 1.1 s, 2.83 m/s of travel, square to the body, and back
+on its feet with a 0.10 seam, where `BigFrontFlip` lands off balance at 1.67 s
+and the rest are 2.2–3.7 s set pieces that turn or kick. Markers off
+`tools/clip_events.gd`: `lift` 0.333 is the last frame a toe is down; `apex`
+0.600 is the hips' highest frame; `land` 0.867 is two frames before the hips'
+lowest (0.933), which is exactly where `RunJump`'s own `land` sits against its
+lowest (0.700 against 0.767), so `arc_time` scrubs both leaps the same way.
+
+**`Punch` is `Cross Punch`.** The only straight punch that is square to the
+body (twist 2.9°) and the shortest at 0.87 s, with the longest reach of the
+eight — the right hand 0.38 m in front of the hips at 0.400 s. `JabPunch` is
+turned 43° with half the reach; the hooks are hooks. `hit` 0.367: the fist's
+speed peaks at 0.267 and its extension at 0.400, and D-063's rule puts the
+event where the hand arrives rather than where it is fastest or fully out.
+The animator's `PUNCH_RELEASE_MAX` 0.25 then plays the 0.367 s window at
+1.47× so the blow lands inside the 0.5 s cycle, as it did with `Cast`.
+
+Both picks are written into the rows as `mixamo_keep`, so a re-fetch brings
+back the chosen take alone; the eleven other takes and their products are
+deleted, and the remaining downloads are left in Downloads, untracked.
+
+### What the candidates found
+
+`import_clip._library_key` keyed a clip by its *role* "once a role has one
+file, and by file while it still has candidates" — but it counted candidates
+as **rows in the table**, and a search row is one row for however many takes
+are on disk. Five flips imported as five `SlideJump`s, each overwriting the
+last, and the measure tool saw one. The count is now taken from the
+directory: a search row with more than one `<file>-*.fbx` in
+`assets/source/anims/` keys by file. It is the first time a search row had
+candidates *and* a live animator reading the role, which is why D-096's flow
+never met it.
+
+### Rejected
+
+- **Leaving the stand-ins.** They were honest, but a slide jump drawn as a
+  running leap and a punch drawn as a spell were the two most visible
+  provisional things in the game the day before a playtest.
+- **`BigFrontFlip`** for the height of it: 1.67 s airborne against a jump the
+  physics resolves in about 0.9, and it lands staggering.
+- **`HookPunchWithTheRearHand`** for its arc (0.29 m of swing at 2.8 m/s): a
+  hook reads as a different weapon from a fist that jabs.
+
+## D-126 — Eleven more skins, baked onto the body's layout because Tripo regenerated the sculpt
+The owner added twelve folders under `assets/source/skins/` (BLOOM, BUZZ,
+CHIP, CRACK, DASH, FUDGE, GOURD, KOI, OOZE, PLUSH, VOLT, WRAP) beside the
+garment spike's `SHIRT`, and asked that they be usable "in the same way the
+existing ones are". `PLUSH` has no download in it. The other eleven went
+through `python tools/extract_skins.py` and every one reported **9 124
+vertices against the body's 15 872**; worn as textures, all eleven rendered as
+a fractured patchwork beside a clean `bogina`. Tripo had not repainted the
+sculpt this time; it had regenerated it, in its own UV layout.
+
+### The bake
+
+A texture in the wrong layout is fixed by putting the paint back onto the
+right one, and the thing both meshes share is the *surface*. `tools/bake_skin.py`:
+
+1. **The body as Godot has it.** `tools/export_body_ref.gd` writes
+   `build/body_ref.glb` from the imported `art/bog/BOG.fbx` — positions in
+   metres, the body's UVs, its triangles — so Python never reads FBX and the
+   reference is the tracked body rather than an old download.
+2. **Alignment of the whole.** Tripo turns and rescales its exports (this
+   batch is a quarter turn about the vertical and 1 m across the arms). The
+   four quarter turns are tried against the body's bounding box (23.8 mm
+   against 48.0 for the runner-up), similarity ICP tightens to 20.8 mm, affine
+   ICP to 17.6 mm — and there it stops, because the difference is not a
+   stretch: the head is 19 mm off, the belly 24, the fingers 30–50, in every
+   direction at once.
+3. **Alignment part by part.** What differs between two drawings of one
+   creature is where its parts are and how big, and the body's own rig
+   describes exactly that. Every bone takes the vertices it dominates and
+   fits them onto the download as a similarity (scale held to 0.80–1.25),
+   children starting from their parent's answer, solved each round on the
+   best-matched 80 % so the antennae cannot drag the face (the head bone owns
+   them: 27 mm untrimmed, 9.8 mm trimmed). Each vertex then blends its bones'
+   moves by its skin weights, the way the game skins it. The head lands as a
+   head, 4 cm from where the affine left it.
+4. **A smooth non-rigid pull** for what is left: each vertex to its nearest
+   point on the download, averaged over the mesh neighbourhood (8 passes, then
+   6, 4, 3, 2) so it is a deformation and not a scatter. The body's vertices
+   sit on the download's skin to **1.9 mm mean, 5.2 mm at the 95th
+   percentile**, with the body's own connectivity and UVs.
+5. **The paint.** The body's UV layout is rasterised at 2048² so every texel
+   knows its point *and its normal* on the warped body; the download's surface
+   is sampled six million times, each sample carrying its own texture's
+   colour and its triangle's normal; each texel blends its twelve nearest
+   samples weighted by inverse distance and by how well they face its way, so
+   an eyelid takes lid paint and not the eyeball's beneath it (a texel with no
+   agreeing neighbour, 7 % of them, mostly inside the mouth, falls back to the
+   nearest); the UV gutters are filled from the nearest painted texel. The
+   output is `art/skins/<name>/basecolor.png`, the same file at the same size
+   an extraction writes, worn through the same `Bog.wear_skin`.
+
+**The first bake was wrong, and the owner saw it in the face.** Steps 3 and 5
+were not in it: the smooth pull alone took the body's head 42 mm to reach the
+download's, obliquely, and every feature slid — irises onto the lids, teeth
+into the lips, the whole skin "mapped incorrectly", as he put it against the
+download rendered in Tripo, where it is perfect. The mean residual had read
+2.5 mm and said nothing about it, because a nearest-point residual is blind
+to sliding along the surface. The part-wise fit is what stops the sliding;
+the normal weighting is what stops a lid borrowing from the eyeball under it.
+
+**Validated on a known answer first.** Baking `BOGINA.glb` — the body's own
+mesh — and comparing with its extraction gives a mean difference of 2.4 levels
+of 255, 9.7 at the 95th percentile, 0.65 % of texels over 40: the seams, where
+a bake blends across and an extraction cannot. Then `KOI` was baked and its
+face rendered at 2560 px beside `bogina`'s: iris centred in the eye, lids
+clean, teeth where the teeth are. The other ten share KOI's mesh exactly (the
+same fit numbers to the decimal), so one registration serves the batch.
+
+**`extract_skins.py` takes the route by itself.** A vertex count that is not
+the body's now hands the download to `bake_skin.bake` instead of printing a
+note about it, so the one command in `assets/source/skins/README.md` still
+rebuilds every skin from its download. A fit worse than a centimetre after
+warping is refused as a different creature.
+
+### In the game
+
+`Skins.NAMES` gains the eleven **after `void`**, appended and never reordered
+(D-109's wire rule), so every existing roster row, settings file and
+`Net.team_skins` entry means what it meant. Each has a README, a baked
+`basecolor.png` and a `thumb.png` from `tools/skin_thumbs.gd`. The character
+page's three-column grid is now nine rows, 1160 px in a 756 px column, and
+scrolls — which D-118 said the `ScrollContainer` was there for.
+
+### Rejected
+
+- **Asking for another Tripo round on the original mesh.** Another evening's
+  work for the owner, and nothing stops Tripo regenerating again; the bake
+  makes the layout the pipeline's problem rather than the prompt's.
+- **The smoothed pull alone, without the part-wise fit.** It reached 2.5 mm
+  with forty fewer lines and was the first version shipped; the face showed
+  why a residual is not a registration (above).
+- **Keeping the body's own eyes and teeth** from `BOG_0.png` under every baked
+  skin, to sidestep the face. It would have made eye colour something a skin
+  cannot change, and the part-wise fit made it unnecessary.
+- **Four columns in the picker** to keep it on one screen: D-118's reason
+  stands, the portrait has nowhere to stand at 510 px.
+- **Treating `SHIRT` as a skin.** It is a garment spike (`tools/fit_garment.py`),
+  the other kind of thing under `art/skins/`, and not yet worn.
+
+## D-127 — A drawn bow is a whole-body plane, and everything that takes that plane away turns the archer sideways
+The owner: *"with the bow drawn, when the player jumps, the top half turns all
+the way to the left for the duration of the jump. On the ground it is fine."*
+
+**The draw is an upper-body layer and an archer's stance is not.** The layer
+supplies `UPPER_BODY_BONES` — the arms and the chest, and nothing below them —
+and it is square to its own hips; the 92° of side-on lives in the **pelvis**,
+which is the archer plane's to drive (`BowAim` and its four, `face: "none"`,
+D-097). So the bow points down the facing only while that plane is underneath,
+and `grounded` swaps the whole plane for the air branch on the frame the feet
+leave the floor, legs and pelvis together, because an air pose is a whole body.
+Measured at a full draw by `tools/movement_check.tscn`: the shoulder line sits
+**+92.2°** off the body's facing on the floor and **+0.4°** at the top of a
+jump, and the bow goes with it, from **+1.6°** to **−90.7°** off the crosshair.
+That is the whole of the complaint in two numbers, and it is not the twist
+D-110 fixed — the draw clip's own chest is square to its own hips, which is why
+`untwist` was right to leave it alone and could never have reached this.
+
+**So the constant D-098 zeroed has something to correct again, and it is the
+same number.** `BogAim.BOW_OFF_FACING` was −92 on the old rig and went to zero
+when the archer set arrived in its authored frame, because the composed bow
+already pointed down the facing. It pointed there *because the pelvis was 92°
+round*: the offset was never a property of the clip's frame, only of which
+pelvis was under the layer. `BOW_OFF_AIR` is that number again, and the yaw the
+modifier applies is `lerpf(BOW_OFF_FACING, BOW_OFF_AIR, plane_lost)` — one
+weight for both halves of the swap, so there is no frame in which both the plane
+and the correction are present and none in which neither is.
+
+**That weight is not "is it airborne", and that is the half of this that had to
+be measured.** Every full-body one-shot in the graph sits above `grounded` and
+below the layers, so `Land` takes the plane away exactly as the air pose does
+and holds it away for the length of its clip with both feet on the floor. An
+airborne-only weight fixed the jump and left **−91.4°** on the touchdown, which
+is the same bug with a different node holding the pelvis. `plane_lost()` is
+therefore the airborne blend *and* every full-body shot's own weight, composed
+the way the graph composes them: a **product** of what each node leaves of the
+plane, not a maximum, because a one-shot blends over whatever `grounded` has
+already produced. Read as a maximum it left **21.8°** at the touchdown.
+
+**The last few degrees are a fact about when a frame is.** `active` is a flag
+and a fade is not: driven off the flag the correction holds full through
+`Land`'s 0.20 s fade-out, worth **+77°** of chest. The node publishes
+`fade_in_remaining` and `fade_out_remaining`, so the weight can be the node's
+own clock rather than a second one beside it — and the pose standing in the
+skeleton is **one animation step behind** the numbers this node holds: the tree
+advances those remainders in its own process, which runs before the script's,
+and `_airborne` is written as a parameter the tree does not read until its next
+advance. Read live, either is worth a flat **8°** through the fade-out — one
+sixtieth of a second out of 0.20 s, of 92° — and an 8° flick on the frame the
+flag drops. So `_shot_weight` hands back last frame's number and keeps this
+frame's for next time, and `plane_lost` is computed before `_airborne` moves.
+Every frame of a landing then reads within **2.3°** of the grounded pose.
+
+**The verdict is a fifth leg of `tools/movement_check.tscn`, `air_draw`.** It
+holds a full draw through a jump and reads the pose off `BoneAttachment3D`s,
+which are the only honest witness to a pose a `SkeletonModifier3D` has touched
+(D-066), two ways at once: the shoulder line for the chest and the two fists for
+the bow. What it asserts is a **difference**, because an archer's chest is
+*meant* to sit most of a right angle off its own hips — "the chest faces
+forward" is the wrong question to ask of an archer and "leaving the ground did
+not move it" is the right one. It now reads +92.2° on the floor and +92.2° in
+the air, **+1.0°** of swing, with the bow +0.6° and +1.8° off the facing and the
+landing's worst frame at +2.3°. `combat_range -- spine` and `-- draw` are
+unchanged to the degree, which is what "the ground is untouched" means when the
+grounded weight is exactly zero.
+
+### Rejected
+
+- **Untwisting the draw clips at import, the way the two carry idles are
+  (D-110).** That rule is for a layer over a *square* base, and this layer's
+  base is turned on purpose; squaring `BowReload` would point the bow sideways
+  on the ground, where it is right, to fix the air, where it is the exception.
+  It also could not have worked: the draw clip's chest is already square to its
+  own hips and there is nothing there to take away.
+- **Keeping the archer's plane under the layer while airborne.** The fix that
+  needs no constant, and it puts a standing aim pose's legs into a jump — one
+  bug traded for a worse one.
+- **Deriving the angle from the pelvis the animation has just written**, as
+  `BOW_OFF_AIR * (1 - hips_yaw / plane_yaw)`. The truest signal, and it would
+  cover every base pose present and future with no list to keep — but it moves
+  the grounded pose, which is the one thing the owner said was fine: the pelvis
+  sways with every stride on the archer's walks, and the plane's own cross-fade
+  would put up to 23° of chest swing into the moment the bow comes up.
+- **A boolean for the one-shots with a `move_toward` of its own.** A second
+  clock beside the fade the node is already running, and measured at 21.8° of
+  chest left at the touchdown even with its rise and fall matched to the fades.
+- **Adding `delta` back onto the two fade remainders** to undo the one-frame
+  offset. It corrects the fades and cannot correct the flag, which drops a step
+  early for the same reason; remembering last frame's weight covers all three
+  with one line.
+- **A new mode in `tools/combat_range.gd`.** The measurement needs a real jump
+  on a flat floor over a known number of ticks, which is what `movement_check`
+  is for and what the range is not.
+
+### What this does not cover
+
+- A dive roll taken at a full draw. `Roll` is in the list and the correction
+  comes on, but a tumbling pelvis is not a square one and nothing measures what
+  the bow does through it.
+- Drawing *after* leaving the ground at a run, which is the only way to get the
+  leap clip (`RunJump`, `face: "none"`) under a drawn bow rather than the
+  squared `AirLoop` — `AIM_WALKS` keeps a drawing Bog under walk speed, so every
+  jump it can start is the standing one. The leap's authored pelvis is near
+  enough square that the same constant applies; it is not measured.
+- `swing` and `emote`, the other two full-body nodes, are left out of
+  `_full_body_shots` because `BogCombat._can_act` refuses both while a string is
+  back. A future move that is full body *and* legal during a draw has to be
+  added to that list, and the list says so.

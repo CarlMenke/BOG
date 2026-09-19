@@ -92,15 +92,32 @@ Phase 10 carries the item-by-item state. What each unit landed:
   The great sword's click is a three-slash chain at 50 a slash, and the spin it
   replaced is now the **sprint attack** at 0.8 of run speed.
 
-**Two clips are stand-ins, and only the owner can finish them.** `SlideJump` is
-drawn with `RunJump` and `Punch` with `Cast`, through
-`BogAnimator.clip_or(role, fallback)`, with one `push_warning` each at `_ready`
-and neither in `REQUIRED_CLIPS`, so the gate does not fail on a clip that does
-not exist. For each: run `python tools/mixamo_fetch.py`, paste it into the
-Mixamo tab, choose a take from the candidates (`"flip"` for `SlideJump`,
-`"punch"` for `Punch`), `bash tools/clip_imports.sh`, an `--import`, then place
-the markers with `tools/clip_events.gd` — `lift`/`apex`/`land` on `SlideJump`,
-`hit` on `Punch`.
+**The two stand-ins retired the same evening (D-125).** `SlideJump` is
+`Doing A Forward Flip While Running` (1.10 s, `lift` 0.333, `apex` 0.600,
+`land` 0.867) and `Punch` is `Cross Punch` (0.87 s, `hit` 0.367), each chosen
+from the whole of its Mixamo search on `tools/clip_measure.gd`'s numbers and a
+`preview_bog` sheet, with the markers read off `tools/clip_events.gd`.
+`BogAnimator.clip_or(role, fallback)` stays as the mechanism for the next
+move that ships before its take is picked; nothing plays a stand-in today.
+
+**A drawn bow through a jump (D-127).** The archer's 92° of side-on lives in
+the pelvis, which the air pose and the `Land` clip take away while the draw
+layer keeps holding the bow, so the top half swung a right angle left for the
+length of every jump. `BogAim` now lerps its yaw correction by
+`BogAnimator.plane_lost()` — the airborne blend and every full-body one-shot's
+own fade, as a product — and `tools/movement_check.tscn` gained an `air_draw`
+verdict that reads a 1.0° swing where there was 91.8°, with the ground
+unchanged to the degree.
+
+**Eleven more skins (D-126)** — bloom, buzz, chip, crack, dash, fudge, gourd,
+koi, ooze, volt, wrap — landed 2026-09-18 and are pickable after `void`. They
+are **baked**, not extracted: Tripo regenerated the sculpt for this batch
+(9 124 vertices in its own UV layout), so `tools/bake_skin.py` registers the
+body onto each download — whole, then bone by bone through the body's own
+skin weights, then a smooth pull — and paints the body's layout from it
+(1.9 mm mean fit, normals agreeing). `python tools/extract_skins.py` takes that route by itself for any
+download whose vertex count is not the body's. The `PLUSH` folder Carl added
+is empty and `SHIRT` is a garment (the pipeline spike), so neither is a skin.
 
 The gate is at **178 of 178** and green, and `net_test.sh` passed after the
 round with the engine quiet in both processes. D-124 touched replicated fields
@@ -238,11 +255,10 @@ What exists now:
   `--import` once more so the material is built on a texture that loads.
   `clip_check` asserts the albedo, because every other check in this project
   passed on a flat grey BOG.
-- `assets/source/anims/*.fbx` — **70 clips, one per role** (D-096 chose
-  them from 104), each with a `.import` that names `tools/import_clip.gd`.
-  `clips.json` carries **72 rows**: `SlideJump` (D-123) and `Punch` (D-124)
-  are rows whose FBX the owner has still to fetch, and the animator draws
-  both with a stand-in until they land.
+- `assets/source/anims/*.fbx` — **72 clips, one per role** (D-096 chose
+  68 from 104; D-125 added `SlideJump` and `Punch` from 101 fetched takes),
+  each with a `.import` that names `tools/import_clip.gd`. `clips.json`
+  carries **72 rows**, one per clip.
   The two newest are `SpearCarry` (the one-handed ready idle the spear's
   grip is solved over, D-103) and `Twerk` (the emote on **Y**, D-105); the
   spear also has its own overhead `Throw-SpearThrowObject` now (D-104).
@@ -288,14 +304,17 @@ What exists now:
 Skins are folders under `art/skins/` (D-100): the robe is the clothing
 example, `example/` the recolour (`tools/make_recolour.gd`,
 `Bog.wear_skin`), and `art/skins/README.md` says how to add the next one.
-**Thirteen team skins** sit beside them — bogina, boo, clank, crag, gilt,
-glub, gum, muck, rime, roar, slag, toad, void — each a Tripo retexture of the
-same sculpt, extracted from its `.glb` by `python tools/extract_skins.py`
-(D-108). The downloads live under `assets/source/skins/` behind a `.gdignore`
-and are untracked; the 2048² PNGs are what is committed. **The lobby picks
-them** (D-109): `scripts/game/skins.gd` is the pickable list — the thirteen
-plus `bog`, the plain body at index zero — and the strip is one line of 40 px
-swatches under the weapon blurb. In free-for-all a skin is one more roster key
+**Twenty-four team skins** sit beside them — bogina, boo, clank, crag, gilt,
+glub, gum, muck, rime, roar, slag, toad, void (D-108), then bloom, buzz, chip,
+crack, dash, fudge, gourd, koi, ooze, volt, wrap (D-126) — each a Tripo
+retexture of the same sculpt, made from its `.glb` by `python
+tools/extract_skins.py`: extracted when the download is the body's own mesh,
+**baked** through `tools/bake_skin.py` when Tripo has regenerated the sculpt
+(the second batch). The downloads live under `assets/source/skins/` behind a
+`.gdignore` and are untracked; the 2048² PNGs are what is committed. **The
+lobby picks them** (D-109): `scripts/game/skins.gd` is the pickable list — the
+twenty-four plus `bog`, the plain body at index zero — and the strip is one
+line of 40 px swatches under the weapon blurb. In free-for-all a skin is one more roster key
 with `weapon`'s whole lifecycle; in **Teams it belongs to the team**, lives in
 `Net.team_skins` indexed by team, can be changed by any member, and no two
 teams may wear the same one. `Net.skin_for(peer_id)` is the one call every

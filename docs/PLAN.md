@@ -243,12 +243,10 @@ argued against.
             the slide's heading with 1.12 of the jump impulse, replicated as
             `sync_slide_jump_serial` so remote animators see the take-off, and
             deliberately not stacking with the bunny hop's `_hop_gain` (**D-123**)
-  - [ ] 10.9a  **Landed with a stand-in clip.** The `SlideJump` role is drawn with
-               `RunJump` through `BogAnimator.clip_or`, with one `push_warning` at
-               `_ready` and no `REQUIRED_CLIPS` entry. To finish it: run `python
-               tools/mixamo_fetch.py`, paste it into the Mixamo tab, choose a take
-               from the `"flip"` candidates, `bash tools/clip_imports.sh`, an
-               `--import`, then place `lift`/`apex`/`land` with `tools/clip_events.gd`
+  - [x] 10.9a  **Its own clip.** `SlideJump` shipped drawn with `RunJump` through
+               `BogAnimator.clip_or`; the same evening `Doing A Forward Flip While
+               Running` was chosen from the 33 `"flip"` takes and its
+               `lift`/`apex`/`land` placed off `tools/clip_events.gd` (**D-125**)
 - [x] 10.10 Crouch alone slides. `wants_sprint` is dropped from entry, the speed
             floor and the cooldown are what make it a decision, and a crouch held in
             the air pre-arms the pose (`_crouch_pose` beside `_crouch_blend`) so a
@@ -260,12 +258,16 @@ argued against.
             punches for 20 at 1.1 m inside a 50° front on a 0.5 s cycle, as an
             upper-body one-shot, with the host checking the attacker's own published
             holster (**D-124**)
-  - [ ] 10.11a **Landed with a stand-in clip.** The `Punch` role is drawn with
-               `Cast` through `clip_or`, capped at 0.25 s so the stand-in lands on
-               the cycle, with one `push_warning` at `_ready`. To finish it: `python
-               tools/mixamo_fetch.py`, paste into the Mixamo tab, choose a take from
-               the `"punch"` candidates, `bash tools/clip_imports.sh`, an `--import`,
-               then place the `hit` marker with `tools/clip_events.gd`
+  - [x] 10.9b  **A drawn bow through a jump.** The draw layer is square to its
+               own hips and the archer's turn is the pelvis's; the air pose and
+               `Land` took that pelvis away and the top half swung 92° left.
+               `BogAim` lerps its yaw by `BogAnimator.plane_lost()` and
+               `movement_check` holds a draw through a jump: 1.0° of swing,
+               2.3° on the worst landing frame (**D-127**)
+  - [x] 10.11a **Its own clip.** `Punch` shipped drawn with `Cast` through
+               `clip_or`; the same evening `Cross Punch` was chosen from the 68
+               `"punch"` takes and its `hit` placed at the fist's arrival
+               (**D-125**)
 - [x] 10.12 The dance empties the hands — `_bare_handed()` is the one sentence the
             holster and the emote share, and the prop comes back off `_tick_hand`'s
             existing poll (**D-124**)

@@ -227,13 +227,11 @@ into the Mixamo tab once for the `SlideJump` and `Punch` candidates.
 > empty-handed dance and the sword's chain. `docs/PLAN.md` Phase 10 carries the
 > item-by-item state and `docs/ARCHITECTURE.md` says where each piece lives.
 >
-> **Two clips are stand-ins.** `SlideJump` is drawn with `RunJump` and `Punch`
+> **Two clips were stand-ins** — `SlideJump` drawn with `RunJump` and `Punch`
 > with `Cast`, through `BogAnimator.clip_or`, each with one `push_warning` at
-> `_ready` and neither in `REQUIRED_CLIPS`. The owner finishes them: `python
-> tools/mixamo_fetch.py` pasted into the Mixamo tab, a take chosen from the
-> `"flip"` and `"punch"` candidates, `bash tools/clip_imports.sh`, an
-> `--import`, then `lift`/`apex`/`land` and `hit` placed with
-> `tools/clip_events.gd`.
+> `_ready` and neither in `REQUIRED_CLIPS` — until the owner fetched the
+> `"flip"` and `"punch"` searches the same evening and **D-125** chose `Doing A
+> Forward Flip While Running` and `Cross Punch` and placed their markers.
 >
 > This document is kept as written — it is the scope the six records were
 > argued against, and the decisions fixed in it are the ones the agents were

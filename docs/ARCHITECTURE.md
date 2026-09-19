@@ -537,10 +537,10 @@ make "there is an export preset" a claim nobody could check out.
 ## The character: one body, one library, one table
 
 The BOG is `art/bog/BOG.fbx`, the sculpt as Mixamo auto-rigged it, imported by
-Godot itself at `root_scale = 180` (1.80 m, feet at 0). Its 70 clips are
+Godot itself at `root_scale = 180` (1.80 m, feet at 0). Its 72 clips are
 animation-only FBX files under `assets/source/anims/`, one per row of
-`assets/source/clips.json` — 72 rows, because `SlideJump` and `Punch` are rows
-whose FBX the owner has still to fetch (**D-123**, **D-124**) — and that table
+`assets/source/clips.json` — 72 rows, `SlideJump` and `Punch` the newest
+(**D-123**, **D-124**, fetched and chosen in **D-125**) — and that table
 is the whole rule table: per clip
 its role, whether it loops, which body line the import squares to the body's
 forward (`face`), and its events in seconds (`markers`). `tools/import_clip.gd`
@@ -596,14 +596,41 @@ stays grounded-only, `_crouch_pose` is only what the body looks like. The camera
 sits closer for all of it — `DISTANCE_DEFAULT` 3.1 and `DISTANCE_AIMING` 2.15,
 shoulders unchanged.
 
-**Two roles are drawn by somebody else's clip.** `BogAnimator.clip_or(role,
-fallback)` resolves `SlideJump` to `RunJump` and `Punch` to `Cast` until the FBX
-lands, with a single `push_warning` at `_ready` behind a static flag — once per
-run, never per Bog and never per frame. Neither is in `REQUIRED_CLIPS`: a missing
-*required* clip is a Bog that never moves and must fail the gate, a missing
-optional one is a move drawn with the wrong picture. `tools/clip_check.gd` skips
-a row with no FBX with a note, and requires `lift`/`apex`/`land` on `SlideJump`
-and `hit` on `Punch` the day they arrive.
+**A role can ship before its clip.** `BogAnimator.clip_or(role, fallback)`
+resolves a role to a stand-in while its FBX is absent — `SlideJump` to
+`RunJump` and `Punch` to `Cast` for the hours between D-123/D-124 and D-125 —
+with a single `push_warning` at `_ready` behind a static flag: once per run,
+never per Bog and never per frame. Such a role is not in `REQUIRED_CLIPS`: a
+missing *required* clip is a Bog that never moves and must fail the gate, a
+missing optional one is a move drawn with the wrong picture. `tools/clip_check.gd`
+skips a row with no FBX with a note, and requires `lift`/`apex`/`land` on
+`SlideJump` and `hit` on `Punch` now that both are there. A search row
+(`mixamo_query`) can have several takes on disk while one is being chosen; the
+import keys them by file until one remains, counting the candidates in
+`assets/source/anims/` rather than in the table (D-125).
+
+**The bow's yaw correction follows the pelvis, not the clip.** The draw is an
+upper-body layer square to its own hips; the archer's side-on is the pelvis the
+`BowAim` plane drives, and the air branch and every full-body one-shot (`Land`,
+`LandHard`, `Roll`, the slide, the take-off) replace that pelvis with a square
+one while the layer goes on holding the bow. `BogAnimator.plane_lost()` is how
+much of the plane is gone — the airborne blend and each shot's own fade weight,
+read one frame late to match the pose in the skeleton, composed as a product —
+and `BogAim` lerps `BOW_OFF_FACING` (0°) toward `BOW_OFF_AIR` (−92°) by it
+(**D-127**). `tools/movement_check.tscn`'s `air_draw` leg is the witness.
+
+**A skin whose download is not the body's mesh is baked, not extracted.**
+`tools/extract_skins.py` reads each Tripo `.glb` under `assets/source/skins/`;
+when its vertex count is the body's, the base colour is the skin. When Tripo has
+regenerated the sculpt instead — the eleven of **D-126** came back at 9 124
+vertices in their own UV layout — `tools/bake_skin.py` registers the body's
+vertices onto the download's surface (quarter turns, similarity and affine ICP
+for the whole; a similarity per bone of the body's rig, blended by skin
+weight; then a smoothed non-rigid pull, to 1.9 mm) and paints every texel of
+the body's layout from the nearest points of the download's paint that face
+the texel's way. It bakes onto
+`build/body_ref.glb`, the body as Godot imports it, written by
+`tools/export_body_ref.gd`.
 
 Grips are solved by their own tools against the new hands — `preview_bow`,
 `preview_sword`, `preview_carry` — and the sheets are the judge; the ragdoll
