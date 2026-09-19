@@ -17655,8 +17655,8 @@ its own ticket, left out of v1 on purpose). The first evening on the rig closed
 most of the *occasion* for it rather than the slide — a standing Bog now gets
 `YAW_SLACK` (60 degrees) of view to swing before the body is dragged after it,
 closing at `SLACK_CLOSE_RATE` (4 rad/s) as soon as it moves, aims, draws or
-throws — which is BOG-33, landed as `fb3ffec`, and whose own record is still
-owed (BOG-60). Sideways movement reads as uneasy now that the body faces the
+throws — which is BOG-33, landed as `fb3ffec`, and which has its own record in
+D-177. Sideways movement reads as uneasy now that the body faces the
 camera in every stance rather than only while aiming (BOG-16). And D-159 has
 already amended rule 3: the aiming shoulder walks *out* to 0.78, past the resting
 0.62, with the drawn bow's `SHOULDER_DRAWN_RATIO` as a floor under it rather than
@@ -17686,3 +17686,116 @@ standing and 186 committed frames at 0.000 degrees of drift, sat 0 frames off th
 slack's edge, and gave the whole 60 degrees back in 15 ticks of the 21 allowed. In
 the gate as "camera stays out of the scenery" with `clip`, `aim`, `frame`, `calm`
 and now `faces`, headless at `--fixed-fps 60`, about two seconds. (BOG-11.)
+
+## D-177 — A Bog that is only looking around gets sixty degrees before its feet move
+The owner, 2026-09-18, after an evening on the PvP rig D-174 describes: *"if they
+are standing still, not moving at all and just moving the camera, then let them
+get it a little further around before it starts moving the character, not all the
+way just further, and then if they start moving, smooth it back to inside the
+previous clamp."* That is Fortnite's standing behaviour. The work is `fb3ffec`
+(BOG-33); the spec is the "Idle yaw slack" section of `docs/PLAN_CAMERA.md`, and
+this record is what that section is a spec for.
+
+**What it is for.** D-174 welded the body to the camera and named the cost in its
+own "known and left": a standing Bog that looks about slides its feet across the
+floor for every degree of it, because this repo has no turn-in-place clips and
+Fortnite hides the same turn with them. The slack does not remove the slide. It
+removes the *occasion* for it. A look round the room is now a look round the
+room, and the feet only move when the player has actually re-pointed the Bog.
+The slide itself is still BOG-19's to fix, and nothing here closes that ticket.
+
+**Sixty degrees, because that is what a look costs.** `YAW_SLACK` is 1.047 rad. A
+glance over either shoulder, a check of a flank, reading a room — all of it sits
+inside 60 degrees, and anything wider is a turn the player meant. Two properties
+are what make it read as a shoulder rather than as a dead zone. Past the edge the
+body is dragged so that it comes to rest *on* the edge and not onto the view, so
+the slack travels round with the camera instead of being a fixed arc the view
+escapes from. And the whole of it is one line in `Bog._face`: `desired -=
+clampf(wrapf(desired - body_yaw, -PI, PI), -_yaw_slack, _yaw_slack)` — the view,
+pulled back toward the body by as much of the gap as the slack covers. Inside the
+slack that resolves to `body_yaw` and the body holds; past it, to the edge
+exactly; at a slack of zero it is `desired` untouched, which is D-174's welded rig
+unchanged. `wrapf` because +179 and -179 degrees are two degrees apart, not 358.
+
+**Four rad a second, because the give-back has to be slower than the body can
+turn.** The slack is a variable, not a constant: `_yaw_slack` is set outright to
+`YAW_SLACK` on any frame the Bog is merely standing there, and `move_toward`s to
+zero at `SLACK_CLOSE_RATE` (4.0) on every frame it is not. A rate and not a
+switch, and that is the second half of the owner's sentence rather than a detail:
+zeroing the slack the moment a key goes down would leave the body up to 60 degrees
+off the view with nothing but `TURN_SPEED` between them, and 60 degrees at 800
+deg/s is an 0.075 s snap — the Bog would *flick* onto the camera on the first step
+of every walk, which is the jerk the slack was bought to avoid. At 4 rad/s the
+whole 60 is handed back over 0.26 s, slower than the body could turn and therefore
+the thing you actually see: the Bog squares up as it sets off, one motion, and is
+locked to the view again by the time it is moving.
+
+**What counts as only looking around.** On the floor, `input_direction` zero,
+horizontal speed under `IDLE_SPEED` (0.35 m/s, the slide's own number and for the
+slide's own reason — below that a velocity is the tail of a stop and not travel),
+not sliding, not aiming, not drawing, and not mid-wind-up. Every entry is a moment
+the player is pointing the Bog at something rather than looking at it. Aiming is
+read as `wants_aim`, off the `aim` action in `_read_input` — deliberately a second
+read of the same key rather than a call up into `BogCamera.is_aiming()`, because
+`_face` wants it on the same tick as `input_direction`, it is only ever asked on
+the Bog we own, and a body that had to reach into its own camera to find out
+whether it may stand still would be the dependency pointing the wrong way. The
+bow's draw and a throw in flight come from `BogAnimator.is_throwing()`, which is
+the one question `_face` asks the tree. Being off the floor is on the list too:
+the slack is a standing posture, and a Bog that lands facing 60 degrees off its
+own camera is the bug the slack would otherwise buy. `set_view_basis` did not
+change shape for any of this.
+
+**The committed states still win.** `_face` returns before any of this for a spin,
+a roll or an emote (D-174), and a slide keeps facing its own velocity, so the
+slack is never what decides those headings.
+
+**What other peers see: nothing new.** `_yaw_slack` is local and there is nothing
+to replicate. What the network carries is `sync_yaw`, which is `body_yaw` — the
+slacked number, after the clamp — so a remote Bog standing and looking around is
+simply a remote Bog standing still, which is what it looks like on its own screen
+too. `_follow_network` keeps chasing `sync_yaw` at `TURN_SPEED` exactly as before.
+
+**The head does not follow the view inside the slack, and that is the state of the
+rig, not a choice made here.** The only torso layer is `BogAim` (D-066), and it is
+the *bow's*: it runs on `BogAnimator.aim_blend()`, which is zero unless a bow is
+up, and its yaw is the fixed `BOW_OFF_FACING`, not the view. There is no
+head-look layer in this game. So inside the slack the whole Bog holds, head
+included, and the 60 degrees is 60 degrees of a camera orbiting a still model.
+Raising the aim blend closes the slack anyway, so the two never argue.
+
+**Rejected.** Dropping the slack to zero on the first frame of input — the flick
+above, and the explicit thing the owner's sentence asks not to happen. Snapping the
+body onto the *view* once the edge is crossed rather than onto the edge: that makes
+the slack an arc you fall out of and back into, and it pops. Easing the slack
+*open* as well as shut: nothing asked for it, and a slack that grows while you
+stand still means the body's resting relationship to the camera depends on how
+long you have been idle. Making the slack part of `set_view_basis`'s signature so
+the rig could hand the body its own aim state: `_read_input` already has the key.
+
+**Known and left.** The feet still slide for the degrees the body *does* turn —
+BOG-19 (turn-in-place clips) is the real fix and is untouched by this. The
+airborne clause and the aim/draw/throw closes are reasoned rather than measured;
+what the testbed drives is a walk. A punch does not close the slack:
+`is_throwing()` covers the wind-up, the cast and the loose but not `punch`, so a
+standing hook (D-158, which takes the legs under `PUNCH_PLANTED_SPEED`) can play
+with the body up to 60 degrees off the camera (BOG-61). And sideways movement
+reading as uneasy under the welded body is its own matter (BOG-16).
+
+**How it is checked.** `tools/camera_range.gd`'s `faces` verdict, in the gate,
+headless at `--fixed-fps 60`. It reads `FACE_SLACK` off `Bog.YAW_SLACK` rather
+than typing 60 here, so a re-tune of the feel cannot leave the testbed asserting a
+number nobody ships. Three of its five claims are the slack: a 45-degree view step
+with the Bog standing still must move the body **not at all** — 0 of 50 frames,
+worst 0.000 degrees; a second 45-degree step, putting the view 90 off the body and
+so 30 past the edge, must leave the body at rest *on* the 60-degree edge — 0 of 30
+frames off it, worst 0.000 degrees; and then the player runs with the view held,
+and the body must give the whole 60 back inside `FACE_CLOSE_TICKS` (21 ticks,
+0.35 s — 16 is what 4 rad/s honestly needs, plus the frame the view basis spends
+crossing from `_process` to the next physics tick, plus room for the 2-degree
+tolerance) with no single tick turning the body further than `rotate_toward` can:
+**15 ticks of 21**, biggest tick of the close 0.0667 rad, biggest tick anywhere on
+the leg 0.2333 rad against a 0.2334 cap. The two claims that were there before are
+unchanged and still pass: running 45-degree steps matched on 6 of 6 turns inside 6
+ticks (worst 4), and 186 committed frames of spin and emote at 0.000 degrees of
+drift. (BOG-60, for BOG-33.)

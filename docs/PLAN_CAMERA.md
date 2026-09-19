@@ -71,7 +71,7 @@ turn-in-place in v1**: the feet will slide when a standing Bog looks around;
 Fortnite hides that with turn-in-place clips this repo does not have. Note it
 as the one known cosmetic gap in the decision text.
 
-### Idle yaw slack (added after the first evening on the rig)
+### Idle yaw slack (added after the first evening on the rig — the record is D-177)
 The gap above came back as the first piece of feedback, and it is closed.
 Owner: *"if they are standing still, not moving at all and just moving the
 camera, then let them get it a little further around before it starts moving

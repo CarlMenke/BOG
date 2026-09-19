@@ -761,7 +761,7 @@ Three tiers, because three different kinds of claim need three different proofs
 
 | tool | proves |
 |---|---|
-| `tools/smoke_test.sh` | **the gate** — import, and one hundred and twenty-six checks |
+| `tools/smoke_test.sh` | **the gate** — import, and every check in this table that says "In the gate". The running count is at the top of this file and in the script's own last line; it is not restated here, because a number in a table is a number that goes stale |
 | `tools/cursor_flow.tscn` | entering a match takes the mouse, and leaving gives it back |
 | `tools/playthrough.tscn` | the whole path, menu to results; 50 assertions on the island, 58 on Rust. Takes a map id after a `--` |
 | `tools/match_rules.tscn` | 888 assertions across 20 scoring scenarios, the last of them three Bogs carrying three different weapons (D-069) |
@@ -879,8 +879,8 @@ and the tool quietly uses its defaults. Pass them literally.
 ## Known issues
 
 
-Five more are limitations of the source art rather than faults in the code, and
-D-029 argues each one out rather than pretending it is fixed:
+What is left here is limitations of the source art rather than faults in the
+code, and D-029 argues each one out rather than pretending it is fixed:
 
 - **`CrouchWalk`'s feet slip 53%** at the game's crouch speed (Walk 9.4%, Run
   16.3%). The clip is authored at 1.273 m/s and would need its rate nearly
@@ -892,9 +892,6 @@ D-029 argues each one out rather than pretending it is fixed:
   at, which skips the most-sunk stretch (within 0.10 m of the floor from there)
   at the cost of the first two frames of the tumble. A few centimetres of
   sinking remain through the rest of the roll.
-- **The nameplate crosses the model at dive apex.** The plate is pinned to the
-  capsule at 1.80 m while `JumpTwo` keeps a 0.618 m pelvis rise. The fix is to
-  offset it by the model's own head height, in `scripts/player/nameplate.gd`.
 - **A sliding Bog is hard to hit.** The slide capsule is vertically right but a
   vertical capsule cannot follow a prone body whose head is half a metre forward
   of the axis.
