@@ -116,3 +116,6 @@ memos/*
 # The raw quarry pack: 5 GB of Tripo exports, trimmed into art/maps/quarry/ by
 # tools/trim_quarry_pack.py. Never committed, and hidden from Godot by .gdignore.
 assets/quarry_asset_pack/
+
+# A copy of the gate, so the original can be edited while a run is in flight.
+tools/.gate_run_copy.sh
