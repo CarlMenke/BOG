@@ -673,7 +673,16 @@ func _stage_combat() -> bool:
 
 	# ---------------------------------------------------------- the punch ---
 	var punch_mark := _failures
-	# In front, inside the reach and well inside the arc.
+	# In front, inside the reach and well inside the arc — and the *view* put on
+	# the body first, because a punch squares the body to the crosshair as it
+	# starts (D-178). This Bog has been stood up and turned by hand and its rig
+	# is still looking wherever the lobby left it, so a dummy placed off
+	# `facing()` alone is a dummy the fist would turn away from before it
+	# landed. One frame for the basis to cross from `_process` into the Bog.
+	var rig := mine.get_node_or_null("CameraRig") as BogCamera
+	if rig != null:
+		rig.set_view(mine.body_yaw, 0.0)
+		await get_tree().process_frame
 	var forward := mine.facing()
 	_place(other, mine.global_position + forward * 1.1, mine.body_yaw + PI)
 	other.set_health(Bog.MAX_HEALTH)

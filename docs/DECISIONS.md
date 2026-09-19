@@ -17776,10 +17776,9 @@ the rig could hand the body its own aim state: `_read_input` already has the key
 **Known and left.** The feet still slide for the degrees the body *does* turn —
 BOG-19 (turn-in-place clips) is the real fix and is untouched by this. The
 airborne clause and the aim/draw/throw closes are reasoned rather than measured;
-what the testbed drives is a walk. A punch does not close the slack:
-`is_throwing()` covers the wind-up, the cast and the loose but not `punch`, so a
-standing hook (D-158, which takes the legs under `PUNCH_PLANTED_SPEED`) can play
-with the body up to 60 degrees off the camera (BOG-61). And sideways movement
+what the testbed drives is a walk. A punch and a slash now take the whole slack at once rather than at this rate,
+because their hit is cut where the body points and the first slash lands four
+ticks after the click (D-178, BOG-61). And sideways movement
 reading as uneasy under the welded body is its own matter (BOG-16).
 
 **How it is checked.** `tools/camera_range.gd`'s `faces` verdict, in the gate,
@@ -18402,3 +18401,106 @@ composition on a remote copy in a two-process run.
 - **Replicating the swing, or seeding it off a shared clock.** Cosmetic, derived
   from a pose every peer already has, and a divergence nobody could see.
   (BOG-32.)
+
+## D-178 — A punch and a slash take the whole slack at once, because the hit is cut where the body points
+D-177 gave a standing Bog 60 degrees of look before its feet move, and named the
+hole in its own "known and left": `Bog._face` asked `BogAnimator.is_throwing()`,
+which covers the draw, the throw, the cast and the loose but not the punch. Since
+D-158 a standing punch is a full-body Hook Punch, so a Bog could throw a hook
+visibly aimed 60 degrees away from the crosshair. That is the half of it anybody
+would have noticed by looking. The half that matters is underneath: the host
+resolves the punch at `PUNCH_RELEASE_TIME` from `_bog.facing()` and cuts
+`PUNCH_ARC` — **50 degrees either side** — around it. A body 60 degrees off the
+view puts the thing the player is actually aiming at *outside the arc entirely*.
+The hit was pointing the wrong way, not just the animation. Measured from the
+slack's edge, the punch landed **59.989 degrees** off the view.
+
+**The sword had it too, and the sword is what decided the fix.** D-168 draws the
+slash's fan from the same `facing()` the hit is cut with, so the drawing and the
+damage agree with each other and both were wrong together: **56.169 degrees** off
+(the slash's own forward step had nudged the Bog over `IDLE_SPEED` and bought
+back four degrees before the blade landed, which is luck, not a design). And the
+first slash connects **four physics ticks** after the click — `slash_release(1)`
+is 0.067 s — while 60 degrees at `TURN_SPEED` costs 4.5 ticks. There is no rate
+that can hand the slack back in less time than the body needs to turn.
+
+**So a strike takes the whole slack at once, and that is the snap D-177
+rejected.** It rejected it *for a walk*, and the reason was that a walk has no
+deadline in it: handing 60 degrees back over a quarter of a second is a Bog
+squaring up as it sets off, where zeroing it would be a flick on the first step
+of every walk. A strike is the opposite case. It has a deadline, it is a
+commitment already paid for, and the flick is the body turning into the punch.
+Zeroing the slack does not turn the Bog — it stops holding it back, and
+`TURN_SPEED` does the rest, which is D-174's welded rig: the state the Bog is in
+for every other attack in the game. The rates were measured before this was
+chosen. At `SLACK_CLOSE_RATE` the punch is still **6.513 degrees** out at its
+release (the arithmetic says 2.7; the rest is the tick between the click and the
+first close). At 8 rad/s the punch is square and the slash is still **29
+degrees** out. Only zero serves both, and a second tunable constant that served
+one weapon would have been a number waiting to rot against a marker.
+
+**Two sources for one question, and the reason is a single tick.** The slash is
+read off `Bog.is_slashing()`, the Bog's own clock, set at the *click* by
+`begin_slash`. The punch has no such clock and is read off the tree, and a
+`OneShot`'s `active` parameter reads true the tick *after* it is fired. Routing
+the slash through the tree as well cost it that tick and left it **16.062
+degrees** out rather than 6.513 — a tick the punch's fifteen can spare and the
+slash's four cannot. `BogAnimator.is_punching()` is therefore its own question
+rather than a fourth answer inside `is_throwing()`, and the distinction it draws
+is the real one: a spear, a bolt and an arrow all leave for `_aim_point()`, so a
+body sitting off the view costs them a look and nothing else. The **spin** stays
+out of it for D-068's reason — its direction is the blade's and `_face` refuses
+to turn the body under it at all. Whether the spin's 100-degree offset is right
+is BOG-63 and untouched here.
+
+**Nothing new crosses the wire.** `_publish` writes `sync_yaw = body_yaw` every
+tick and `body_yaw` is the slacked number, so the close reaches the other seven
+machines as the body turning, which is what it is. The drawn fan and the hit stay
+the same vector by construction: `_host_slash` normalises the client's aim once
+into `blade` and hands that one value to `_sword_victims` and to `_do_slash`.
+
+**Results, from the slack's edge.** The punch: 59.989 degrees off before, **0.000
+after** — square ten ticks before the fist lands. The first slash: 56.169 before,
+**6.513 after**, which is exactly the 60 degrees less everything `rotate_toward`
+could pay in four ticks. The verdict asserts that arithmetic rather than the
+number, so if a marker ever moves that release past the turn it becomes "square"
+on its own.
+
+### How it is checked
+
+`camera_range`'s `faces` verdict gains a sixth claim, printed as `strike`, and
+the leg it lives on gains two phases. The emote hands over the stance for
+nothing: the dance holds the body while the camera sweeps a half-circle round it,
+so stopping the dance and planting the view 90 degrees off the body leaves a
+standing Bog that walks down to the 60-degree edge and rests there. Then the
+weapon goes away and the fist goes; then the sword comes out, the view is planted
+90 degrees off again, and the chain's first slash goes. Both halves are asserted
+— **thrown from the edge** and landed on the view — because the second alone
+would pass on a Bog that was never off the view to begin with.
+
+Two things about the harness are worth writing down because they are wall clocks
+leaking into a tick loop. The release is sampled on the **tick**
+`PUNCH_RELEASE_TIME` falls on rather than waited for: `BogCombat` times a wind-up
+off `Time.get_ticks_msec` and a headless run at `--fixed-fps 60` gets through
+hundreds of physics ticks inside a quarter of a real second, so waiting for
+`weapon_launched` samples a body that has had ten times the frames the shipping
+game gives it — and does indeed report 0.000 degrees for **every** close rate,
+including the one that is 6.5 degrees out in a match. And the sword phase has no
+tick of its own: it is booked when the fist's wind-up has run out *and* its
+one-shot has faded, whichever is later, because which of those two is later
+depends on how fast the machine gets through a tick. The leg's tick count is a
+cap rather than a length, and the leg ends when the slash has been sampled. The
+spin is ended by hand for the same reason — `FACE_SPIN_SECONDS` is three seconds
+of wall time and the loop is still inside them three hundred ticks later.
+
+`tools/playthrough.gd` needed one line for the same reason it needs saying at
+all: its punch stage stands a dummy 1.1 m along `mine.facing()` while the Bog's
+rig is still looking wherever the lobby left it, and a punch that squares the
+body to the crosshair turns away from that dummy before it lands. The view is put
+on the body first. The stage is otherwise unchanged and still passes both halves
+— the hit in front and the miss behind.
+
+Not exercised: another peer watching the squared punch (reasoned off `sync_yaw`;
+`net_test.sh` has no punch round), slashes 2 and 3 (their releases are longer, so
+they are strictly easier than the one that is thrown), and how the snap reads in
+play, which is the one thing a number cannot answer. (BOG-61, for D-177.)

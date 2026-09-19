@@ -62,8 +62,8 @@ extends Node3D
 ##   judged, and it is the honest price of the rule.
 ##
 ## - **faces** — the body follows the camera (the whole rework, D-174), *except*
-##   while the player is only looking around (`Bog.YAW_SLACK`, D-177). Five
-##   claims, and the middle three are the idle slack:
+##   while the player is only looking around (`Bog.YAW_SLACK`, D-177). Six
+##   claims, and the middle four are the idle slack:
 ##     * a 45-degree view step with the Bog standing still moves the body **not
 ##       at all** — 45 is inside the 60 degrees of slack, and the whole point of
 ##       the feature is that a look is not a turn;
@@ -75,6 +75,12 @@ extends Node3D
 ##       the body further than `rotate_toward` can — which is the difference
 ##       between squaring up and snapping, and the only part of this a number
 ##       can tell apart;
+##     * a punch and then a slash, each thrown from a standstill with the view
+##       60 degrees off the body, must find the body back on the view by the
+##       tick the host reads `facing()` to cut the hit arc around (D-178) —
+##       "back on the view" being every degree `TURN_SPEED` could pay in the
+##       ticks that release allows, which is square for the punch's fifteen and
+##       6.5 degrees short for the first slash's four;
 ##     * running view steps of 45 degrees are matched to within 2 degrees inside
 ##       0.1 s, exactly as before: once you are moving, the body is welded on;
 ##     * through a sword spin and an emote the body yaw must not move at all
@@ -155,6 +161,25 @@ const FACE_SWEEP_TICKS := 60
 const FACE_SPIN_END := 405
 const FACE_EMOTE_AT := 425
 const FACE_EMOTE_SWEEP := 445
+## Then the punch (D-178), last because it is the one phase that needs the body
+## put back on the slack's edge from a standstill, and the emote hands that over
+## for nothing: the dance held the body while the camera swept a half-circle
+## round it, so stopping the dance leaves a standing Bog 180 degrees off its own
+## view and it settles onto the 60-degree edge on its own. The weapon goes away
+## on the same tick, because a punch is the attack you have when you have put it
+## away. `FACE_PUNCH_AT` is 35 ticks later: 9 of `TURN_SPEED` to walk the 120
+## degrees down to the edge, and the rest is room.
+const FACE_EMOTE_END := 510
+const FACE_PUNCH_AT := 545
+## Then the same question with a sword in the fists, because the slash reads
+## `facing()` at *its* release too (D-168) and a fix that only reached the fist
+## would leave the wider arc pointing the wrong way. That phase has no tick of
+## its own — it is booked in `_drive_face` off the punch's own clock, which is a
+## wall clock this loop cannot predict — so all that is written down here is the
+## gap between the sword coming out and the click. It is `FACE_EDGE_SETTLE`
+## again: the view is stepped 90 degrees off the body and the body has to come
+## to rest on the slack's edge before the swing means anything.
+const FACE_SWORD_SETTLE := FACE_EDGE_SETTLE
 
 ## Each leg puts the Bog on `spot` facing -Z and then runs `ticks` of `drive`.
 const LEGS := [
@@ -165,7 +190,14 @@ const LEGS := [
 	{"name": "canopy edge", "spot": Vector3(80.0, 0.1, 3.4), "ticks": 260, "drive": "canopy"},
 	{"name": "back to a wall", "spot": Vector3(120.0, 0.1, 0.0), "ticks": 260, "drive": "turn"},
 	{"name": "tunnel", "spot": Vector3(160.0, 0.1, 10.0), "ticks": 260, "drive": "tunnel"},
-	{"name": "open ground", "spot": Vector3(255.0, 0.1, 0.0), "ticks": 540, "drive": "face"},
+	# The face leg's tick count is a **cap and not a length**: everything from
+	# the punch on waits on `BogCombat`'s wind-up clock, which counts real
+	# seconds while this loop counts physics ticks as fast as the machine will
+	# go, so how many ticks the sword half starts at is the machine's answer and
+	# not this file's. The leg ends the moment the slash has been sampled
+	# (`_face_strikes_done`), and the cap is only here so a strike that never
+	# lands ends the run instead of hanging it.
+	{"name": "open ground", "spot": Vector3(255.0, 0.1, 0.0), "ticks": 20000, "drive": "face"},
 ]
 
 ## Boxes, as {centre, size}. Layer 1, like every map's collision.
@@ -199,6 +231,7 @@ var _tick: int = 0
 var _bog: Bog
 var _rig: BogCamera
 var _combat: BogCombat
+var _animator: BogAnimator
 ## The full arm, pivot to unobstructed lens: 3.16 m for the 3.1 m distance and
 ## the 0.62 m shoulder. Read off the rig's own constants so a re-tune cannot
 ## leave this checking a length nobody ships.
@@ -281,6 +314,27 @@ var _face_broke: int = 0
 var _face_worst_drift: float = 0.0
 var _face_spun: bool = false
 var _face_emoted: bool = false
+## The punch (D-178). `_face_punch_from` is the gap the fist was thrown from —
+## the slack's edge, asserted rather than assumed, because a punch thrown from a
+## body already on the view would pass this claim without testing anything.
+## `_face_punch_off` is that gap again on the tick the host read `facing()` for
+## its arc, and -1 until the fist actually goes out.
+var _face_punched: bool = false
+var _face_punch_from: float = 0.0
+var _face_punch_off: float = -1.0
+## The slash, the same numbers one weapon along, plus the two ticks its phase is
+## booked from — which are found at run time rather than written down, because
+## what they wait on is a wall clock.
+var _face_slashed: bool = false
+var _face_slash_from: float = 0.0
+var _face_slash_off: float = -1.0
+var _face_sword_at: int = -1
+var _face_slash_at: int = -1
+## `BogAnimator.PUNCH_RELEASE_TIME` and `slash_release(1)` in physics ticks,
+## filled in `_ready`. See `_drive_face` for why the samples are taken on a tick
+## and not on the animation's own signal.
+var _punch_release_ticks: int = 0
+var _slash_release_ticks: int = 0
 var _face_notes: Array[String] = []
 
 var _total_checked: int = 0
@@ -324,10 +378,18 @@ func _ready() -> void:
 		return
 	_rig = _bog.get_node("CameraRig") as BogCamera
 	_combat = _bog.get_node("Combat") as BogCombat
+	# The tree, for the one question the punch phase asks it: whether the
+	# one-shot is still playing, which is what decides when the Bog is merely
+	# standing there again and has its slack back.
+	_animator = _bog.get_node_or_null("AnimationTree") as BogAnimator
 	_arm = Vector3(BogCamera.SHOULDER_DEFAULT, 0.0, BogCamera.DISTANCE_DEFAULT).length()
 	_turn_cap = Bog.TURN_SPEED / float(Engine.physics_ticks_per_second) + 0.0001
-	print("camera_range: starting, %d legs, arm %.3f m, slack %.1f deg, turn cap %.4f rad a tick" % [
-		LEGS.size(), _arm, rad_to_deg(FACE_SLACK), _turn_cap])
+	var hz := float(Engine.physics_ticks_per_second)
+	_punch_release_ticks = maxi(1, roundi(BogAnimator.PUNCH_RELEASE_TIME * hz))
+	_slash_release_ticks = maxi(1, roundi(BogAnimator.slash_release(1) * hz))
+	print("camera_range: starting, %d legs, arm %.3f m, slack %.1f deg, turn cap %.4f rad a tick, releases %d and %d ticks" % [
+		LEGS.size(), _arm, rad_to_deg(FACE_SLACK), _turn_cap,
+		_punch_release_ticks, _slash_release_ticks])
 	_next_leg()
 
 
@@ -376,7 +438,8 @@ func _physics_process(_delta: float) -> void:
 		return
 	var leg: Dictionary = LEGS[_leg]
 	_tick += 1
-	if _tick > int(leg["ticks"]):
+	if _tick > int(leg["ticks"]) \
+			or (leg["drive"] == "face" and _face_strikes_done()):
 		_next_leg()
 		return
 	_drive(leg["drive"], maxi(_tick, 0))
@@ -426,7 +489,7 @@ func _drive(kind: String, t: int) -> void:
 		Input.action_release("move_forward")
 
 
-## The `faces` leg, in six phases, and the only leg that touches the Bog itself.
+## The `faces` leg, in eight phases, and the only leg that touches the Bog itself.
 ##
 ## The view is stepped rather than swept on purpose. A sweep measures a body
 ## chasing a moving target, which is a lag and not a catch-up; a step asks the
@@ -508,11 +571,98 @@ func _drive_face(t: int) -> Dictionary:
 				_face_notes.append("the emote never started")
 		if t == FACE_EMOTE_SWEEP - 2:
 			_begin_hold()
-		if t >= FACE_EMOTE_SWEEP:
+		if t == FACE_EMOTE_END:
+			# The dance stopped and the view planted 90 degrees off the body the
+			# dance was holding: standing phase B again, off the *body* rather
+			# than off the old view because where the emote left the camera is
+			# the emote's business. A standing Bog walks that down to the
+			# slack's edge and rests there, which is the stance the punch wants.
+			# The weapon goes away on the same tick, because a punch is the
+			# attack a holstered Bog has — cleared first and then toggled, the
+			# playthrough's idiom, so the toggle cannot depend on what the
+			# loadout happened to hand out.
+			_combat.stop_emote()
+			# And the spin ended by hand. Its clock is wall time and this loop
+			# is not (`FACE_SPIN_SECONDS`), so a headless run at `--fixed-fps 60`
+			# is still inside those three seconds three hundred ticks later —
+			# which would leave `_face` returning early and the holster refused
+			# for a reason that has nothing to do with the punch.
+			_bog.end_spin()
+			_end_hold()
+			_face_yaw = _bog.body_yaw + FACE_STEP * 2.0
+			_bog.sync_holstered = false
+			_combat.toggle_holster()
+			if not _combat.is_holstered():
+				_face_notes.append("the weapon never went away")
+		if t == FACE_PUNCH_AT:
+			# Driven rather than clicked, for the spin's and the emote's reason:
+			# what is being measured is what `Bog._face` does about a punch, and
+			# a key press would add the whole of `BogCombat`'s gating to it.
+			_face_punch_from = absf(angle_difference(_bog.body_yaw, _rig.yaw()))
+			_combat.try_punch()
+			_face_punched = _combat.is_winding_up()
+			if not _face_punched:
+				_face_notes.append("the punch never started")
+		if t == FACE_PUNCH_AT + _punch_release_ticks:
+			# **The release, counted in ticks and not waited for.** `BogCombat`
+			# times a wind-up off `Time.get_ticks_msec`, and this loop is not a
+			# clock — a headless run at `--fixed-fps 60` gets through hundreds
+			# of physics ticks inside a quarter of a *second*, so waiting for
+			# `weapon_launched` would sample a body that had had ten times the
+			# frames the shipping game gives it and would flatter any close rate
+			# at all. In a real match the two clocks run together, so the tick
+			# `PUNCH_RELEASE_TIME` falls on is the faithful sample, and it is
+			# `_face` that has been asked the question either way.
+			_face_punch_off = absf(angle_difference(_bog.body_yaw, _rig.yaw()))
+		# **The sword half is booked off the fist's clock, not off this leg's.**
+		# `BogCombat` counts a wind-up in real seconds and this loop counts
+		# ticks as fast as the machine will run them, so the tick the punch is
+		# *over* on is not a number this file can write down. It waits for the
+		# wind-up to run out instead, and for the one-shot under it to fade —
+		# both, because the first is what frees `try_sword_attack` and the
+		# second is what lets the Bog count as standing there again and get its
+		# slack back, and which of the two is later depends on how fast this
+		# machine gets through a tick.
+		if _face_punched and _face_sword_at < 0 and t > FACE_PUNCH_AT \
+				and not _combat.is_winding_up() \
+				and (_animator == null or not _animator.is_punching()):
+			_face_sword_at = t + 1
+		if t == _face_sword_at:
+			# The sword out, the lobby's way (`Bog.weapon` and a `refresh_hand`,
+			# which is what `combat_range` does), and the view planted 90
+			# degrees off the body again. The punch's one-shot has faded by now,
+			# so the Bog is merely standing there and the slack is back.
+			_bog.weapon = Loadout.Weapon.SWORD
+			_bog.sync_holstered = false
+			_combat.refresh_hand()
+			_face_yaw = _bog.body_yaw + FACE_STEP * 2.0
+		if _face_sword_at > 0 and t == _face_sword_at + FACE_SWORD_SETTLE:
+			_face_slash_from = absf(angle_difference(_bog.body_yaw, _rig.yaw()))
+			_combat.try_sword_attack()
+			_face_slashed = _combat.is_winding_up()
+			_face_slash_at = t
+			if not _face_slashed:
+				_face_notes.append("the slash never started")
+		if _face_slash_at > 0 and t == _face_slash_at + _slash_release_ticks:
+			_face_slash_off = absf(angle_difference(_bog.body_yaw, _rig.yaw()))
+		if t >= FACE_EMOTE_SWEEP and t < FACE_EMOTE_END:
 			var through := clampf(float(t - FACE_EMOTE_SWEEP) / float(FACE_SWEEP_TICKS),
 				0.0, 1.0)
 			return {"yaw": _face_yaw + PI * through, "forward": false}
 	return {"yaw": _face_yaw, "forward": forward}
+
+
+## Is the face leg's last phase over? Both strikes thrown and both sampled, or
+## one of them refused to start — either way there is nothing left to watch and
+## the leg's tick cap is not a thing to sit through.
+func _face_strikes_done() -> bool:
+	if _tick <= FACE_PUNCH_AT:
+		return false
+	if not _face_punched:
+		return true
+	if _face_slash_at > 0 and not _face_slashed:
+		return true
+	return _face_slash_off >= 0.0
 
 
 ## Start watching a heading the rig is not allowed to move.
@@ -813,6 +963,35 @@ func _finish() -> void:
 	print("camera_range: on the first step of a walk the body gave the slack back in %d ticks of %d allowed, the biggest tick of that close %.4f rad; biggest tick anywhere on the leg %.4f rad against a %.4f cap" % [
 		_face_close_ticks, FACE_CLOSE_TICKS, _face_close_step,
 		_face_worst_step, _turn_cap])
+	# The punch's claim (D-178), and it is about the *hit* rather than the
+	# drawing: the host cuts `BogCombat.PUNCH_ARC` around `facing()` at the
+	# release, so a body still handing the slack back on that tick aims the arc
+	# itself off the crosshair. Both halves are asserted — thrown from the edge,
+	# landed on the view — because the second alone would pass on a Bog that was
+	# never off the view to begin with.
+	if _face_punch_off < 0.0 or _face_slash_off < 0.0:
+		_face_notes.append("a release tick was never sampled")
+	# **What the body owes is what `rotate_toward` can pay in the ticks it
+	# has.** Zeroing the slack does not turn the Bog; it stops holding it back,
+	# and `TURN_SPEED` does the rest. The punch's 15 ticks are three times the
+	# 4.5 the 60 degrees costs, so its debt is nothing and its claim is "square".
+	# The first slash's release is **4 ticks**, which is less than the turn
+	# itself — so the claim there is that every degree the body could have
+	# turned, it turned, and the arithmetic says so rather than a number typed
+	# in. If a marker ever moves that release out past the turn, this becomes
+	# "square" on its own.
+	var punch_owed := maxf(_face_punch_from - _turn_cap * _punch_release_ticks, 0.0)
+	var slash_owed := maxf(_face_slash_from - _turn_cap * _slash_release_ticks, 0.0)
+	var struck := _face_punched and _face_slashed \
+		and _face_punch_off >= 0.0 and _face_punch_off <= punch_owed + FACE_TOLERANCE \
+		and _face_punch_from >= FACE_SLACK - FACE_TOLERANCE \
+		and _face_slash_off >= 0.0 and _face_slash_off <= slash_owed + FACE_TOLERANCE \
+		and _face_slash_from >= FACE_SLACK - FACE_TOLERANCE
+	print("camera_range: thrown with the view %.1f degrees off the body, a punch was %.3f degrees off it at its release %d ticks later (owed %.1f) and a slash %.3f degrees off at its own %d ticks later (owed %.1f) — strike %s" % [
+		rad_to_deg(_face_punch_from), rad_to_deg(maxf(_face_punch_off, 0.0)),
+		_punch_release_ticks, rad_to_deg(punch_owed),
+		rad_to_deg(maxf(_face_slash_off, 0.0)), _slash_release_ticks,
+		rad_to_deg(slash_owed), "PASS" if struck else "FAIL"])
 	# `FACE_SLACK > FACE_TOLERANCE` is the leg refusing to be degenerate: the two
 	# standing claims are both written against the Bog's own constant, so a
 	# slack of zero would make the second of them read "the body is on the view"
@@ -823,7 +1002,7 @@ func _finish() -> void:
 		and FACE_SLACK > FACE_TOLERANCE \
 		and _face_stand_frames > 0 and _face_stand_broke == 0 \
 		and _face_edge_frames > 0 and _face_edge_broke == 0 \
-		and closed and _face_worst_step <= _turn_cap
+		and closed and struck and _face_worst_step <= _turn_cap
 	var note := "" if _face_notes.is_empty() else " (" + ", ".join(_face_notes) + ")"
 	print("camera_range: the body matched the view on %d of %d turns within %d ticks (worst %d ticks, %.2f deg still out), held still through %d of %d standing frames and %d committed ones (worst drift %.3f deg), sat %d frames off the slack's edge, and gave the slack back in %d ticks%s — faces %s" % [
 		_face_turns - _face_slow, _face_turns, FACE_CATCHUP_TICKS,

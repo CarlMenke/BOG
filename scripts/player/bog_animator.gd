@@ -2065,6 +2065,26 @@ func is_throwing() -> bool:
 		or bool(get(P_LOOSE_ACTIVE))
 
 
+## True while a punch is playing, wind-up and follow-through alike. A question
+## of its own rather than a fourth answer inside `is_throwing()` because it is
+## about a different thing: a spear, a bolt and an arrow all leave for
+## `_aim_point()`, so a body sitting off the view costs them nothing but a look,
+## and a fist cuts the arc the body is pointing at (D-178).
+##
+## What asks is `Bog._face`, and what it does with the answer is shut the idle
+## yaw slack outright instead of at `Bog.SLACK_CLOSE_RATE`, so the body is
+## square with the view by the time the host reads `facing()` at
+## `PUNCH_RELEASE_TIME`. The slash wants the same thing and does not ask here:
+## `Bog.is_slashing()` is set at the *click* where this flag is a tree parameter
+## that only reads true on the tick after the one-shot is fired, and the first
+## slash's release is four ticks away — a tick it cannot spare. A punch's
+## fifteen can.
+func is_punching() -> bool:
+	if tree_root == null:
+		return false
+	return bool(get(P_PUNCH_ACTIVE))
+
+
 ## How far the torso is turned to the crosshair, 0 to 1 (D-066). Read by
 ## `BogAim`.
 func aim_blend() -> float:

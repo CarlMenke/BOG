@@ -695,9 +695,10 @@ var body_yaw: float = 0.0
 ## the body ended up, and that arrives on `sync_yaw` already slacked.
 var _yaw_slack: float = 0.0
 ## This Bog's animation tree, found the first time `_face` needs it and kept.
-## The body asks it exactly one question — `is_throwing()`, which is true
-## through a wind-up, a cast and a loose — and asking the scene tree for a child
-## by name every physics tick to get it would be a lookup a frame for a node
+## The body asks it two questions — `is_throwing()`, which is true through a
+## wind-up, a cast and a loose, and `is_punching()`, which is true through a
+## punch (D-178) — and asking the scene tree for a child by name every physics
+## tick to get it would be a lookup a frame for a node
 ## that never moves.
 var _animator: BogAnimator
 
@@ -1995,9 +1996,16 @@ func _detect_landing(grounded_before: bool) -> void:
 ## as the Bog does anything. "Anything" is the list below, and every entry is
 ## there because it is a moment the player is pointing the Bog at something
 ## rather than looking at it: a key down, real speed under the feet, the aim
-## button, a drawn bow, a wind-up or a cast in flight, and being off the floor
-## (the slack is a standing posture, and a Bog in the air that lands facing 60
-## degrees off its own camera is the bug the slack would otherwise buy).
+## button, a drawn bow, a wind-up or a cast in flight, a punch or a slash on the
+## way out, and being off the floor (the slack is a standing posture, and a Bog
+## in the air that lands facing 60 degrees off its own camera is the bug the
+## slack would otherwise buy).
+##
+## The punch and the slash are also the one thing that takes the slack back
+## **all at once** rather than at a rate, because they are the two attacks the
+## host resolves off `facing()` at the release rather than off the crosshair,
+## and a close still running when the fist lands points the hit arc itself the
+## wrong way and not just the animation (D-178).
 ##
 ## Two properties are worth naming because they are what makes it feel like a
 ## shoulder rather than a dead zone. Past the edge the body is dragged to sit
@@ -2011,14 +2019,38 @@ func _face(delta: float) -> void:
 		return
 	if _animator == null:
 		_animator = get_node_or_null("AnimationTree") as BogAnimator
+	# A punch or a slash, which is both a reason the Bog is not merely looking
+	# around and a reason to give the slack back all at once rather than at a
+	# rate: the host reads `facing()` at the release and cuts its arc around
+	# that, so this close has a deadline in it (D-178). Asked before `idle`
+	# rather than inside it because the answer is wanted twice.
+	#
+	# Two sources, and the reason is a tick. The slash is the Bog's own clock,
+	# set at the click by `begin_slash`; the punch has none and is read off the
+	# tree, which publishes a one-shot's `active` a tick after it is fired. The
+	# first slash lands four ticks after the click and cannot spare that tick,
+	# and the punch's fifteen can.
+	var striking := is_slashing() or (_animator != null and _animator.is_punching())
 	# Ordered so the cheap tests short-circuit the node question, and so that
 	# each clause is one reason the Bog is not merely looking around.
 	var idle := is_on_floor() and input_direction == Vector2.ZERO \
-		and not wants_aim and not is_sliding() and not is_drawing() \
+		and not wants_aim and not is_sliding() and not is_drawing() and not striking \
 		and Vector2(velocity.x, velocity.z).length() < IDLE_SPEED \
 		and (_animator == null or not _animator.is_throwing())
 	if idle:
 		_yaw_slack = YAW_SLACK
+	elif striking:
+		# **A strike takes the whole slack at once** (D-178), and that is the
+		# snap D-177 rejected for a walk, on purpose. A walk has no deadline in
+		# it, so handing 60 degrees back over a quarter of a second is a Bog
+		# squaring up as it sets off; a strike's hit is read off `facing()` at
+		# the release and the release can be 0.067 s away (the first slash), so
+		# any rate at all would still be paying degrees back when the blade
+		# lands. Zeroing it leaves `TURN_SPEED` as the only thing between the
+		# body and the view, which is D-174's welded rig — the state the Bog is
+		# in for every other attack in the game — and on an attack the flick
+		# reads as the commitment it is.
+		_yaw_slack = 0.0
 	else:
 		_yaw_slack = move_toward(_yaw_slack, 0.0, SLACK_CLOSE_RATE * delta)
 	var desired := yaw_towards(-_view_basis.z)

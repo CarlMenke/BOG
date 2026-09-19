@@ -981,6 +981,13 @@ also "camera stays out of the scenery" "aim PASS"
 also "camera stays out of the scenery" "frame PASS"
 also "camera stays out of the scenery" "calm PASS"
 also "camera stays out of the scenery" "faces PASS"
+# The fifth verdict's sixth claim (D-178). A punch and a slash are the two
+# attacks whose hit the host cuts around `Bog.facing()` at the release rather
+# than around the crosshair, so a standing Bog that has 60 degrees of idle slack
+# open aims the *arc* 60 degrees off what the player is looking at, not just the
+# animation. Thrown from the slack's edge the punch is now square at its release
+# and the slash is inside what `TURN_SPEED` could pay in the four ticks it has.
+also "camera stays out of the scenery" "strike PASS"
 # Menu to results screen, through the real scenes and the real autoloads. The
 # only check here that can notice a *join* coming apart — a lobby that never
 # hands off to the arena, an arena that never registers, a results screen that
