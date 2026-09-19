@@ -44,6 +44,12 @@ sentence. One want can hide three; three sentences can be one want.
     round; Low is when convenient.
   - **Todo** if all of the above is there. Otherwise **Backlog** with an
     `Open:` line naming what is missing.
+- **Brainstorm, not a want.** An idea floated and then hedged, flagged as
+  brainstorming, contradicted in the next breath, or left with a question in
+  it. Always tell the two apart; when it is not clear, ask once. A brainstorm
+  still gets a ticket so it stays on the one list, but always **Backlog**,
+  labelled **Brainstorm**, with an `Open:` line naming the decision. Nothing
+  is built from it. The team document has the rule.
 - Relate tickets that will land together with `relatedTo`. Make a project
   only when a round is big enough to want a `docs/PLAN_*.md`, and name it
   after the round.

@@ -21,7 +21,16 @@ with a `.raw.txt` but no feedback file was transcribed and then interrupted:
 pick it up at step 2.
 
 Memos are recordings Carl or a friend made on a phone, or a whole play session
-captured with the mic open. Sizes vary from two minutes to three hours; the
+captured with the mic open. Three habits of theirs to read for:
+- **"I'm talking to the recording."** A line addressed to the memo itself is
+  the highest-signal line in the file; it is a want said on purpose.
+- **"We're just brainstorming."** A want flagged that way, or hedged in the
+  next breath ("I don't know, I guess..."), is a lean, not a decision: Backlog
+  with the **Brainstorm** label and an `Open:` line, and say so in the
+  feedback file. Always draw this line; Carl asked for it on 2026-09-19.
+- **Two voices, no labels.** Whisper does not say who spoke. Attribute from
+  context (who set up Linear, who made the exe, who is remaking which map)
+  and mark the attribution where it changes what a want means. Sizes vary from two minutes to three hours; the
 first one, `2026-09-18 21-02-05.mp3`, was 3h22m of two people playing. Both
 shapes go through the same steps.
 

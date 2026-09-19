@@ -21,7 +21,9 @@ Linear"**. The short form:
   throwing it away needs no ticket. Over an hour, more than a couple of files,
   or something someone will later ask "why" about: ticket first.
 - **Ideas are weighed, not built.** Carl thinks out loud. Take it in, weigh it
-  against what is already in Linear and in the D-records, and place it. Bulk
+  against what is already in Linear and in the D-records, and place it. Always
+  tell a want from a brainstorm: a hedged or flagged idea is a Backlog ticket
+  with the **Brainstorm** label and an `Open:` line, never something to build. Bulk
   feedback (a message, a transcript, a memo) goes through the `triage` skill,
   which writes tickets and reports back without starting work.
 - **Keep it small.** One ticket per outcome. Later notes and related feedback
