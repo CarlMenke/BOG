@@ -2845,12 +2845,13 @@ func try_punch() -> void:
 		_request_punch_windup.rpc_id(1)
 
 
-## The arm going, on this machine. There is no hand to repaint — a punching Bog
-## is holstered, so both fists are already empty and stay that way — and no
-## clock on the body either: the punch is an upper-body one-shot that ends when
-## the clip ends, which is the whole of what "you keep moving and turning at
-## full speed" means. So this is one line and a comment saying why it is one
-## line.
+## The arm going — the whole body, since D-158, when it is thrown standing — on
+## this machine. There is no hand to repaint, because a punching Bog is
+## holstered and both fists are already empty and stay that way; and no clock on
+## the body either, because the shot ends when the clip ends and the speed is
+## never scaled, which is the whole of what "you keep moving and turning at full
+## speed" means. `BogAnimator.play_punch` is the one line that knows how much
+## body this one gets, and it decides off the legs it can already see.
 func _begin_punch() -> void:
 	if _bog == null:
 		return

@@ -41,7 +41,7 @@ const REQUIRED_MARKERS := {
 	"JumpStart": ["lift"], "Land": ["absorb"], "LandHard": ["absorb", "up"],
 	"Roll": ["dive", "apex", "land", "up"], "Slide": ["down", "up"],
 	"SlideJump": ["lift", "apex", "land"],
-	"Punch": ["hit"],
+	"Punch": ["windup", "hit"],
 	"Drink": ["raise", "done"], "Death": ["fall"],
 	"SwordDraw": ["swap"], "SwordSheathe": ["swap"], "BowEquip": ["swap"], "BowUnequip": ["swap"], "BowReload": ["nock"],
 }

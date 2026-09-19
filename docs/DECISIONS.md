@@ -16862,3 +16862,61 @@ and the card is still in the fist. Then the same row becomes a timed capture
 and the dance has to end **by itself**, and Y has to fail to start another —
 which is the control, and the half of the sentence that would otherwise be
 unproved. (BOG-47.)
+
+## D-158 — The punch is a hook, and it takes the legs when the legs are free
+D-125 gave the fist `Cross Punch` and D-124 layered it over the upper body, and
+the two together read as an arm with a Bog behind it. Carl, 2026-09-18: the
+punch should be a whole body committing, the way the emote is. He picked the
+take himself — Mixamo's **Hook Punch**, 1.333 s, no travel, fetched by hand so
+the row is `mixamo_by_hand` (D-104) — and it replaces `Cross Punch` in the
+`Punch` row's `mixamo_keep`. The old file, its `.import` and its `.res` are
+deleted, because D-125's own `_library_key` rule keys a search row *by file*
+while more than one candidate is on disk: leaving both would have imported two
+keys and left the animator's `Punch` role missing.
+
+**The window is the strike and not the gather, which is D-104 read from the
+other end.** `Cross Punch` opened at frame zero with the fist already going.
+This clip spends half a second gathering — the weight dropping, the fist
+chambering — and a window opened at zero would be 0.767 s of clip asked to land
+inside `PUNCH_RELEASE_MAX`, a rate of **3.07**. D-104 raised the throw's cap so
+the clip played at its authored speed; a punch's quarter second is the promise
+D-124 sold it on and cannot be widened, so the window narrowed instead.
+`PUNCH_CLIP_START` is the clip's own `windup` on the real take and on the
+stand-in alike, and the one line that knew it was a stand-in is gone.
+
+Markers off `tools/clip_events.gd` and the two sheets. **`windup` 0.500**: the
+fist at its furthest back, 0.32 m behind the hips, the frame it turns forward.
+**`hit` 0.767**: the first frame it is at its full 0.61 m of reach, with its
+speed down to 2.1 m/s from a peak of 8.0 at 0.633 — D-063's rule, the hand
+where it *arrives*, not where it is fastest or fully out. Window 0.267,
+`PUNCH_RELEASE_TIME` 0.25 unchanged, **`PUNCH_RATE` 1.068**, against 1.47
+before. `clip_check` requires both markers now.
+
+**Full body when the legs are free, and the mask is a switch rather than a
+node.** `Hook Punch` travels 0.00 m/s, so a full-body shot thrown at a sprint
+is 0.56 s of a Bog planting its feet while the world slides past at 5.9 — three
+metres of skate, and the thing D-124's layer was quietly avoiding. The emote's
+answer (D-105) is not available here: a dancer stops moving, and the whole of
+what the punch buys is that you do not. So the `punch` one-shot is built
+carrying the upper-body filter with `filter_enabled` **off**, and `play_punch`
+turns it back on for that firing when the body is airborne or going faster than
+`PUNCH_PLANTED_SPEED` — half a walk, 1.15 m/s, a Bog standing, turning or
+shuffling. Standing, the whole body commits; running, it is the arm it always
+was, which is also what a punch thrown at a run actually is. Decided on the
+frame it is fired and never re-asked, so the pelvis cannot step into or out of
+the clip mid-hook; decided on every peer, because `_begin_punch` runs on every
+peer and `Bog.velocity` is replicated, so eight machines make the same choice
+about the same Bog.
+
+Two nodes off one clip would have drawn the same thing on screen. One node is
+one fade, one `active` flag and one place to look.
+
+**Nothing about the damage moved.** `try_punch` still sets the release at
+`PUNCH_RELEASE_TIME` and the rate is still derived back through it, so the fist
+connects a quarter second after the click on every machine, at 20 damage inside
+`PUNCH_REACH` and `PUNCH_ARC`, exactly as before. `punch` is deliberately not
+added to `_full_body_shots` (D-127), for `swing`'s reason one record on: a
+punch wants `is_holstered()` and a holster is refused while a string is back,
+so it can no more play under a draw than a spin can. Not proved by any check:
+that the running branch keeps the legs, and how the full-body punch composes on
+another peer's copy. (BOG-27.)

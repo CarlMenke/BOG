@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://b7jd7gyhhkgso"
-path="res://.godot/imported/Punch-CrossPunch.fbx-fc7ba92159334bbd43f4e32fa0ac14bc.scn"
+uid="uid://7u73dti88ot8"
+path="res://.godot/imported/Punch-HookPunch.fbx-f08c0dbe9a7dcc6067b137788a5a070f.scn"
 
 [deps]
 
-source_file="res://assets/source/anims/Punch-CrossPunch.fbx"
-dest_files=["res://.godot/imported/Punch-CrossPunch.fbx-fc7ba92159334bbd43f4e32fa0ac14bc.scn"]
+source_file="res://assets/source/anims/Punch-HookPunch.fbx"
+dest_files=["res://.godot/imported/Punch-HookPunch.fbx-f08c0dbe9a7dcc6067b137788a5a070f.scn"]
 
 [params]
 

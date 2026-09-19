@@ -50,7 +50,8 @@ extends AnimationTree
 ##     drink      OneShot        Drink between `raise` and `done`, upper body, at the channel's rate
 ##     cast       OneShot        Cast from `windup` past `release`, upper body, at the dial's rate
 ##     throw      OneShot        Throw from `windup` past `release`, upper body, at THROW_RATE
-##     punch      OneShot        Punch past its `hit`, upper body, at PUNCH_RATE
+##     punch      OneShot        Punch's `windup` past its `hit`, at PUNCH_RATE,
+##                               **full body** unless it was thrown on the move
 ##     slash_pick Transition     SwordCombo's three windows, one per slash
 ##     slash      OneShot        the picked window, upper body, over the sword plane
 ##     swing      OneShot        SwordSpin, **full body**
@@ -109,11 +110,11 @@ const REQUIRED_CLIPS: Array[String] = [
 const SLIDE_JUMP_ROLE := "SlideJump"
 const SLIDE_JUMP_FALLBACK := "RunJump"
 
-## The punch's clip, and the clip it borrowed until that one landed (D-125:
-## `Cross Punch`, `hit` at 0.367). **Not** in `REQUIRED_CLIPS` either, for
-## `SLIDE_JUMP_ROLE`'s reason exactly: the move was designed, wired and playable
-## a day before its take was picked off Mixamo (`assets/source/clips.json`
-## carries the row, the query and the pick).
+## The punch's clip, and the clip it borrowed until that one landed (D-125's
+## `Cross Punch`, retired by D-158 for `Hook Punch`). **Not** in
+## `REQUIRED_CLIPS` either, for `SLIDE_JUMP_ROLE`'s reason exactly: the move was
+## designed, wired and playable a day before its take was picked off Mixamo
+## (`assets/source/clips.json` carries the row, the query and the pick).
 ##
 ## `Cast` was the stand-in the feel round chose, and it was an honest one: a
 ## one-handed forward thrust from the shoulder, which is what a punch is, with a
@@ -375,11 +376,19 @@ const PUNCH_RELEASE_MAX := 0.25
 ## on an instance, and only because the graph node it feeds is built per body).
 static var PUNCH_PLAYS: String = clip_or(PUNCH_ROLE, PUNCH_FALLBACK)
 static var PUNCH_HIT_EVENT: String = "hit" if PUNCH_PLAYS == PUNCH_ROLE else "release"
-## Where the window opens. Zero on the real clip, whose first frame is the fist
-## already going; the stand-in opens on a standing idle, so it opens at its own
-## `windup` instead — the one line in this block that knows it is a stand-in.
-static var PUNCH_CLIP_START: float = 0.0 if PUNCH_PLAYS == PUNCH_ROLE \
-	else marker(PUNCH_FALLBACK, "windup")
+## Where the window opens: the clip's own `windup`, on the real take and on the
+## stand-in alike.
+##
+## It used to be zero on the real clip, because `Cross Punch`'s first frame is
+## the fist already going. `Hook Punch` is not that clip (D-158): it spends half
+## a second gathering — the weight dropping, the fist chambering — before the
+## strike, and a window opened at zero would be 0.767 s of clip asked to land
+## inside `PUNCH_RELEASE_MAX`, a rate of 3.07. So the window is the strike and
+## not the gather, which is D-104's rule read from the other end: there the cap
+## was raised to let the throw play at its authored speed, and here the window
+## is narrowed to the same end, because a punch's quarter second is the promise
+## D-124 sold it on and cannot be widened.
+static var PUNCH_CLIP_START: float = marker(PUNCH_PLAYS, "windup")
 static var PUNCH_HIT_IN_CLIP: float = marker(PUNCH_PLAYS, PUNCH_HIT_EVENT)
 static var PUNCH_WINDOW: float = PUNCH_HIT_IN_CLIP - PUNCH_CLIP_START
 static var PUNCH_CLIP_END: float = minf(PUNCH_HIT_IN_CLIP + FOLLOW_THROUGH,
@@ -391,6 +400,25 @@ static var PUNCH_CLIP_END: float = minf(PUNCH_HIT_IN_CLIP + FOLLOW_THROUGH,
 ## promise. A clip that winds up inside the cap plays at 1.0.
 static var PUNCH_RELEASE_TIME: float = minf(PUNCH_WINDOW, PUNCH_RELEASE_MAX)
 static var PUNCH_RATE: float = PUNCH_WINDOW / maxf(PUNCH_RELEASE_TIME, 0.01)
+
+## How slowly a Bog has to be going for the punch to take its legs, in m/s
+## (D-158). **Half a walk**, which is a Bog standing, turning on the spot or
+## shuffling a step — the cases where the legs are not busy and the hook's own
+## pivot is free to be shown.
+##
+## This number is the whole of the answer to "what does a full-body punch do to
+## somebody who is running". `Hook Punch` is a standing take (0.00 m/s of
+## travel), so a full-body shot over a sprint is 0.56 s of a Bog planting its
+## feet while the world slides past at 5.9 — the skate D-124's upper-body layer
+## was avoiding without ever saying so, and the reason that layer is still here
+## rather than deleted. Above this the punch is the arm it always was and the
+## legs keep running, which is also what a punch thrown at a run *is*; at or
+## below it the whole body commits, which is what D-158 was asked for.
+##
+## The choice is made on the frame the shot is fired and not re-asked, for
+## `can_holster`'s reason: a mask that changed half way through a hook would be
+## the pelvis stepping in or out of the clip mid-swing.
+const PUNCH_PLANTED_SPEED := Bog.WALK_SPEED * 0.5
 
 # ------------------------------------------------------------- the capture ---
 
@@ -697,6 +725,10 @@ var _plane_lost: float = 0.0
 ## the nodes that can put somebody else's pelvis under a layer. `swing` is the
 ## sixth and is left out — `BogCombat._can_act` refuses a sword spin, an emote
 ## and a holster alike while a string is back, so it cannot play under a draw.
+## `punch` is the seventh, out for the same reason one record later (D-158):
+## it is full body when it is thrown standing, but `try_punch` wants
+## `is_holstered()` and a holster is refused while a string is back, so it can
+## no more play under a draw than the spin can.
 var _full_body_shots: Array[Array] = []
 var _dive_blend: float = 0.0
 var _leap_blend: float = 0.0
@@ -985,15 +1017,16 @@ func _build_graph(player: AnimationPlayer) -> AnimationNodeBlendTree:
 	tree.add_node("throw_clip", _window("Throw", THROW_CLIP_START, THROW_CLIP_END), Vector2(2760, 1000))
 	tree.add_node("throw_rate", AnimationNodeTimeScale.new(), Vector2(2940, 1000))
 	tree.add_node("throw", _upper_body_shot(THROW_FADE_IN, THROW_FADE_OUT), Vector2(2960, 720))
-	# The fist, layered like the throw and for a sharper version of its reason
-	# (the feel round): a punch is what you have when you have put the weapon
-	# away, and the whole of what it buys is that you keep moving and turning at
-	# full speed while you throw it. A full-body shot would be a Bog that stops
-	# to punch, which is the sword's trade and not this one.
+	# The fist, and the one shot in this graph that is **both** (D-158). It is
+	# built full body and `play_punch` turns the upper-body filter back on for
+	# the frame it is fired on, because which of the two a hook is depends on
+	# what the legs are already doing — see `PUNCH_PLANTED_SPEED`. Two nodes off
+	# one clip would have been the other way to write it and the same thing on
+	# screen; one node is one fade, one `active` flag and one place to look.
 	tree.add_node("punch_clip", _window(PUNCH_PLAYS, PUNCH_CLIP_START, PUNCH_CLIP_END),
 		Vector2(2960, 1120))
 	tree.add_node("punch_rate", AnimationNodeTimeScale.new(), Vector2(3140, 1120))
-	tree.add_node("punch", _upper_body_shot(PUNCH_FADE_IN, PUNCH_FADE_OUT), Vector2(3160, 730))
+	tree.add_node("punch", _switchable_shot(PUNCH_FADE_IN, PUNCH_FADE_OUT), Vector2(3160, 730))
 	# The slash chain: three windows of one clip and a `Transition` to say which
 	# one is being played, feeding one upper-body OneShot (the feel round).
 	#
@@ -1324,6 +1357,18 @@ func _upper_body_shot(fade_in: float, fade_out: float) -> AnimationNodeOneShot:
 	shot.filter_enabled = true
 	for bone in UPPER_BODY_BONES:
 		shot.set_filter_path(NodePath("%s:%s" % [_skeleton_path, bone]), true)
+	return shot
+
+
+## The same shot with its mask **carried but switched off**, so a caller can
+## turn it on per firing (D-158). The filter paths are what the mask is made of
+## and `filter_enabled` is the switch over them, so a node built this way is
+## full body until somebody says otherwise and upper body the moment they do —
+## and it is full body at rest, because a shot nobody has fired has no opinion
+## and the graph should read as what it mostly is.
+func _switchable_shot(fade_in: float, fade_out: float) -> AnimationNodeOneShot:
+	var shot := _upper_body_shot(fade_in, fade_out)
+	shot.filter_enabled = false
 	return shot
 
 
@@ -1984,9 +2029,25 @@ func play_slash(index: int) -> void:
 
 ## Throw the fist. No rate: `PUNCH_RATE` is what the release was derived through
 ## and nothing moves it, so it is set once in `_ready` like the draw's seek.
+##
+## The one thing decided here is how much body the hook gets (D-158), and it is
+## decided here because this is the frame that knows: `PUNCH_PLANTED_SPEED` is
+## read off the legs as they are on the click. Grounded as well as slow — a
+## punch thrown off a ledge would otherwise put a standing take's feet under a
+## Bog in mid-air, which is the air pose's job and the one pose in this graph
+## that is never anybody else's.
+##
+## Runs on every peer, because `BogCombat._begin_punch` does (D-024): the speed
+## it reads is `Bog.velocity`, which a remote copy is publishing, so the eight
+## machines make the same choice about the same Bog.
 func play_punch() -> void:
 	if tree_root == null:
 		return
+	var shot := (tree_root as AnimationNodeBlendTree).get_node("punch") as AnimationNodeOneShot
+	if shot != null and _body != null:
+		var planted := _body.is_grounded() \
+			and Vector2(_body.velocity.x, _body.velocity.z).length() <= PUNCH_PLANTED_SPEED
+		shot.filter_enabled = not planted
 	set(P_PUNCH, AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE)
 
 

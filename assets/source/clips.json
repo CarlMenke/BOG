@@ -930,14 +930,16 @@
    "mixamo_name": null,
    "mixamo_id": null,
    "mixamo_query": "punch",
+   "mixamo_by_hand": true,
    "mixamo_keep": [
-    "Cross Punch"
+    "Hook Punch"
    ],
    "in_place": false,
    "loop": false,
    "face": "hips",
    "markers": {
-    "hit": 0.367
+    "windup": 0.5,
+    "hit": 0.767
    }
   },
   {
