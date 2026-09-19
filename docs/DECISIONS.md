@@ -15294,3 +15294,23 @@ move the gate's count to twenty-five.
   and saves an afternoon when the downloads come back right.
 - **Leaving them pickable with a note.** A player does not read notes, and a
   skin on the ring is a claim that it is right.
+
+## D-129 — A dive's way down is measured against the floor it left, so it only hangs when it lands lower
+The owner: *"the second jump dive roll stalls a little bit too much and too
+motionless for too long ... a pause at a certain point is okay, but should only
+occur if they jump off somewhere higher than where they land."*
+
+`BogAnimator.arc_time` scrubbed the `Roll` clip by vertical speed against the
+dive's **launch** speed, both ways. A dive always launches from the top of a
+jump, so it always lands faster than it left: from a 1.69 m apex the way down
+ran out of clip 0.17 s into a 0.4 s fall and held the about-to-land pose for
+the other 0.22 s, on flat ground, every time. `arc_time` now takes a
+`land_speed`, and the dive's is `dive_land_speed()`: how fast the body will be
+falling when it is back at the height this airtime opened at
+(`_takeoff_height`), up under the plain gravity and down under
+`Bog.FALL_GRAVITY_SCALE` — which is the 1.35 that was a literal in
+`_apply_gravity` and is a constant now because two files need it. Simulated at
+60 Hz: 0.22 s frozen before, 0.00 after. A landing *below* the take-off still
+outruns the clip and holds the pose, which is the pause the owner allowed; one
+above it is cut short by the roll. The jump and slide-jump arcs pass no
+`land_speed` and read exactly as before.

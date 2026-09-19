@@ -138,6 +138,10 @@ const CROUCH_SPEED := 1.6
 ## it keeps jumps short and readable rather than floaty. 9.0 m/s of launch under
 ## that gravity is a 1.69 m apex — just under the Bog's own height.
 const JUMP_VELOCITY := 9.0
+## How much harder gravity pulls on the way down than on the way up. A constant
+## because `BogAnimator` needs it to know how fast a dive will be falling when
+## it gets back to the floor it left.
+const FALL_GRAVITY_SCALE := 1.35
 
 const GROUND_ACCELERATION := 48.0
 const GROUND_FRICTION := 42.0
@@ -972,7 +976,7 @@ func _apply_gravity(delta: float) -> void:
 	var gravity := float(ProjectSettings.get_setting("physics/3d/default_gravity", 24.0))
 	# Falling faster than rising makes a jump feel decisive rather than floaty.
 	if velocity.y < 0.0:
-		gravity *= 1.35
+		gravity *= FALL_GRAVITY_SCALE
 	velocity.y -= gravity * delta
 	velocity.y = maxf(velocity.y, -60.0)
 

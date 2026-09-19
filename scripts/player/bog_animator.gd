@@ -623,6 +623,13 @@ var _fall_speed: float = 0.0
 ## The upward speed the dive was launched at, the scale its arc is measured
 ## against. Seeded with the floor the dive itself enforces.
 var _dive_launch: float = Bog.DIVE_UP_VELOCITY
+## The downward speed the dive will have when it is back at the height this
+## airtime left the ground at, which is what its way down is measured against:
+## the fall is spread over the whole drop to that floor, and only a landing
+## *lower* than the take-off outruns it and holds the about-to-land pose.
+var _dive_land: float = Bog.DIVE_UP_VELOCITY
+## The height the body was at when this airtime opened.
+var _takeoff_height: float = 0.0
 
 ## Last values of the replicated counters this animator has acted on.
 var _dive_serial: int = 0
@@ -1303,12 +1310,28 @@ func _body_relative(flat: Vector3) -> Vector2:
 ## vertical velocity rather than a stopwatch — which is what makes a fall work
 ## with no extra clip: a BOG that walks off a ledge has vy of about 0, starts
 ## at the apex pose and falls through to the pre-landing pose.
+##
+## `land_speed` is how fast the body will be falling when it touches down, for
+## an arc that does not come down where it went up. The dive is the one that
+## needs it: it launches from the top of a jump, so it always lands faster than
+## it left, and read against `launch` alone the way down ran out of clip a
+## third of the way through the fall and held the about-to-land pose for the
+## rest of it. Left at 0 it is `launch`, which is a jump off and onto one floor.
 static func arc_time(vy: float, launch: float, from: float, apex: float,
-		to: float) -> float:
-	var phase := clampf(0.5 * (1.0 - vy / maxf(launch, 0.01)), 0.0, 1.0)
-	if phase < 0.5:
-		return lerpf(from, apex, phase / 0.5)
-	return lerpf(apex, to, (phase - 0.5) / 0.5)
+		to: float, land_speed: float = 0.0) -> float:
+	if vy >= 0.0:
+		return lerpf(from, apex, clampf(1.0 - vy / maxf(launch, 0.01), 0.0, 1.0))
+	var down := land_speed if land_speed > 0.0 else launch
+	return lerpf(apex, to, clampf(-vy / maxf(down, 0.01), 0.0, 1.0))
+
+
+## How fast a dive launched upward at `launch`, `height` above the floor it is
+## coming back to, is falling when it gets there: up to its apex under the
+## plain gravity and down from it under the heavier one `Bog` falls with.
+static func dive_land_speed(launch: float, height: float) -> float:
+	var gravity := float(ProjectSettings.get_setting("physics/3d/default_gravity", 24.0))
+	var drop := height + launch * launch / (2.0 * maxf(gravity, 0.01))
+	return sqrt(2.0 * gravity * Bog.FALL_GRAVITY_SCALE * drop)
 
 
 ## Both scrubbed air clips are told what time it is every frame, whether or
@@ -1339,7 +1362,8 @@ func _scrub_air() -> void:
 		marker(_slide_jump_role, "lift"), marker(_slide_jump_role, "apex"),
 		marker(_slide_jump_role, "land")))
 	set(P_DIVE_SEEK, arc_time(vy, _dive_launch,
-		marker("Roll", "dive"), marker("Roll", "apex"), marker("Roll", "land")))
+		marker("Roll", "dive"), marker("Roll", "apex"), marker("Roll", "land"),
+		_dive_land))
 
 
 ## Airtimes, from the two replicated serials and the grounded flag. The serials
@@ -1380,6 +1404,11 @@ func _track_airtime(delta: float) -> void:
 ## is the walk speed, because that is where the leap's own run-up starts to
 ## look like the legs under it.
 func _open_airtime(dived: bool, slide_jumped: bool = false) -> void:
+	# A dive continues the airtime it was spent in, so the floor it is coming
+	# back to is the one that airtime left; only a dive with no airtime under
+	# it (its serial beat the jump's here) has to take the height it is at.
+	if not dived or not _airtime_open:
+		_takeoff_height = _body.global_position.y
 	_airtime_open = true
 	_airtime = 0.0
 	_fall_speed = 0.0
@@ -1388,6 +1417,8 @@ func _open_airtime(dived: bool, slide_jumped: bool = false) -> void:
 		_leaping = false
 		_slide_leaping = false
 		_dive_launch = maxf(_body.vertical_speed(), Bog.DIVE_UP_VELOCITY)
+		_dive_land = dive_land_speed(_dive_launch,
+			maxf(_body.global_position.y - _takeoff_height, 0.0))
 		return
 	_dived = false
 	var flat := Vector3(_body.velocity.x, 0.0, _body.velocity.z)
