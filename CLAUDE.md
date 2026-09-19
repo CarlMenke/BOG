@@ -55,10 +55,23 @@ repo.
   asset pack. Getting the asset is part of the plan, not a fallback after the
   primitive version disappoints.
 - **Ask, do not substitute.** If the asset has to come from Carl, the ticket
-  gets **Needs a human** and an `Open:` line naming exactly what to fetch (the
-  Tripo prompt, the Mixamo clip name, the file to download), and the build
-  waits for it. A cone over five boxes because nobody asked for a campfire is
-  the failure this rule exists to stop.
+  gets **Needs a human** and an `Open:` line naming exactly what to fetch, and
+  the build waits for it. A cone over five boxes because nobody asked for a
+  campfire is the failure this rule exists to stop.
+- **The ask has one shape, so it is easy to act on.** One line per item, in
+  the ticket and repeated in chat when the ticket is written:
+  `FETCH <what> — <where from> — <exact search term or prompt> — <format>`.
+  For example: `FETCH campfire mesh — Tripo — "low-poly stone-ring campfire,
+  three logs, small flame, game asset" — GLB with textures`, or `FETCH turn
+  left clip — Mixamo — "Left Turn" on the BOG rig, skinless — FBX`. Say how
+  many items and nothing else; the pipeline step is Claude's, not Carl's.
+- **Downloads is the hand-off.** Carl drops what he fetched into his
+  `Downloads` folder and says so, nothing more. Claude looks there (newest
+  files first, matching the ask by name and type), moves the file into the
+  repo at the right path with the right name, and runs the pipeline. Carl
+  never files anything into the repo by hand unless he chooses to. Only if
+  the ask names another place (a shared drive, a URL) does Claude look
+  elsewhere.
 - **The route in.** Meshes: `assets/source/props/` through
   `tools/decimate_assets.py`. Clips: `assets/source/anims/` as skinless FBX
   through the Godot-native import (D-095..D-101). Skins and garments:
