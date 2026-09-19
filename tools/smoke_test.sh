@@ -1412,7 +1412,7 @@ check "quarry parkour and ramps" "parkour_report: PASS" \
 # cover and high ground counted equal either side, and every pad and letter on
 # solid ground. It is the only thing standing between "not symmetrical" and
 # "not even".
-check "the quarry is even" "quarry_check: PASS"     "$GODOT" --headless --path "$GODOT_ROOT" --script tools/quarry_check.gd
+check "the quarry is even" "quarry_check: PASS"     "$GODOT" --headless --path "$GODOT_ROOT" tools/quarry_check.tscn
 # Highsun Grounds' eight pads, all of them on one lodge deck — which is what
 # makes `PAD_SEPARATION` the number the deck's 24 m width was derived from. Its
 # triangle floor is its own and the lowest but the quarry's: the whole range is

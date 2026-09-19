@@ -1,4 +1,4 @@
-extends SceneTree
+extends Node
 ## Is Twin Quarry *even*? Development tool, not shipped.
 ##
 ## The map is deliberately not symmetric — the north-west corner is a solid
@@ -29,12 +29,14 @@ extends SceneTree
 ##                the scene claims, because a card that settles two metres
 ##                under a terrace is a card nobody can pick up.
 ##
-## A `SceneTree` script rather than a scene, like `snapshot.gd` and unlike the
-## map previews: it renders nothing, so it wants the dummy rasteriser and a
-## process that ends when the numbers are printed.
+## A scene, like the other harnesses, and not a `--script`: a `SceneTree` script
+## starts before the autoloads exist, so everything the map pulls in that names
+## one (`Bog` names `SceneFlow`) prints a compile error on the way past, and the
+## gate rightly fails any run that prints one — which this did on its first
+## night in `smoke_test.sh`, with nineteen checks passing underneath.
 ##
 ## Usage:
-##   Godot --headless --path . --script tools/quarry_check.gd
+##   Godot --headless --path . tools/quarry_check.tscn
 ##
 ## Prints a line per measurement and `quarry_check: PASS` or `FAIL`.
 
@@ -139,7 +141,7 @@ var _ticks: int = 0
 var _done: bool = false
 
 
-func _initialize() -> void:
+func _ready() -> void:
 	Engine.max_fps = int(ProjectSettings.get_setting(
 		"physics/common/physics_ticks_per_second", 60))
 	var packed := load(MAP) as PackedScene
@@ -148,18 +150,17 @@ func _initialize() -> void:
 		_done = true
 		return
 	_map = packed.instantiate() as StaticMap
-	root.add_child(_map)
+	add_child(_map)
 
 
-func _process(_delta: float) -> bool:
-	if _done:
-		return true
-	_ticks += 1
-	if _ticks < SETTLE:
-		return false
-	_done = true
-	_run()
-	return true
+func _process(_delta: float) -> void:
+	if not _done:
+		_ticks += 1
+		if _ticks < SETTLE:
+			return
+		_done = true
+		_run()
+	get_tree().quit(1 if _failures > 0 or _map == null else 0)
 
 
 func _run() -> void:
