@@ -17333,3 +17333,44 @@ ground, inside a millimetre. A card left at the anchor reads as a band 0.396 m
 wide on `RunJump` alone, which is what it printed before the fix. The picture is
 `out/plate_runjump.png`. On every peer by D-150's argument, not by a socket run.
 (BOG-55.)
+
+## D-166 — A rack's and a well's lettering face the marker's -Z, like everything else
+Every marker group in this project is authored facing the marker's own -Z. A
+`Label3D` and a `Sprite3D` face their own **+Z**, so a `WeaponRack`'s name plank
+and weapon tile and an `ItemWell`'s lit face were the three things in the game
+that did not: point a rack's -Z at the deck and the deck gets the back of the
+plank, which a double-sided `Label3D` renders mirrored and a `Sprite3D` does not
+render at all. `signboard.gd` has compensated with an explicit
+`_label.rotation.y = PI` since it was written. D-161 found the same trap and
+turned the *map* instead — `RACK_YAW` and `WELL_YAW` the opposite way from what
+the arithmetic said — and wrote down that this was the contained fix and not the
+right one. This is the right one: the turn lives in `weapon_rack.gd` and
+`item_well.gd` beside the signboard's, and `range_map.gd`'s two yaws say what
+they mean again.
+
+**Nothing a player stands in moved.** A rack's walk-over `Area3D` is a box
+centred on the rack's own origin and its two solid uprights are symmetric in z,
+and a well's pedestal, its body and the spot it mints its stock at are all on its
+centre line. So turning a marker by PI changes what is drawn and not where the
+interaction is, and the numbers say so: `tools/range_views.tscn`'s `probe` prints
+the same 1.36 m nearest pad, the same 0.84 m of clearance off `Rack_spear`'s
+trigger and the same 0.1-to-0.9 m arming band D-161 measured, and
+`tools/range_items.tscn -- all` still swaps a weapon and re-mints a well.
+
+**The probe had to be turned with them.** It walked out from `basis.z` and said
+so in a comment about measuring the right side of a rack if somebody turned it
+round — which is exactly what this is, so it now walks out from `-basis.z`. It
+is the only thing outside the two scripts that had an opinion about which way a
+rack faces; `RangeItems` is the only builder of either fitting, it is added only
+by `RangeDirector`, and `RangeDirector` is added only by `range_map.gd`, so
+Highsun Grounds is the whole of the blast radius.
+
+**And the well's tile was inside the stone.** With the face finally pointing at
+its reader, the render showed four pedestals with their names right and no
+pictures under them. The column is a 0.42 m box turned an eighth (D-161's "reads
+as eight-sided from the deck"), so along -Z its surface is a *corner* standing
+`sqrt(2)` further out than its own faces — 0.594 m — and the tile was hung at
+0.44. It had been buried for the life of the map, invisible behind a facing that
+made it invisible anyway. `FACE_OUT` is that corner plus two centimetres and both
+the picture and the word sit on it, so a pedestal has a front. The renders are
+`range_views`' `racks`, `wells`, `pad` and `deck`. (BOG-56.)

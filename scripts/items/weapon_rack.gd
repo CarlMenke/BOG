@@ -193,7 +193,15 @@ func _model_scene() -> PackedScene:
 			return HeldGear.MODEL
 
 
-## The name on the plank, and the tile beside it.
+## The name on the plank, and the tile beside it, both on the rack's own **-Z**
+## face — the facing every marker group in the game is authored in (D-166).
+##
+## A `Label3D` and a `Sprite3D` each face their own +Z, so a plank hung on the
+## -Z side without the turn shows the deck its back: the label is double-sided
+## by default and renders the name mirrored, the sprite is not and is simply not
+## drawn. `signboard.gd` has turned its own label for this reason since it was
+## written; these two did not, and the map turned the racks the wrong way round
+## to make up for it (D-161). The turn belongs here, where the face is built.
 func _build_plank() -> void:
 	var label := Label3D.new()
 	label.text = Loadout.NAMES[Loadout.sanitize(weapon)].to_upper()
@@ -204,6 +212,7 @@ func _build_plank() -> void:
 	label.outline_modulate = Color(0.0, 0.0, 0.0, 0.85)
 	label.position = Vector3(0.0, 0.42, -0.12)
 	label.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+	label.rotation.y = PI
 	add_child(label)
 
 	var tile := Sprite3D.new()
@@ -212,4 +221,5 @@ func _build_plank() -> void:
 	tile.position = Vector3(0.0, 1.88, -0.10)
 	tile.shaded = false
 	tile.double_sided = false
+	tile.rotation.y = PI
 	add_child(tile)

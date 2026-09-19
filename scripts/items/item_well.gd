@@ -80,6 +80,15 @@ const PEDESTAL_RADIUS := 0.42
 ## own `HOVER` on top of whatever it is given.
 const STOCK_LIFT := 0.95
 
+## How far out from the pedestal's centre the picture and the word are hung.
+##
+## The column is a `PEDESTAL_RADIUS` box turned an eighth, so along -Z its
+## surface is a *corner* and stands `sqrt(2)` further out than its own faces do:
+## 0.594 m and not 0.42. The tile used to sit at 0.44 and was inside the stone,
+## which nobody could see while it was also facing the wrong way (D-166). Both
+## are on the one plane so the pedestal reads as having a front.
+const FACE_OUT := PEDESTAL_RADIUS * 1.41421 + 0.02
+
 ## How close a `Pickup` has to be to count as this well's stock. Generous enough
 ## to survive the robe's lower hang (`Pickup.ROBE_DROP`) and tight enough that
 ## two wells three metres apart never claim each other's.
@@ -303,14 +312,20 @@ func _build() -> void:
 
 
 ## The kind's picture on the front of the pedestal, facing the way the marker
-## faces (its own -Z, per `range_map.gd`'s header).
+## faces (its own -Z, the facing every marker group in the game is authored in).
+##
+## Both of these are hung on the -Z side and both are turned to look down it
+## (D-166). A `Sprite3D` and a `Label3D` face their own +Z, so without the turn
+## the pedestal shows its reader the back of the picture — which a `Sprite3D`
+## does not draw at all — and a mirrored word above it. The map used to turn the
+## wells the other way round to make up for it (D-161).
 func _build_face(tint: Color) -> void:
 	var path: String = TILES.get(kind, "")
 	if path != "":
 		var sprite := Sprite3D.new()
 		sprite.texture = load(path)
 		sprite.pixel_size = 0.0017
-		sprite.position = Vector3(0.0, PEDESTAL_HEIGHT * 0.62, -PEDESTAL_RADIUS - 0.02)
+		sprite.position = Vector3(0.0, PEDESTAL_HEIGHT * 0.62, -FACE_OUT)
 		sprite.modulate = Color(1.0, 1.0, 1.0)
 		# Lit from inside, like every other thing this map asked you to read at
 		# night (D-058): a picture that depends on a torch being near it is a
@@ -318,6 +333,7 @@ func _build_face(tint: Color) -> void:
 		# the rule still holds — a well is read from the far end of a lane.
 		sprite.shaded = false
 		sprite.double_sided = false
+		sprite.rotation.y = PI
 		add_child(sprite)
 
 	var label := Label3D.new()
@@ -327,9 +343,10 @@ func _build_face(tint: Color) -> void:
 	label.modulate = tint
 	label.outline_size = 14
 	label.outline_modulate = Color(0.0, 0.0, 0.0, 0.85)
-	label.position = Vector3(0.0, PEDESTAL_HEIGHT + 0.16, -PEDESTAL_RADIUS - 0.02)
+	label.position = Vector3(0.0, PEDESTAL_HEIGHT + 0.16, -FACE_OUT)
 	label.billboard = BaseMaterial3D.BILLBOARD_DISABLED
 	label.no_depth_test = false
+	label.rotation.y = PI
 	add_child(label)
 
 

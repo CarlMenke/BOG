@@ -281,10 +281,10 @@ func _probe_reach(map: StaticMap, space: PhysicsDirectSpaceState3D,
 		var at := marker as Marker3D
 		if at == null:
 			continue
-		# The readable face, off the built transform rather than off the yaw
-		# constant, so this still measures the right side of the rack if
-		# somebody turns it round.
-		var face := at.global_transform.basis.z.normalized()
+		# The readable face — the marker's own -Z (D-166) — off the built
+		# transform rather than off the yaw constant, so this still measures the
+		# right side of the rack if somebody turns it round.
+		var face := -at.global_transform.basis.z.normalized()
 		var nearest := -1.0
 		var furthest := -1.0
 		for step: int in 20:

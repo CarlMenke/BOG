@@ -341,7 +341,7 @@ const LETTER_AT: Array[Vector2] = [
 ## as the middle of the row rather than as something dropped into it.
 ##
 ## Every one of these is `DECK` high and turned to face across the deck at the
-## pads — see `RACK_YAW` for which way "face" turned out to mean. See
+## pads — its own -Z, like everything else on this map (`RACK_YAW`). See
 ## `_build_markers` for the arithmetic that keeps them clear of the eight pads.
 
 ## How far off the deck's centre line each row stands. The side walls' inner
@@ -354,20 +354,16 @@ const WELL_X := -10.75
 ## Which way each row is turned, so its **readable face** looks across the deck
 ## at the pads and its span runs along z, down its own wall.
 ##
-## These are the two yaws that put the lettering the right way round, and they
-## are not the ones the arithmetic suggests. A marker's own -Z is the facing
-## every other group on this map is authored in, and the racks were authored
-## that way when they stood on the apron — but a `WeaponRack`'s name plank is a
-## `Label3D` and its weapon tile a `Sprite3D`, and both of those face their own
-## **+Z**, as does an `ItemWell`'s lit face. Point a rack's -Z at the deck and
-## the deck gets the back of the plank: the `Label3D` is double-sided by default
-## so the name renders mirrored, and the `Sprite3D` is not, so the tile above it
-## simply is not drawn. The first render of this change had three racks reading
-## SPEAR / BOW / GREAT SWORD backwards with no tiles at all, which is a thing no
-## amount of staring at the yaw would have shown. So: +Z across the deck, and a
-## render is what says so.
-const RACK_YAW := -PI * 0.5
-const WELL_YAW := PI * 0.5
+## The marker's own -Z, which is the facing every other group on this map is
+## authored in. For a while these were the opposite two yaws: a `WeaponRack`'s
+## name plank and weapon tile and an `ItemWell`'s lit face each faced their own
+## +Z, so a rack turned the honest way showed the deck the back of its plank —
+## the name mirrored, the tile not drawn at all — and D-161 turned the map round
+## rather than the fittings. The turn lives in `weapon_rack.gd` and
+## `item_well.gd` now, beside `signboard.gd`'s, so these say what they mean
+## (D-166).
+const RACK_YAW := PI * 0.5
+const WELL_YAW := -PI * 0.5
 
 ## The weapon racks, in the order the loadout lists them, north to south — so
 ## walking in off the apron you meet spear, bow, sword in that order. 2.4 m
