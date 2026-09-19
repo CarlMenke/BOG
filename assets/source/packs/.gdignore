@@ -1,0 +1,1 @@
+Raw Mixamo pack downloads, whole and unrenamed (D-095..D-101, BOG-84). Godot must not import these: a clip reaches the game only by being copied into anims/ under its role name with a row in clips.json.
