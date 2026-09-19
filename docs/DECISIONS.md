@@ -16502,7 +16502,7 @@ moments of each of eighteen clips, reading `Nameplate.name_bottom()` a frame
 *after* the pose so what is measured is the plate's own `_process` and not the
 tool reproducing it. It reads 0.120 m at its tightest and 0.000 m of lift at
 rest. The pictures are `out/plate_runjump.png` and `out/plate_dive.png`. The
-carrier's letter card still hangs at the old anchor; that is BOG-55. (BOG-8.)
+carrier's letter card still hung at the old anchor; D-165 lifts it (BOG-55). (BOG-8.)
 
 ## D-154 — Shine and glow ride in the skin folder, and a folder without them is the same body it was
 `tools/extract_skins.py` followed one texture slot, `baseColorTexture`, with
@@ -17288,3 +17288,48 @@ end at (0, 0, 0) and Lantern Wharf, whose origin is not walkable, bakes none.
 Link anchors do land on both new ledges, so the routes are covered as far as the
 bake covers anything. The fix is a forced map update or a frame's delay before
 the links are built, and it changes the drawn line on all seven maps. (BOG-49.)
+
+## D-165 — The carrier's gold card rides the head with the plate it sits over
+`CarrierMarker` hangs at the nameplate's own 1.80 m capsule anchor, deliberately:
+`Bog._build_carrier_marker` puts it there so the card can place itself above the
+plate out of the plate's own measurements rather than out of a second guess at
+where a head is. D-150 then gave the plate a lift and did not give the card one,
+so on the one clip that crosses — `RunJump`, crown at 1.779 m — the plate rose
+0.396 m and the card stayed, and the card that is supposed to be the thing above
+the plate was 0.295 m *into* the top of the name and heading for the head.
+`Nameplate.head_lift()` was left public for exactly this and this is what it is
+for.
+
+**The lift is added, the gap is not scaled by it.** `_layout` draws the card at
+`head_lift() + CARD_LIFT * grow`. `CARD_LIFT` is daylight over the plate and grows
+with the plate below it as the distance hold takes over; the lift is metres of
+risen head and does not grow with anything. Because the lift is a floor and is a
+flat zero in every ground pose, the card does not move in any of them either —
+the same sentence D-150 had to write about the plate, inherited rather than
+re-argued.
+
+**It is laid out with or without a lens now.** The old `_process` returned the
+moment `get_viewport().get_camera_3d()` came back null, because the only thing it
+had left to do needed a distance. The lift does not: it is a fact about the body,
+which is `Nameplate._process`'s reason for reading the head before it consults the
+camera, and a frame with no camera at all is every headless check. Without this
+the check below would have measured a card laid out exactly once.
+
+**The local carrier's own card is untouched and is still never drawn.** The
+`peer_id != Net.local_id()` guard sits above all of it, so the one screen that
+pays for none of this is the one screen that would have had a card parked in the
+middle of its own view. That guard is also what made the first run of the new
+check measure nothing: an offline session still has a peer — Godot's
+`OfflineMultiplayerPeer` — so `Net.local_id()` is 1 and so is a fresh
+`Bog.peer_id`, every Bog in the tool was the local one, and the marker correctly
+hid itself. `preview_plate` stands its Bogs up at `peer_id` 2.
+
+**The check is a band and not a worst case.** `tools/preview_plate.tscn` gives
+every Bog it builds a card and prints `CarrierMarker.card_bottom()` against
+`Nameplate.name_top()` — a new method, the other end of `name_bottom()`. What says
+the card rides the head is not that the number is positive but that it is the
+*same* number: 0.101 m in all twelve moments of all eighteen clips, air and
+ground, inside a millimetre. A card left at the anchor reads as a band 0.396 m
+wide on `RunJump` alone, which is what it printed before the fix. The picture is
+`out/plate_runjump.png`. On every peer by D-150's argument, not by a socket run.
+(BOG-55.)

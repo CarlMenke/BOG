@@ -315,6 +315,13 @@ func name_bottom() -> float:
 	return global_position.y + _lift - _half_height()
 
 
+## The world height of the top of the name this frame. The other end of
+## `name_bottom()`, for whatever has to stay clear above the plate — today the
+## carrier's card (D-165) and the check that measures it.
+func name_top() -> float:
+	return global_position.y + _lift + _half_height()
+
+
 ## How far the plate is lifted off its anchor this frame. For the checks, and for
 ## anything that hangs above the plate and has to keep its gap.
 func head_lift() -> float:

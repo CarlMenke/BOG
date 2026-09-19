@@ -29,6 +29,14 @@ extends Node3D
 ## a round trip later and that is what actually turns the marker off, but a card
 ## floating over a Bog already mid-ragdoll for that round trip says the wrong
 ## thing about who has it.
+##
+## **It rides the head with the plate** (D-165). This node hangs at the
+## nameplate's own 1.80 m capsule anchor, and since D-150 the plate lifts what it
+## draws when the head climbs out of that capsule — `RunJump` puts the crown at
+## 1.779 m. The card's whole job is to sit clear above the plate, so it takes the
+## plate's own `head_lift()` and keeps the gap it was built with. Nothing new is
+## measured here: the lift is a floor and is a flat zero in every ground pose, so
+## the card does not move in any of them either.
 
 ## World size of the card up close. At the distance it starts holding its size
 ## (`HOLD_FROM`) a 0.52 m card is about 33 px tall on a 1080p screen, which is
@@ -57,6 +65,10 @@ const CARD_LIFT := \
 var _glyph: String = ""
 var _colour: Color = Color(1.00, 0.84, 0.26)
 var _bog: Bog
+## The plate this card sits over, or null in a harness that hangs a marker on
+## something that is not a Bog. Resolved once; `head_lift()` is asked every
+## frame, exactly as the plate asks `head_centre()` (D-150).
+var _plate: Nameplate
 var _camera: Camera3D
 var _back: MeshInstance3D
 var _card: MeshInstance3D
@@ -65,6 +77,8 @@ var _label: Label3D
 
 func _ready() -> void:
 	_bog = get_parent() as Bog
+	if _bog != null:
+		_plate = _bog.get_node_or_null("Nameplate") as Nameplate
 	_back = _quad("Border", INK, 2)
 	_card = _quad("Card", _colour, 3)
 	_label = Label3D.new()
@@ -114,9 +128,11 @@ func _process(_delta: float) -> void:
 		return
 	if _camera == null or not is_instance_valid(_camera):
 		_camera = get_viewport().get_camera_3d()
-		if _camera == null:
-			return
-	_layout(maxf(1.0, global_position.distance_to(_camera.global_position) / HOLD_FROM))
+	# Laid out with or without a lens, for `Nameplate._process`'s reason: the
+	# plate's lift is a fact about the body and not about who is looking at it,
+	# and a frame with no camera at all is every headless check.
+	_layout(1.0 if _camera == null
+		else maxf(1.0, global_position.distance_to(_camera.global_position) / HOLD_FROM))
 
 
 func _apply() -> void:
@@ -133,13 +149,40 @@ func _apply() -> void:
 
 
 func _layout(grow: float) -> void:
-	var lift := Vector3(0.0, CARD_LIFT * grow, 0.0)
+	# The plate's own lift, unscaled: this node sits at the plate's anchor, so how
+	# far the plate rose off it is how far the card has to rise to keep the same
+	# daylight over it. `CARD_LIFT` is the gap above the plate and grows with the
+	# plate below it; the lift is metres of head and does not (D-165).
+	var lift := Vector3(0.0, _plate_lift() + CARD_LIFT * grow, 0.0)
 	(_card.mesh as QuadMesh).size = CARD_SIZE * grow
 	(_back.mesh as QuadMesh).size = (CARD_SIZE + Vector2.ONE * BORDER * 2.0) * grow
 	_card.position = lift
 	_back.position = lift
 	_label.position = lift
 	_label.pixel_size = CARD_SIZE.y * GLYPH_FILL * grow / FONT_SIZE
+
+
+## How far the plate underneath is drawn above its own anchor this frame
+## (`Nameplate.head_lift()`, D-150). Zero in every pose a Bog keeps its head
+## inside its capsule in, which is every ground pose.
+func _plate_lift() -> float:
+	if _plate == null or not is_instance_valid(_plate):
+		return 0.0
+	# Typed by hand, `Nameplate._track_head`'s reason: `Bog` names `Nameplate`,
+	# `Nameplate` names `Bog` back and this names both, and an inferred local off
+	# a member of a class in a reference cycle is what took the gate down once.
+	var lift: float = _plate.head_lift()
+	return lift
+
+
+## The world height of the bottom of the card, border and all, this frame. For
+## the checks, which measure it against the top of the name
+## (`tools/preview_plate.tscn`).
+func card_bottom() -> float:
+	if _back == null:
+		return global_position.y
+	return global_position.y + _back.position.y \
+		- (_back.mesh as QuadMesh).size.y * 0.5
 
 
 func _quad(node_name: String, colour: Color, priority: int) -> MeshInstance3D:

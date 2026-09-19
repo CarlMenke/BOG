@@ -29,6 +29,13 @@ extends Node3D
 ## lowest ink of the name, and the gap between them is what a player sees as
 ## daylight. It is taken a frame **after** the pose is set, so what is read is
 ## the plate's own `_process` doing its job and not this file reproducing it.
+##
+## **The carrier's card is measured with it** (D-165). The gold card a letter
+## carrier wears (`CarrierMarker`) hangs off the same 1.80 m anchor and has to
+## stay above the plate, so every Bog this tool stands up is carrying one. The
+## column it adds is the daylight between `CarrierMarker.card_bottom()` and
+## `Nameplate.name_top()`, and the thing that says the card rides the head is
+## that the column does not move: one number for every pose, air and ground.
 
 const BOG := preload("res://scenes/player/bog.tscn")
 
@@ -60,6 +67,7 @@ const FRAME_MARGIN := 1.2
 
 var _bog: Bog
 var _plate: Nameplate
+var _card: CarrierMarker
 var _player: AnimationPlayer
 
 
@@ -80,10 +88,16 @@ func _ready() -> void:
 func _measure() -> void:
 	print("preview_plate: the head against the name it is under, %d moments a clip"
 		% SAMPLES)
-	print("  %-14s %8s %8s %8s %8s" % ["clip", "crown", "name", "gap", "lift"])
+	print("  %-14s %8s %8s %8s %8s %8s" % ["clip", "crown", "name", "gap", "lift",
+		"card"])
 	var worst := INF
 	var worst_in := ""
 	var resting := 0.0
+	# The card's own daylight over the top of the name, across every clip. Held
+	# as a band rather than as a worst case: what says the card rides the head is
+	# that the two ends of it are the same number.
+	var card_low := INF
+	var card_high := -INF
 	for clip: String in AIR_CLIPS + GROUND_CLIPS:
 		# A Bog of its own per clip, and it is not tidiness: the lift falls back
 		# over `Nameplate.LIFT_FALL` rather than snapping down, so a plate carried
@@ -100,7 +114,10 @@ func _measure() -> void:
 		if row[2] < worst:
 			worst = row[2]
 			worst_in = clip
-		print("  %-14s %8.3f %8.3f %8.3f %8.3f" % [clip, row[0], row[1], row[2], row[3]])
+		card_low = minf(card_low, row[4])
+		card_high = maxf(card_high, row[5])
+		print("  %-14s %8.3f %8.3f %8.3f %8.3f %8.3f"
+			% [clip, row[0], row[1], row[2], row[3], row[4]])
 
 	# The name never crosses the head. Zero and not a margin, because the margin
 	# is `Nameplate.HEAD_GAP`'s job and stating it twice would be two opinions
@@ -126,19 +143,38 @@ func _measure() -> void:
 			% resting + "scene height in Idle, so every framing measured against "
 			+ "it has moved.")
 
+	# And the carrier's card rode all of it (D-165). One tolerance, a millimetre,
+	# because the gap is arithmetic on the same lift and not two measurements
+	# that have to agree: a card left at the anchor while the plate rose reads as
+	# a band 0.085 m wide on `RunJump` alone.
+	if card_low < 0.0:
+		print("preview_plate: card FAIL — the card is %.3f m into the top of the "
+			% -card_low + "name. `CarrierMarker` is not taking `Nameplate.head_lift()`.")
+	elif card_high - card_low > 0.001:
+		print("preview_plate: card FAIL — the card's daylight over the name runs "
+			+ "%.3f to %.3f m across the poses, so it is not riding the plate."
+			% [card_low, card_high])
+	else:
+		print("preview_plate: the card holds %.3f m over the top of the name in "
+			% card_low + "every sampled moment of every clip — card PASS")
 
-## One clip's row: `[crown, name bottom, worst gap, worst lift]`, the crown and
-## the name taken at the moment the gap is tightest.
+
+## One clip's row: `[crown, name bottom, worst gap, worst lift, tightest card
+## gap, widest card gap]`, the crown and the name taken at the moment the gap is
+## tightest.
 func _row(clip: String) -> Array:
 	var length := _player.get_animation(clip).length
-	var out := [0.0, 0.0, INF, 0.0]
+	var out := [0.0, 0.0, INF, 0.0, INF, -INF]
 	for i in SAMPLES:
 		await _pose(clip, length * float(i) / float(SAMPLES))
 		var crown := _crown()
 		var bottom := _plate.name_bottom()
+		var over := _card.card_bottom() - _plate.name_top()
 		out[3] = maxf(out[3], _plate.head_lift())
+		out[4] = minf(out[4], over)
+		out[5] = maxf(out[5], over)
 		if bottom - crown < out[2]:
-			out = [crown, bottom, bottom - crown, out[3]]
+			out = [crown, bottom, bottom - crown, out[3], out[4], out[5]]
 	return out
 
 
@@ -233,12 +269,23 @@ func _stand(at: Vector3, display: String) -> Bog:
 		node.queue_free()
 	var plate := bog.get_node_or_null("Nameplate") as Nameplate
 	plate.set_display_name(display)
+	# Carrying, so the card is up on the sheet and in the table (D-165).
+	#
+	# **And somebody else's**, which is the line this tool cannot leave out. The
+	# card is never drawn over the local player's own Bog, and an offline session
+	# still has a peer — Godot's own `OfflineMultiplayerPeer` — so `Net.local_id()`
+	# is 1 and so is a fresh `Bog.peer_id`. Left alone, every Bog here is the
+	# local one, the marker hides itself, and the check measures a card that is
+	# laid out exactly once and then never again. Which is what it did.
+	bog.peer_id = 2
+	bog.carrier_marker.set_carrying("B")
 	return bog
 
 
 func _stand_one() -> void:
 	_bog = _stand(Vector3.ZERO, "Bog")
 	_plate = _bog.get_node_or_null("Nameplate") as Nameplate
+	_card = _bog.carrier_marker
 	_player = _bog.find_child("AnimationPlayer", true, false) as AnimationPlayer
 
 

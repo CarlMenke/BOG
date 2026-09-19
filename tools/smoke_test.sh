@@ -898,8 +898,13 @@ check "free-for-all names unchanged" "team_plates: ffa PASS"     "$GODOT" --head
 # and this holds both halves of that — the head never reaches the lettering in
 # any of twelve moments of eighteen clips, and the lift is a flat zero in every
 # pose a Bog keeps its head inside its capsule in. Headless, about half a minute.
+# The third line is the carrier's gold card (D-165), which hangs off the same
+# anchor and has to go up with the plate rather than through it: every Bog here
+# is carrying one, and the card holds the same 0.101 m over the top of the name
+# in all eighteen clips.
 check "the name clears the head" "plate PASS"     "$GODOT" --headless --path "$GODOT_ROOT" tools/preview_plate.tscn
 also "the name clears the head" "resting PASS"
+also "the name clears the head" "card PASS"
 # A letter picked up is told to everyone (D-050). A player: "some kind of
 # notification when someone picks up a letter, maybe it should also show people
 # with letters through walls". Through the real spawn path, the real HUD and real
