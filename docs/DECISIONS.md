@@ -16772,3 +16772,53 @@ larger than the 15% the third hop is being measured for.
 which stays full, so a fatigued hop enters the lift-to-apex window 15% or 30%
 in instead of at its start. The same on every peer, and the fix is an animator
 told which launch it got. (BOG-28.)
+
+## D-159 — Aiming walks the camera out over the shoulder, not in toward the middle
+The feel round had this backwards. `SHOULDER_AIMING` was 0.48 against a resting
+`SHOULDER_DEFAULT` of 0.62, so raising a weapon pulled the lens *toward* the
+Bog's spine and stood its head and antennae in front of the thing being shot at.
+The owner, from the 2026-09-18 play memo and again on the 19th once the PvP rig
+had merged: *"i feel like the camera when you're ADS needs to be a little more
+over to the right."* The aiming shoulder is now **0.78**, above the resting one.
+
+**Chosen by looking, not by arithmetic.** `tools/shoulder_shots.gd` is
+`snapshot.gd` with two differences that are the whole reason it exists: it holds
+the aim button from the first frame, which no mode of the combat range does for
+a still frame, and it paints a crosshair at screen centre — which under the PvP
+camera rework's fourth rule (`docs/PLAN_CAMERA.md`, merged as 8d36b6e; its own
+record is still owed, BOG-11) is exactly where the shot goes. Four values were
+rendered with a spear cocked (`out/bog53-shoulder-*-spear.png`) and read off as
+angle from the Bog's back at the 2.15 m aiming boom, against 16.1 degrees at
+rest: 0.48 is 12.6 and puts the head on the crosshair; 0.62 (16.1) and 0.70
+(18.0) clear the head and leave the shaft reaching across it; 0.86 (21.8) clears
+everything and crowds the Bog against the left edge of the frame, which is more
+than "a little"; 0.78 is 19.9, a shade under four degrees further round than
+standing, and the first one where both the shaft and the antennae are clear of
+what is under the reticle with the Bog still sitting in the left third.
+
+**The drawn shoulder became a floor.** `SHOULDER_DRAWN_RATIO` (the same rework)
+walks the lens to 0.307 of the boom at full draw so the bow does not stand up
+through the crosshair — 0.66 m at the aiming boom, which was *outside* the old
+0.48 and is *inside* the new 0.78. Left as a plain `lerpf` toward it, drawing
+the string would now haul the camera back in over the aim it had just walked out
+of, and the archer would have a narrower shot than the spearman. `_apply_stance`
+takes `maxf(stance, distance * SHOULDER_DRAWN_RATIO)` instead, so the ratio is
+the floor it was always meant to be and nothing changes when the aim button is
+not held (0.62 out to 0.952 at the resting boom, as before).
+
+**No parallax to pay for.** A wider shoulder moves the shot's origin further
+from the body, which under the old D-045 rig would have opened a gap between the
+crosshair and the throw. It cannot here: `aim_ray` *is* the lens, so moving the
+lens moves the aim with it. `camera_range`'s `aim` verdict — `BogCombat._aim_point`
+against a ray out of the actual `Camera3D` — is 0 frames off over the 2,240 at
+all seven scenery stations, worst 0.0000 m, and `clip`, `frame`, `calm` and
+`faces` are unchanged. The bow's 9 m snap and 51 m full shots still land, the
+shield still stops a spear, and the torso still tracks the crosshair to 3
+degrees of bearing.
+
+**Known and left:** the aiming lens is 0.30 m further from the pivot than it
+was, so the arm it sweeps is a touch longer and a right-hand wall pulls it in a
+touch earlier than before. That is the spring arm doing its job — `clip` is
+still zero frames on both shoulders walked along, the corner and the tunnel —
+but it is the number to watch if aiming in a doorway ever reads as tight.
+(BOG-53.)

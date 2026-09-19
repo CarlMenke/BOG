@@ -28,10 +28,11 @@ extends Node3D
 ##    and vertical slower, so a step or a scrape along a wall does not pump the
 ##    picture. This is Unreal's `bEnableCameraLag`, which Fortnite ships.
 ## 3. **Over the right shoulder, fixed.** No swap. 3.1 m back and 0.62 m across
-##    at rest, 2.15 / 0.48 with a bow up, and the field of view and the mouse
+##    at rest, 2.15 / 0.78 with a bow up, and the field of view and the mouse
 ##    sensitivity both scaled by `FOV_AIM_SCALE` so aiming narrows the view
 ##    without sweeping the same hand movement further across the world (the feel
-##    round's numbers, unchanged).
+##    round's numbers, except the aiming shoulder — D-159 walked that one out
+##    past the resting one instead of in).
 ## 4. **The shot comes out of the lens** (`aim_ray`). Screen centre is where the
 ##    spear goes, wherever scenery has put the camera.
 ##
@@ -64,17 +65,31 @@ const PITCH_MAX := 0.95
 const DISTANCE_DEFAULT := 3.1
 const DISTANCE_AIMING := 2.15
 const SHOULDER_DEFAULT := 0.62
-const SHOULDER_AIMING := 0.48
-## The shoulder at a full draw, as a fraction of the boom. Either shoulder above
-## puts the lens 11 to 13 degrees off the Bog's back, which clears a Bog with a
-## spear up and does not clear one at full draw: the bow arm comes out and the
-## bow stands up in front of it, straight through the crosshair. 0.307 is the
-## tangent of 17 degrees — four to six further round to the right — and a ratio
-## rather than a length because the string is on the attack button and can be
-## drawn with the aim held (2.15 m of boom) or without it (3.1 m), and it is the
-## angle that has to be the same in both. Reached along `draw_fraction()` rather
-## than switched to, so the view walks out with the string and a snap shot
-## hardly moves it.
+## Aiming moves the lens *out*, not in (D-159). The feel round had this the
+## other way round — 0.48 against the resting 0.62 — and the owner, 2026-09-19:
+## *"i feel like the camera when you're ADS needs to be a little more over to
+## the right."* Rendered at 0.62, 0.70, 0.78 and 0.86 with a spear cocked
+## (`out/bog53-shoulder-*-spear.png`): 0.48 stands the Bog's own head on the
+## crosshair, 0.62 and 0.70 leave the spear reaching across it, 0.86 pushes the
+## Bog out of the frame's left third. 0.78 is 19.9 degrees off the Bog's back at
+## the aiming boom against the resting 16.1 — "a little" further round, and
+## enough that the shaft and the antennae are clear of what is being shot at.
+const SHOULDER_AIMING := 0.78
+## The shoulder at a full draw, as a fraction of the boom. The resting shoulder
+## puts the lens 11 degrees off the Bog's back, which clears a Bog with a spear
+## up and does not clear one at full draw: the bow arm comes out and the bow
+## stands up in front of it, straight through the crosshair. 0.307 is the
+## tangent of 17 degrees — six further round to the right — and a ratio rather
+## than a length because the string is on the attack button and can be drawn
+## with the aim held (2.15 m of boom) or without it (3.1 m), and it is the angle
+## that has to be the same in both. Reached along `draw_fraction()` rather than
+## switched to, so the view walks out with the string and a snap shot hardly
+## moves it.
+##
+## It is a floor and not a destination (the `maxf` in `_apply_stance`): at the
+## aiming boom the ratio is 0.66 m, which is inside `SHOULDER_AIMING`, so a
+## drawn string would otherwise haul the lens back *in* over the aim it had just
+## walked out of.
 const SHOULDER_DRAWN_RATIO := 0.307
 const FOV_AIM_SCALE := 0.82
 ## How fast the rig crosses between those two sets: an eighth of a second, which
@@ -270,8 +285,9 @@ func _follow(delta: float) -> void:
 func _apply_stance(delta: float) -> void:
 	var t := clampf(STANCE_SPEED * delta, 0.0, 1.0)
 	var want_distance := DISTANCE_AIMING if _aiming else DISTANCE_DEFAULT
-	var want_shoulder := lerpf(SHOULDER_AIMING if _aiming else SHOULDER_DEFAULT,
-		want_distance * SHOULDER_DRAWN_RATIO, _body.draw_fraction())
+	var want_stance := SHOULDER_AIMING if _aiming else SHOULDER_DEFAULT
+	var want_shoulder := lerpf(want_stance,
+		maxf(want_stance, want_distance * SHOULDER_DRAWN_RATIO), _body.draw_fraction())
 	_distance = lerpf(_distance, want_distance, t)
 	_shoulder = lerpf(_shoulder, want_shoulder, t)
 	_camera.fov = lerpf(_camera.fov, _base_fov * (FOV_AIM_SCALE if _aiming else 1.0), t)
