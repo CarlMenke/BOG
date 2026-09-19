@@ -6,6 +6,14 @@ to stay put, so every download is the same mesh — 15 872 vertices, one
 primitive, the same UV layout — wearing a different paint job) and downloaded
 with the texture embedded.
 
+The second batch (2026-09-18: BLOOM, BUZZ, CHIP, CRACK, DASH, FUDGE, GOURD,
+KOI, OOZE, VOLT, WRAP) did **not** keep the mesh — Tripo regenerated the sculpt
+at 9 124 vertices in its own UV layout — so its textures are baked onto the
+body's layout by `tools/bake_skin.py` rather than extracted; the script below
+tells the two apart by vertex count and does the right thing for each (D-126).
+`PLUSH/` is an empty folder with no download in it, and `SHIRT/` holds the
+garment spike's dressed body and cut (`tools/fit_garment.py`), not a skin.
+
 These are the source of `art/skins/<name>/basecolor.png`, and nothing else.
 The game never loads a `.glb` from here:
 

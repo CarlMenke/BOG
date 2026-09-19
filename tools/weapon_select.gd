@@ -507,12 +507,17 @@ func _run_lobby() -> void:
 	# rather than the 40 px swatch it was when it lived over the ring (D-109).
 	_check("in three columns", skins.columns, 3)
 	_check("one cell per pickable skin", skins.get_child_count(), Skins.NAMES.size())
-	_check("fourteen of them", Skins.NAMES.size(), 14)
-	# The two folders under `art/skins/` that are not a pick: the worked example
-	# and the Elder's robe. A list that grew one of those by accident would put a
-	# garment on a strip of bodies.
+	# Twenty-five: the plain body, the thirteen of D-108 and the eleven of D-126.
+	# The number is pinned so that a skin folder that arrives without its name
+	# in `Skins.NAMES` (or a name without its folder) is a red gate, not a quiet
+	# gap in the grid.
+	_check("twenty-five of them", Skins.NAMES.size(), 25)
+	# The folders under `art/skins/` that are not a pick: the worked example,
+	# the Elder's robe and the shirt on its way. A list that grew one of those
+	# by accident would put a garment on a strip of bodies.
 	_check("and the worked example is not one of them",
 		Skins.NAMES.has("example"), false)
+	_check("nor the shirt", Skins.NAMES.has("shirt"), false)
 	_check("nor is the Elder's robe", Skins.NAMES.has("elder"), false)
 	_check("the plain body is the first and the default",
 		Skins.NAMES[Skins.DEFAULT], "bog")

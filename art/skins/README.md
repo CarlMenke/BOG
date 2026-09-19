@@ -29,10 +29,30 @@ recolour by another route. `python tools/extract_skins.py` is the step between
 the download and the skin: it reads the `.glb` in
 `assets/source/skins/<NAME>/`, pulls the base-colour image out of the
 container, downsamples it to 2048² and writes `art/skins/<name>/basecolor.png`
-(D-108). The thirteen team skins are exactly that — `bogina`, `boo`, `clank`,
-`crag`, `gilt`, `glub`, `gum`, `muck`, `rime`, `roar`, `slag`, `toad` and
-`void` — so re-running the script rebuilds all thirteen, and the downloads are
+(D-108). The first thirteen team skins are exactly that — `bogina`, `boo`,
+`clank`, `crag`, `gilt`, `glub`, `gum`, `muck`, `rime`, `roar`, `slag`, `toad`
+and `void` — so re-running the script rebuilds them, and the downloads are
 untracked source rather than anything the game loads.
+
+### A recolour that is not the body's mesh
+
+Tripo does not promise to keep the mesh. The second batch — `bloom`, `buzz`,
+`chip`, `crack`, `dash`, `fudge`, `gourd`, `koi`, `ooze`, `volt`, `wrap`
+(D-126) — came back *regenerated*: 9 124 vertices in Tripo's own UV layout,
+the same creature to the eye and two centimetres off to the ruler. Its texture
+cannot be worn as it is; it renders as a patchwork. `tools/bake_skin.py` is the
+step for that: it registers the body's vertices onto the download's surface
+(the quarter turns tried against the bounding box, similarity and affine ICP,
+then a smoothed non-rigid pull, to 2.5 mm) and paints every texel of the
+body's layout from the nearest point of the download's paint, writing the same
+`basecolor.png`. `extract_skins.py` takes that route by itself whenever a
+download's vertex count is not the body's 15 872. It bakes onto
+`build/body_ref.glb`, which is the body as Godot imports it:
+
+    "$GODOT" --headless --path . --script tools/export_body_ref.gd
+
+Baked or extracted, a skin is the same folder with the same three files, and
+the game cannot tell them apart.
 
 ## A clothing mesh
 
@@ -60,19 +80,21 @@ Not all of them, and the list is not this directory. `scripts/game/skins.gd`
 
     bog  bogina  boo  clank  crag  gilt  glub  gum
     muck  rime  roar  slag  toad  void
+    bloom  buzz  chip  crack  dash  fudge  gourd  koi  ooze  volt  wrap
 
-Fourteen: the thirteen recolours plus **`bog`, the plain body**, which is a
+Twenty-five: the twenty-four recolours plus **`bog`, the plain body**, which is a
 skin called "no texture at all" and is the default. `art/skins/bog/` is a folder
 like the rest and holds a README and a thumb and nothing else;
 `Skins.texture_of` answers `null` for it, which is `Bog.wear_skin`'s own word
 for "put the imported texture back".
 
-The two folders that are **not** pickable are not oversights:
+The folders that are **not** pickable are not oversights:
 
 - `example/` is D-100's worked example of *how a recolour is made*, not a skin
   anyone wears.
 - `elder/` is a garment, and it is worn by being the Elder (D-038). A robe is
   not a body, and the picker is a strip of bodies.
+- `shirt/` is a garment on its way (`docs/SKIN_PIPELINE.md`), not yet worn.
 
 `NAMES` is **appended to, never reordered**: the index is what travels on the
 wire, sits in a roster row and sits in `Net.team_skins`, so moving a name would

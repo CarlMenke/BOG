@@ -32,11 +32,17 @@ extends RefCounted
 ## thumb and no `basecolor.png`, because "the body's own" is a real answer to
 ## "which skin" and the picker needs a tile for it.
 ##
-## The two folders under `art/skins/` that are **not** here are not oversights:
-## `example` is D-100's worked example of how a recolour is made, and `elder` is
-## a garment worn by being the Elder (D-038). Neither is a thing a player picks.
+## The folders under `art/skins/` that are **not** here are not oversights:
+## `example` is D-100's worked example of how a recolour is made, `elder` is a
+## garment worn by being the Elder (D-038), and `shirt` is a garment still on
+## its way (docs/SKIN_PIPELINE.md). None is a thing a player picks.
+##
+## Two batches: the first thirteen recolours (D-108) and, after `void`, the
+## eleven of 2026-09-18, which are baked rather than extracted
+## (`tools/bake_skin.py`) because Tripo regenerated the sculpt for them.
 const NAMES := ["bog", "bogina", "boo", "clank", "crag", "gilt", "glub", "gum",
-	"muck", "rime", "roar", "slag", "toad", "void"]
+	"muck", "rime", "roar", "slag", "toad", "void",
+	"bloom", "buzz", "chip", "crack", "dash", "fudge", "gourd", "koi", "ooze", "volt", "wrap"]
 
 ## The plain body. See above.
 const DEFAULT := 0
@@ -130,7 +136,7 @@ static func thumb_of(skin: Variant) -> Texture2D:
 ## Team 0 is the plain body and every team after it takes the next name in the
 ## list, which is a rule rather than a table because the only thing it has to
 ## guarantee is that no two teams start on the same one. The modulo cannot
-## actually wrap — `MatchConfig` allows eight teams and there are fourteen
+## actually wrap — `MatchConfig` allows eight teams and there are twenty-five
 ## skins — but it is there so that adding a ninth team is a bad default rather
 ## than an index error.
 static func default_for_team(team: int) -> int:
