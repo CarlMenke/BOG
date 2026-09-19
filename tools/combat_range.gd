@@ -3728,7 +3728,7 @@ func _report_bow_shot(label: String, dummy: Bog, low: float, high: float) -> voi
 	var taken := _bow_health - dummy.health
 	var owed := ArrowProjectile.damage_for(charge, Net.config)
 	# This range aims at the dummy's eyes, so the flat full draw goes through the
-	# head and the dropping snap shot does not — and since D-139 that is a
+	# head and the dropping snap shot does not — and since D-141 that is a
 	# different number. Asked of the host's own announcement rather than
 	# re-derived here: `report_damage` files a headshot under `Bog.HEAD_BONE`,
 	# and a harness that measured the head for itself would be agreeing with
@@ -3765,7 +3765,7 @@ func _report_bow_shot(label: String, dummy: Bog, low: float, high: float) -> voi
 	_bow_fail(label, "; ".join(fails))
 
 
-## Remember which bone the host filed the next landed hit under (D-139).
+## Remember which bone the host filed the next landed hit under (D-141).
 func _bow_watch_bone() -> void:
 	_bow_bone = ""
 	if not MatchState.hit_landed.is_connected(_on_bow_hit):

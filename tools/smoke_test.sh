@@ -1406,7 +1406,7 @@ check "quarry parkour and ramps" "parkour_report: PASS" \
     "$GODOT" --path "$GODOT_ROOT" --resolution 1000x1000 --script tools/snapshot.gd -- \
     res://tools/parkour_report.tscn "$GODOT_LOG_DIR/quarry_parkour.png" 40 top \
     map=res://scenes/world/maps/quarry.tscn
-# Twin Quarry is fair (D-144). The two bases are one function called twice, and
+# Twin Quarry is fair (D-146). The two bases are one function called twice, and
 # this re-proves it from the built scene rather than trusting that: the bases
 # congruent under a half turn, all three letter runs the same length from both,
 # cover and high ground counted equal either side, and every pad and letter on

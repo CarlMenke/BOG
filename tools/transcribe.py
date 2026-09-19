@@ -87,7 +87,7 @@ def transcribe(audio, model, device_label, model_name):
         vad_parameters={"min_silence_duration_ms": 700},
         condition_on_previous_text=False,  # long recordings: a bad segment must not poison the next hour
     )
-    lines = [
+    header = [
         f"# source: {os.path.basename(audio)}",
         f"# duration: {_hms(duration)}",
         f"# model: {model_name} on {device_label}",
@@ -95,20 +95,24 @@ def transcribe(audio, model, device_label, model_name):
         "# one line per segment, [h:mm:ss] is where it starts in the recording",
         "",
     ]
-    next_report = 600.0
-    for seg in segments:
-        text = seg.text.strip()
-        if not text:
-            continue
-        lines.append(f"[{_hms(seg.start)}] {text}")
-        if seg.start >= next_report:
-            print(f"  {_hms(seg.start)} / {_hms(duration)}  ({time.time() - t0:.0f}s elapsed)", file=sys.stderr)
-            next_report += 600.0
-
+    # Streamed, not collected: a three-hour run that dies in hour three keeps
+    # the first two, and the partial file is readable while the run goes.
     out = raw_path(audio)
+    count = 0
+    next_report = 600.0
     with open(out, "wb") as f:
-        f.write(("\n".join(lines) + "\n").encode("utf-8"))
-    print(f"  -> {out}  ({len(lines) - 6} segments, {time.time() - t0:.0f}s)", file=sys.stderr)
+        f.write(("\n".join(header) + "\n").encode("utf-8"))
+        for seg in segments:
+            text = seg.text.strip()
+            if not text:
+                continue
+            f.write(f"[{_hms(seg.start)}] {text}\n".encode("utf-8"))
+            f.flush()
+            count += 1
+            if seg.start >= next_report:
+                print(f"  {_hms(seg.start)} / {_hms(duration)}  ({time.time() - t0:.0f}s elapsed)", file=sys.stderr)
+                next_report += 600.0
+    print(f"  -> {out}  ({count} segments, {time.time() - t0:.0f}s)", file=sys.stderr)
     return out
 
 

@@ -134,6 +134,28 @@ step right and back, and the lobby camera 18% further out so the 3.5 m ring
 sits inside the panel band again; and rebindable controls in Settings, saved as
 the difference from the project's defaults.
 
+**And the lobby ring stands in two rows** (**D-139**): alternate slots 0.35 m
+inside and 0.65 m outside the 3.5 m arc, each Bog's angle solved so the eight
+stay evenly spaced on the screen and the ends stay where the band check put
+them (435 .. 1123 of 400 .. 1140), so a full lobby reads as a group rather than
+a queue without a Bog going behind a panel.
+
+**And the campfire under the wordmark is a model now** (**D-138**). The owner
+found one he wanted in his downloads, so `BogBackdrop._build_fire` no longer
+builds a fire out of five boxes and two cones: `assets/source/props/CAMPFIRE.glb`
+goes through `tools/decimate_assets.py` at the shield's 10000 triangles and 1024
+textures and is placed at `FIRE_MODEL_SCALE` 0.88 and `FIRE_YAW_DEGREES` 212,
+with the `OmniLight3D`, the flicker and `HOVER_HEIGHT` untouched. A Tripo
+download emits nothing, so the pipeline manufactures the glow rather than a
+menu script overriding the material: `tools/flame_glow.py` cuts the saturated
+red-to-yellow 15.8% of the base colour into an emission texture at strength 2.6,
+over the environment's 1.45 glow threshold. **To rebuild it:** `python
+tools/decimate_assets.py campfire`, then `ROOT="$PWD" GODOT_TAG=fire .
+tools/find_godot.sh` and `"$GODOT" --headless --path . --import` — the
+`.import` file and the extracted `art/generated/campfire_*.png` are committed,
+and the import has to be re-run after every rebuild of the GLB. The gate ended
+**191 checks, 0 failures**.
+
 **Nobody has played any of this.** Same sentence as the two rounds before.
 
 ### Previously — the feel round

@@ -127,7 +127,7 @@ const EXPECT := {
 		# spear cannot cross the gap, so what the two bases have of each other is
 		# information, not threat.
 		#
-		# Both grew again at the rebuild (D-138) and for one reason: the shaft
+		# Both grew again at the rebuild (D-140) and for one reason: the shaft
 		# went from 13 m across to 15, so there is two metres more of the middle
 		# of this map that no rock can ever stand in. 44 m of ground line is a
 		# rim-to-rim run down the one band the berms do not cross, and 60 m from

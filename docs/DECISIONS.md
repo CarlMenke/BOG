@@ -15885,7 +15885,157 @@ out of an arm, and a player who binds their cancel key away has no cancel key.
 - **Binding the mouse wheel is left possible.** An armed row takes any mouse
   button, wheel included; it displays as WH+/WH- and a right-click undoes it.
 
-## D-138 — A dive's way down is measured against the floor it left, so it only hangs when it lands lower
+## D-138 — The campfire is a model with its glow cut out of its own paint
+The owner: *"improve the fire place used in the menu and in the lobby, it
+should be all the same lighting and stuff, just the model itself should be
+completely redone. It should still be that lower poly chill feel, just right
+now it's only a cone and some beams. Make it more thought out and in place."*
+An hour later, while a hand-built replacement was being modelled: *"I just
+found one I want to use, it's in my downloads folder, go ahead and use that."*
+
+**What was there.** `BogBackdrop._build_fire` built a fire out of primitives —
+five `BoxMesh` logs leaned in from a 0.24 m ring and two `CylinderMesh` cones
+with `SHADING_MODE_UNSHADED` and `emission_energy_multiplier` 2.2 and 3.4. That
+is not a shortcut anybody took; it is what a fire looks like when there is no
+fire to download. There is one now, so the pit is a prop like every other
+placed thing in this game and this function's whole job is to put it down.
+
+**Through the pipeline, at the shield's numbers.** `CAMPFIRE.glb` is 956,464
+triangles of Tripo with base colour, roughness-metallic and normal at 4096, and
+it goes into `assets/source/props/` and through `tools/decimate_assets.py` at
+**10000 triangles and 1024 textures** — the shield's row, on the shield's
+argument. There is exactly one of it, it is placed rather than spawned, and it
+is looked at closely: the menu lens sits 5.7 m from it and the lobby's 11.7 m,
+with the wordmark hovering directly over it, which is to say it is in the middle
+of the first picture anybody ever sees of this game. It is also doubly curved
+nearly everywhere — a ring of river stones, five logs, a tongue of flame — with
+none of the long flat planes that made the great sword's blade cheap. Out the
+far side: 10,000 triangles and 1.9 MB from 28.8.
+
+**The glow had to be manufactured, and it is manufactured in the asset.** A
+Tripo download emits nothing: its flame is modelled geometry painted orange. The
+environment's glow threshold is **1.45** (`arena_env.tres`), set just over a
+torch-lit Bog so that only real light sources bloom, and base colour tops out
+under 1.0 in linear light — a painted flame can never reach it. So
+`tools/flame_glow.py` cuts a mask out of the model's own base colour: a texel is
+flame if its hue is within 0..65° or past 345° (wrapping red through orange to
+yellow, stopping short of the moss), its saturation is at least **0.62** and its
+value at least **0.68**. That keeps **15.8%** of the atlas. The thresholds are
+what separate flame from *warm stone* — this atlas is full of tan and salmon
+rock faces at hue 25-35 sitting at half the saturation of the paint on the fire
+— and rather than trust that, the mask is checked against the geometry: it
+lights nothing below 10 cm, 12% of the 12-24 cm band, 64% of 24-36 cm and
+everything above, on a 92 cm model whose stone ring is the bottom quarter. That
+is the flame column, found by colour and confirmed by height.
+
+The mask is blurred 2 px before it multiplies, because the glow pass is the one
+thing that makes a hard edge obvious — bloom that stops dead on a texel boundary
+reads as cut out with scissors, and 2 px at 1024 is a millimetre and a half on
+the model. The result ships as an `emissiveTexture` with
+`KHR_materials_emissive_strength` **2.6**, between the old cones' 2.2 and 3.4,
+which is the amount of bloom this menu was framed around. Godot 4.7 imports that
+as `emission_enabled`, `emission_texture` and `emission_energy_multiplier`
+2.5999999 — the same three fields the cones set by hand, off an asset instead of
+off a script.
+
+**Two hook tables, and the order is the point.** `AFTER_DECIMATION` (the bow's
+string) must run after `fast_simplification` and before everything else, because
+a morph target authored earlier comes out pointing at vertices that no longer
+exist. `AFTER_TEXTURES` (this) must run after the texture loop, because that loop
+walks the *builder's* `images` and re-reads each one's `bufferView` **out of the
+source file**: an image appended before it gets the builder's fresh view index
+looked up in the source's buffer views and comes back as unrelated bytes,
+silently, since a view is an offset and a length and both documents have plenty
+of both.
+
+**Placed at 0.88, turned to 212 degrees.** The model is 1.00 m across and 0.92 m
+tall, and the thing its height has to clear is the wordmark: `MenuLetters` puts
+the bottom of a glyph at 0.875 m at the lowest point of its bob, and the cones
+topped out at 0.66, so the letters have always been read against 0.215 m of air.
+At scale 1.0 the tip stands at 0.92 and comes up through the O — rendered, not
+guessed. `FIRE_MODEL_SCALE` **0.88** puts the tip at 0.813 m and the pit at
+0.88 m across: 0.062 m of air under the lowest glyph, a flame a quarter again
+taller than the cones', and still the metre-wide ring anybody would build. The
+air is thinner than it was, and that is the trade a modelled fire costs — a
+cone's tip could be put wherever it was convenient. One uniform number, because
+a fire that has been squashed reads as a fire nobody modelled. `FIRE_YAW_DEGREES` **212** is measured off the menu camera rather than
+picked: that lens is on bearing `atan2(3.90, 6.15)` = 32°, and 180° of model
+past that is the face with both flame tongues broadside and the logs crossing in
+front of them. The lobby's lens is on bearing 0 and sees the same face thirty
+degrees round, near enough that one constant serves both screens.
+
+**Nothing about the light moved.** The `OmniLight3D` is the key for the whole
+glade and for every Bog in the ring, and its numbers were measured against faces
+rather than against the flame — the moon is a third of it by a reading taken off
+a Bog's belly (D-136), the 11 m range is what makes the treeline fall away into
+night, the 2.0 volumetric energy is D-009's. Changing what is *drawn* in the
+middle of the glade is no reason to relight it. The stones stand closer to that
+light than the old black-barked boxes did and come up pale for it; that is the
+fire's own light on pale stone and not a material to be argued with. The
+imported material is left exactly as it arrives: the roughness map is already
+0.97 and the metallic 0.008, so there was no plastic sheen to take off it, and
+the normal map is flat enough to be a no-op.
+
+### Rejected
+
+- **Keeping the cones.** They were a placeholder that had outlived the moment,
+  and the owner asked for the model to be redone by name.
+- **A hand-built low-poly fire in Blender.** Started, and dropped mid-model when
+  the download turned up. The download is better than what was being built, and
+  an hour of modelling is not a reason to ship the worse fire.
+- **Overriding the material in GDScript to make it glow.** One line in
+  `_build_fire` and the one thing that makes a fire a fire lives in a menu
+  script, where nobody would look for it, on a prop whose every other surface
+  property comes from its file. Every other asset in `art/generated` carries its
+  own shading; this one now does too, and if the bloom is ever wrong it is wrong
+  in the pipeline.
+- **`GPUParticles3D` for the flame.** This is scenery in a menu that nobody will
+  ever stand next to. The glow pass over a modelled tongue of fire buys the
+  read for a fraction of the cost, which is the same argument the cones were
+  built on and the only part of them worth keeping.
+- **Instancing the 956k-triangle source.** A million triangles in the main menu
+  for a prop 0.9 m across, and a 28.8 MB file in the build, to gain detail no
+  lens in this game is close enough to resolve.
+
+## D-139 — The lobby ring stands in two rows, spaced on the screen
+The owner: *"the bogs in the lobby are too close together, maybe stagger them
+just a bit? because you can move them apart a bit but you have to make sure
+they dont go behind the gui."*
+
+He named the constraint himself. D-136 put the eight-Bog ring back inside the
+740 px band between the roster column and the match rail with 31 px to spare
+on one side and 20 on the other, so "move them apart" has nowhere to go: the
+band is the width, and eight pairs of shoulders and eight nameplates are a
+fixed share of it. What the band does not price is depth. `BogBackdrop` now
+stands the ring on **two circles** — even slots 0.35 m inside `ring_radius`,
+odd slots 0.65 m outside it (`RING_STEP_IN`, `RING_STEP_OUT`) — so a Bog and
+the next one along are a metre apart through the picture where they were
+0.85 m across it, and the near shoulder in front of the far one reads as a
+group standing about rather than a line touching elbows. The split is
+lopsided on purpose: the ring was stood off the fire from 3.0 m to 3.5 m for
+the letters' air, and a symmetrical stagger would have put four Bogs back at
+3.0; the near row stops at 3.15 and the far row pays the rest.
+
+**The angles are solved from the screen, not stepped round the arc.** Stepping
+a Bog in along its radius shrinks its x by the same fraction while its distance
+to the lens barely moves, so it slides toward the centre of the frame; stepping
+out slides it away. Laid over the old evenly spaced arc angles, the stagger
+opened some gaps to 74 px and closed the pair at each end to 20, one Bog behind
+the other. So `_slot_transform` starts from the two sight lines the arc's ends
+have always defined, divides the screen distance between them equally (a lerp
+in the tangent of the bearing off the lens axis, which *is* screen x), and
+puts each Bog where its sight line meets its row's circle (`_on_ring`, a
+ray–circle crossing taking the far root). `ring_arc_degrees` keeps its meaning
+— it still fixes the ends — and the count still only changes the spacing.
+
+Measured by `tools/weapon_select.gd`'s band check, eight Bramblewicks then
+five: **435.0 .. 1122.7** and 428.7 .. 1122.7 against 400 .. 1140, plate tops
+197.2 and 205.5 against 100; `ui_range lobby_letters` still finds every head
+above the wordmark (the nearest, Pipwick, has the row's top level with 0.95 m
+on him). The rendered lobby is the same width it was and the eight now read as
+a front four and a back four.
+
+## D-140 — A dive's way down is measured against the floor it left, so it only hangs when it lands lower
 The owner: *"the second jump dive roll stalls a little bit too much and too
 motionless for too long ... a pause at a certain point is okay, but should only
 occur if they jump off somewhere higher than where they land."*
@@ -15905,7 +16055,7 @@ outruns the clip and holds the pose, which is the pause the owner allowed; one
 above it is cut short by the roll. The jump and slide-jump arcs pass no
 `land_speed` and read exactly as before.
 
-## D-139 — The head is a sphere on the skull, and a shot through it is worth 1.3 of itself
+## D-141 — The head is a sphere on the skull, and a shot through it is worth 1.3 of itself
 The owner: *"there should be a headshot hitbox, the headshots need to do 30%
 more damage."*
 
@@ -15929,7 +16079,7 @@ a whole body's worth already. In practice this is the bow's rule: 20-80 becomes
 26-104, **so a full draw to the head kills from full health**, which is new and
 is the point. The spear's 100 is 130 and changes nothing.
 
-## D-140 — The shoulder walks out with the bowstring, to seventeen degrees at a full draw
+## D-142 — The shoulder walks out with the bowstring, to seventeen degrees at a full draw
 The owner: *"when you're fully drawn with the bow, the camera angle is behind
 the bog, you can't see your crosshair, the camera needs to offset to the right a
 few degrees."*
@@ -15952,7 +16102,7 @@ nothing new to say. Written against the pre-D-rework rig and ported onto
 5 (the shot leaves the lens) means the crosshair stays truthful wherever the
 shoulder is.
 
-## D-141 — The potion is drunk where it is found: no key, no stock, and the cost is two slow unarmed seconds
+## D-143 — The potion is drunk where it is found: no key, no stock, and the cost is two slow unarmed seconds
 The owner: *"the potion should just automatically drink once you pick it up,
 the animation doesn't work for me."*
 
@@ -15984,7 +16134,7 @@ and its reference row are retired. `RefillStone` still stocks one in the range,
 reachable only by the tools — kept as the way back if a carried spare is ever
 wanted again.
 
-## D-142 — You may pick again mid-match, and only the next Bog you get hears about it
+## D-144 — You may pick again mid-match, and only the next Bog you get hears about it
 The owner: *"Ingame you can hit escape then change class to change your
 loadout. Once you die there is also a popup on your screen to press a key to
 quickly get to the change class screen to swap; if you don't change fast enough
@@ -16022,7 +16172,7 @@ respawn rebuilds the thing that carries a weapon, while a body stands there all
 match and swapping it would leave seven players aiming at somebody they no
 longer recognise.
 
-## D-143 — Lantern Wharf is a fifth bigger, has its lanterns, and paid for the room in sightlines
+## D-145 — Lantern Wharf is a fifth bigger, has its lanterns, and paid for the room in sightlines
 The owner: *"the wharf needs to be maybe 20% bigger as well as a very nice
 dressing revamp"*, to the depth Whisperbloom Hollow has.
 
@@ -16060,7 +16210,7 @@ four moored boats and a lit far shore, midges under the lit strings, and hooks
 for quay water north and south and for rigging. Eleven new draw calls, seven
 shared materials, no new shadow casters; collision unchanged.
 
-## D-144 — Twin Quarry is rebuilt on its own footprint: one base written once, the asymmetry on the bisector, and a tunnel
+## D-146 — Twin Quarry is rebuilt on its own footprint: one base written once, the asymmetry on the bisector, and a tunnel
 The owner: *"rebuild the quarry map with the idea the same as the old one just
 more in depth and more detail. The main idea is one big hole in the middle,
 quarry-like, with 2 identical bases. The map doesn't have to be symmetrical, it

@@ -1,7 +1,7 @@
 [gd_scene load_steps=3 format=3 uid="uid://bgubmapquarry01"]
 
 ; Twin Quarry — the sixth map, and the first built for Capture B·O·G (D-082),
-; rebuilt in place against the quarry asset pack (D-138).
+; rebuilt in place against the quarry asset pack (D-140).
 ;
 ; Like Kopje Crossing, Lantern Wharf and Halcyon Wake this scene has no geometry
 ; in it at all. `scripts/world/maps/quarry_map.gd` extends `StaticMap` and

@@ -44,6 +44,15 @@ and `verify_blend_shapes` reads the written `.glb` back off disk afterwards and
 prints the deltas it finds, because a dead shape key is invisible everywhere
 else.
 
+The campfire gets a seventh, on the far side of the texture copy rather than the
+near side, and for a mirror-image reason: `tools/flame_glow.py` cuts an emission
+map out of the base colour the copy has just written, and a texture added before
+that loop would be re-read out of the *source* file by a buffer view index that
+only means something in the new one. It is the first prop in this table whose
+emission is manufactured here rather than delivered in the download, which is
+what lets the menu's glow pass bloom a flame that arrives as plain painted
+geometry (D-138).
+
 Sources in `assets/` are never touched; re-running this is always safe.
 
 Usage:  python tools/decimate_assets.py [name ...]
@@ -64,6 +73,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import bow_string  # noqa: E402
 import fast_simplification  # noqa: E402
+import flame_glow  # noqa: E402
 from gltf_io import ARRAY_BUFFER, ELEMENT_ARRAY_BUFFER, Gltf, GltfBuilder  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -151,6 +161,23 @@ OUT_DIR = os.path.join(REPO, "art", "generated")
 # a bottle is a surface of revolution, and a circle goes visibly faceted long
 # before a stick does.
 #
+# The campfire is the shield's case, not the magnet's, and for the shield's
+# reason: there is exactly one of it, it is a placed thing rather than a thing
+# that spawns, and it is stood close to. The menu camera sits 5.7 m from it and
+# the lobby's 11.7 m, with the wordmark hovering directly over it — which is to
+# say it is in the middle of the first picture anybody ever sees of this game.
+# It is also doubly curved nearly everywhere: a ring of river stones, five logs
+# and a tongue of flame, with almost no flat plane anywhere in it to spend
+# triangles cheaply on the way the great sword's blade has. 10000/1024, the
+# shield's numbers, on the shield's argument.
+#
+# It is also the first prop here whose emission map is *manufactured* rather
+# than delivered. Every other texture in this table arrives in the download and
+# is only downscaled and renamed on the way past; the campfire's flame arrives
+# as painted geometry with no light in it at all, and `tools/flame_glow.py` cuts
+# a glow mask out of the base colour so the menu's glow pass has something to
+# bloom (D-138).
+#
 # The magnet is where those numbers come from, and it took them from the lure it
 # replaced (D-078): 446,811 triangles of Tripo down to 6000, one JPEG basecolor
 # down to 512. It is the same case as the potion in every respect — thrown or
@@ -169,6 +196,7 @@ TARGETS = {
     "bow":         ("assets/source/props/BOW.glb", 4000, 1024),
     "heal_potion": ("assets/source/props/HEAL_POTION.glb", 6000, 512),
     "greatsword":  ("assets/source/props/GreatSword.glb", 3000, 1024),
+    "campfire":    ("assets/source/props/CAMPFIRE.glb", 10000, 1024),
 }
 
 # Targets that get something added after the decimator has finished with them.
@@ -181,6 +209,27 @@ TARGETS = {
 # builder, makes that ordering the only one expressible.
 AFTER_DECIMATION = {
     "bow": bow_string.add_string,
+}
+
+# Targets that get something added after the *textures* have been copied across.
+#
+# There are two hook tables rather than one because `process` does two things in
+# sequence that an addition can sit either side of, and which side it sits on is
+# load-bearing in opposite directions.
+#
+# `AFTER_DECIMATION` runs on the mesh and must be after `fast_simplification`
+# and before everything else. This one runs on the images and must be after the
+# texture loop, because that loop walks `b.doc["images"]` and re-reads each
+# entry's `bufferView` *out of the source file* `g`. Any image appended before
+# it would have the builder's own fresh view index looked up in the source's
+# buffer views and come back as unrelated bytes — silently, since a buffer view
+# is just an offset and a length and both documents have plenty of both.
+#
+# Only the campfire, whose flame is painted into the base colour and emits
+# nothing; `tools/flame_glow.py` cuts the glow out of that base colour and hangs
+# it on the material as an emission map.
+AFTER_TEXTURES = {
+    "campfire": flame_glow.add_emission,
 }
 
 
@@ -515,6 +564,7 @@ def process(name, src_path, target_tris, max_texture):
     # The only thing else in the file that is not the mesh is the embedded texture,
     # which is copied across (downscaled, and renamed) into the new buffer.
     source_stem = os.path.splitext(os.path.basename(src_path))[0]
+    written = {}
     for image in b.doc.get("images", []):
         if "bufferView" not in image:
             continue
@@ -531,6 +581,12 @@ def process(name, src_path, target_tris, max_texture):
                 % (image["name"], cleaned, name, cleaned))
             image["name"] = cleaned
         image["bufferView"] = b.add_view(data)
+        written[image.get("name", "")] = data
+
+    # 7. anything derived from the textures that were just written -----------
+    glow = AFTER_TEXTURES.get(name)
+    if glow:
+        glow(b, written, log)
 
     if not os.path.isdir(OUT_DIR):
         os.makedirs(OUT_DIR)
