@@ -3865,9 +3865,12 @@ func _replicates(field: String) -> bool:
 ## `STRAFE_PLANT_HEIGHT`, only decorates the report with how much of each leg
 ## had a foot actually down.
 ##
-## The Bog is held facing one way with `set_view_basis(..., true, ...)`, which
-## is the same flag the camera raises while somebody is aiming — so this is not
-## an artificial pose, it is the pose this whole weapon set is used in.
+## The Bog is held facing one way by holding the *view* still and letting the
+## body do what it always does now — point at it (`docs/PLAN_CAMERA.md`). This
+## used to need the `face_view` flag, because a body left to itself faced its own
+## velocity and there would have been no strafe to measure; under the PvP rig a
+## held view is a held facing for free, which is the pose every gait in this
+## table is walked in during a real fight.
 func _drive_strafe() -> void:
 	var player := MatchState.bogs.get(1) as Bog
 	if player == null:
@@ -3876,9 +3879,9 @@ func _drive_strafe() -> void:
 	if rig != null:
 		rig.process_mode = Node.PROCESS_MODE_DISABLED
 	player.reads_local_input = false
-	# Facing -Z, held there. `face_view` is the aiming flag, so the body does
-	# not turn to follow its own velocity and every leg is a genuine strafe.
-	player.set_view_basis(Basis.IDENTITY, true, 0.0)
+	# Facing -Z, held there, with the rig switched off so nothing else can move
+	# the view out from under the legs.
+	player.set_view_basis(Basis.IDENTITY, 0.0)
 
 	if _strafe_leg >= STRAFE_GAITS.size() * STRAFE_COMPASS.size():
 		_report_strafe()
@@ -4188,10 +4191,12 @@ func _drive_spine() -> void:
 			var pitch := 0.0
 			var yaw := 0.0
 			if _spine_sample < SPINE_YAWS:
-				# Round the horizon at a level view. The body follows, because a
-				# drawing Bog faces its own crosshair (`_face_view`), so this is
+				# Round the horizon at a level view. The body follows, because
+				# under the PvP rig every Bog faces its own camera, so this is
 				# also a test that the correction is a *body-relative* rotation
 				# and not a world-space one that happens to work at yaw zero.
+				# `SPINE_SETTLE` is what gives the body time to arrive: the yaw
+				# steps by a whole sample and the body closes it at `TURN_SPEED`.
 				yaw = TAU * float(_spine_sample) / float(SPINE_YAWS)
 			else:
 				var step := _spine_sample - SPINE_YAWS
@@ -5287,7 +5292,7 @@ func _drive_chain() -> void:
 	if rig != null:
 		rig.process_mode = Node.PROCESS_MODE_DISABLED
 	player.reads_local_input = false
-	player.set_view_basis(Basis(Vector3.UP, -PI / 2.0), false)
+	player.set_view_basis(Basis(Vector3.UP, -PI / 2.0))
 	if player.global_position.x > CHAIN_WRAP:
 		player.global_position.x -= CHAIN_WRAP * 2.0
 
@@ -5481,7 +5486,7 @@ func _drive_bhop() -> void:
 	if rig != null:
 		rig.process_mode = Node.PROCESS_MODE_DISABLED
 	player.reads_local_input = false
-	player.set_view_basis(Basis(Vector3.UP, -PI / 2.0), false)
+	player.set_view_basis(Basis(Vector3.UP, -PI / 2.0))
 	if player.global_position.x > BHOP_WRAP:
 		player.global_position.x -= BHOP_WRAP * 2.0
 
