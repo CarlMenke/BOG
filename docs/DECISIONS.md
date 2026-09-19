@@ -16256,3 +16256,65 @@ dressed block, not a tinted wall. Overcast became hard sun with a warm bounce
 fill, which is the one change here that is taste rather than measurement.
 Known weak: rectangular puddles, a very brown palette, a plant that reads as
 shapes from the pit floor. **Nobody has played it.**
+
+## D-147 — A voice memo is transcribed on this machine and read as a whole before it becomes tickets
+The owner, 2026-09-19: *"it would be nice if there was some built in thing or
+flow that we could use for new memos. Ideally, it would take the memo,
+transcribe it (it lives as an mp3), ground and untangle the transcription,
+then update linear with anything, clarifying stuff if need be."* The first
+memo, recorded the night Linear was set up, had sat in `memos/` for a day
+because the triage skill stopped at audio and asked for a transcript (BOG-45).
+
+**Transcription is local.** `tools/transcribe.py` runs faster-whisper
+(`medium.en`) and writes `memos/<name>.raw.txt`, one `[h:mm:ss] text` line per
+segment, streamed to disk as it goes so a run that dies in hour three keeps
+hours one and two. Local over the OpenAI audio API because a memo is two
+friends talking with the mic open, there is no key to manage, and the cost is
+a 1.5 GB model download once. The GPU matters: the first memo was 3h22m, which
+is about twenty minutes on the RTX 3080 and hours on the CPU. CTranslate2 finds
+cuBLAS 12 and cuDNN 9 only as loose DLLs, and on the Store Python those come
+from two pip wheels that land in the *user* site-packages, outside
+`site.getsitepackages()`; the script adds every `nvidia/*/bin` it can find to
+the DLL search path and falls back to CPU int8, saying so, if the model still
+will not load on cuda. `condition_on_previous_text` is off, because on a long
+recording one hallucinated segment otherwise poisons the next hour.
+
+**Untangling is a written file, not a step in Claude's head.** The `memo`
+skill reads the whole raw transcript and writes
+`feedback/YYYY-MM-DD-memo-<slug>.md`: who was talking and what the session
+was, then one entry per distinct want with the timestamps and the line quoted
+verbatim, mishearings included, and what already tracks it (ticket, D-record,
+file); then the not-wants, so the next reader does not re-triage a joke or a
+bug fixed since. That file is what tickets point at; the raw transcript stays
+beside the audio, both gitignored. A memo counts as run when a feedback file
+names it on its `Source:` line, so it is never run twice. Whisper has no
+speaker labels and mishears the game's words ("sphere" for spear, "Alaska
+standing" for last one standing), so the skill carries a glossary and
+attributes voices from context.
+
+**Tickets come from the triage skill, unchanged.** The memo skill hands the
+feedback file to triage at its step 2. One set of rules for what becomes a
+ticket, wherever the words came from.
+
+**Brainstorm is told from want, always.** Reading the first memo, several ideas
+were floated and hedged in the next breath ("that's what I'm actually going to
+do... I don't know, I guess you can drop items"). Parking one as Backlog with
+an `Open:` line instead of ticketing it as work drew the owner's *"that was a
+good call out and distinction you just made about brainstorm vs actual
+ticket. make sure you always do that and find a good place for brainstorm
+items."* The place is a Backlog ticket with the **Brainstorm** label and an
+`Open:` line naming the decision, so it stays on the one list without looking
+like work; nothing is built from it; the label comes off when Carl chooses it.
+The rule is in the team document "How BOG uses Linear", `CLAUDE.md`, and both
+skills. The memo skill also learned the habits of a recorded session: a line
+addressed to the recording is the highest-signal line in the file, "we're
+just brainstorming" is a flag to honour, and two unlabelled voices are
+attributed from context and marked where it changes the meaning.
+
+**The first run.** `memos/2026-09-18 21-02-05.mp3`, 630 segments, became
+`feedback/2026-09-18-memo-play-session-with-julian.md`: thirteen wants,
+BOG-47..BOG-54 (one of them Brainstorm), comments on BOG-28, BOG-29 (raised
+to High; the map-building skill was asked for three times), BOG-35 and
+BOG-44, two questions to Carl answered in-session, and a process rule kept as
+memory rather than a ticket. What stays manual: getting the mp3 off the phone
+into `memos/`.
