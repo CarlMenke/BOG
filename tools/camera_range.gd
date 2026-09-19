@@ -1,46 +1,71 @@
 extends Node3D
-## Walks the player's own Bog into the places a third-person camera ends up
-## inside the scenery, and counts the frames where it did (D-045).
+## The PvP camera rig, driven the way a mouse drives it, and asked five
+## questions every frame. See `docs/PLAN_CAMERA.md`.
 ## Development tool, not shipped. Headless, a couple of seconds.
 ##
 ##   Godot --headless --fixed-fps 60 --path . tools/camera_range.tscn
 ##
-## A player: "too frequently the camera is inside meshes and stuff when there
-## are meshes behind the character". A screenshot can show that once; it cannot
-## say how often, and it cannot say it stopped. So this stands up five stations
-## — a long wall on each shoulder, a corner, a tree canopy with a trunk, a wall at
-## the Bog's back, and a low tunnel (the cave in PLAN 5.2) — and drives the view
-## round each of them the way a mouse would, walking where walking is the point.
+## Eight legs. Seven of them are the placement stations this file has always had
+## — a long wall on each shoulder, a corner, a tree canopy and its edge, a wall
+## at the Bog's back, and a low tunnel — because the complaint they were written
+## for ("too frequently the camera is inside meshes and stuff when there are
+## meshes behind the character") is not answered by rewriting the rig, it is
+## answered by the same 1,700 frames still coming back clean. The eighth is new
+## and belongs to the rework: a patch of open ground where the view is turned and
+## the *body* is watched.
 ##
-## After the rig has placed its camera, every frame, the camera is **inside the
-## scenery** if any of these is true:
-##   - a point query at the camera's origin finds collision (inside a solid);
-##   - a sphere of `NEAR_CLEARANCE` there touches collision — the near plane is
-##     0.05 m out and about 0.09 m to its corners, so a camera closer than this
-##     to a face draws the inside of it;
-##   - a ray from the Bog's eye to the camera hits collision — the camera is on
-##     the far side of a wall, which is what a player actually sees as "inside".
-##     The first two cannot see this against a thin face or a trimesh.
+## The five verdicts:
 ##
-## The third verdict is the framing (D-083). A player: *"I slowly look right and
-## for a bit once the camera makes contact with the wall it'll move left first"*.
-## Nothing was inverted — the shoulder was being held at its full 0.62 m while the
-## boom came in, so the lens swung round to the side of the Bog as it pulled in
-## and the Bog slid across the frame, the same way whichever way the view was
-## turning, which is backwards for half of all turns. The invariant that kills it
-## is that the lens must never be further off the boom's axis than the
-## unobstructed camera would be *at the depth it got to*: the shoulder is an angle
-## and it comes in with the boom. It is an inequality, so a shoulder squeezed by a
-## wall of its own is still allowed.
+## - **clip** — the lens is never inside the scenery. Three tests, because no one
+##   of them sees every case: a point query at the lens (inside a solid), a
+##   `NEAR_CLEARANCE` sphere there (the near plane is 0.05 m out and about 0.09 m
+##   to its corners, so a lens merely *outside* a face still draws the inside of
+##   it), and a ray from the Bog's eye to the lens (on the far side of a wall,
+##   which is what a player actually sees as "inside" and which neither of the
+##   first two can find against a thin face or a trimesh). Zero frames.
 ##
-## The second verdict is the aim. Pulling a camera in must not move the spear
-## (D-025): the throw is aimed down the crosshair's ray, and the crosshair has to
-## mean the same thing whether or not a wall behind the Bog has shoved the lens
-## forward. Each checked frame the point `BogCombat` would throw at is compared
-## with the point worked out here, independently, from the *unobstructed* camera
-## for the same view — the rig's own yaw and pitch at the full boom and shoulder.
-## It reaches past the public API once, into `BogCombat._aim_point`, because that
-## function is literally what a throw reads and a copy of it would prove nothing.
+## - **frame** — the lens is never off the segment from the pivot to the
+##   unobstructed lens point. This is D-083's invariant, and under the new rig it
+##   is not a rule the code obeys but the shape of the code: there is one sweep
+##   along one segment and the lens sits at a fraction of it, so the Bog cannot
+##   slide across the picture while the camera comes in. Measured as the
+##   perpendicular distance from that line, which is zero up to float. Zero
+##   frames.
+##
+## - **aim** — the point `BogCombat` would throw at is the point a ray out of the
+##   *actual* camera hits, within a centimetre. This is the invariant that
+##   replaced D-045's: the aim used to be read from where the camera would be
+##   with nothing in the way, which kept a wall from moving a spear but cost the
+##   crosshair its meaning. Now screen centre is the shot. The check reaches past
+##   the public API once, into `BogCombat._aim_point`, because that function is
+##   literally what a throw reads and a copy of it would prove nothing; the other
+##   side of the comparison is built here from the `Camera3D` node alone.
+##
+## - **calm** — how the rig *moves*, which is what is left once the placement is
+##   right, and it is three claims rather than a budget. The old rig needed
+##   budgets because it had five rates and a lead fighting each other (D-088);
+##   this one has a pivot that eases, a rotation with no filter at all, and an
+##   arm that comes in at once and goes out on one exponential — so every one of
+##   these can be zero:
+##     * **drag** — the pivot never moves further in a frame than the subject
+##       moved plus the ease of the gap it already had. An exponential cannot
+##       overshoot, and this says so in numbers.
+##     * **loose** — with the view still and the arm out at full length, the lens
+##       moves no further than the body moved plus the ease of the gap the pivot
+##       already had. It passes by the lens being a rigid offset from the pivot
+##       rather than by being damped, which is the thing worth asserting: there
+##       is nothing else in this rig allowed to move the picture.
+##     * **late** — on the way back out, the arm never grows faster than
+##       `RETURN_RATE` allows from where it was.
+##   Pull-ins are exempt, by design: a frame drawn from inside a wall is worse
+##   than a pop, so coming in is instant. The worst one is printed rather than
+##   judged, and it is the honest price of the rule.
+##
+## - **faces** — the body follows the camera (the whole rework). Standing and
+##   running, a 45-degree view step has to be matched by the body to within 2
+##   degrees inside 0.1 s; and through a sword spin and an emote the body yaw
+##   must not move at all while the view is swung 180 degrees, because those two
+##   are commitments the camera is not allowed to re-point.
 
 ## World and camera blockers, which is what the rig is meant to avoid. Bogs,
 ## projectiles and pickups are deliberately not in it.
@@ -50,64 +75,45 @@ const AIM_MASK := 1 | 2 | 8
 
 const NEAR_CLEARANCE := 0.1
 const AIM_TOLERANCE := 0.01
-## How far past its share of the shoulder the lens may sit. A centimetre is float
-## slack: the rig places the two from the same frame's sweep, so the real margin
-## is zero. Nothing here holds the aim button, whose shoulder and boom ease on
-## slightly different ratios and would need a wider one.
-const FRAME_TOLERANCE := 0.01
-
-## The fourth verdict, `calm`, is the *motion* of the lens rather than its place
-## (D-086). `clip` says the camera is never in a wall and `frame` says the Bog
-## does not walk across the picture; neither of them can see a camera that
-## arrives somewhere correct by jumping, or one that hunts back and forth about a
-## correct place. Those are the two named failure modes of every collision
-## camera — "pop" and "swim" — and they are what is left once the placement is
-## right, so they are measured directly.
-##
-## Three numbers, all read off the lens's own offset within the rig, so the
-## Bog's walking and the player's turning are already subtracted out and what is
-## left is only what the scenery did:
-##
-##   - **step**, metres the lens moved along boom-and-shoulder in one frame. A
-##     pop is a big step. 0.09 m at 60 fps is 5.4 m/s of pure camera dolly,
-##     which is faster than the Bog runs and is the point at which a pull-in
-##     stops reading as a movement and starts reading as a cut. This one is a
-##     budget rather than a zero, and honestly so: where the boom *grazes* a
-##     surface — the view tipping down until the arm lies along the floor — the
-##     length that fits is clearance over the sine of the angle, and the
-##     derivative of that has no bound. At the graze there is no policy, only
-##     geometry, and a camera that refused to move would be in the floor. So the
-##     claim the gate makes is that it is rare: 4 % of frames, against the 14.9 %
-##     measured before any of D-086.
-##   - **flips**, frames where the boom reversed direction by more than a
-##     millimetre having been moving the other way by more than a millimetre.
-##     Swim is literally a high flip count: a camera that cannot decide. One
-##     flip per pull-in is correct and unavoidable (in, then out); a budget of
-##     4 % of frames leaves room for that across legs that make contact
-##     constantly and still fails a camera that is oscillating.
-##   - **turn**, degrees per frame of the *lens's own* rotation away from the
-##     boom's axis. The rig aims the lens at where the aim ray meets the world so
-##     the reticle stays honest (D-045), and that meeting point jumps the whole
-##     length of the ray whenever the ray crosses an edge. 1.2 deg/frame is
-##     72 deg/s, about a third of a fast mouse flick, and anything above it is
-##     the picture snapping on its own.
-const STEP_LIMIT := 0.09
-const STEP_BUDGET := 0.04
-const TURN_LIMIT := 1.2
-const FLIP_BUDGET := 0.04
-## Movement below this is float noise and a sign change in it means nothing.
-const FLIP_EPSILON := 0.001
-## Radians of view turned in one frame past which the frame is a *cut*, not a
-## turn, and `calm` skips it. The "back to a wall" leg deliberately flicks 1.45
-## rad between two frames, which no rig can lead and no player would read as
-## camera movement — the whole picture changed. 0.15 rad is 9 degrees a frame,
-## 540 deg/s, well above anything the sweeping legs produce (0.06 rad at their
-## fastest) and well below a flick, so it separates the two cleanly.
+## How far off the pivot-to-lens line the lens may sit. Half a centimetre is
+## float slack on a 3.16 m segment; the rig places the lens *on* the segment by
+## construction, so the real margin is zero.
+const FRAME_TOLERANCE := 0.005
+## Metres of float slack on a per-frame motion claim, and the fraction of slack
+## allowed on the eased return so a rounding difference in `delta` is not a
+## verdict.
+const CALM_SLACK := 0.002
+const RETURN_SLACK := 1.05
+## Radians of view moved in one frame past which the frame is a *cut* and not a
+## turn. 0.15 rad is 9 degrees a frame, 540 deg/s: well above anything the
+## sweeping legs produce and well below the deliberate flick in "back to a wall".
 const CUT_TURN := 0.15
-## Ticks after a teleport before anything is checked: the rig eases after the
-## body (`BogCamera.FOLLOW_SPEED`), so for a moment after a forty-metre jump it
-## is legitimately flying through whatever lies between two stations.
+## `faces`: how close the body has to get to the view, how long it may take, and
+## how much a committed heading may drift while the view swings (none, in
+## practice — `Bog._face` returns before touching `body_yaw`).
+const FACE_TOLERANCE := 0.0349   # 2 degrees
+const FACE_CATCHUP_TICKS := 6    # 0.1 s at 60 Hz
+const FACE_HOLD_TOLERANCE := 0.0087  # half a degree
+
+## Ticks after a teleport before anything is checked: the pivot eases after the
+## body (`BogCamera.LAG_FLAT`), so for a moment after a forty-metre jump it is
+## legitimately flying through whatever lies between two stations.
 const SETTLE_TICKS := 50
+
+## The `facing` leg's clock, in ticks of its own. Standing turns, then running
+## turns, then a spin, then an emote — and the two commitments get room either
+## side to let the body settle onto the view before the thing that freezes it.
+const FACE_STEP := 0.7854        # 45 degrees a step
+const FACE_STEP_TICKS := 16
+const FACE_RUN_FROM := 100
+const FACE_TURN_END := 195
+const FACE_SPIN_AT := 205
+const FACE_SPIN_SECONDS := 1.2
+const FACE_SPIN_SWEEP := 210
+const FACE_SWEEP_TICKS := 60
+const FACE_SPIN_END := 300
+const FACE_EMOTE_AT := 310
+const FACE_EMOTE_SWEEP := 320
 
 ## Each leg puts the Bog on `spot` facing -Z and then runs `ticks` of `drive`.
 const LEGS := [
@@ -118,6 +124,7 @@ const LEGS := [
 	{"name": "canopy edge", "spot": Vector3(80.0, 0.1, 3.4), "ticks": 260, "drive": "canopy"},
 	{"name": "back to a wall", "spot": Vector3(120.0, 0.1, 0.0), "ticks": 260, "drive": "turn"},
 	{"name": "tunnel", "spot": Vector3(160.0, 0.1, 10.0), "ticks": 260, "drive": "tunnel"},
+	{"name": "open ground", "spot": Vector3(190.0, 0.1, 0.0), "ticks": 420, "drive": "face"},
 ]
 
 ## Boxes, as {centre, size}. Layer 1, like every map's collision.
@@ -138,14 +145,18 @@ const BLOCKS := [
 	[Vector3(158.4, 1.5, 0.0), Vector3(0.6, 3.0, 26.0)],
 	[Vector3(161.6, 1.5, 0.0), Vector3(0.6, 3.0, 26.0)],
 	[Vector3(160.0, 2.5, 0.0), Vector3(3.8, 0.6, 26.0)],
+	# station 6 is deliberately empty ground: the `facing` leg is about the body.
 ]
 
 var _leg: int = -1
 var _tick: int = 0
 var _bog: Bog
 var _rig: BogCamera
-var _boom: Node3D
 var _combat: BogCombat
+## The full arm, pivot to unobstructed lens: 3.16 m for the 3.1 m distance and
+## the 0.62 m shoulder. Read off the rig's own constants so a re-tune cannot
+## leave this checking a length nobody ships.
+var _arm: float = 0.0
 
 var _leg_checked: int = 0
 var _leg_clipped: int = 0
@@ -155,37 +166,68 @@ var _leg_behind: int = 0
 var _leg_worst_behind: float = 0.0
 var _leg_aim_off: int = 0
 var _leg_worst_aim: float = 0.0
-var _leg_wide: int = 0
-var _leg_worst_wide: float = 0.0
+var _leg_off_line: int = 0
+var _leg_worst_line: float = 0.0
 var _leg_nearest: float = INF
 var _leg_from: Vector3 = Vector3.ZERO
-var _leg_jumped: int = 0
-var _leg_worst_step: float = 0.0
-var _leg_flips: int = 0
-var _leg_snapped: int = 0
-var _leg_worst_turn: float = 0.0
 
-## Last frame's lens offset and lens-off-boom angle, and which way the boom was
-## last seen moving. Cleared at every leg, because a teleport between stations is
-## a legitimate jump and comparing across it would measure the teleport.
+## `calm`'s three counts and the pull-in it does not judge.
+var _leg_calm: int = 0
+var _leg_drag: int = 0
+var _leg_free: int = 0
+var _leg_loose: int = 0
+var _leg_late: int = 0
+var _leg_pulls: int = 0
+var _leg_flips: int = 0
+var _leg_worst_pull: float = 0.0
+var _leg_worst_cut: float = 0.0
+
+## Last frame's arm length, pivot, subject eye, lens and view. Cleared at every
+## leg, because a teleport between stations is a legitimate jump and comparing
+## across it would measure the teleport.
+var _prev_arm: float = 0.0
+var _prev_pivot: Vector3 = Vector3.ZERO
+var _prev_eye: Vector3 = Vector3.ZERO
 var _prev_lens: Vector3 = Vector3.ZERO
-var _prev_dev: float = 0.0
-var _prev_sign: int = 0
 var _prev_yaw: float = 0.0
 var _prev_pitch: float = 0.0
+var _prev_sign: int = 0
 var _have_prev: bool = false
-var _leg_calm: int = 0
-var _total_calm: int = 0
+
+## `faces` bookkeeping. `_face_yaw` is the view the leg is driving toward,
+## `_face_turned_at` the tick it last stepped, and `_face_held` the body yaw a
+## commitment froze.
+var _face_yaw: float = 0.0
+var _face_turned_at: int = 0
+var _face_settled: bool = true
+var _face_turns: int = 0
+var _face_slow: int = 0
+var _face_worst_catchup: int = 0
+var _face_worst_error: float = 0.0
+var _face_held: float = 0.0
+var _face_holding: bool = false
+var _face_held_frames: int = 0
+var _face_broke: int = 0
+var _face_worst_drift: float = 0.0
+var _face_spun: bool = false
+var _face_emoted: bool = false
+var _face_notes: Array[String] = []
 
 var _total_checked: int = 0
 var _total_clipped: int = 0
 var _total_aim_off: int = 0
-var _total_wide: int = 0
-var _total_jumped: int = 0
+var _total_off_line: int = 0
+var _total_calm: int = 0
+var _total_drag: int = 0
+var _total_free: int = 0
+var _total_loose: int = 0
+var _total_late: int = 0
+var _total_pulls: int = 0
 var _total_flips: int = 0
-var _total_snapped: int = 0
-var _worst_step: float = 0.0
-var _worst_turn: float = 0.0
+var _worst_pull: float = 0.0
+var _worst_cut: float = 0.0
+var _worst_aim: float = 0.0
+var _worst_line: float = 0.0
 
 
 func _ready() -> void:
@@ -211,9 +253,9 @@ func _ready() -> void:
 		get_tree().quit()
 		return
 	_rig = _bog.get_node("CameraRig") as BogCamera
-	_boom = _rig.get_node("Boom") as Node3D
 	_combat = _bog.get_node("Combat") as BogCombat
-	print("camera_range: starting, %d legs" % LEGS.size())
+	_arm = Vector3(BogCamera.SHOULDER_DEFAULT, 0.0, BogCamera.DISTANCE_DEFAULT).length()
+	print("camera_range: starting, %d legs, arm %.3f m" % [LEGS.size(), _arm])
 	_next_leg()
 
 
@@ -231,21 +273,28 @@ func _next_leg() -> void:
 	_leg_worst_behind = 0.0
 	_leg_aim_off = 0
 	_leg_worst_aim = 0.0
-	_leg_wide = 0
-	_leg_worst_wide = 0.0
+	_leg_off_line = 0
+	_leg_worst_line = 0.0
 	_leg_nearest = INF
-	_leg_jumped = 0
-	_leg_worst_step = 0.0
-	_leg_flips = 0
-	_leg_snapped = 0
-	_leg_worst_turn = 0.0
 	_leg_calm = 0
+	_leg_drag = 0
+	_leg_free = 0
+	_leg_loose = 0
+	_leg_late = 0
+	_leg_pulls = 0
+	_leg_flips = 0
+	_leg_worst_pull = 0.0
+	_leg_worst_cut = 0.0
 	_have_prev = false
 	_prev_sign = 0
 	if _leg >= LEGS.size():
 		_finish()
 		return
 	_bog.revive_at(Transform3D(Basis.IDENTITY, LEGS[_leg]["spot"]))
+	_rig.set_view(0.0, -0.12)
+	_face_yaw = 0.0
+	_face_holding = false
+	_face_settled = true
 
 
 func _physics_process(_delta: float) -> void:
@@ -292,6 +341,10 @@ func _drive(kind: String, t: int) -> void:
 			forward = t > 0
 			yaw = 1.1 * sin(t * 0.04)
 			pitch = -0.12 + 0.65 * sin(t * 0.07)
+		"face":
+			var driven := _drive_face(t)
+			yaw = float(driven["yaw"])
+			forward = bool(driven["forward"])
 	_rig.set_view(yaw, pitch)
 	if forward:
 		Input.action_press("move_forward")
@@ -299,23 +352,96 @@ func _drive(kind: String, t: int) -> void:
 		Input.action_release("move_forward")
 
 
-func _process(_delta: float) -> void:
+## The `faces` leg, in four phases, and the only leg that touches the Bog itself.
+##
+## The view is stepped rather than swept for the two turning phases on purpose.
+## A sweep measures a body chasing a moving target, which is a lag and not a
+## catch-up; a step asks the question the player asks, which is "I flicked, when
+## is the Bog pointing there". 45 degrees is a real mouse movement and closes at
+## `Bog.TURN_SPEED` in about 3.4 ticks, so 6 ticks of budget is the turn plus the
+## one frame the view basis spends crossing from `_process` to the next physics
+## tick, plus slack.
+##
+## The two commitments are then driven directly rather than through a key, for
+## `tools/combat_range.gd`'s reason: what is being measured is what `Bog._face`
+## does about `is_spinning()` and `is_emoting()`, and a key press would add the
+## whole of `BogCombat`'s gating to the thing that could fail.
+func _drive_face(t: int) -> Dictionary:
+	var forward := false
+	if t <= FACE_TURN_END:
+		forward = t > FACE_RUN_FROM
+		# Hold the view still for the last stretch, so the body is settled on it
+		# before the spin freezes whatever it is holding. `t > 0` because the
+		# settle calls this with t = 0 over and over, and a step there would be
+		# fifty turns nobody drove and nobody watched.
+		if t > 0 and t % FACE_STEP_TICKS == 0 and t <= FACE_TURN_END - FACE_STEP_TICKS:
+			_face_yaw += FACE_STEP
+			_face_turned_at = t
+			_face_settled = false
+			_face_turns += 1
+	elif t <= FACE_SPIN_END:
+		if t == FACE_SPIN_AT:
+			_bog.begin_spin(FACE_SPIN_SECONDS)
+			_face_spun = _bog.is_spinning()
+			if not _face_spun:
+				_face_notes.append("the spin never started")
+		if t == FACE_SPIN_SWEEP - 2:
+			_begin_hold()
+		if t >= FACE_SPIN_SWEEP:
+			var through := clampf(float(t - FACE_SPIN_SWEEP) / float(FACE_SWEEP_TICKS),
+				0.0, 1.0)
+			return {"yaw": _face_yaw + PI * through, "forward": false}
+	else:
+		if t == FACE_SPIN_END + 1:
+			# The spin is over: let the body come back onto the view it was
+			# swung to, which is itself the other half of the claim.
+			_face_yaw += PI
+			_end_hold()
+		if t == FACE_EMOTE_AT:
+			_combat.start_emote()
+			_face_emoted = _bog.is_emoting()
+			if not _face_emoted:
+				_face_notes.append("the emote never started")
+		if t == FACE_EMOTE_SWEEP - 2:
+			_begin_hold()
+		if t >= FACE_EMOTE_SWEEP:
+			var through := clampf(float(t - FACE_EMOTE_SWEEP) / float(FACE_SWEEP_TICKS),
+				0.0, 1.0)
+			return {"yaw": _face_yaw + PI * through, "forward": false}
+	return {"yaw": _face_yaw, "forward": forward}
+
+
+## Start watching a heading the rig is not allowed to move.
+func _begin_hold() -> void:
+	_face_held = _bog.body_yaw
+	_face_holding = true
+
+
+func _end_hold() -> void:
+	_face_holding = false
+
+
+func _process(delta: float) -> void:
 	if _bog == null or _leg < 0 or _leg >= LEGS.size() or _tick <= 0:
 		return
-	_check_frame()
+	_check_frame(delta)
+	if LEGS[_leg]["drive"] == "face":
+		_check_facing()
 
 
-func _check_frame() -> void:
+func _check_frame(delta: float) -> void:
 	var space := get_world_3d().direct_space_state
 	var cam := _rig.camera().global_position
+	var pivot := _rig.global_position
 	var eye := _bog.global_position + Vector3.UP * _bog.eye_height()
 	if _leg_checked == 0:
 		_leg_from = _bog.global_position
 	_leg_checked += 1
 	# How far the scenery shoved the lens in, so a leg that never pushed the
 	# camera at all is visible as one rather than passing quietly.
-	_leg_nearest = minf(_leg_nearest, cam.distance_to(_rig.global_position))
+	_leg_nearest = minf(_leg_nearest, cam.distance_to(pivot))
 
+	# ------------------------------------------------------------------ clip ---
 	var point := PhysicsPointQueryParameters3D.new()
 	point.position = cam
 	point.collision_mask = WORLD_MASK
@@ -329,8 +455,8 @@ func _check_frame() -> void:
 	shape.collision_mask = WORLD_MASK
 	var touching := not space.intersect_shape(shape, 1).is_empty()
 
-	var ray := PhysicsRayQueryParameters3D.create(eye, cam, WORLD_MASK)
-	var hit := space.intersect_ray(ray)
+	var hit := space.intersect_ray(
+		PhysicsRayQueryParameters3D.create(eye, cam, WORLD_MASK))
 	var behind := not hit.is_empty()
 
 	if inside:
@@ -343,71 +469,98 @@ func _check_frame() -> void:
 	if inside or touching or behind:
 		_leg_clipped += 1
 
-	var aim_error := _combat._aim_point().distance_to(_unobstructed_aim_point(space))
+	# ------------------------------------------------------------------- aim ---
+	var aim_error := _combat._aim_point().distance_to(_lens_aim_point(space))
 	if aim_error > AIM_TOLERANCE:
 		_leg_aim_off += 1
 	_leg_worst_aim = maxf(_leg_worst_aim, aim_error)
 
-	# The lens's own offsets, read off the node the rig placed: how far it sits to
-	# the side, and how far back it got. A lens further to the side than its share
-	# of the boom is a Bog sliding across the frame (D-083).
-	var lens := _rig.camera().position
-	var share := BogCamera.SHOULDER_DEFAULT * lens.z / BogCamera.DISTANCE_DEFAULT
-	if lens.x - share > FRAME_TOLERANCE:
-		_leg_wide += 1
-	_leg_worst_wide = maxf(_leg_worst_wide, lens.x - share)
+	# ----------------------------------------------------------------- frame ---
+	# The unobstructed lens direction for this view, built here from the rig's
+	# yaw and pitch rather than read off the camera, so it is an independent
+	# statement of where the segment runs. How far the lens sits off that line is
+	# the Bog's drift across the picture (D-083), and it has to be zero.
+	var line := (Basis(Vector3.UP, _rig.yaw()) * Basis(Vector3.RIGHT, _rig.pitch())
+		* Vector3(BogCamera.SHOULDER_DEFAULT, 0.0, BogCamera.DISTANCE_DEFAULT)).normalized()
+	var along := cam - pivot
+	var off_line := (along - line * along.dot(line)).length()
+	if off_line > FRAME_TOLERANCE:
+		_leg_off_line += 1
+	_leg_worst_line = maxf(_leg_worst_line, off_line)
 
-	# Pop and swim (D-086). `lens` is boom-space, so the Bog's walking and the
-	# player's turning are already out of it and every millimetre here was put
-	# there by the scenery. The lens's own rotation is measured as its angle off
-	# the boom's axis, for the same reason: turning the view turns the boom too,
-	# so what is left is only the reticle correction swinging the picture.
-	var dev := rad_to_deg((-_rig.camera().global_transform.basis.z).angle_to(
-		-_boom.global_transform.basis.z))
-	var cut := absf(_rig.yaw() - _prev_yaw) + absf(_rig.pitch() - _prev_pitch) > CUT_TURN
-	if _have_prev and not cut:
+	# ------------------------------------------------------------------ calm ---
+	var arm := along.length()
+	if _have_prev:
 		_leg_calm += 1
-		var step := lens.distance_to(_prev_lens)
-		_leg_worst_step = maxf(_leg_worst_step, step)
-		if step > STEP_LIMIT:
-			_leg_jumped += 1
-		var turn := absf(dev - _prev_dev)
-		_leg_worst_turn = maxf(_leg_worst_turn, turn)
-		if turn > TURN_LIMIT:
-			_leg_snapped += 1
-		var move := lens.z - _prev_lens.z
+		# drag: the pivot never outruns the body plus the ease of the gap it
+		# already had. `LAG_FLAT` is the faster of the rig's two rates, so it
+		# bounds the vertical channel as well.
+		var gap := _prev_pivot.distance_to(_prev_eye)
+		var cap := gap * (1.0 - exp(-BogCamera.LAG_FLAT * delta)) \
+			+ _prev_eye.distance_to(eye) + CALM_SLACK
+		if _prev_pivot.distance_to(pivot) > cap:
+			_leg_drag += 1
+
+		# loose: with the view still and the arm out at full length, nothing but
+		# the pivot's own easing may move the lens — so the lens is held to the
+		# same cap the pivot is. It is the literal form of "with no scenery
+		# contact the lens moves no more than the body moved plus lag slack",
+		# and it passes by being a rigid offset rather than by being damped,
+		# which is the property actually worth asserting: there is no second
+		# thing in this rig allowed to move the picture.
+		var still := is_equal_approx(_rig.yaw(), _prev_yaw) \
+			and is_equal_approx(_rig.pitch(), _prev_pitch)
+		if still and arm >= _arm - 0.001 and _prev_arm >= _arm - 0.001:
+			_leg_free += 1
+			if _prev_lens.distance_to(cam) > cap:
+				_leg_loose += 1
+
+		var step := arm - _prev_arm
+		if step < -CALM_SLACK:
+			# A pull-in. Exempt, but this is the pop the design is buying, so
+			# it is measured and printed. Split on whether the view was *turned*
+			# or *cut* this frame: the "back to a wall" leg deliberately flicks
+			# 83 degrees between two frames, which no rig can lead and no player
+			# reads as camera movement — the whole picture changed — and mixing
+			# that in with a mouse drag would hide the number worth knowing.
+			_leg_pulls += 1
+			if absf(_rig.yaw() - _prev_yaw) + absf(_rig.pitch() - _prev_pitch) > CUT_TURN:
+				_leg_worst_cut = maxf(_leg_worst_cut, -step)
+			else:
+				_leg_worst_pull = maxf(_leg_worst_pull, -step)
+		elif step > CALM_SLACK:
+			var out := (_arm - _prev_arm) * (1.0 - exp(-BogCamera.RETURN_RATE * delta))
+			if step > out * RETURN_SLACK + CALM_SLACK:
+				_leg_late += 1
 		var sign_now := 0
-		if move > FLIP_EPSILON:
+		if step > CALM_SLACK:
 			sign_now = 1
-		elif move < -FLIP_EPSILON:
+		elif step < -CALM_SLACK:
 			sign_now = -1
 		if sign_now != 0:
 			if _prev_sign != 0 and sign_now != _prev_sign:
 				_leg_flips += 1
 			_prev_sign = sign_now
-	_prev_lens = lens
-	_prev_dev = dev
+	_prev_arm = arm
+	_prev_pivot = pivot
+	_prev_eye = eye
+	_prev_lens = cam
 	_prev_yaw = _rig.yaw()
 	_prev_pitch = _rig.pitch()
-	# A cut breaks the chain on both sides: the frame that lands on the new view
-	# is not compared with the old one, and its direction of travel is not carried
-	# across either, so a flick cannot be scored as a flip.
-	_have_prev = not cut
-	if cut:
-		_prev_sign = 0
+	_have_prev = true
 
 
-## Where a throw should go for this view, worked out from the camera the rig
-## would have with nothing in the way: the rig's pivot, its yaw and pitch, the
-## full boom and the full shoulder. The ray is only tested from the Bog's own
-## depth outwards — nothing behind the thrower is something it can throw at, and
-## this is the same rule the rig promises (`BogCamera.aim_ray`).
-func _unobstructed_aim_point(space: PhysicsDirectSpaceState3D) -> Vector3:
-	var basis := Basis(Vector3.UP, _rig.yaw()) * Basis(Vector3.RIGHT, _rig.pitch())
-	var origin := _rig.global_position \
-		+ basis * Vector3(BogCamera.SHOULDER_DEFAULT, 0.0, BogCamera.DISTANCE_DEFAULT)
-	var direction := -basis.z
-	var from := origin + direction * BogCamera.DISTANCE_DEFAULT
+## Where a throw goes for this view, worked out from the `Camera3D` node and
+## nothing else: its own position, its own forward, and the Bog skipped by the
+## lens's own distance from the pivot — which is the whole of `aim_ray`'s
+## contract restated from the outside. The ray is only tested from the Bog's own
+## depth outwards, because nothing behind the thrower is something it can throw
+## at.
+func _lens_aim_point(space: PhysicsDirectSpaceState3D) -> Vector3:
+	var cam := _rig.camera()
+	var origin := cam.global_position
+	var direction := -cam.global_transform.basis.z
+	var from := origin + direction * origin.distance_to(_rig.global_position)
 	var query := PhysicsRayQueryParameters3D.create(
 		from, origin + direction * BogCombat.MAX_AIM_DISTANCE, AIM_MASK)
 	query.exclude = [_bog.get_rid()]
@@ -420,26 +573,63 @@ func _unobstructed_aim_point(space: PhysicsDirectSpaceState3D) -> Vector3:
 	return p
 
 
+## The `faces` verdict, asked only on the open-ground leg.
+##
+## Two halves. While the view is being stepped, every step starts a stopwatch
+## that stops when the body is within `FACE_TOLERANCE` of the view; a step the
+## body has not matched inside `FACE_CATCHUP_TICKS` is a failure. While a
+## commitment is holding, the body yaw is compared with the one it had when the
+## hold began and any movement at all is a failure — the camera may turn through
+## a whole half-circle and the body must not notice.
+func _check_facing() -> void:
+	var error := absf(angle_difference(_bog.body_yaw, _rig.yaw()))
+	if _face_holding:
+		_face_held_frames += 1
+		var drift := absf(angle_difference(_bog.body_yaw, _face_held))
+		_face_worst_drift = maxf(_face_worst_drift, drift)
+		if drift > FACE_HOLD_TOLERANCE:
+			_face_broke += 1
+		return
+	if _face_settled:
+		return
+	if error <= FACE_TOLERANCE:
+		_face_settled = true
+		_face_worst_catchup = maxi(_face_worst_catchup, _tick - _face_turned_at)
+	elif _tick - _face_turned_at > FACE_CATCHUP_TICKS:
+		# Out of budget. `_face_worst_error` is how far short the body was when
+		# the stopwatch ran out, so a pass prints zero and a failure prints how
+		# badly.
+		_face_settled = true
+		_face_slow += 1
+		_face_worst_error = maxf(_face_worst_error, error)
+		_face_worst_catchup = maxi(_face_worst_catchup, _tick - _face_turned_at)
+
+
 func _report_leg() -> void:
 	var leg: Dictionary = LEGS[_leg]
-	print("camera_range: %-18s walked %4.1f m, camera as close as %.2f m; clipped %3d/%d frames (inside %d, near plane %d, behind a wall %d, worst %.2f m); aim off %d, worst %.3f m; lens wide %d, worst %.3f m" % [
+	print("camera_range: %-18s walked %4.1f m, camera as close as %.2f m; clipped %3d/%d frames (inside %d, near plane %d, behind a wall %d, worst %.2f m); aim off %d, worst %.3f m; off the line %d, worst %.4f m" % [
 		leg["name"], _bog.global_position.distance_to(_leg_from), _leg_nearest,
 		_leg_clipped, _leg_checked, _leg_inside, _leg_touching,
 		_leg_behind, _leg_worst_behind, _leg_aim_off, _leg_worst_aim,
-		_leg_wide, _leg_worst_wide])
-	print("camera_range: %-18s over %d unbroken frames: lens step worst %.3f m (%d over), flips %3d, lens turn worst %.2f deg (%d over)" % [
-		leg["name"], _leg_calm, _leg_worst_step, _leg_jumped, _leg_flips,
-		_leg_worst_turn, _leg_snapped])
+		_leg_off_line, _leg_worst_line])
+	print("camera_range: %-18s over %d frames: pivot outran the body %d, lens adrift %d of %d loose frames, arm late out %d; %d pull-ins, worst %.3f m in a turned frame and %.3f m in a cut one, %d reversals" % [
+		leg["name"], _leg_calm, _leg_drag, _leg_loose, _leg_free, _leg_late,
+		_leg_pulls, _leg_worst_pull, _leg_worst_cut, _leg_flips])
 	_total_checked += _leg_checked
 	_total_clipped += _leg_clipped
 	_total_aim_off += _leg_aim_off
-	_total_wide += _leg_wide
-	_total_jumped += _leg_jumped
-	_total_flips += _leg_flips
-	_total_snapped += _leg_snapped
+	_total_off_line += _leg_off_line
 	_total_calm += _leg_calm
-	_worst_step = maxf(_worst_step, _leg_worst_step)
-	_worst_turn = maxf(_worst_turn, _leg_worst_turn)
+	_total_drag += _leg_drag
+	_total_free += _leg_free
+	_total_loose += _leg_loose
+	_total_late += _leg_late
+	_total_pulls += _leg_pulls
+	_total_flips += _leg_flips
+	_worst_pull = maxf(_worst_pull, _leg_worst_pull)
+	_worst_cut = maxf(_worst_cut, _leg_worst_cut)
+	_worst_aim = maxf(_worst_aim, _leg_worst_aim)
+	_worst_line = maxf(_worst_line, _leg_worst_line)
 
 
 func _finish() -> void:
@@ -451,25 +641,33 @@ func _finish() -> void:
 		print("camera_range: camera inside the scenery on %d of %d frames — clip FAIL" % [
 			_total_clipped, _total_checked])
 	if _total_aim_off == 0 and enough:
-		print("camera_range: aim matched the unobstructed camera on all %d frames — aim PASS" % _total_checked)
+		print("camera_range: the crosshair was the shot on all %d frames (worst %.4f m) — aim PASS" % [
+			_total_checked, _worst_aim])
 	else:
-		print("camera_range: aim off the unobstructed camera on %d of %d frames — aim FAIL" % [
-			_total_aim_off, _total_checked])
-	if _total_wide == 0 and enough:
-		print("camera_range: the shoulder came in with the boom on all %d frames — frame PASS" % _total_checked)
+		print("camera_range: the shot was off the crosshair on %d of %d frames (worst %.3f m) — aim FAIL" % [
+			_total_aim_off, _total_checked, _worst_aim])
+	if _total_off_line == 0 and enough:
+		print("camera_range: the lens stayed on the pivot-to-lens line on all %d frames (worst %.4f m) — frame PASS" % [
+			_total_checked, _worst_line])
 	else:
-		print("camera_range: lens wider than its share of the shoulder on %d of %d frames — frame FAIL" % [
-			_total_wide, _total_checked])
+		print("camera_range: lens off the pivot-to-lens line on %d of %d frames (worst %.4f m) — frame FAIL" % [
+			_total_off_line, _total_checked, _worst_line])
 
-	var flip_allowance := int(_total_calm * FLIP_BUDGET)
-	var step_allowance := int(_total_calm * STEP_BUDGET)
-	var calm := _total_jumped <= step_allowance and _total_snapped == 0 \
-		and _total_flips <= flip_allowance and enough and _total_calm >= 1000
-	print("camera_range: over %d frames the view was turned rather than cut: lens step over %.2f m on %d (budget %d, worst %.3f m); boom flips %d (budget %d); lens turn over %.2f deg on %d (worst %.2f deg) — calm %s" % [
-		_total_calm, STEP_LIMIT, _total_jumped, step_allowance, _worst_step,
-		_total_flips, flip_allowance,
-		TURN_LIMIT, _total_snapped, _worst_turn,
+	var calm := _total_drag == 0 and _total_loose == 0 and _total_late == 0 \
+		and enough and _total_calm >= 1000 and _total_free >= 100
+	print("camera_range: over %d frames the pivot outran the body %d, the lens drifted on %d of %d loose frames, the arm went out over the eased cap %d; %d pull-ins, worst %.3f m in one turned frame (%.3f m across a cut), %d reversals — calm %s" % [
+		_total_calm, _total_drag, _total_loose, _total_free, _total_late,
+		_total_pulls, _worst_pull, _worst_cut, _total_flips,
 		"PASS" if calm else "FAIL"])
+
+	var faced := _face_turns > 0 and _face_slow == 0 and _face_broke == 0 \
+		and _face_spun and _face_emoted and _face_held_frames > 0
+	var note := "" if _face_notes.is_empty() else " (" + ", ".join(_face_notes) + ")"
+	print("camera_range: the body matched the view on %d of %d turns within %d ticks (worst %d ticks, %.2f deg still out), and held its heading through %d committed frames (worst drift %.3f deg)%s — faces %s" % [
+		_face_turns - _face_slow, _face_turns, FACE_CATCHUP_TICKS,
+		_face_worst_catchup, rad_to_deg(_face_worst_error),
+		_face_held_frames, rad_to_deg(_face_worst_drift), note,
+		"PASS" if faced else "FAIL"])
 	get_tree().quit()
 
 

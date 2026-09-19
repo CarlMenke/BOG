@@ -137,7 +137,7 @@ func _spawn(peer: int, at: Vector3) -> Bog:
 	if rig != null:
 		rig.process_mode = Node.PROCESS_MODE_DISABLED
 	bog.global_position = at
-	bog.set_view_basis(Basis.IDENTITY, false)
+	bog.set_view_basis(Basis.IDENTITY)
 	MatchState.bogs[peer] = bog
 	return bog
 
@@ -167,7 +167,7 @@ func _ticks(count: int) -> void:
 func _reset() -> void:
 	_drive(0.0, false, false)
 	_bog.revive_at(Transform3D(Basis.IDENTITY, SPAWN))
-	_bog.set_view_basis(Basis.IDENTITY, false)
+	_bog.set_view_basis(Basis.IDENTITY)
 	await _ticks(REST_TICKS)
 
 
