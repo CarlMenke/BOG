@@ -1503,6 +1503,15 @@ check "range parkour and reaches" "parkour_report: PASS" \
     res://tools/parkour_report.tscn "$GODOT_LOG_DIR/range_parkour.png" 40 top \
     map=res://scenes/world/maps/range.tscn
 also "range parkour and reaches" "every landing is reachable from the ground (0 stranded)"
+# The lodge's two rows of fittings, against the physics rather than against the
+# render (D-161). The racks and the wells are built after `super()`, so they are
+# not in the collision bake `preview_map` checks the pads against: this is the
+# only thing that stands a Bog-shaped capsule on all eight pads with the
+# furniture present, and the only thing that asks whether a rack against a wall
+# is still reachable at all.
+check "range lodge fittings" "range_views: probe PASS" \
+    "$GODOT" --path "$GODOT_ROOT" --resolution 640x360 --script tools/snapshot.gd -- \
+    res://tools/range_views.tscn "$GODOT_LOG_DIR/range_probe.png" 12 probe
 # And the picture the capture's numbers belong beside: the raised fist with the
 # card above it, half way down (the letters round). `shield deploys`' form — it
 # proves the scene renders with a Bog, a pouch and a card in it, which no

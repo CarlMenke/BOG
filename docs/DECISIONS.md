@@ -16997,3 +16997,78 @@ the same `skin=` so the corpse is a picture rather than an assertion.
   takes the colour off that material's own parameter.
 - **Keeping SHIRT unpickable and shipping the capability alone.** See above.
   (BOG-14.)
+
+## D-161 — The two sets of thing you can equip stand inside the lodge, one row down each wall
+The racks and the wells were out on the apron: three racks on the line z = 31
+between x -31 and -25, four wells on the same line between x 6 and 15. That put
+a weapon sixteen metres from the nearest spawn pad, down a ramp, out in the
+open — so the first thing a player did on Highsun Grounds was walk out of the
+hall, turn round, and walk back into it carrying a spear. The owner, 2026-09-18:
+*"in the practice range, the 2 sets of item you can equip should be inside the
+spawn hut along both walls."* Two sets, both walls, and that is what these are
+now: you spawn on a pad, turn to the wall — 1.4 m from the four pads on the
+outer columns, seven across the deck from the four on the inner ones — take
+what you want, and walk out north. Nobody crosses the apron to arm themselves.
+(BOG-30's text named only the racks; the owner's sentence names two sets, and
+one set per wall only parses if the wells move too.)
+
+**Racks east, wells west, which reverses the side each set was on.** The stats
+signboard (D-140) already stands on the west wall at z = 40.5 with a 1.6 m board
+on it, solid timber baked into the lodge, and it is the only obstruction on
+either wall: it leaves two runs of under four metres. A rack is 1.28 m of frame
+carrying a spear laid across it 1.67 m wide (`DISPLAY_SCALE` 1.35 on a 1.24 m
+model), so three of them want six metres of clear wall and the west wall has
+none. Four 0.84 m pedestals do fit around the sign — the row is symmetric about
+it at ±1.5 and ±2.8 m, so the board reads as the middle of the row rather than
+as something dropped into it. Racks at x +11.1, z 38.1 / 40.5 / 42.9, spear to
+sword in the order you meet them walking in; wells at x -10.75, z 37.7 / 39.0 /
+42.0 / 43.3. Uprights 0.24 m off the timber, pedestals 0.06 m — both read as
+flush, and neither leaves a gap a 0.76 m Bog could wedge into.
+
+**The lettering faced the wrong way and only a render said so.** Every marker
+group on this map is authored facing the marker's own -Z, and the racks were
+authored that way on the apron. But a `WeaponRack`'s name plank is a `Label3D`
+and its weapon tile a `Sprite3D`, and both of those face their own **+Z**, as
+does an `ItemWell`'s lit face. Point a rack's -Z at the deck and the deck gets
+the *back* of the plank: `Label3D` is double-sided by default, so the name
+renders mirrored, and `Sprite3D` is not, so the tile above it is simply not
+drawn. The first frame of this change had three racks reading SPEAR / BOW /
+GREAT SWORD backwards with no tiles at all — and, read the other way, it says
+the labels on the apron had been facing *north down the range*, away from the
+lodge you approached them from, for the life of the map. `RACK_YAW` and
+`WELL_YAW` are therefore -PI/2 and +PI/2, the opposite of what the arithmetic
+suggests. `signboard.gd` has compensated for the same thing since it was
+written, with an explicit `_label.rotation.y = PI`; `weapon_rack.gd` and
+`item_well.gd` never did, and turning the map is the contained fix rather than
+the right one (BOG-56).
+
+**The clearance is measured, not argued, because nothing else on this map can
+see a rack.** The fittings are built after `super()` by `RangeItems`, so they
+are not in the collision bake that `tools/preview_map.tscn` checks the eight
+pads against: a pad standing inside a rack would pass every existing check.
+`tools/range_views.tscn` is the range's answer to `quarry_views` (D-146) and
+builds the items itself; its `probe` view stands a Bog-shaped capsule on all
+eight pads and walks one out from every rack. No pad is blocked, no pad sits
+inside a swap trigger — the nearest is 1.36 m off `Rack_spear`, 0.84 m clear of
+the trigger's edge — and every rack arms the swap from anywhere 0.1 to 0.9 m in
+front of its face, an 0.8 m band of standable floor with the wall behind it.
+That band is the whole of "does the interaction still reach": a rack is a
+walk-over `Area3D` and not a ray or a prompt, because no interact action is
+bound in this project (D-112).
+
+**The probe's first version passed while measuring nothing.** A `WeaponRack`
+has `collision_layer = 0` and masks the player layer — it watches, and nothing
+in the game ever needs to query *for* a rack. But a shape query filters by the
+layer of the thing it is looking for, so `collide_with_areas` against a layer-0
+area finds nothing, always, and reports it as clearance: eight pads came back
+"arms 0 racks" before a single number in that line was true. The tool now puts
+the triggers on the player layer for the length of its own run, which nothing in
+the game does and nothing should.
+
+**Left alone.** The apron is not redressed. Nothing stood on the stretch in
+front of the lodge before, and it still reads as a forecourt; the far west
+corner where the racks were is plainer than it was, and the answer to that, if
+it needs one, is a real prop and a relaxed `_prop_allowed`, not primitives
+(D-135). The sun and the fill are BOG-26's. The four wells' `OmniLight3D`s are
+now inside the hall rather than out on the apron, which is a consequence of
+moving them and not a lighting decision. (BOG-30.)

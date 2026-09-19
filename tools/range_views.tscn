@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://cq7vw8rangeview1"]
+
+[ext_resource type="Script" path="res://tools/range_views.gd" id="1"]
+
+[node name="RangeViews" type="Node3D"]
+script = ExtResource("1")

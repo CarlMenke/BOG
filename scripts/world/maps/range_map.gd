@@ -67,8 +67,9 @@ extends StaticMap
 ## Nine, each its own table and its own `Node3D`:
 ##
 ##   lodge     a 24 x 12 m deck 1.2 m up under a hall roof, the eight pads on
-##             it, two ramps down to the apron. The apron in front of it is the
-##             hub: racks west, wells east, every zone entered off it.
+##             it, the racks down its east wall and the wells down its west
+##             (D-161), two ramps down to the apron. The apron in front of it is
+##             the hub: open ground, every zone entered off it.
 ##   lanes     three throwing lanes, 6 m wide, 32 m long, read off what stands
 ##             in them rather than off anything between them: dummies at
 ##             8 / 15 / 22 m, boards at 8 and 22, one pop-up cover block each,
@@ -314,18 +315,78 @@ const LETTER_AT: Array[Vector2] = [
 
 # ------------------------------------------------------------------ fittings ---
 
-## The weapon racks, west apron, in the order the loadout lists them.
+## The two sets of thing you can equip, **inside the lodge, one row down each
+## side wall of the spawn deck** (D-161).
+##
+## They used to stand out on the apron: three racks on the line z = 31 between
+## x -31 and -25, four wells on the same line between x 6 and 15. That put a
+## weapon sixteen metres from the nearest spawn pad, down a ramp, out in the
+## open — so the first thing a player did on this map was walk out of the hall,
+## turn round, and walk back into it carrying a spear. The owner's words were
+## "the 2 sets of item you can equip should be inside the spawn hut along both
+## walls", and that is what these are now: you spawn on a pad, turn to the wall
+## — 1.4 m from the four pads on the outer columns, seven across the deck from
+## the four on the inner ones — take what you want, and walk out north. Nobody
+## crosses the apron to arm themselves any more.
+##
+## **Racks east, wells west, and not the other way round**, which reverses the
+## side each set was on. The stats signboard already stands on the west wall at
+## z = 40.5 with a 1.6 m board on it, and it is solid timber baked into the
+## lodge — the only obstruction on either wall. A rack is 1.28 m of frame with a
+## spear laid across it 1.67 m wide (`DISPLAY_SCALE` 1.35 on a 1.24 m model), so
+## three of them want six metres of clear wall and the west wall has two runs of
+## under four. Four wells are 0.84 m pedestals and fit either side of the sign
+## with a tenth of a metre to spare, which is what the numbers below are: the
+## row is symmetric about the signboard at ±1.5 and ±2.8 m, so the board reads
+## as the middle of the row rather than as something dropped into it.
+##
+## Every one of these is `DECK` high and turned to face across the deck at the
+## pads — see `RACK_YAW` for which way "face" turned out to mean. See
+## `_build_markers` for the arithmetic that keeps them clear of the eight pads.
+
+## How far off the deck's centre line each row stands. The side walls' inner
+## faces are at ±11.4 (`LODGE_X` less the 0.6 m returns `_build_lodge` builds),
+## so a rack's uprights sit 0.24 m off the timber and a well's pedestal — a
+## 0.84 m box turned an eighth, so 1.19 m corner to corner — sits 0.06 m off it.
+## Both read as flush; neither leaves a gap a 0.76 m Bog could wedge into.
+const RACK_X := 11.1
+const WELL_X := -10.75
+## Which way each row is turned, so its **readable face** looks across the deck
+## at the pads and its span runs along z, down its own wall.
+##
+## These are the two yaws that put the lettering the right way round, and they
+## are not the ones the arithmetic suggests. A marker's own -Z is the facing
+## every other group on this map is authored in, and the racks were authored
+## that way when they stood on the apron — but a `WeaponRack`'s name plank is a
+## `Label3D` and its weapon tile a `Sprite3D`, and both of those face their own
+## **+Z**, as does an `ItemWell`'s lit face. Point a rack's -Z at the deck and
+## the deck gets the back of the plank: the `Label3D` is double-sided by default
+## so the name renders mirrored, and the `Sprite3D` is not, so the tile above it
+## simply is not drawn. The first render of this change had three racks reading
+## SPEAR / BOW / GREAT SWORD backwards with no tiles at all, which is a thing no
+## amount of staring at the yaw would have shown. So: +Z across the deck, and a
+## render is what says so.
+const RACK_YAW := -PI * 0.5
+const WELL_YAW := PI * 0.5
+
+## The weapon racks, in the order the loadout lists them, north to south — so
+## walking in off the apron you meet spear, bow, sword in that order. 2.4 m
+## apart, which leaves 0.73 m of daylight between the ends of two laid-across
+## spears, and symmetric about z = 40.5 so the row lines up with the signboard
+## opposite.
 const RACKS: Array[Dictionary] = [
-	{"at": Vector2(-31.0, 31.0), "weapon": "spear"},
-	{"at": Vector2(-28.0, 31.0), "weapon": "bow"},
-	{"at": Vector2(-25.0, 31.0), "weapon": "sword"},
+	{"at": Vector2(RACK_X, 38.1), "weapon": "spear"},
+	{"at": Vector2(RACK_X, 40.5), "weapon": "bow"},
+	{"at": Vector2(RACK_X, 42.9), "weapon": "sword"},
 ]
-## The item wells, east apron.
+## The item wells. The inner pair stop 0.11 m short of the signboard's 1.6 m
+## board (z 39.7 to 41.3); the outer pair are 1.3 m further out, which is the
+## closest two pedestals can stand without their turned corners meeting.
 const WELLS: Array[Dictionary] = [
-	{"at": Vector2(6.0, 31.0), "kind": "shield"},
-	{"at": Vector2(9.0, 31.0), "kind": "magnet"},
-	{"at": Vector2(12.0, 31.0), "kind": "potion"},
-	{"at": Vector2(15.0, 31.0), "kind": "robe"},
+	{"at": Vector2(WELL_X, 37.7), "kind": "shield"},
+	{"at": Vector2(WELL_X, 39.0), "kind": "magnet"},
+	{"at": Vector2(WELL_X, 42.0), "kind": "potion"},
+	{"at": Vector2(WELL_X, 43.3), "kind": "robe"},
 ]
 ## The one sign left on the range, and the only control on it.
 ##
@@ -887,17 +948,33 @@ func _build_markers() -> void:
 		_marker(letters, ["B", "O", "G"][i], Vector3(at.x, 0.0, at.y), 0.0,
 			{"zone": "capture"})
 
+	# The two rows of fittings, on the deck rather than on the apron (D-161), so
+	# `DECK` and not 0.0 is the height and the yaw is across the deck rather
+	# than back down it.
+	#
+	# The clearance that decides these numbers is on x, and the thing that would
+	# break it is somebody moving a pad rather than somebody moving a rack. A
+	# `WeaponRack`'s walk-over `Area3D` is 1.1 m deep and arms the swap from a
+	# Bog-shaped capsule standing anywhere from 0.1 to 0.9 m in front of the
+	# frame; a Bog on the outer pad at x = 9.75 stands 1.74 m out, so there is
+	# 0.84 m between "you equip where you spawn" and "you are handed a spear for
+	# standing still on the frame you spawned". Those are measured rather than
+	# argued: `tools/range_views.tscn` in its `probe` view stands the capsule on
+	# all eight pads and walks it out from every rack, and it is the only thing
+	# on this map that looks at the racks at all — they are built after
+	# `super()`, so the collision bake `tools/preview_map.tscn` checks the pads
+	# against does not contain them.
 	var racks := _marker_root("Racks")
 	for entry: Dictionary in RACKS:
 		var at: Vector2 = entry["at"]
-		_marker(racks, "Rack_%s" % entry["weapon"], Vector3(at.x, 0.0, at.y), PI,
-			{"weapon": entry["weapon"], "zone": "lodge"})
+		_marker(racks, "Rack_%s" % entry["weapon"], Vector3(at.x, DECK, at.y),
+			RACK_YAW, {"weapon": entry["weapon"], "zone": "lodge"})
 
 	var wells := _marker_root("Wells")
 	for entry: Dictionary in WELLS:
 		var at: Vector2 = entry["at"]
-		_marker(wells, "Well_%s" % entry["kind"], Vector3(at.x, 0.0, at.y), PI,
-			{"kind": entry["kind"], "zone": "lodge"})
+		_marker(wells, "Well_%s" % entry["kind"], Vector3(at.x, DECK, at.y),
+			WELL_YAW, {"kind": entry["kind"], "zone": "lodge"})
 
 	var signs := _marker_root("Signs")
 	_marker(signs, "Sign_%s_%s" % [SIGNBOARD["zone"], SIGNBOARD["action"]],
@@ -1143,8 +1220,8 @@ func _build_props(parent: Node3D) -> void:
 			node.add_to_group(BACKDROP_GROUP)
 
 
-## Nowhere a prop may stand: in a lane, on a landing, on the apron's fittings,
-## on the deck, in the pit, or within four metres of a pad.
+## Nowhere a prop may stand: in a lane, on a landing, on the apron, on the deck,
+## in the pit, or within four metres of a pad.
 func _prop_allowed(at: Vector2) -> bool:
 	if at.x > LANE_LINES[0] - 0.6 and at.x < LANE_LINES[3] + 0.6 \
 			and at.y < LANE_FIRING_Z + 1.0 and at.y > LANE_FIRING_Z - LANE_LENGTH - 1.0:
@@ -1158,7 +1235,7 @@ func _prop_allowed(at: Vector2) -> bool:
 	if at.x > LODGE_X.x - 5.0 and at.x < LODGE_X.y + 5.0 and at.y > LODGE_Z.x - 6.0:
 		return false
 	if at.y > LANE_FIRING_Z - 1.0 and at.y < LODGE_Z.x:
-		return false   # the apron: racks, wells, stations and the walking line
+		return false   # the apron: the walking line out of the lodge to every zone
 	for platform: Platform in platforms:
 		if at.distance_to(Vector2(platform.centre.x, platform.centre.z)) \
 				< platform.radius + 1.2:
