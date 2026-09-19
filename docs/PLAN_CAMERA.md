@@ -71,6 +71,45 @@ turn-in-place in v1**: the feet will slide when a standing Bog looks around;
 Fortnite hides that with turn-in-place clips this repo does not have. Note it
 as the one known cosmetic gap in the decision text.
 
+### Idle yaw slack (added after the first evening on the rig)
+The gap above came back as the first piece of feedback, and it is closed.
+Owner: *"if they are standing still, not moving at all and just moving the
+camera, then let them get it a little further around before it starts moving
+the character, not all the way just further, and then if they start moving,
+smooth it back to inside the previous clamp."* Fortnite's standing behaviour.
+
+`Bog._face` now carries a **`_yaw_slack`**, the radians the view is allowed to
+be off the body before it drags it:
+
+- **60° (`Bog.YAW_SLACK`) while the Bog is idle**, set outright, not eased in.
+  Idle means on the floor, `input_direction` zero, horizontal speed under
+  `IDLE_SPEED` (0.35 m/s), not sliding, not aiming (`wants_aim`, read in
+  `_read_input` off the `aim` action), not drawing, and not mid-wind-up
+  (`BogAnimator.is_throwing()`). Everything on that list is the player pointing
+  the Bog at something rather than looking at it.
+- **Closing to 0 at `SLACK_CLOSE_RATE` (4 rad/s) otherwise.** A rate, not a
+  switch: zeroing it outright would leave the body up to 60° off the view with
+  only `TURN_SPEED` between them, i.e. an 0.075 s flick on the first step of
+  every walk. 4 rad/s hands the whole 60° back over 0.26 s, slower than the
+  body can turn, so what you see is the Bog squaring up as it sets off.
+- Every tick: `desired = view_yaw − clamp(wrapf(view_yaw − body_yaw, −π, π),
+  −slack, +slack)`, then the same `rotate_toward(body_yaw, desired,
+  TURN_SPEED·delta)` as before. Inside the slack that resolves to `body_yaw`
+  and the body holds; past it, to the slack's **edge**, so the slack travels
+  round with the view rather than being an arc the view escapes from. At a
+  slack of 0 it is the welded rig above, unchanged.
+
+The committed states still win — `_face` returns for spin/roll/emote before any
+of this, and a slide keeps facing its velocity. Remote Bogs need nothing:
+`body_yaw` is already replicated, so what arrives on `sync_yaw` is slacked.
+
+`faces` in `tools/camera_range.gd` grew three claims for it: a standing 45°
+look must move the body **not at all**; a standing 90° one must leave it at
+rest exactly on the 60° edge; and starting to run with the view held must close
+that 60° inside 0.35 s with no single physics tick turning the body further
+than `rotate_toward` can. Measured: 0.000° of standing drift, 0.000° off the
+edge, 15 ticks to close, 0.0667 rad in the biggest tick of the close.
+
 ### What to remove from `Bog`
 - `_face_view`, and the `face_view` argument of `set_view_basis`. New shape:
   `set_view_basis(basis: Basis, pitch: float)`. Movement (`_wish_direction`)
