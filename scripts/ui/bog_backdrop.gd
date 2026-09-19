@@ -43,7 +43,7 @@ enum Formation { HERO, RING }
 ## number as far as the lobby is concerned: what they decide together is how
 ## wide on screen eight Bogs and their nameplates are, and that has to fit
 ## between the roster column and the match rail rather than behind them.
-@export var ring_radius: float = 3.0
+@export var ring_radius: float = 3.5
 ## How much of the circle they occupy. They fill the *far* arc, so the near side
 ## stays open and the camera looks into the group rather than at its backs.
 ##
@@ -295,7 +295,7 @@ const CAMERA_CLEARANCE := 6.0
 
 ## Torch flicker. Two detuned sines beat against each other so the period never
 ## quite repeats, which is what stops a flicker reading as a pulsing loop.
-const FIRE_ENERGY := 4.0
+const FIRE_ENERGY := 3.0
 const FIRE_FLICKER := 0.22
 
 var _camera: Camera3D
@@ -498,10 +498,10 @@ func _slot_transform(index: int, count: int) -> Transform3D:
 		# little frame left for him to be looking *into*. Four is still a
 		# three-quarter, and it is his eyeline that carries it now.
 		#
-		# 1.65 m out, which is as close to the flame as the pose survives: nearer
-		# and the fire is lighting his shins and blowing out his belly, further
-		# and he walks out of the only light there is.
-		return Transform3D(Basis(Vector3.UP, deg_to_rad(204.5)), Vector3(-0.37, 0.0, -1.61))
+		# 2.05 m out. It used to be 1.65, which was as close to the flame as the
+		# pose survives; a little further back reads as standing at a fire rather
+		# than over it, and the light still reaches him.
+		return Transform3D(Basis(Vector3.UP, deg_to_rad(204.5)), Vector3(-0.46, 0.0, -2.00))
 
 	# Fill the far arc, centred on the back of the ring. One Bog is at the
 	# middle of the arc, two straddle it, and so on outward.
@@ -887,11 +887,11 @@ func _build_fire() -> void:
 	# menu, and the environment's glow pass turns an emissive cone into a
 	# believable fire for a fraction of the cost of a GPUParticles system that
 	# nobody will ever stand next to.
-	_add_flame_cone(pit, 0.26, 0.72, 0.30, Color(1.0, 0.42, 0.10), 2.2)
-	_add_flame_cone(pit, 0.13, 0.46, 0.38, Color(1.0, 0.78, 0.34), 3.4)
+	_add_flame_cone(pit, 0.26, 0.72, 0.30, Color(1.0, 0.55, 0.26), 2.2)
+	_add_flame_cone(pit, 0.13, 0.46, 0.38, Color(1.0, 0.85, 0.52), 3.4)
 
 	_fire = OmniLight3D.new()
-	_fire.light_color = Color(1.0, 0.63, 0.29)
+	_fire.light_color = Color(1.0, 0.73, 0.47)
 	_fire.light_energy = FIRE_ENERGY
 	# Tight enough that the glade falls away into night a few metres out. A
 	# wide range lights the whole clearing evenly and the result reads as
