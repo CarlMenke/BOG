@@ -1414,6 +1414,11 @@ check "safari spawns and collision" "preview_map: PASS"     "$GODOT" --path "$GO
 # off `Bog` rather than typing. A change to the jump that strands a platform
 # fails here instead of in a match. About six seconds, so it earns its place.
 check "safari parkour reachability" "parkour_report: PASS"     "$GODOT" --path "$GODOT_ROOT" --resolution 1000x1000 --script tools/snapshot.gd --     res://tools/parkour_report.tscn "$GODOT_LOG_DIR/safari_parkour.png" 30 top
+# And the thing D-160 added: the kopje's top has three ways onto it on three
+# different sides, so the Bog holding it can be flanked. Counted rather than
+# eyeballed: the layout before D-160 had one, and the reachability check above
+# said yes to it the whole time.
+also "safari parkour reachability" "there are 3 ways onto the top"
 # Lantern Wharf's eight pads through the same tool. Its floor for "the geometry
 # was built" is its own: the yard is 1,700 triangles of boxes on purpose, and
 # Rust's 90,000 would fail it for being cheap.

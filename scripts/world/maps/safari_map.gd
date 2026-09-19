@@ -122,6 +122,57 @@ const KOPJE_CORE: Array[Dictionary] = [
 	{"model": "Rock_Medium_2", "at": Vector3(4.2, -1.0, 3.6), "scale": Vector3(3.2, 2.8, 3.2)},
 ]
 
+# --- the flanks ----------------------------------------------------------
+## Two more ways onto the top, and why there had to be some (D-160).
+##
+## The spiral is ten steps of a single corridor. Its last five — 5, 6, 7, 8, 9 —
+## run round the kopje's east side and finish on the shoulders, which both face
+## north, so *every* approach on this map converged on one lip. Whoever got
+## there first could watch the only door. Carl and Julian, playing it on
+## 2026-09-18: "It's fun once you get up top. If you're down below, it's kinda
+## ass"; "there's literally only one way to get up there".
+##
+## So the kopje gets two short climbs up its own flanks, each of them a `step`
+## on a pillar off the face and a wider `ledge` under the summit's lip, each
+## reached from a different quarter of the map, and each three jumps long from
+## the shelf it starts on:
+##
+##   west   the waterhole's mesa ramp dives onto the west step (1.9 m of rise),
+##          the step dives onto the west ledge (2.1 m), and the ledge steps up
+##          onto the summit or across onto shoulder 0. The whole western half of
+##          the map — the water, the shore, the dead forest behind it — used to
+##          have to walk the spiral from step 1.
+##   south  spiral 4 dives onto the south step (2.1 m), the step hops across to
+##          the south ledge, and the ledge steps up onto the summit. Spiral 4 is
+##          one leap off chain B, which is the baobab's own way in, so the
+##          south-east reaches the top without steps 5 to 9 either. Spiral 6
+##          can also make the south ledge, at the very end of a dive — the east
+##          gets a shortcut, not a fourth door.
+##
+## Every number here is held by `tools/parkour_report.gd`, which now counts the
+## landings that can jump onto the top and fails a build where fewer than three
+## of them stand on different sides of it. The old layout scored one.
+##
+## Two things constrain the positions much harder than they look. The spiral
+## ring sits at a radius of about 10.8 and a slab is 4.1 m across, so there is
+## no room for a rung *in* that ring; these live inside it, at radii of 6.4 to
+## 8.6, where the only neighbours are the core lumps (tops 4.2-5.8, so a ledge
+## at 8 stands proud of them) and each other. And a leap rises 2.295 m, so no
+## rung may be more than about 2.1 m above the one below it — which is why each
+## climb is two rungs and not one big dive.
+##
+## As (bearing, radius, top). `bearing` is the shared helper's: 0 is +x, 90 is
+## +z, so 204 is west and a little north, and 68 is south and a little east.
+const FLANK_CLIMBS: Array[Dictionary] = [
+	{"side": "west", "step": Vector3(165.0, 6.75, 6.4), "ledge": Vector3(204.0, 7.0, 8.4)},
+	{"side": "south", "step": Vector3(110.0, 8.6, 6.6), "ledge": Vector3(68.0, 6.4, 8.0)},
+]
+## The step is a spiral step's slab; the ledge is a tenth wider, because it is
+## the one a fight happens on and because the width is what makes it read as a
+## shelf of the summit rather than as one more stepping stone.
+const FLANK_STEP_SCALE := Vector3(2.0, 1.6, 2.0)
+const FLANK_LEDGE_SCALE := Vector3(2.2, 1.7, 2.2)
+
 # --- the ridge -----------------------------------------------------------
 ## Eight blocks along z = -24, the map's running route and the thing the summit
 ## dives at. The 8 m spacings are ~2.7 m hops and the two 10 m ones are ~4.7 m
@@ -478,6 +529,7 @@ func _ready() -> void:
 	_build_cliff(terrain)
 
 	_build_kopje(_group("Kopje"))
+	_build_flanks(_group("Flanks"))
 	_build_ridge(_group("Ridge"))
 	_build_termites(_group("Termites"))
 	_build_baobab(_group("Baobab"))
@@ -628,6 +680,32 @@ func _build_kopje(parent: Node3D) -> void:
 			r += SPIRAL_LEAP_PUSH
 		_slab(parent, "kopje", "spiral %d" % i, "RockPath_Square_Wide", bearing(b, r),
 			SPIRAL_FIRST_TOP + SPIRAL_RISE * float(i), Vector3(2.0, 1.6, 2.0), -b)
+
+
+# ------------------------------------------------------------------ flanks ---
+
+## The two climbs up the kopje's own sides. See `FLANK_CLIMBS` for why they
+## exist and why they sit where they do.
+##
+## They are built exactly as a spiral step is — a kit slab placed by its top,
+## with a stretched boulder for a pillar under it — because that is what the
+## rest of this hill is made of, and a ledge here that was made of anything else
+## would read as scaffolding bolted to a rock. The pillars are tall (the west
+## ledge stands on about eight metres of it) and most of each one is swallowed
+## by the core lumps it rises through, which is the look that was wanted: rock
+## coming out of the face, not a mushroom standing beside it.
+##
+## Yawed to face outward, like the spiral's, so the slab's long axis lies across
+## the direction you arrive from and the landing is as wide as it can be.
+func _build_flanks(parent: Node3D) -> void:
+	for climb: Dictionary in FLANK_CLIMBS:
+		var side := String(climb["side"])
+		var step: Vector3 = climb["step"]
+		_slab(parent, "flank", "%s step" % side, "RockPath_Square_Wide",
+			bearing(step.x, step.y), step.z, FLANK_STEP_SCALE, -step.x)
+		var ledge: Vector3 = climb["ledge"]
+		_slab(parent, "flank", "%s ledge" % side, "RockPath_Square_Wide",
+			bearing(ledge.x, ledge.y), ledge.z, FLANK_LEDGE_SCALE, -ledge.x)
 
 
 # ------------------------------------------------------------------- ridge ---

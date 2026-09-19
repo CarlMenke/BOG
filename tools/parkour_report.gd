@@ -48,6 +48,11 @@ const DEFAULT_MAP := "res://scenes/world/maps/safari.tscn"
 ##   min_big_edges   how many big-dive shortcuts the layout must offer
 ##   summit_zone     if set, the landing labelled "summit" must leap to a
 ##                   landing in this zone (Kopje Crossing's prize, D-042)
+##   top_height      if above zero, every landing at or above this is "the top
+##                   plateau", and `top_routes` separate ways onto it, at least
+##                   `top_spread` degrees apart around it, must exist (D-160)
+##   top_routes      how many of those there have to be
+##   top_spread      how far apart two of them have to be to count as two
 ##   sightline       if above zero, the longest line between two Bogs' eyes
 ##                   standing on the ground may not be longer than this
 ##   roof_sightline  the same, with at least one of the two on a landing
@@ -61,6 +66,15 @@ const EXPECT := {
 	"res://scenes/world/maps/safari.tscn": {
 		"min_platforms": 110, "min_big_edges": 6, "summit_zone": "ridge",
 		"sightline": 0.0, "roof_sightline": 0.0, "reach": 36.0, "grid": 2.0,
+		# The kopje's top, and the thing this map was rebuilt to stop being
+		# (D-160). 8.5 m takes in the summit at 9.5, both shoulders at 8.9 and
+		# spiral step 9 at 8.85 — the four landings that are "up top" in the
+		# sense Carl and Julian meant, where the fight is won and from which the
+		# whole savanna is in range. Three ways on, at least 60 degrees apart
+		# around it, so a Bog holding it has to watch three sides at once. The
+		# layout before D-160 scored **one**: every approach on the map funnelled
+		# into spiral steps 8 and 9 and both of those face north.
+		"top_height": 8.5, "top_routes": 3, "top_spread": 60.0,
 	},
 	"res://scenes/world/maps/wharf.tscn": {
 		"min_platforms": 20, "min_big_edges": 0, "summit_zone": "",
@@ -258,6 +272,9 @@ var _platforms: Array[StaticMap.Platform] = []
 var _spawns: Array[Transform3D] = []
 var _edges: Dictionary = {}      ## Vector2i(from, to) -> "hop" | "leap" | "big"
 var _tree: Dictionary = {}       ## to -> Vector2i(from, class index) as Vector2i
+## The ways onto the top plateau that `_check_top_routes` counted, as
+## Vector2i(entrance, top landing), so `_draw` can put them in the picture.
+var _routes_up: Array[Vector2i] = []
 var _checks: int = 0
 var _failures: int = 0
 var _reported: bool = false
@@ -307,6 +324,7 @@ func _physics_process(_delta: float) -> void:
 	_check_physics()
 	_build_graph()
 	_check_reachability()
+	_check_top_routes()
 	_check_off_limits()
 	_check_spawns()
 	_check_sightlines()
@@ -516,6 +534,142 @@ func _check_reachability() -> void:
 	_want("the summit can dive to the %s (%s)" % [summit_zone,
 		", ".join(landings) if not landings.is_empty() else "nowhere"],
 		not landings.is_empty())
+
+
+# ---------------------------------------------------------- ways to the top ---
+
+## How many separate ways there are onto the high ground, and whether they are
+## on different sides of it (D-160).
+##
+## Reachability above answers "can you get up there at all", and on Kopje
+## Crossing it said yes the whole time the map was being complained about,
+## because *one* way up is enough to satisfy it. The thing a player actually
+## feels is how many doors the Bog holding the top has to watch, and that is
+## this check: every landing below `top_height` that can hop or leap onto a
+## landing at or above it is a **way up**, and two ways up on the same side of
+## the hill are one door with two handles.
+##
+## Three rules, and each one is there because dropping it would let a map pass
+## that plays like the old one:
+##
+##   * a way up has to be reachable from the ground **without setting foot on
+##     the top**, or a second slab beside the summit counts as a second route
+##     to it;
+##   * hops and leaps only, for the same reason `_check_reachability` walks
+##     those: a one-tick dive is a shortcut somebody practised, not a way in;
+##   * they are counted by their bearing around the top's own centre, and two
+##     closer together than `top_spread` count once. The old layout's two
+##     entrances — spiral steps 8 and 9 — were 54 degrees apart and were the
+##     same approach, walked one step further.
+func _check_top_routes() -> void:
+	var top_height := float(_expect.get("top_height", 0.0))
+	if top_height <= 0.0:
+		return
+	var count := _platforms.size()
+	var on_top: Dictionary = {}
+	var centre := Vector2.ZERO
+	for i: int in count:
+		if _platforms[i].centre.y >= top_height:
+			on_top[i] = true
+			centre += Vector2(_platforms[i].centre.x, _platforms[i].centre.z)
+	if on_top.is_empty():
+		_want("something on %s stands at %.1f m or higher" % [_map_path, top_height], false)
+		return
+	centre /= float(on_top.size())
+
+	var below := _reachable_avoiding(on_top)
+	# One entry per landing that can get onto the top, carrying the first jump
+	# that does it and where round the hill that landing stands. One per
+	# *landing* rather than one per edge: a slab that can reach both the summit
+	# and a shoulder is still one way up, and counting its edges would make the
+	# old layout look like four routes instead of the one it was.
+	var ways: Array[Dictionary] = []
+	for i: int in count:
+		if on_top.has(i) or not below[i]:
+			continue
+		for j: int in on_top:
+			var jump: String = String(_edges.get(Vector2i(i, j), ""))
+			if jump != "hop" and jump != "leap":
+				continue
+			var at := Vector2(_platforms[i].centre.x, _platforms[i].centre.z) - centre
+			ways.append({
+				"bearing": fposmod(rad_to_deg(atan2(at.y, at.x)), 360.0),
+				"from": i, "to": j, "jump": jump,
+			})
+			break
+	var by_bearing := func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a["bearing"]) < float(b["bearing"])
+	ways.sort_custom(by_bearing)
+
+	var spread := float(_expect.get("top_spread", 60.0))
+	var kept := _spread_out(ways, spread)
+	print("  top: %d landing(s) at or above %.1f m, centred on %.1f, %.1f" % [
+		on_top.size(), top_height, centre.x, centre.y])
+	_routes_up.clear()
+	for index: int in ways.size():
+		var way: Dictionary = ways[index]
+		var counted := kept.has(index)
+		if counted:
+			_routes_up.append(Vector2i(int(way["from"]), int(way["to"])))
+		print("  top: %s %s off %s, %.0f degrees round — onto %s" % [
+			"*" if counted else " ", String(way["jump"]),
+			_platforms[int(way["from"])].label, float(way["bearing"]),
+			_platforms[int(way["to"])].label])
+
+	var want := int(_expect.get("top_routes", 0))
+	_want("there are %d ways onto the top, %.0f degrees apart (%d of %d)" % [
+		want, spread, kept.size(), ways.size()], kept.size() >= want)
+
+
+## The biggest set of ways up — as indices into `ways`, which is sorted by
+## bearing — no two of which are within `spread` degrees of each other.
+##
+## Brute force over which one to start from, because the list is a handful long
+## and because a plain greedy sweep from zero degrees gets the wrong answer on a
+## circle: a map whose entrances sit at 10, 80 and 350 degrees has three of them
+## by any honest reading, and a sweep that starts at 10 throws away 350 for
+## being 20 degrees from where it began.
+func _spread_out(ways: Array[Dictionary], spread: float) -> Array[int]:
+	var best: Array[int] = []
+	for start: int in ways.size():
+		var kept: Array[int] = [start]
+		var first := float(ways[start]["bearing"])
+		var last := first
+		for step: int in range(1, ways.size()):
+			var index := (start + step) % ways.size()
+			var here := float(ways[index]["bearing"])
+			if fposmod(here - last, 360.0) < spread:
+				continue
+			# And it must clear the one we started on, going the other way round.
+			if fposmod(first - here, 360.0) < spread:
+				continue
+			kept.append(index)
+			last = here
+		if kept.size() > best.size():
+			best = kept
+	return best
+
+
+## Which landings can be reached from the ground by hops and leaps without ever
+## standing on one of `forbidden`. The same walk as `_check_reachability`'s,
+## without the costing — all this needs is yes or no.
+func _reachable_avoiding(forbidden: Dictionary) -> Array[bool]:
+	var count := _platforms.size()
+	var seen: Array[bool] = []
+	seen.resize(count)
+	seen.fill(false)
+	var open: Array[int] = [count]     # the ground is node `count`
+	while not open.is_empty():
+		var here: int = open.pop_back()
+		for j: int in count:
+			if seen[j] or forbidden.has(j):
+				continue
+			var jump: String = String(_edges.get(Vector2i(here, j), ""))
+			if jump != "hop" and jump != "leap":
+				continue
+			seen[j] = true
+			open.append(j)
+	return seen
 
 
 # ------------------------------------------------------------------ spawns ---
@@ -849,12 +1003,33 @@ func _draw() -> void:
 		group.add_child(_link(from + Vector3.UP * 0.2, to + Vector3.UP * 0.2,
 			Color(1.0, 0.25, 0.2)))
 
+	# The ways onto the top plateau, in white and twice as thick as anything
+	# else, with a ring standing on the landing each one launches from. This is
+	# the one thing in the picture a person is meant to be able to count from
+	# across the room: three white lines arriving from three sides is the whole
+	# of what D-160 asked for, and one white line is the map Carl complained
+	# about.
+	for route: Vector2i in _routes_up:
+		var from: Vector3 = _platforms[route.x].centre + Vector3.UP * 0.9
+		var to: Vector3 = _platforms[route.y].centre + Vector3.UP * 0.9
+		group.add_child(_link(from, to, Color(1.0, 1.0, 1.0), 0.22))
+		var ring := MeshInstance3D.new()
+		var torus := TorusMesh.new()
+		torus.inner_radius = float(_platforms[route.x].radius)
+		torus.outer_radius = float(_platforms[route.x].radius) + 0.35
+		torus.rings = 28
+		torus.ring_segments = 4
+		ring.mesh = torus
+		ring.material_override = _flat(Color(1.0, 1.0, 1.0))
+		ring.position = _platforms[route.x].centre + Vector3.UP * 0.2
+		group.add_child(ring)
 
-func _link(from: Vector3, to: Vector3, tint: Color) -> MeshInstance3D:
+
+func _link(from: Vector3, to: Vector3, tint: Color, thick: float = 0.09) -> MeshInstance3D:
 	var span := to - from
 	var node := MeshInstance3D.new()
 	var box := BoxMesh.new()
-	box.size = Vector3(0.09, 0.09, maxf(span.length(), 0.01))
+	box.size = Vector3(thick, thick, maxf(span.length(), 0.01))
 	node.mesh = box
 	node.material_override = _flat(tint)
 	node.look_at_from_position(from + span * 0.5, to, Vector3.UP)

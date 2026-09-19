@@ -17212,3 +17212,79 @@ an event the joiner was here for. `net_test.sh` is 263 + 53 assertions, engine
 quiet. Not covered by any harness: the lobby's own `late_join_pending` branch,
 three or more peers (a client-owned Bog still leaks one `Node not found` line
 into a joiner's log), and joining a Teams, B·O·G or lives match. (BOG-5.)
+
+## D-160 — Kopje Crossing's top has three doors, and a checker counts them
+Every approach on the savanna ended in the same five steps. The spiral is ten
+rungs, and its last five — 5, 6, 7, 8, 9 — run round the kopje's east side and
+finish on two shoulders that both face north, so the waterhole, the dead
+forest, the termite field and the baobab all converged on one lip. Whoever got
+up first watched one door. Carl and Julian, playing it on 2026-09-18: *"It's fun
+once you get up top. If you're down below, it's kinda ass"*; *"there's literally
+only one way to get up there"*; *"once you get up there first, it's pretty
+fucked up"*. D-042's reachability check said the map was fine the whole time,
+because **one** way up is all it ever asked for.
+
+**Two climbs up the kopje's own flanks, and nothing else moved.** `FLANK_CLIMBS`
+in `safari_map.gd` is two rows of (bearing, radius, top): a `step` on a pillar
+off the face at 6.4-6.6 m and a wider `ledge` under the summit's lip at
+8.0-8.4 m, west and south. Four landings, 123 to 127. Both are built by the same
+`_slab` the spiral is — a kit slab placed by its top on a stretched
+`Rock_Medium_2` — because a ledge here made of anything else would read as
+scaffolding bolted to a rock (D-135), and because most of each pillar is
+swallowed by the core lumps it rises through, which is the look that was wanted.
+
+**Where they could go was decided by two numbers.** The spiral ring sits at a
+radius of about 10.8 and a slab is 4.1 m across, so there is no room for a rung
+*in* that ring — these live inside it, at radii of 6.4 to 8.6, where the only
+neighbours are the decorative core lumps (tops 4.2-5.8, so a ledge at 8 stands
+proud of them) and each other. And a leap rises 2.295 m, so no rung may be more
+than about 2.1 m above the one below it. That is why each climb is two rungs and
+a step onto the summit rather than one big dive.
+
+**West is the waterhole's.** Off `wh mesa 4` at 4.6 m: dive to the west step
+(1.9 m of rise, 2.92 m of gap against a 5.65 m leap), dive to the west ledge
+(2.1, 0.90 against 5.20), then step up onto the summit (1.2, 2.08 against a
+3.05 m hop) or across onto shoulder 0 (0.6, 1.17 against 3.42). **South is the
+baobab's.** Off spiral 4, which is one leap from chain B: dive to the south step
+(2.1, 1.55 against 5.20), hop to the south ledge (1.5, 1.80 against 2.61), step
+up onto the summit (1.6, 1.48 against 2.42). Spiral 6 can also reach the south
+ledge, at the very end of a dive (5.26 against 5.82) — the east gets a shortcut
+past steps 7 to 9, not a fourth door.
+
+**Three jumps each, because the third one is the fatigued one.** D-156 scales a
+chained take-off to 0.85 on the third link, and both climbs are three. Measured
+against 0.85: the west climb still makes shoulder 0 as a plain hop (1.17 against
+1.91) and the summit as a dive (2.08 against 5.73), and the south climb makes
+the summit as a dive (1.48 against 4.98). The one thing a tired Bog cannot do is
+hop the west ledge onto the summit without diving — 17 cm short — and that is
+the right thing to leave in: the last step of a flank should cost a commitment.
+In practice the rungs are 4.5-6.3 m apart, which is usually outside the 1.0 s
+chain window anyway.
+
+**The complaint is now a check, and it would have failed.**
+`tools/parkour_report.gd` gained `top_height`, `top_routes` and `top_spread` in
+`EXPECT`, safari only: every landing at or above 8.5 m is the top plateau (the
+summit at 9.5, both shoulders at 8.9, spiral 9 at 8.85), and three separate ways
+onto it must exist, at least 60 degrees apart around its centre. A way up has to
+be reachable from the ground **without setting foot on the top** — or a slab
+beside the summit counts as a second route to it — and is counted once per
+landing rather than once per edge, or a slab that can reach both a shoulder and
+the summit would read as two. The spread rule is the load-bearing one: the old
+map had two entrances, spiral steps 8 and 9, and they are 54 degrees apart and
+are the same approach walked one step further. Built as it was before this
+record the check prints `1 of 1` and fails; it now prints ways up at 76, 157 and
+322 degrees. `_draw` puts the counted ones in the render in white, twice as
+thick as anything else, with a ring on the landing each launches from — three
+white lines arriving from three sides is the thing a person is meant to be able
+to count from across the room.
+
+**Known and left:** the guide line's jump links are broken on every map and this
+did not fix them (BOG-57). `JumpLinks._try_jump` asks
+`NavigationServer3D.map_get_closest_point` for the ground across a gap and gets
+`Vector3.ZERO` back, because `NavBake` runs it before the navigation map has
+synced; the `LAND_SNAP_XZ` test then only passes for probes that happen to fall
+within 40 cm of the *world origin*, so Kopje Crossing bakes 14 links that all
+end at (0, 0, 0) and Lantern Wharf, whose origin is not walkable, bakes none.
+Link anchors do land on both new ledges, so the routes are covered as far as the
+bake covers anything. The fix is a forced map update or a frame's delay before
+the links are built, and it changes the drawn line on all seven maps. (BOG-49.)
