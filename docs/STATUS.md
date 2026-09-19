@@ -4,7 +4,7 @@ Resume point for BOG. Read this first, then `docs/ARCHITECTURE.md` (how it fits
 together), `docs/PLAN.md` (the full task list, with checkboxes) and
 `docs/DECISIONS.md` (why things are the way they are).
 
-Last updated: 2026-09-18. What comes next is in Linear (workspace BOG), not
+Last updated: 2026-09-19. What comes next is in Linear (workspace BOG), not
 here: see `CLAUDE.md`.
 
 ---
@@ -432,6 +432,28 @@ up is slower** (`Bog.BACK_SPEED_SCALE` 0.6); **the crouch is the deep squat**;
 decided at step 4: a BOG with a bow drawn walks (`Bog.AIM_WALKS`), and the
 draw's pull is `BowReload`'s nock-to-cheek half second scrubbed by the
 charge, because the aim and draw clips are the same pose.
+
+## Voice memos (BOG-45)
+
+A memo dropped in `memos/` (gitignored, `.gdignore`d) becomes Linear tickets
+through the `memo` skill: `tools/transcribe.py` writes a timestamped
+`<name>.raw.txt` next to the audio, the skill untangles that into a dated
+`feedback/*-memo-*.md` with every want quoted and timestamped, and the
+`triage` skill takes it from there. A memo is "done" when a feedback file
+names it on its `Source:` line.
+
+Transcription is local, no API key:
+
+```
+pip install faster-whisper nvidia-cublas-cu12 nvidia-cudnn-cu12
+python tools/transcribe.py            # first run downloads medium.en (~1.5 GB) to ~/.cache/huggingface
+```
+
+The two nvidia wheels are what let CTranslate2 use the RTX 3080 (cuBLAS 12 and
+cuDNN 9 as loose DLLs; the script finds them under the user site-packages,
+where the Store Python keeps them). With them a memo runs at about ten times
+realtime; without them the script falls back to the CPU and says so, which is
+slower than realtime. No ffmpeg needed, faster-whisper decodes mp3 itself.
 
 ---
 
