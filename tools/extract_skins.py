@@ -21,10 +21,11 @@ metallic-roughness map, which Tripo also ships — decodes it, downsamples to
 a recolour does not need more), and writes the PNG.
 
 It also prints what it found in the mesh: vertex count and primitive count per
-GLB, against the body's one skinned mesh of 15 872 vertices (D-095). A count
-that differs is worth saying out loud but does not settle anything — a Tripo
-re-export can renumber vertices and still carry the same UV layout. The render
-check is the real test:
+GLB, against the body's one skinned mesh of 15 872 vertices (D-095). A download
+whose count differs is a *regenerated* sculpt in its own UV layout, and its
+texture cannot be worn as it is; such a skin is handed to `tools/bake_skin.py`,
+which registers the body onto the download and paints the body's layout from
+it, writing the same PNG (D-126). Either way the render check is the real test:
 
     "$GODOT" --path . --resolution 1600x700 --script tools/snapshot.gd -- \
         res://tools/preview_bog.tscn build/review/skin_muck.png 30 Idle skin=muck
@@ -141,6 +142,15 @@ def mesh_shape(gltf):
 def extract(glb: Path, name: str, dry_run: bool) -> dict:
     gltf, bin_chunk = read_glb(glb)
     verts, prims, skinned = mesh_shape(gltf)
+    if verts != BODY_VERTS:
+        # Not the body's mesh, so not the body's UV layout: the texture cannot
+        # be worn as it is. `bake_skin` registers the body onto the download
+        # part by part and paints the body's layout from it (the second batch
+        # of skins, 2026-09-18, came back from Tripo regenerated at 9 124
+        # vertices; the first thirteen were the body itself). It needs
+        # `build/body_ref.glb` and says so if missing.
+        import bake_skin
+        return bake_skin.bake(glb, name, dry_run)
     index, mat_name = base_colour_image(gltf)
     raw, mime = image_bytes(gltf, bin_chunk, index)
 
@@ -219,7 +229,7 @@ def main(argv=None) -> int:
     print("%-8s %-6s %-11s %-11s %-9s %8s %5s  %s" % (
         "skin", "fmt", "source", "written", "png", "verts", "prim", "note"))
     for r in rows:
-        note = "" if r["verts"] == BODY_VERTS else "verts differ from body's %d" % BODY_VERTS
+        note = "" if r["verts"] == BODY_VERTS else "regenerated: baked onto the body's layout (tools/bake_skin.py)"
         if not r["skinned"]:
             note = ("unskinned; " + note).strip("; ")
         print("%-8s %-6s %-11s %-11s %-9s %8d %5d  %s" % (

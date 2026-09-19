@@ -42,10 +42,11 @@ Tripo does not promise to keep the mesh. The second batch — `bloom`, `buzz`,
 the same creature to the eye and two centimetres off to the ruler. Its texture
 cannot be worn as it is; it renders as a patchwork. `tools/bake_skin.py` is the
 step for that: it registers the body's vertices onto the download's surface
-(the quarter turns tried against the bounding box, similarity and affine ICP,
-then a smoothed non-rigid pull, to 2.5 mm) and paints every texel of the
-body's layout from the nearest point of the download's paint, writing the same
-`basecolor.png`. `extract_skins.py` takes that route by itself whenever a
+(the quarter turns tried against the bounding box, similarity and affine ICP
+for the whole, then a similarity per bone of the body's rig blended by skin
+weight, then a smoothed non-rigid pull, to 1.9 mm) and paints every texel of
+the body's layout from the nearest points of the download's paint that face
+its way, writing the same `basecolor.png`. `extract_skins.py` takes that route by itself whenever a
 download's vertex count is not the body's 15 872. It bakes onto
 `build/body_ref.glb`, which is the body as Godot imports it:
 
