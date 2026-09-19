@@ -134,6 +134,12 @@ step right and back, and the lobby camera 18% further out so the 3.5 m ring
 sits inside the panel band again; and rebindable controls in Settings, saved as
 the difference from the project's defaults.
 
+**And the lobby ring stands in two rows** (**D-139**): alternate slots 0.35 m
+inside and 0.65 m outside the 3.5 m arc, each Bog's angle solved so the eight
+stay evenly spaced on the screen and the ends stay where the band check put
+them (435 .. 1123 of 400 .. 1140), so a full lobby reads as a group rather than
+a queue without a Bog going behind a panel.
+
 **Nobody has played any of this.** Same sentence as the two rounds before.
 
 ### Previously — the feel round

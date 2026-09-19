@@ -15884,3 +15884,41 @@ out of an arm, and a player who binds their cancel key away has no cancel key.
   focused button.
 - **Binding the mouse wheel is left possible.** An armed row takes any mouse
   button, wheel included; it displays as WH+/WH- and a right-click undoes it.
+
+## D-139 — The lobby ring stands in two rows, spaced on the screen
+The owner: *"the bogs in the lobby are too close together, maybe stagger them
+just a bit? because you can move them apart a bit but you have to make sure
+they dont go behind the gui."*
+
+He named the constraint himself. D-136 put the eight-Bog ring back inside the
+740 px band between the roster column and the match rail with 31 px to spare
+on one side and 20 on the other, so "move them apart" has nowhere to go: the
+band is the width, and eight pairs of shoulders and eight nameplates are a
+fixed share of it. What the band does not price is depth. `BogBackdrop` now
+stands the ring on **two circles** — even slots 0.35 m inside `ring_radius`,
+odd slots 0.65 m outside it (`RING_STEP_IN`, `RING_STEP_OUT`) — so a Bog and
+the next one along are a metre apart through the picture where they were
+0.85 m across it, and the near shoulder in front of the far one reads as a
+group standing about rather than a line touching elbows. The split is
+lopsided on purpose: the ring was stood off the fire from 3.0 m to 3.5 m for
+the letters' air, and a symmetrical stagger would have put four Bogs back at
+3.0; the near row stops at 3.15 and the far row pays the rest.
+
+**The angles are solved from the screen, not stepped round the arc.** Stepping
+a Bog in along its radius shrinks its x by the same fraction while its distance
+to the lens barely moves, so it slides toward the centre of the frame; stepping
+out slides it away. Laid over the old evenly spaced arc angles, the stagger
+opened some gaps to 74 px and closed the pair at each end to 20, one Bog behind
+the other. So `_slot_transform` starts from the two sight lines the arc's ends
+have always defined, divides the screen distance between them equally (a lerp
+in the tangent of the bearing off the lens axis, which *is* screen x), and
+puts each Bog where its sight line meets its row's circle (`_on_ring`, a
+ray–circle crossing taking the far root). `ring_arc_degrees` keeps its meaning
+— it still fixes the ends — and the count still only changes the spacing.
+
+Measured by `tools/weapon_select.gd`'s band check, eight Bramblewicks then
+five: **435.0 .. 1122.7** and 428.7 .. 1122.7 against 400 .. 1140, plate tops
+197.2 and 205.5 against 100; `ui_range lobby_letters` still finds every head
+above the wordmark (the nearest, Pipwick, has the row's top level with 0.95 m
+on him). The rendered lobby is the same width it was and the eight now read as
+a front four and a back four.
