@@ -334,11 +334,10 @@ func _stock_the_bar() -> void:
 		return
 	combat.grant_shield(2)
 	combat.grant_magnet(1)
-	# And a potion, so the fourth tile is photographed carrying something too
-	# (D-067). One rather than two: the stock numbers on the bar should differ
-	# from each other, or a reference shot cannot show that each tile reads its
-	# own count.
-	combat.grant_potion(1)
+	# **No potion**, and there is no fourth tile to carry one (D-067, amended).
+	# A potion is drunk off the ground now, so it is never stock a player sees a
+	# number for; the two counts above are still different from each other,
+	# which is the property the shot is for.
 
 
 ## Collect a letter card for real, and then stand there holding it.
@@ -453,7 +452,6 @@ func _stage_elder() -> void:
 const CONTROL_BINDINGS := {
 	"primary_attack": "LMB",
 	"aim": "RMB",
-	"drink_potion": "F",
 	"place_shield": "Q",
 	"throw_magnet": "E",
 	"respawn": "R",
@@ -468,7 +466,7 @@ const CONTROL_BINDINGS := {
 ## the map with nothing polling it is a key that does nothing, which is worse
 ## than a key that is not bound: a player presses it, and the game's silence is
 ## indistinguishable from a bug in the weapon.
-const CONTROL_RETIRED := ["throw_spear", "draw_bow", "swing_sword"]
+const CONTROL_RETIRED := ["throw_spear", "draw_bow", "swing_sword", "drink_potion"]
 
 
 ## The input map, checked rather than read (D-070).

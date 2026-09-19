@@ -1580,12 +1580,27 @@ func claim_pickup(pickup_id: int, peer_id: int) -> void:
 		Pickup.Kind.MAGNET:
 			_grant_ability(peer_id, "grant_magnet")
 		Pickup.Kind.POTION:
-			# Stock, like the other two, and pointedly **not** a heal on touch
-			# (D-067). Granting the health here would make standing on a fresh
-			# corpse the strongest play in the game and would take every decision
-			# out of healing; what a potion buys is the *option* to spend two
-			# seconds standing still, later, somewhere of your choosing.
-			_grant_ability(peer_id, "grant_potion")
+			# **Drunk where it lies** (D-067, amended by the owner). It is not
+			# stock any more and there is no key: walking onto the bottle
+			# starts the two-second channel, and the health still arrives over
+			# it rather than on touch — which is the half of D-067 that was
+			# about the *decision* and survives. What it is not is instant, so
+			# standing on a fresh corpse still does not win a fight: it buys two
+			# seconds at half speed with no weapon in your hands.
+			#
+			# **A refusal leaves the bottle standing on the ground**, which is
+			# the letter card's rule one item over (D-035) and the reason
+			# `host_auto_drink` returns a bool at all. A Bog at full health, an
+			# Elder, a Bog already drinking, one holding a letter card and one
+			# mid-swing all walk straight over a potion and can come back for
+			# it. `Pickup` re-offers itself to whoever is still standing on it,
+			# so "come back for it" does not mean stepping off and on again.
+			var drinker: Bog = bogs.get(peer_id)
+			if not is_instance_valid(drinker):
+				return
+			var combat := drinker.get_node_or_null("Combat") as BogCombat
+			if combat == null or not combat.host_auto_drink():
+				return
 		Pickup.Kind.ELDER_ROBE:
 			# No guard for "already the Elder". The robe cannot be picked up by
 			# somebody already wearing one, because `_make_elder` is idempotent

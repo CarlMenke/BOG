@@ -1028,6 +1028,12 @@ func _run_loadout() -> void:
 	# A drink empties both fists (D-067). The most obviously true of the three
 	# for a two-handed weapon, and the one that had to be re-checked against a
 	# sword that is now *carried* rather than appearing for the length of a swing.
+	# Wounded first, because a potion refuses a Bog at full health now (D-067,
+	# amended): an untouched swordsman would be refused for a reason that has
+	# nothing to do with the fists this block is about.
+	var drinker := MatchState.bogs.get(902) as Bog
+	if drinker != null:
+		drinker.set_health(Bog.MAX_HEALTH * 0.5)
 	swordsman.grant_potion(1)
 	swordsman._server_potions = 1
 	swordsman._host_drink_potion()

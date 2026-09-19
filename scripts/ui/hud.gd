@@ -60,15 +60,16 @@ const HEALTH_BAR := Vector2(224.0, 22.0)
 @onready var _spear_slot: AbilitySlot = %SpearSlot
 @onready var _shield_slot: AbilitySlot = %ShieldSlot
 @onready var _magnet_slot: AbilitySlot = %MagnetSlot
-@onready var _potion_slot: AbilitySlot = %PotionSlot
 @onready var _banner: Control = %Banner
 @onready var _banner_title: Label = %BannerTitle
 @onready var _banner_sub: Label = %BannerSub
+@onready var _death_prompt: Label = %DeathPrompt
 @onready var _spectate_label: Label = %SpectateLabel
 @onready var _chat: ChatPanel = %Chat
 @onready var _scoreboard: Scoreboard = %Scoreboard
 @onready var _pause: PauseMenu = %PauseMenu
 @onready var _results: ResultsScreen = %Results
+@onready var _class_picker: ClassPicker = %ClassPicker
 
 ## Counts down the phase this client believes it is in. `phase_changed` does not
 ## carry the phase timer, so a warmup countdown has to be run locally off
@@ -493,13 +494,12 @@ func _refresh_abilities() -> void:
 	# tile is the only thing on this bar that divides (D-054).
 	_shield_slot.set_stock(combat.shield_count(), combat.shield_use_cooldown() > 0.0)
 	_magnet_slot.set_stock(combat.magnet_count(), combat.magnet_use_cooldown() > 0.0)
-	# The potion's `busy` is its own channel and not a use-delay (D-067): there
-	# is no second clock on this one, because the two seconds a drink takes are
-	# already the floor on how fast a stack can be emptied. So the tile is dark
-	# for exactly as long as the Bog is standing there drinking, which is the
-	# other half of the tell — the animation is what your opponent sees and this
-	# is what you see.
-	_potion_slot.set_stock(combat.potion_count(), combat.is_channelling())
+	# **There is no potion tile** (D-067, amended). A potion is not carried and
+	# has no key, so a tile for it would be a permanent zero beside a caption
+	# naming a key that is not bound — the worst kind of HUD, one that describes
+	# a control the game does not have. The drink's whole readout is the bottle
+	# in the fist and the half-speed walk (D-075), which is the sentence the
+	# spear and the bow already make about themselves.
 
 
 ## The B/O/G lamps and the hold, for the local player only.

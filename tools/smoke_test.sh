@@ -437,11 +437,12 @@ also "damage leaves a Bog standing" "spear PASS"
 # what is kept is the half that had actually arrived. The last of those is the
 # line that would fail if the heal ever went back to landing in one lump.
 #
-# `moved` is the other rule and the edge case it was written for. A Bog that runs
-# loses the drink at `BogCombat.CHANNEL_MOVE_SPEED`; a Bog *pulled* at four and a
-# half metres a second keeps it. Without the second half, the rule could be
-# written about displacement instead of about intent and nothing would notice —
-# and a magnet that silently cancelled a drink would be the best answer to one.
+# `moved` is the other rule, turned the other way up by the auto-drink (D-067,
+# amended). A potion is drunk on contact now, so the drinker is moving on the
+# frame the channel starts: a Bog that sprints **keeps** the drink and pays for
+# it at `Bog.DRINK_SPEED_SCALE` instead, and a Bog dragged by a magnet keeps it
+# too. Without both halves, movement could quietly creep back into the interrupt
+# rule and every drink in the game would cancel on its first frame.
 #
 # `death` is D-032 restated for a fifth carried thing, and `config` is the three
 # new lobby dials through `to_dict`/`apply_dict` and out the far side of both

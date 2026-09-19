@@ -124,6 +124,27 @@ const FISTS_SPEED_SCALE := 1.10
 ## animator sees the same slowed locomotion plane its owner does.
 const SLASH_SPEED_SCALE := 0.85
 
+## What a Bog travels at while it is drinking a heal potion (D-067, amended).
+##
+## **This number is where the cost of a potion went.** D-067 charged two seconds
+## of standing still for it, enforced by cancelling the channel above a walking
+## pace. A potion is drunk on contact now, so the drinker is by definition
+## moving on the frame the channel starts and that rule would cancel every drink
+## in the game — the cost had to move somewhere or a heal would be free. It
+## moved here, and into `BogCombat.is_busy()`, which already refuses every
+## attack for the length of a channel: for two seconds you are half speed,
+## unarmed, and holding 0.30 m of bright purple beside your head (D-075). That
+## is a worse place to be caught than standing still was, and unlike standing
+## still it is a thing that happens *to* you rather than something you opted
+## into, which is the point of an automatic drink.
+##
+## A half and not a third: `DRAW_SPEED_SCALE`'s 0.5 is the other "you are
+## committed to something and cannot run out of it" number in this file, and two
+## commitments of the same weight should cost the same. It composes with the
+## crouch, the Elder's boost and the carrier's tax the way every scale here
+## does, so a crouching Elder mid-drink is one product and not a branch.
+const DRINK_SPEED_SCALE := 0.5
+
 ## How fast the Bog actually moves. Chosen for how the game plays, not for what
 ## the clips were made at: walking is brisk, sprinting is nearly twice that, and
 ## crouching is slow enough that choosing it costs you something. Each of these
@@ -485,6 +506,17 @@ var draw: float = -1.0
 ## whether this Bog walks, and whether it is still dancing after a hit — are both
 ## written here.
 var emoting: bool = false
+## True while this Bog is drinking a heal potion, on every peer (D-067,
+## amended).
+##
+## **Written by `BogCombat._begin_channel` / `_end_channel` on every peer**, for
+## `emoting`'s reason exactly and by the same road: the channel arrives as two
+## events on a host relay, not as a sampled bool, so there is nothing here for a
+## dropped packet to leave stuck on. It lives on the body rather than staying
+## behind `BogCombat.is_channelling()` because the one thing it changes here is
+## `target_speed()`, which is asked several times a frame and must not pay for a
+## `get_node_or_null` each time.
+var drinking: bool = false
 ## The robe, while this Bog is the Elder (D-038), and null the rest of the time
 ## — which is almost always. Built on demand rather than in `_ready` like the
 ## spear, because seven of every eight Bogs in a match will never wear one and a
@@ -1471,10 +1503,15 @@ func target_speed() -> float:
 	# fists' gain and the slash's cost join the same product and cannot both
 	# apply — a holstered Bog has no sword to slash with — so the two are two
 	# factors rather than a branch (the feel round).
+	# The drink's cost is the sixth factor in the same product and is written the
+	# same way for the same reason (D-067, amended): one place, every stance, and
+	# a remote Bog's animator sees the same slowed locomotion plane its owner
+	# does because `drinking` is set on every peer by `BogCombat._begin_channel`.
 	return speed * elder_scale(Net.config.elder_speed_multiplier) * carrier_scale() \
 		* lerpf(1.0, DRAW_SPEED_SCALE, draw_fraction()) \
 		* (FISTS_SPEED_SCALE if is_holstered() else 1.0) \
-		* (SLASH_SPEED_SCALE if is_slashing() else 1.0)
+		* (SLASH_SPEED_SCALE if is_slashing() else 1.0) \
+		* (DRINK_SPEED_SCALE if drinking else 1.0)
 
 
 ## `capture_carrier_speed` while this Bog carries a letter in Capture B·O·G, and

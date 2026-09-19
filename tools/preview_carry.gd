@@ -876,9 +876,11 @@ func _fist_centre(skeleton: Skeleton3D, hand: int,
 ##
 ## The pose is `Drink` layered over `Idle`, which is what the graph composes: a
 ## `OneShot` filtered to `UPPER_BODY_BONES` over whatever the locomotion plane
-## is doing, at weight 1 (D-067). `Idle` underneath because a Bog that is
-## moving is a Bog that is not drinking — `CHANNEL_MOVE_SPEED` says so — which
-## makes this the one measurement on this page with nothing to average over.
+## is doing, at weight 1 (D-067). `Idle` underneath because the pose this
+## measures is the bottle and not the legs, and standing still is the one
+## locomotion state with nothing to average over. A drinking Bog is allowed to
+## be walking since the auto-drink (D-067, amended), and that changes nothing
+## here: the filter means the legs never reach the hand.
 ##
 ## **What it does not check is `POTION_SCALE`**, and `HEAD_BONES` carries why.
 func _report_bottle(skeleton: Skeleton3D, player: AnimationPlayer) -> int:

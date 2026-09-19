@@ -129,6 +129,28 @@ const MAGNET_COLOUR := Color(0.55, 0.85, 1.00)
 ## standing on it. By the time the two are confusable you can see that one is a
 ## bottle and the other is a robe with a hat on it.
 const POTION_COLOUR := Color(0.80, 0.40, 1.00)
+
+## How often a potion that is being stood on is offered again, in seconds
+## (D-067, amended).
+##
+## **The potion is the one drop that is *used* rather than banked**, so it is the
+## only one whose refusal can stop being true while the collector is still
+## standing on it: a Bog at full health walks over a bottle, is shot two seconds
+## later, and the potion under its feet would otherwise do nothing until it
+## stepped off and back on again. `body_entered` fires once; nothing in Godot
+## fires it a second time for a body that never left.
+##
+## Every other kind keeps the single-shot rule and should. A letter card left
+## alone under a Bog that is already holding one is D-035 working exactly as
+## written — *"for this Bog to come back to or for somebody else to reach
+## first"* — and a card that leapt into a hand the instant the previous hold
+## expired would quietly delete that decision.
+##
+## A quarter of a second rather than every frame because the answer only changes
+## when the Bog's health, hands or state do, and `MatchState.claim_pickup` walks
+## a dictionary and a `match` to work it out. Four asks a second is well inside
+## a human's reaction to being shot and is a twentieth of the work.
+const POTION_RETRY := 0.25
 ## The robe's own violet, taken up out of the cloth rather than matched to it.
 ## `#2F1D45` is the albedo (D-037) and is far too dark to be a light; this is the
 ## same hue at full value, so the glow on the grass reads as *that* robe and not
@@ -150,6 +172,9 @@ var _taken: bool = false
 var _keeps: bool = false
 ## Seeded per drop so two items side by side are not bobbing in lockstep.
 var _phase: float = 0.0
+## Seconds until this potion offers itself to whoever is standing on it again.
+## Never counted down on any other kind — see POTION_RETRY.
+var _retry_in: float = POTION_RETRY
 
 
 ## Called on every peer, from `MatchState._spawn_pickup`, with the values the
@@ -395,6 +420,7 @@ func _process(delta: float) -> void:
 	if _taken or _model == null:
 		return
 	_age += delta
+	_tick_retry(delta)
 	# Bobbing is applied to the child, not to this node, so the catch volume
 	# stays where it was put. An item whose hitbox rides up and down with it
 	# would be collectable on half the frames.
@@ -413,6 +439,30 @@ func _process(delta: float) -> void:
 		_model.rotate_y(SPIN_SPEED * delta)
 	if _age >= LIFETIME and not _keeps:
 		wither()
+
+
+## Offer a potion again to whatever is already standing on it (see POTION_RETRY).
+##
+## Host only, like the overlap itself, and it goes through the same one door:
+## `claim_pickup` is still the only thing that awards anything, so a retry that
+## is refused costs exactly what the first refusal cost and a retry that is
+## accepted is indistinguishable from having walked on a moment later.
+func _tick_retry(delta: float) -> void:
+	if kind != Kind.POTION or not Net.is_host or not monitoring:
+		return
+	_retry_in -= delta
+	if _retry_in > 0.0:
+		return
+	_retry_in = POTION_RETRY
+	for body in get_overlapping_bodies():
+		var bog := body as Bog
+		if bog == null or not bog.alive:
+			continue
+		MatchState.claim_pickup(pickup_id, bog.peer_id)
+		# `claim_pickup` sets `_taken` through `take` on the frame it awards
+		# anything, so one accepted offer ends the loop and the item.
+		if _taken:
+			return
 
 
 ## Host only, and only ever from the host's own overlap. Everything this decides

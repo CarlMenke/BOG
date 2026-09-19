@@ -696,9 +696,9 @@ const POTION_KEPT_TOLERANCE := 2.0
 ## of it. Half a point of health.
 const POTION_EPSILON := 0.5
 ## How long the mode lets a body settle into or out of a state, in physics
-## ticks. A quarter of a second — long enough for a standing start to pass
-## `BogCombat.CHANNEL_MOVE_SPEED` and short enough to be a small fraction of the
-## channel it is being measured inside.
+## ticks. A quarter of a second — long enough for a standing start to be
+## unmistakably moving and short enough to be a small fraction of the channel it
+## is being measured inside.
 const POTION_SETTLE := 15
 ## Where the magnet that must *not* cancel the drink is placed, relative to the
 ## Bog, and how long it holds. Six metres is well past `Bog.MAGNET_GRIP`, so the
@@ -1264,6 +1264,11 @@ var _potion_stock: int = 0
 ## next — and the line that says which thing broke names the wrong one. It is
 ## `_potion_mid`'s own shape, one question over.
 var _potion_hands: Array[bool] = []
+## Whether the animator's `drink` one-shot was actually running half way through
+## the first channel, read there and asserted in the next step for
+## `_potion_hands`' reason. The one thing in this mode that is about the
+## *animation* rather than about the health.
+var _potion_shot: bool = false
 var _potion_problems: Array[String] = []
 var _potion_failures: int = 0
 ## Ward flashes counted before the Elder was hit, so the verdict is about the
@@ -2551,31 +2556,57 @@ func _drive_potion(player: Bog, combat: BogCombat) -> void:
 			_potion_at = _frames
 			_potion_step = 1
 		1:
-			if far_combat.potion_count() <= 0:
+			# **The full-health refusal, and it is asserted before the drink
+			# rather than after it** (D-067, amended). The far dummy is standing
+			# on the bottle at 100 health, which is the one state in which a
+			# potion must be left where it is: an automatic drink that spent
+			# itself on a Bog with nothing to heal would be a drop that deletes
+			# itself. Waiting `POTION_SETTLE` ticks rather than testing on the
+			# frame of the drop is what makes it a claim about the *rule* and
+			# not about the ordering — `Pickup` re-offers itself four times a
+			# second, so a refusal that was going to come undone has had a
+			# handful of chances to.
+			if _frames - _potion_at < POTION_SETTLE:
+				return
+			_potion_expect(_potion_seen, "nothing was ever lying on the ground")
+			_potion_expect(not far_combat.is_channelling(),
+				"%s drank a potion at full health" % far.display_name)
+			_potion_expect(far_combat.potion_count() == 0,
+				"%s banked the potion instead of drinking it" % far.display_name)
+			# And now the same bottle, the same Bog, still standing on it,
+			# wounded. Nothing steps off and on again: what collects it is
+			# `Pickup._tick_retry`, which is the whole reason a refusal is
+			# allowed to be temporary.
+			_hit(far, POTION_WOUND)
+			_potion_at = _frames
+			_potion_step = 2
+		2:
+			if not far_combat.is_channelling():
 				if _frames - _potion_at > POTION_PATIENCE:
 					_potion_expect(false,
 						"no potion ever reached %s" % far.display_name)
 					_potion_verdict("drop", "waited %d frames" % POTION_PATIENCE)
 					_potion_finish()
 				return
-			_potion_expect(_potion_seen, "nothing was ever lying on the ground")
-			_potion_verdict("drop", "%s's corpse left a potion and %s walked onto it"
+			_potion_verdict("drop",
+				("%s's corpse left a potion, %s walked onto it at full health and "
+				+ "left it standing, and drank it with no key the moment it was hurt")
 				% [near.display_name, far.display_name])
 
 			# On to the drink. The player is hurt first, because a Bog at full
 			# health heals nothing and every number below would be zero.
 			_hit(player, POTION_WOUND)
 			combat.grant_potion(2)
-			_potion_step = 2
-		2:
+			_potion_step = 3
+		3:
 			if not combat.has_potion():
 				return
 			_potion_health = player.health
 			_potion_stock = combat.potion_count()
 			combat.try_drink_potion()
 			_potion_at = _frames
-			_potion_step = 3
-		3:
+			_potion_step = 4
+		4:
 			# One frame after the keypress. **The whole point of the feature is
 			# what is asserted here**: the potion has been spent and no health
 			# has arrived.
@@ -2584,8 +2615,8 @@ func _drive_potion(player: Bog, combat: BogCombat) -> void:
 				"the stock went from %d to %d" % [_potion_stock, combat.potion_count()])
 			_potion_expect(is_equal_approx(player.health, _potion_health),
 				"health jumped to %.1f on the frame of the click" % player.health)
-			_potion_step = 4
-		4:
+			_potion_step = 5
+		5:
 			if combat.channel_fraction() < 0.5:
 				return
 			# Half way: some of it has arrived and not all of it. Two
@@ -2612,16 +2643,30 @@ func _drive_potion(player: Bog, combat: BogCombat) -> void:
 				_potion_hands.append_array([fist.has_potion(),
 					fist.is_carried(), fist.has_bow(), fist.has_arrow(),
 					fist.has_sword()])
-			_potion_step = 5
-		5:
+			# **And the clip, which nothing in this mode has ever asked about.**
+			# Every assertion above is satisfied by a Bog that heals correctly
+			# and never moves an arm: `is_channelling()` is a float on the
+			# combat node, the bottle is a visibility toggle on the mesh, and
+			# neither of them is the animation. `drink/active` is the graph's
+			# own answer to "is the one-shot running", read off the tree the
+			# body is actually driven by, and it is the one line here that would
+			# have caught a drink whose clip never fired. Recorded rather than
+			# asserted for `_potion_hands`' reason.
+			var tree := player.get_node_or_null("AnimationTree") as BogAnimator
+			_potion_expect(tree != null, "the Bog has no AnimationTree at all")
+			_potion_shot = tree != null and bool(tree.get(BogAnimator.P_DRINK_ACTIVE))
+			_potion_step = 6
+		6:
 			if combat.is_channelling():
 				return
 			# And the far end: all of it, once, and the arm down.
 			var want := _potion_health + Net.config.heal_amount
 			_potion_expect(is_equal_approx(player.health, want),
 				"the finished drink left %.1f and not %.1f" % [player.health, want])
+			_potion_expect(_potion_shot,
+				"the Drink one-shot was not running half way through the channel")
 			_potion_verdict("channel",
-				"%.0f health over %.1f s: %.0f at the click, %.0f half way, %.0f at the end"
+				"%.0f health over %.1f s: %.0f at the click, %.0f half way, %.0f at the end, with the Drink clip playing"
 				% [Net.config.heal_amount, Net.config.heal_channel, _potion_health,
 					_potion_mid, player.health])
 
@@ -2665,8 +2710,8 @@ func _drive_potion(player: Bog, combat: BogCombat) -> void:
 			_potion_stock = combat.potion_count()
 			combat.try_drink_potion()
 			_potion_at = _frames
-			_potion_step = 6
-		6:
+			_potion_step = 7
+		7:
 			if combat.channel_fraction() < POTION_INTERRUPT_AT:
 				return
 			# What the drink is owed at the instant it is broken, read off the
@@ -2679,8 +2724,8 @@ func _drive_potion(player: Bog, combat: BogCombat) -> void:
 			_potion_mid = player.health
 			# The recorded rule, through the real door.
 			_hit(player, POTION_INTERRUPT_HIT)
-			_potion_step = 7
-		7:
+			_potion_step = 8
+		8:
 			var kept := player.health - _potion_health + POTION_INTERRUPT_HIT
 			_potion_expect(not combat.is_channelling(),
 				"the hit did not end the channel")
@@ -2703,17 +2748,17 @@ func _drive_potion(player: Bog, combat: BogCombat) -> void:
 			player.reads_local_input = false
 			player.input_direction = Vector2.ZERO
 			combat.grant_potion(2)
-			_potion_step = 8
-		8:
+			_potion_step = 9
+		9:
 			if not combat.has_potion():
 				return
 			_potion_stock = combat.potion_count()
 			combat.try_drink_potion()
 			_potion_at = _frames
-			_potion_step = 9
-		9:
+			_potion_step = 10
+		10:
 			# Settled into the channel before anything is asked of it, so that
-			# "it stopped" cannot be "it never started".
+			# "it kept going" cannot be "it never started".
 			if _frames - _potion_at < POTION_SETTLE:
 				return
 			_potion_expect(combat.is_channelling(),
@@ -2721,30 +2766,45 @@ func _drive_potion(player: Bog, combat: BogCombat) -> void:
 			player.input_direction = Vector2(0.0, -1.0)
 			player.wants_sprint = true
 			_potion_at = _frames
-			_potion_step = 10
-		10:
-			if _frames - _potion_at < POTION_SETTLE:
-				return
-			_potion_expect(not combat.is_channelling(),
-				"running at %.1f m/s did not end the channel"
-					% _flat_speed(player))
-			_potion_expect(_flat_speed(player) > BogCombat.CHANNEL_MOVE_SPEED,
-				"the Bog never got moving: %.2f m/s" % _flat_speed(player))
-			_potion_expect(combat.potion_count() == _potion_stock - 1,
-				"the abandoned potion came back")
-			player.input_direction = Vector2.ZERO
-			player.wants_sprint = false
-			_potion_at = _frames
 			_potion_step = 11
 		11:
+			if _frames - _potion_at < POTION_SETTLE:
+				return
+			# **The rule that had to change, asserted the other way up** (D-067,
+			# amended). A potion is drunk on contact now, so the drinker is
+			# moving on the frame the channel starts and a speed rule would
+			# cancel every drink in the game on its first frame. Sprinting is
+			# the hardest case there is and the drink has to survive it.
+			_potion_expect(combat.is_channelling(),
+				"running at %.2f m/s ended the channel" % _flat_speed(player))
+			_potion_expect(_flat_speed(player) > Bog.CROUCH_SPEED,
+				"the Bog never got moving: %.2f m/s" % _flat_speed(player))
+			# And the cost that replaced it: the sprint the Bog is asking for is
+			# `DRINK_SPEED_SCALE` of the sprint it would get with its hands
+			# empty. Asserted against `target_speed()` and not against the
+			# measured velocity, because what the rule changes is the ask — the
+			# body is still accelerating toward it and a frame count is not the
+			# thing under test.
+			_potion_expect(player.target_speed()
+					< Bog.RUN_SPEED - POTION_EPSILON,
+				"a drinking Bog asked for %.2f m/s, the full %.2f"
+					% [player.target_speed(), Bog.RUN_SPEED])
+			player.input_direction = Vector2.ZERO
+			player.wants_sprint = false
+			# Broken on purpose, so the magnet control below starts from a fresh
+			# channel rather than from whatever is left of this one.
+			_hit(player, POTION_INTERRUPT_HIT)
+			_potion_at = _frames
+			_potion_step = 12
+		12:
 			# Stopped, and standing still again, before the magnet control.
-			if _flat_speed(player) > BogCombat.CHANNEL_MOVE_SPEED * 0.5:
+			if _flat_speed(player) > Bog.CROUCH_SPEED * 0.5:
 				return
 			_potion_stock = combat.potion_count()
 			combat.try_drink_potion()
 			_potion_at = _frames
-			_potion_step = 12
-		12:
+			_potion_step = 13
+		13:
 			if _frames - _potion_at < POTION_SETTLE:
 				return
 			_potion_expect(combat.is_channelling(), "the second drink never started")
@@ -2756,20 +2816,20 @@ func _drive_potion(player: Bog, combat: BogCombat) -> void:
 			player.apply_magnet(player.global_position + POTION_MAGNET_FROM,
 				Net.config.magnet_pull_strength, POTION_MAGNET_HOLD)
 			_potion_at = _frames
-			_potion_step = 13
-		13:
+			_potion_step = 14
+		14:
 			if _frames - _potion_at < POTION_SETTLE:
 				return
 			_potion_expect(combat.is_channelling(),
 				"a magnet cancelled the drink; it was doing %.2f m/s"
 					% _flat_speed(player))
-			_potion_expect(_flat_speed(player) > BogCombat.CHANNEL_MOVE_SPEED,
+			_potion_expect(_flat_speed(player) > Bog.CROUCH_SPEED,
 				"the magnet never actually moved it: %.2f m/s" % _flat_speed(player))
 			_potion_verdict("moved",
-				"running ended the channel at %.2f m/s and a magnet dragging it at %.2f did not"
-				% [BogCombat.CHANNEL_MOVE_SPEED, _flat_speed(player)])
-			_potion_step = 14
-		14:
+				"a sprint kept the channel at %.0f%% speed and a magnet dragging it at %.2f m/s did not break it"
+				% [Bog.DRINK_SPEED_SCALE * 100.0, _flat_speed(player)])
+			_potion_step = 15
+		15:
 			# Everything carried is lost on death (D-032). Two potions on a Bog
 			# that is about to die, and a fresh life that has none.
 			combat.grant_potion(2)
@@ -2777,8 +2837,8 @@ func _drive_potion(player: Bog, combat: BogCombat) -> void:
 			MatchState.report_kill(1, DUMMY_BASE + 1, Bog.Cause.SPEAR,
 				player.body_centre(), Vector3.FORWARD * 6.0, "mixamorig_Spine1")
 			_potion_at = _frames
-			_potion_step = 15
-		15:
+			_potion_step = 16
+		16:
 			if not MatchState.is_alive(1):
 				if _frames - _potion_at > POTION_PATIENCE:
 					_potion_expect(false, "%s never came back" % player.display_name)

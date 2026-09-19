@@ -48,7 +48,6 @@ const CONTROL_REFERENCE: Array[Array] = [
 	["Aim", "aim"],
 	["Plant shield", "place_shield"],
 	["Throw magnet", "throw_magnet"],
-	["Drink potion", "drink_potion"],
 	["Scoreboard", "scoreboard"],
 	["Chat", "chat"],
 	["Pause", "pause"],

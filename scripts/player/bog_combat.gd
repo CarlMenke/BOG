@@ -79,15 +79,28 @@ extends Node
 ## cheapest honest way to make a continuous thing visible.
 ##
 ## **The heal potion is the one thing in this file that is not an attack**
-## (D-067). It is stock like the shield and the magnet, spent with a key like
-## both of them — and then, unlike either, it takes two seconds to happen. A
-## channel is a windup whose *point* is that it can be taken away: the health
-## arrives over it rather than at the end of it, being hit ends it, moving under
-## your own power ends it, and the potion is gone either way. What it has in
-## common with everything above is the split this whole file is built on — the
-## owning client decides it wants to drink and plays its own arm immediately,
-## and the host is the only machine that spends the potion or puts back a single
-## point of health.
+## (D-067, amended). It used to be stock spent with a key; it is now drunk where
+## it lies, the moment a Bog walks onto the drop, and there is no key and no
+## carried bottle between the two. A channel is still a windup whose *point* is
+## that it can be taken away: the health arrives over the two seconds rather
+## than at the end of them, and being hit still ends it and keeps whatever had
+## arrived.
+##
+## **What the amendment had to move is the interrupt rule.** D-067 charged two
+## seconds of standing still for a potion, and that cost cannot survive a drink
+## that *starts* on the stride that collected it — the collector is by
+## definition moving, so "moving ends it" would cancel every drink on the frame
+## it began. The cost moved rather than vanished: a drinking Bog travels at
+## `Bog.DRINK_SPEED_SCALE` of its speed and cannot attack (`is_busy()`), so it
+## is slow, unarmed and holding 0.30 m of bright purple beside its head for two
+## seconds. Only a hit ends a drink early now, which is the one clause D-067
+## called the mechanic rather than the tuning.
+##
+## The other half of the amendment is that the drink is **decided on the host**
+## and nowhere else (D-004). There is no keypress left to predict from, so there
+## is no local prediction: the host that rules on the pickup is the machine that
+## starts the channel, and every peer including the drinker learns about it from
+## the same broadcast.
 ##
 ## **The great sword is the fourth outcome on that one tick, and the first that
 ## does not leave the hand** (D-068). A click, a wind-up, a release moment
@@ -450,23 +463,6 @@ const MAGNET_SPEED := 22.0
 ## than where the thrower aimed.
 const MAGNET_GRAVITY := 22.0
 
-## How fast a drinking Bog may be going, in m/s, before its channel is over
-## (D-067).
-##
-## **A speed and not an input**, and that is the whole architecture of the rule.
-## The host has to be able to decide this about a Bog it does not own, and what
-## it has of a remote Bog is `sync_velocity` — the same replicated field the
-## animator lays its locomotion plane out from. An input would have to be put on
-## the wire to be asked at all, and a rule only the drinker can evaluate is a
-## rule a modified client simply never reports.
-##
-## 1.0 is a third under `Bog.CROUCH_SPEED`'s 1.6, which is the slowest a Bog can
-## deliberately travel, and far over the few centimetres a second a body settling
-## on a slope carries. So there is nothing near it in either direction: every way
-## of moving on purpose is over it and nothing that happens to a Bog standing
-## still comes close.
-const CHANNEL_MOVE_SPEED := 1.0
-
 const LAYER_WORLD := 1
 const LAYER_PLAYER := 2
 const LAYER_DEPLOYABLE := 8
@@ -602,12 +598,6 @@ var _channel_at: float = 0.0
 ## cannot be re-timed. A host who drags the slider mid-match moves the next
 ## drink, not the one in somebody's hand.
 var _channel_seconds: float = 0.0
-## `Bog.sync_jump_serial` at the moment the channel started. A serial that has
-## moved is a jump, which is the one way of leaving the ground that is a
-## decision — and it is replicated, so the host can see it on a Bog it does not
-## own (D-052's field, asked a new question).
-var _channel_jump: int = 0
-
 ## Host-side. The only clock that heals anybody.
 var _server_channel_at: float = 0.0
 var _server_channel_seconds: float = 0.0
@@ -729,8 +719,12 @@ func _process(_delta: float) -> void:
 		try_place_shield()
 	if Input.is_action_just_pressed("throw_magnet"):
 		try_throw_magnet()
-	if Input.is_action_just_pressed("drink_potion"):
-		try_drink_potion()
+	# **There is no drink key.** A potion is drunk by walking onto it and the
+	# host is what decides that, so there is nothing here to poll — the action
+	# is retired in `project.godot` and asserted retired by `hud_range -- keys`,
+	# for D-070's reason: a key bound to nothing is worse than a key that is not
+	# bound, because the player presses it and the game's silence reads as a bug
+	# in the potion.
 	# The emote is the one key here that is a toggle rather than a trigger, for
 	# the reason it is a loop rather than a one-shot: the player decides when it
 	# is over, and the most obvious way to say so is the key that started it.
@@ -833,20 +827,56 @@ func carries(weapon: int) -> bool:
 	return _bog != null and _bog.weapon == weapon
 
 
-## Whether there is a potion that can be drunk right now.
+## Whether this Bog could start a drink this instant, potion or no potion.
 ##
-## The mirror of `has_spear()` and `has_bow()`, and it shares both of their
-## clauses for both of their reasons — an Elder has no need of one and a hand
-## holding a letter card has nothing to raise a bottle with (D-035). It adds the
-## two a channel brings with it: you must have one, and you must not be moving
-## when you start.
+## **The one gate**, the way `has_spear()` is the spear's: the host asks it
+## before it will start a channel off a pickup, `Pickup` leaves a bottle on the
+## ground when it says no, and `has_potion()` below is this plus stock. Anything
+## that should stop a Bog drinking adds a clause here and gets all three.
 ##
-## It does **not** ask whether you are already at full health. A Bog that drinks
-## at 100 wastes a potion, which is its own business — and a gate there would be
-## a key that silently does nothing at the exact moment a player is panicking
-## about a fight they think they are losing.
+## The clauses, and which of them is inherited and which the auto-drink added:
+##
+## * **An Elder does not drink.** Inherited (D-067). Damage to one is zero, so
+##   there is nothing for a potion to put back, and the robe's own fists are
+##   busy with a bolt.
+## * **A hand holding a letter card has nothing to raise a bottle with.**
+##   Inherited (D-035), the same sentence the spear and the bow already make.
+## * **Not already drinking.** Inherited. A second drink started over the first
+##   would restart the clock and pay the first one's remainder twice.
+## * **Not mid-swing, mid-windup or mid-chain** (`is_busy()`, which folds the
+##   channel clause above into itself). New, and it is what stops a pickup
+##   quietly eating an attack: the drink is a layer *under* the throw and the
+##   slash in the animator's graph (D-068), and a bottle raised inside a windup
+##   would take the spear out of the fist on the frame it was due to leave it.
+## * **Not already at full health.** New, and it is the "don't waste it" rule:
+##   a Bog at 100 walking over a potion leaves it standing. D-067 deliberately
+##   refused this clause because it was a *key* that would silently do nothing;
+##   with no key there is nothing to be silent about, and the drop staying
+##   visibly on the ground is the feedback the keypress could not give.
+##
+## What is **not** here any more is the movement rule. See the header: a drink
+## that starts on the stride that collected it cannot be cancelled by that
+## stride. Its absence is also the fix for a real bug — this gate used to ask
+## `_channel_broken()`, which compares `Bog.sync_jump_serial` against the serial
+## latched *when a channel started*, so on a Bog that had never drunk it
+## compared today's jump count against zero and went permanently false the first
+## time the player jumped. A potion has been undrinkable after your first jump
+## of a life since the serial was introduced.
+func can_drink_now() -> bool:
+	return _bog != null and _bog.alive and not is_elder() \
+		and not is_holding_letter() and not is_busy() \
+		and _bog.health < Bog.MAX_HEALTH
+
+
+## Whether there is a potion in stock that can be drunk right now.
+##
+## Stock survives the auto-drink for one reason and it is the practice range's:
+## `RefillStone` and the harnesses hand potions over directly, and
+## `try_drink_potion` is how one of those is spent. Nothing in a match banks a
+## potion any more — `MatchState.claim_pickup` grants and spends in the same
+## breath (see `host_auto_drink`).
 func has_potion() -> bool:
-	return _potions > 0 and not is_elder() and not is_holding_letter() 		and not _channel_broken()
+	return _potions > 0 and can_drink_now()
 
 
 ## Whether there is a spear to throw. **The one gate**: the throw asks it, the
@@ -3540,24 +3570,53 @@ func _do_throw_magnet(origin: Vector3, velocity: Vector3, remaining: int) -> voi
 const CHANNEL_HEAL_TICK := 0.2
 
 
-## Drink one, if there is one to drink and this is a moment to drink it in.
+## Host only. A potion was walked onto: drink it where it lies.
 ##
-## The same predictive shape every other spend in this file has: the potion goes
-## out of the local count on the keypress and the arm starts on the same frame,
-## and the host's `_do_drink_potion` carries the real remainder. What is new is
-## that the *clock* starts here too — a channel is two seconds long on every
-## machine and the drinker should not spend a round trip of it with its arms
-## down.
+## Returns whether a channel actually started, and the answer is the pickup's:
+## `MatchState.claim_pickup` consumes the drop when this says true and **leaves
+## it standing on the ground** when it says false, which is the letter card's
+## rule one item over (D-035) and the reason the refusal has to travel back out
+## of here rather than being swallowed.
 ##
-## A drink the host refuses is cancelled by `_do_stop_drink`, which its refusal
-## path broadcasts. Without that, a client whose request was thrown away would
-## stand there holding a bottle for two seconds and heal nothing.
+## **The stock is deliberately not touched.** A potion off the ground is granted
+## and spent in the same breath, so the count it would go through is the count it
+## comes back to, and writing both halves out would only be a frame in which the
+## HUD could have shown a bottle nobody is carrying. `_do_drink_potion` still
+## carries `_server_potions` so a peer that had drifted is corrected by the same
+## message that starts its arm.
+##
+## **No local prediction, unlike every other spend in this file.** There is no
+## keypress to predict from: the host rules on the overlap and the drinker hears
+## about its own drink from the same broadcast every other peer does. That costs
+## the collector half a round trip of arm, and buys the thing a keypress could
+## not — that no client can start a channel at all, which is what makes the
+## refusals above rules rather than requests.
+func host_auto_drink() -> bool:
+	if not Net.is_host or _bog == null or not _bog.alive:
+		return false
+	if _server_channel_at > 0.0 or not can_drink_now():
+		return false
+	_server_channel_at = _now()
+	_server_channel_seconds = maxf(_config.heal_channel, 0.01)
+	_server_channel_healed = 0.0
+	_do_drink_potion.rpc(_server_potions)
+	_do_drink_potion(_server_potions)
+	return true
+
+
+## Spend one potion out of stock, if there is one and this is a moment for it.
+##
+## Nothing in a match reaches this any more — a match's potions are drunk off
+## the ground by `host_auto_drink` above. What still does is the practice
+## range's `RefillStone` stock and the harnesses, which is why the stock path is
+## kept rather than deleted: it is the one way a potion that was *handed* to a
+## Bog is spent.
+##
+## Host-decided like the pickup, and for the pickup's reason: with no keypress
+## there is nothing to predict, so a non-host caller simply asks and waits.
 func try_drink_potion() -> void:
-	if not has_potion() or is_busy():
+	if not has_potion():
 		return
-	_potions -= 1
-	inventory_changed.emit()
-	_begin_channel()
 	if Net.is_host:
 		_host_drink_potion()
 	else:
@@ -3571,19 +3630,14 @@ func _request_drink_potion() -> void:
 	_host_drink_potion()
 
 
-## The authoritative half. Every clause the client checked is checked again
-## here, plus the one only the host can check — that this Bog is not already
-## drinking, which is what stops a modified client spamming the request into a
-## continuous heal.
+## The authoritative half. Every clause `can_drink_now` names, on the host's own
+## copy of the state, plus the one only the host can check — that this Bog is
+## not already drinking, which is what stops a modified client spamming the
+## request into a continuous heal.
 func _host_drink_potion() -> void:
 	if not _bog.alive:
 		return
-	if _server_potions <= 0 or _server_channel_at > 0.0 \
-			or is_elder() or is_holding_letter() or _channel_moving():
-		# The asker has already spent its own potion and started its own arm, so
-		# it is told that both of those were wrong.
-		_broadcast_inventory()
-		_stop_channel_everywhere()
+	if _server_potions <= 0 or _server_channel_at > 0.0 or not can_drink_now():
 		return
 	_server_potions -= 1
 	_server_channel_at = _now()
@@ -3593,19 +3647,18 @@ func _host_drink_potion() -> void:
 	_do_drink_potion(_server_potions)
 
 
-## The drink, on every peer. Carries the host's remainder, which is what makes
-## the predictive spend above safe.
+## The drink, on every peer, and the **only** thing that starts an arm.
+##
+## It runs on the drinker too, which is the one line that changed when the key
+## went away: there is no longer a local half that got there first, so skipping
+## the owning client here would be the one machine that never plays the clip —
+## and a drink nobody can see on their own Bog is exactly the bug this step was
+## sent to fix.
 @rpc("authority", "call_remote", "reliable")
 func _do_drink_potion(remaining: int) -> void:
 	if _potions != remaining:
 		_potions = remaining
 		inventory_changed.emit()
-	# The drinker started its own clock and its own arm on the keypress.
-	# Starting them again when the relay lands would restart the drink half a
-	# round trip in and leave the bottle up after the health had finished
-	# arriving — the same thing `_do_throw_windup` refuses to do to an arm.
-	if _bog == null or _bog.is_local():
-		return
 	_begin_channel()
 
 
@@ -3655,12 +3708,9 @@ func _begin_channel() -> void:
 		return
 	_channel_at = _now()
 	_channel_seconds = maxf(_config.heal_channel, 0.01)
-	# Latched, not polled: a jump is the one way of leaving the ground that is a
-	# decision, and the serial is replicated so the host can see it on a Bog it
-	# does not own. Comparing against where it was when the drink started is
-	# what makes "did this Bog jump *during* the channel" a question with an
-	# answer on every machine.
-	_channel_jump = _bog.sync_jump_serial
+	# Every peer runs this, the drinker included: with the key gone there is no
+	# local half that got here first, so this is the only place an arm starts.
+	_bog.drinking = true
 	var animator := _bog.get_node_or_null("AnimationTree") as BogAnimator
 	if animator != null:
 		animator.play_drink(BogAnimator.drink_rate_for_channel(_channel_seconds))
@@ -3681,6 +3731,10 @@ func _end_channel() -> void:
 	_channel_at = 0.0
 	_channel_seconds = 0.0
 	if _bog != null:
+		# Before the animator and before the hand: the speed penalty is the
+		# thing the player feels, and a frame of it left on after the bottle
+		# came down is a frame of a Bog that cannot work out why it is slow.
+		_bog.drinking = false
 		var animator := _bog.get_node_or_null("AnimationTree") as BogAnimator
 		if animator != null:
 			animator.stop_drink()
@@ -3690,32 +3744,6 @@ func _end_channel() -> void:
 	cooldowns_changed.emit()
 
 
-## Is this Bog moving under its own power? The rule that says "standing still".
-##
-## **Speed, not input**, because the host has to be able to ask it about a Bog
-## it does not own, and what it has of one is `sync_velocity` — the same
-## replicated field the locomotion plane is laid out from. An input would have
-## to be put on the wire to be asked at all, and a rule only the drinker can
-## evaluate is a rule a modified client never reports.
-##
-## **Being pulled is not moving** (D-067), and this is the line that says so.
-## `Magnet` drags a Bog without its owner pressing anything, so a rule written
-## about *displacement* would have the magnet silently cancel the drink — and the
-## far more interesting outcome is a Bog hauled out of cover still drinking, in
-## the open, which is the magnet doing exactly what it is for. Stated as "your own
-## movement input", the rule also survives everything else that moves a body
-## nobody asked to move: a shove, a slope, something moving to stand on. What
-## makes it askable on the host is `Bog.note_pulled`, which marks the host's copy
-## of every victim without pulling it.
-func _channel_moving() -> bool:
-	if _bog == null:
-		return true
-	if _bog.is_pulled():
-		return false
-	var flat := Vector3(_bog.velocity.x, 0.0, _bog.velocity.z)
-	return flat.length() > CHANNEL_MOVE_SPEED
-
-
 ## Is there any reason the channel that is running should not still be?
 ##
 ## Everything here is replicated, so the host and the drinker reach the same
@@ -3723,21 +3751,25 @@ func _channel_moving() -> bool:
 ## written for, and for the same reason. Being hit is not in it: that is decided
 ## at the one door every hit comes through and arrives as `host_break_channel`.
 ##
+## **It is two clauses now and it used to be four**, and the two that went are
+## the amendment to D-067 (see the header). *Moving* went because a drink now
+## begins on the stride that walked onto the bottle, so a speed rule would
+## cancel every drink in the game on its first frame; *jumping* went with it,
+## because it was only ever the speed rule's blind spot — pressing jump barely
+## moves a Bog horizontally — and on its own it would mean a player who hopped
+## over a drop got nothing for it. What is left is the pair that are about the
+## body rather than about its velocity: a dead Bog is not drinking, and a hand
+## that has just closed on a letter card has nothing to hold a bottle with
+## (D-035).
+##
 ## **Airborne is deliberately absent.** The drink is a layer filtered to Spine1
 ## and up, so it works in the air by construction, and there is no grounded
-## check anywhere in this file for this to become the first of. What is here is
-## the *jump*, which is a decision and is caught by the serial; walking off a
-## ledge mid-drink is not, and a Bog that falls two metres while drinking keeps
-## drinking. Crouching is absent for the same reason in reverse: it is standing
-## still, lower, and the drink layers over it untouched.
+## check anywhere in this file for this to become the first of. Crouching is
+## absent for the same reason: the drink layers over it untouched.
 func _channel_broken() -> bool:
 	if _bog == null or not _bog.alive:
 		return true
-	if is_holding_letter():
-		return true
-	if _bog.sync_jump_serial != _channel_jump:
-		return true
-	return _channel_moving()
+	return is_holding_letter()
 
 
 ## How far through the *host's* channel we are, 0 to 1.

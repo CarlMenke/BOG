@@ -15361,3 +15361,35 @@ nothing new to say. Written against the pre-D-rework rig and ported onto
 `_apply_stance` when the PvP camera landed underneath it the same evening; rule
 5 (the shot leaves the lens) means the crosshair stays truthful wherever the
 shoulder is.
+
+## D-132 — The potion is drunk where it is found: no key, no stock, and the cost is two slow unarmed seconds
+The owner: *"the potion should just automatically drink once you pick it up,
+the animation doesn't work for me."*
+
+**The animation first, because it was never the animator.** `has_potion()`
+gated the drink on `_channel_broken()`, which compared `sync_jump_serial` with
+`_channel_jump` — a serial latched only *when a channel starts*. On a Bog that
+had never drunk it was 0, so the first jump of a life made `has_potion()`
+permanently false and `try_drink_potion()` returned before it reached the
+animator. Nobody who had jumped ever drank. It went unseen because nothing read
+`drink/active` and the harness never jumps; it reads it now.
+
+**Then the rule.** The potion is drunk on contact and is no longer carried.
+`MatchState.claim_pickup` asks the host-side `BogCombat.can_drink_now()`; a
+refusal — full health, already drinking, an Elder, holding a letter, mid
+windup/swing/chain — **leaves the bottle standing** (the letter card's
+precedent, D-035), and `Pickup` re-offers it four times a second to whoever is
+on it, so a full-health Bog that gets shot drinks without stepping off.
+Mid-action refuses rather than cancels: a bottle raised inside a windup empties
+the fist the spear was due to leave.
+
+D-067's "two seconds of standing still" could not survive this — the collector
+is moving by definition — so the interrupt lost its movement and jump clauses
+and the cost moved into `Bog.DRINK_SPEED_SCALE` (0.5) and `is_busy()`: two
+seconds slow, unarmed, holding a bright purple bottle. Only a hit, death or a
+letter ends a channel early; continuous delivery and "spent either way" are
+D-067's, unchanged. The drink is decided wholly on the host now, because there
+is no keypress left to predict from. The `drink_potion` action, its HUD tile
+and its reference row are retired. `RefillStone` still stocks one in the range,
+reachable only by the tools — kept as the way back if a carried spare is ever
+wanted again.
