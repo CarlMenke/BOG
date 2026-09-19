@@ -17374,3 +17374,71 @@ as eight-sided from the deck"), so along -Z its surface is a *corner* standing
 made it invisible anyway. `FACE_OUT` is that corner plus two centimetres and both
 the picture and the word sit on it, so a pedestal has a front. The renders are
 `range_views`' `racks`, `wells`, `pad` and `deck`. (BOG-56.)
+
+## D-173 — Building a map is a skill with a contract in it, and the construction is an agent's job
+Seven maps exist and the first six each re-derived the same contract from the
+code: what `MapCatalog` wants in a row, which nodes `static_map.gd` reads off a
+scene, which markers the match looks for, where the collision-before-`super()`
+line is, what the gate holds a map to. Carl, 2026-09-18: a map skill, and
+*"open by asking questions before it builds."* So
+`.claude/skills/build-map/SKILL.md` is that contract written once.
+
+**It asks first.** Theme and hour, size against the wharf's 43 m and the
+range's 90, which modes, the asset pack and whether it is in `Downloads` yet,
+the terrain idea, and which map is the bar for effort. The brief it carries is
+the owner's, said three times: theming and lighting get the effort the reference
+map got, the far distance and the clouds included; a map is built from a pack
+and never from nothing (*"Claude just makes up random shapes that aren't too
+good. Asset packs have textures"*), through `tools/decimate_assets.py`'s
+weld-decimate-repack, which took a 5 GB mining pack to 62 MB; and terrain means
+structural difference, not props on a flat square — Whisperbloom Hollow is the
+counter-example that worked flat because the model count carried it. A pack or
+a mesh that is not in the repo goes out as a `FETCH` line before any building,
+never as an improvised primitive (D-135).
+
+**The split with the `map-builder` agent.** The skill holds the contract, the
+brief and the wiring; the agent holds the construction. Asking the questions,
+fetching the pack, adding the gate lines and landing the ticket are the calling
+session's; the contract, what to focus on, the renders and the checklist are the
+agent's, and `.claude/agents/map-builder.md` now opens by pointing at them. One
+statement of each thing, in one place.
+
+**What the contract turned out to be**, gathered from the code rather than from
+memory: six files and a catalog row; `Environment`, `Sun`, a shadowless
+`Bounce`, an optional `Lights`, eight inward-facing `Spawns` six metres apart,
+and for Capture `Bases` in team order and three `Letters` in B, O, G order;
+`void_height` as the map's own floor; `platforms` and `off_limits` before
+`super()` and the backdrop group after it; navigation that asks nothing of the
+map but collision on layer 1 and gaps a Bog can cross; `preview_map`,
+`parkour_report` with its `EXPECT` row, a playthrough, `nav_check`, and a baked
+thumbnail (D-162). Sightlines, cover at named heights, and a top with three
+doors come from D-031, D-042, D-056, D-057, D-082 and D-160.
+
+**Dry-run against Twin Quarry**, which is what the ticket asked for: everything
+that map has is asked for by the skill, and four things the quarry and the range
+have that the first draft did not ask for went in — the Bog has no step-up so a
+ramp is the only climb, a corridor has to fit the camera's spring arm and not
+just the capsule (4.0 m by 3.4 m), markers may be built in code when their
+positions are derived rather than typed, and any number a map argues from is
+printed back out of the built scene for the gate to read
+(`range_map._check_sun_and_sky` exists because the sun was 59.6 degrees off
+design for a whole pass and no render showed it).
+
+### Rejected
+
+- **Putting the contract in the agent definition.** An agent's prompt is read
+  when the agent runs; the wiring either side of the construction — the
+  questions, the `FETCH` ask, the gate lines, the D-record — belongs to the
+  session that never spawns one for a small edit.
+- **Restating D-031, D-042, D-056, D-057, D-082 and D-135 in the skill.** Linked
+  instead. A second copy of a record is a copy that goes stale.
+
+### Known unfixed, found while writing it
+
+- `quarry.tscn` names its three letter markers G, U, B, from when the mode was
+  Capture G·U·B; child order is what is read, so the card labelled G is the
+  game's B (noted on BOG-52).
+- `tools/map_thumbs.gd` is not in the gate, so a rebuilt map keeps a stale
+  lobby photograph silently (BOG-58).
+- `tools/capture_preview.tscn` runs only on `safari`, the one map with no
+  declared bases (BOG-59). (BOG-29.)
