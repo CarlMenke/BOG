@@ -16434,3 +16434,72 @@ reference shot carries it.
 
 Nothing else moved. `Bog.Cause.FIST`, `RangeStats` having no row for it, and
 the `"fist"` on `weapon_launched` are all D-124's and all untouched. (BOG-7.)
+
+## D-150 — The nameplate rides the model's head, and only when the head leaves the capsule
+`bog.tscn` hangs the plate off the **capsule** at 1.80 m, and standing that is
+the right answer: the crown of the skull is at 1.543 m and the bottom of the
+name at 1.694, which is 0.151 m of daylight and is the framing everything else
+about the plate was settled against. It stops being the right answer the moment
+the model leaves the pose the capsule was measured in. An air clip's own
+vertical rise survives the import — D-097 zeroes a clip's travel and not its
+height — and the animator scrubs that clip by the jump arc, so the body climbs
+inside a capsule that does not move.
+
+**The clip that crosses is `RunJump`, not the dive.** The old record (the Gub
+list, "the nameplate crosses the model at dive apex") named `JumpTwo` and its
+0.618 m pelvis rise, and that clip is gone: today's dive is `Roll`, a low
+head-first tumble whose crown tops out at 1.456 m — *below* standing, so the
+plate was never in its way. The run jump tucks the knees and puts the crown at
+**1.779 m**, 0.085 m through the bottom of the name, on every screen except the
+jumper's own, which is the one screen that never draws its own plate.
+
+**The plate rides the head, as a floor and not as a height.** `Nameplate` lifts
+what it *draws* — the name, the ally stripe and the health bar together — by
+`max(0, crown + HEAD_GAP + half the name)`, with the crown taken from
+`Bog.head_centre()` and `Bog.HEAD_RADIUS`: the same pair a headshot is resolved
+against, deliberately, because "where is this Bog's head" is a question with one
+answer and the check that a spear can hit it is what keeps that answer honest.
+Because it is a floor, the lift is a flat **0.000 in every ground clip** — Idle,
+Walk, Run, both crouches, Throw, SwordCombo, Drink, Twerk and BowAim — so
+nothing that was framed against the resting height has moved, and a plate never
+bobs with a Bog's own gait.
+
+**`HEAD_GAP` is 0.12 and it is measured, not chosen.** It is the standing
+clearance, less the 0.009 m the busiest ground pose (`Drink`, crown 1.562)
+spends of it: under every pose a Bog stands in, so none of them lifts anything,
+and close enough to the standing daylight that a lifted plate looks the way a
+player already expects. Six centimetres was tried first and is wrong — it keeps
+the *skull* out of the lettering, and the antennae stand proud of the skull, so
+the render showed them in the text.
+
+**Up instantly, down over 0.18 s.** The only asymmetry a plate chasing a head is
+allowed. A smoothed rise is a plate in the wrong place for exactly as long as
+the head is moving fastest; a smoothed fall is the plate settling back over a
+landing instead of snapping down on the frame the feet arrive. Nothing needs
+filtering on the way up, because below the gap the lift is a flat zero and there
+is no gait noise to filter.
+
+**The node does not move itself.** The lift is applied to the label, the stripe
+and the health root, not to the `Nameplate`'s `position` — that field belongs to
+whoever placed it, and `BogBackdrop` stacks the lobby's ring in three ranks off
+it. A node that moved itself would be a second writer of the same number and the
+ranks would drift by however far the last head rose.
+
+**On every peer for free.** A remote Bog's pose is composed locally out of
+replicated velocity and serials (D-004), so every screen already has the
+skeleton this measures; the plate other players see is right without a byte on
+the wire. `head_centre()` reads the skeleton before `BogAim` has turned the
+torso (D-066's trap) and that is the right reading anyway — the aim correction
+is worth a centimetre or two of head height against a gap of twelve, and a
+`BoneAttachment3D` would be a node on the rig whose only job is to be a frame
+late. It is now asked once a frame rather than once a shot, so `Bog.head_centre`
+finds and keeps the rig instead of searching the model tree by name eight times
+a frame.
+
+`tools/preview_plate.tscn` is the check: a real `bog.tscn` with its real plate,
+the `AnimationTree` switched off and the body's own player seeked, twelve
+moments of each of eighteen clips, reading `Nameplate.name_bottom()` a frame
+*after* the pose so what is measured is the plate's own `_process` and not the
+tool reproducing it. It reads 0.120 m at its tightest and 0.000 m of lift at
+rest. The pictures are `out/plate_runjump.png` and `out/plate_dive.png`. The
+carrier's letter card still hangs at the old anchor; that is BOG-55. (BOG-8.)

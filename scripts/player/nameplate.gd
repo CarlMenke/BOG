@@ -32,6 +32,57 @@ const PIXEL_SIZE := 0.0033
 ## sunlit patch of grass, and at range it is most of what is left of the plate.
 const OUTLINE_SIZE := 14
 
+## How much daylight there has to be between the crown of the Bog's own head and
+## the lowest ink of the name (D-150).
+##
+## The node this script is on is pinned to the **capsule**, at 1.80 m in
+## `bog.tscn`, and for a Bog standing on a floor that is the right answer — it is
+## the height the standing framing was settled at. It stops being the right
+## answer the moment the model leaves the pose the capsule was measured in. An
+## air clip's own vertical rise is kept by the import (D-097 zeroes the travel
+## and not the height) and scrubbed by the jump arc, so the body climbs inside a
+## capsule that does not move: `RunJump` tucks the knees and puts the crown of
+## the head at **1.779 m**, which is 0.085 m *through* the bottom of the name.
+## Every screen sees that except the jumper's own, which is the one screen that
+## never draws its own plate.
+##
+## So the plate rides the model. `Bog.head_centre()` is where the skull is this
+## frame off the posed skeleton and `Bog.HEAD_RADIUS` is its own half-height:
+## the same pair a headshot is resolved against, deliberately, because "where is
+## this Bog's head" is a question with one answer and the check that a spear can
+## hit it is what keeps that answer honest.
+##
+## **A floor and not a height.** The lift is `max(0, ...)`, so while the head is
+## lower than this — which is every pose a Bog stands, walks, crouches or fights
+## in — the plate is exactly where the scene put it and does not move at all.
+## That is what keeps the lobby's ring where `tools/ui_range.tscn` measured it
+## (D-118) and keeps a plate from bobbing with a Bog's own gait.
+##
+## 0.12 is that floor taken from the pose everything else about the plate was
+## framed against rather than chosen: standing, the crown is at 1.543 m and the
+## bottom of the name at 1.694, which is 0.151 m of daylight, and the busiest
+## ground clip (`Drink`, at 1.562) spends 0.009 of it. A gap of 0.12 therefore
+## sits under every ground pose the body has — so none of them lifts the plate by
+## so much as a millimetre — while an airborne pose that does lift it keeps
+## almost exactly the clearance a player is used to seeing over a standing Bog.
+## It is measured against the **skull**, and the antennae stand a few centimetres
+## proud of that, which is why the number is the standing clearance and not the
+## six centimetres that would merely keep the blob out of the lettering.
+const HEAD_GAP := 0.12
+
+## How long the lift takes to fall back once the head drops, as an exponential
+## time constant.
+##
+## **It rises instantly and falls slowly**, which is the only asymmetry a plate
+## chasing a head is allowed to have. A smoothed *rise* is a plate that is in the
+## wrong place for exactly as long as the head is moving fastest, which is the
+## frame this whole record is about; a smoothed *fall* is the plate settling back
+## over a landing instead of snapping down on the frame the feet arrive. Nothing
+## is smoothed on the way up because nothing needs to be: below `HEAD_GAP` the
+## lift is a flat zero, so there is no gait noise to filter out and the rise only
+## ever happens when the body genuinely leaves its own capsule.
+const LIFT_FALL := 0.18
+
 ## Beyond this the plate fades out.
 ##
 ## These came down with the plate. At a fixed screen size the old 34-46 m was
@@ -155,6 +206,18 @@ var _colour: Color = NEUTRAL_COLOUR
 var _ally: bool = false
 ## 1 -> 0. Starts full, which is also the state in which nothing is drawn.
 var _health: float = 1.0
+## How far above this node's own anchor the plate is drawn this frame, in metres
+## (D-150). Zero in every pose a Bog keeps its head inside its capsule in.
+##
+## Carried as a lift on what is *drawn* rather than as a move of this node,
+## because the node's own `position` belongs to whoever placed it —
+## `bog.tscn` hangs it at 1.80 and `BogBackdrop` stacks the lobby's ring in three
+## ranks off that number. A node that moved itself would be a second writer of
+## the same field, and the ranks would drift by however far the last head rose.
+var _lift: float = 0.0
+## The Bog under this plate, or null in a harness that hangs one over something
+## else. Resolved once: `head_centre()` is asked every frame now.
+var _body: Bog
 
 
 func _ready() -> void:
@@ -176,18 +239,23 @@ func _ready() -> void:
 	_label.double_sided = true
 	_label.render_priority = 1
 	add_child(_label)
+	_body = get_parent() as Bog
 	_build_bar()
 	_build_health_bar()
 	_refresh()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if _label == null:
 		return
 	if _camera == null or not is_instance_valid(_camera):
 		_camera = get_viewport().get_camera_3d()
-		if _camera == null:
-			return
+	# Before the lens is consulted, because the lift is a fact about the body and
+	# not about who is looking at it — and because this is then still right on a
+	# frame with no camera at all, which is every headless check.
+	_track_head(delta)
+	if _camera == null:
+		return
 	var distance := global_position.distance_to(_camera.global_position)
 	if _ally:
 		_hold_size(distance)
@@ -203,6 +271,56 @@ func _process(_delta: float) -> void:
 	_place_health(alpha)
 
 
+## How high the plate is drawn above its own anchor this frame, so the head
+## underneath it stays out of the lettering (D-150, `HEAD_GAP`).
+##
+## Read off the **model** on every peer, which is the only place this can be read
+## from: a remote Bog's pose is composed locally out of replicated velocity and
+## serials (D-004), so every screen already has the skeleton this measures and
+## none of them needs a byte on the wire to agree about it.
+##
+## `Bog.head_centre()` reads the skeleton before `BogAim` has turned the torso,
+## which is the trap D-066 wrote down. It is the right reading anyway: the aim
+## correction is a yaw with a few degrees of pitch on it, worth a centimetre or
+## two of head height against a gap of twelve, and taking it off a `BoneAttachment3D`
+## would mean a node on the rig whose only job is to be a frame later.
+func _track_head(delta: float) -> void:
+	var wanted := 0.0
+	if _body != null and is_instance_valid(_body):
+		# Typed by hand, both of them. `Bog` names `Nameplate` and this now names
+		# `Bog` back, and an inferred local off a member of a class in a reference
+		# cycle is what took the gate down once already (the letters round): on a
+		# cold cache the inference fails, the script does not compile, and the
+		# error is nowhere near the line that caused it.
+		var head: Vector3 = _body.head_centre()
+		var crown: float = head.y + Bog.HEAD_RADIUS - global_position.y
+		wanted = maxf(0.0, crown + HEAD_GAP + _half_height())
+	# Up on the frame it is needed, down over `LIFT_FALL`.
+	if wanted >= _lift:
+		_lift = wanted
+	else:
+		_lift = lerpf(wanted, _lift, exp(-delta / LIFT_FALL))
+	_label.position.y = _lift
+
+
+## Half the drawn height of the name, which is how far its lowest ink is below
+## this node — the label is centred on it.
+func _half_height() -> float:
+	return FONT_SIZE * _label.pixel_size * 0.5
+
+
+## The world height of the bottom of the name this frame. For the checks, which
+## measure the head against it (`tools/preview_plate.tscn`).
+func name_bottom() -> float:
+	return global_position.y + _lift - _half_height()
+
+
+## How far the plate is lifted off its anchor this frame. For the checks, and for
+## anything that hangs above the plate and has to keep its gap.
+func head_lift() -> float:
+	return _lift
+
+
 ## A teammate's plate at full strength at any range, scaled up past
 ## `ALLY_HOLD_FROM` so its height on screen stops falling.
 func _hold_size(distance: float) -> void:
@@ -215,7 +333,9 @@ func _hold_size(distance: float) -> void:
 	var height := FONT_SIZE * pixel
 	var width := _text_width() * pixel
 	(_bar.mesh as QuadMesh).size = Vector2(width * 0.8, ALLY_BAR_HEIGHT * ALLY_SCALE * grow)
-	_bar.position = Vector3(0.0, -height * ALLY_BAR_DROP, 0.0)
+	# The lift the name took (D-150), so the stripe stays under the name rather
+	# than under the anchor the name has left.
+	_bar.position = Vector3(0.0, _lift - height * ALLY_BAR_DROP, 0.0)
 
 
 ## Where the health bar is this frame, how wide the fill is, and what colour it
@@ -239,8 +359,11 @@ func _place_health(alpha: float) -> void:
 	# The camera's own basis, so screen-right is the bar's x and the fill can be
 	# offset along it. The drop is world-down rather than screen-down: the bar
 	# belongs under the name in the world, and the camera does not roll.
+	# The name's own lift is carried down to the bar (D-150): the two are one
+	# plate, so a bar left at the anchor while the name rose would be the health
+	# of a Bog whose head is between the two of them.
 	_health_root.global_transform = Transform3D(_camera.global_basis,
-		global_position + Vector3.DOWN * drop)
+		global_position + Vector3.UP * _lift + Vector3.DOWN * drop)
 
 	var width := HEALTH_BAR.x * grow
 	var height := HEALTH_BAR.y * grow
