@@ -118,6 +118,7 @@ const FOLD_OPEN := "▾"
 const FOLD_SHUT := "▸"
 
 @onready var _backdrop: BogBackdrop = %Backdrop
+@onready var _tutorial: Tutorial = %Tutorial
 @onready var _player_list: VBoxContainer = %PlayerList
 @onready var _player_count: Label = %PlayerCount
 @onready var _code_label: Label = %CodeLabel
@@ -280,6 +281,19 @@ func _refresh() -> void:
 	_refresh_actions()
 	_refresh_surface()
 	_backdrop.set_roster(_backdrop_entries())
+	# **Through `_refresh` and not through a handler of its own** (D-069). The
+	# question the tutorial answers is "is this room about to play B·O·G", and
+	# that has exactly two answers a lobby can give: the one it opens with and
+	# the one the host's picker leaves it on. Both arrive here — `_ready` calls
+	# this once and `Net.config_changed` calls it again — so hanging the card
+	# off `_refresh` is one home for both instead of a second listener that has
+	# to agree with this one about what the config says.
+	#
+	# Called on every refresh and that is deliberate: the once-per-machine flag
+	# lives in `Tutorial` (`Settings.tutorial_seen`), so a roster change, a
+	# chat line or a dial being dragged costs a function call that returns.
+	if MatchConfig.is_bog(Net.config.win_condition):
+		_tutorial.maybe_auto_open()
 
 
 func _backdrop_entries() -> Array:
@@ -1022,12 +1036,26 @@ func _on_start() -> void:
 	Net.request_match_start()
 
 
+## **The letters leave before the screen does.** The owner: *"when the game
+## starts the letters should bounce down then bounce out of the top of the
+## screen, as if they are leaving first, and then the screen goes, so we see
+## them leave."* So the 0.85 s exit is awaited here rather than fired and
+## forgotten, and it is awaited on **every peer** — the host and each client
+## all run this lobby, all get `match_start_requested`, and a client that
+## skipped the beat would be looking at the arena while the host was still
+## watching a G climb out of frame.
+##
+## Safe to wait on. `SceneFlow.go_to` queues a request that lands while it is
+## busy, so a second start arriving during the exit is not lost; and the arena
+## is checked *first*, because a build with no island should say so at once
+## rather than after a second of ceremony.
 func _on_match_start() -> void:
 	if not ResourceLoader.exists(SceneFlow.ARENA):
 		UIState.post_notice("No island",
 			"The host started a match, but this build has no arena scene yet.")
 		SceneFlow.go_to_menu()
 		return
+	await _backdrop.letters_leave()
 	SceneFlow.go_to_arena()
 
 

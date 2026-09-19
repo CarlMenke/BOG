@@ -1,8 +1,17 @@
 class_name RangeAmbience
 extends RefCounted
-## The things moving in the air over Glowworm Grounds: the glowworms the place
-## is named for, marsh gas coming up off the peat, a layer of mist lying in the
-## bottom of the bog — and the two ambient loops the repository already has.
+## The things moving in the air over Highsun Grounds: the drifting glowworm
+## motes, marsh gas coming up off the peat, a layer of mist lying in the bottom
+## of the bog — and the two ambient loops the repository already has.
+##
+## The map used to be named for the glowworms and is not any more (the sun is
+## up), and they stay anyway, unchanged, because they were never furniture.
+## **This is the one place on the range where an unshaded emissive quad is the
+## right answer**: these are *effects* — soft dots with no silhouette, no
+## collision and nothing to aim at — and an effect is allowed to be light with
+## no object under it. What is not allowed is an object that is only light: see
+## the note above `range_map.TORCHES` for the rule and the twenty-four lantern
+## spheres it cost.
 ##
 ## `WharfAmbience` is the model, not `Ambience`, and for the reason the wharf
 ## gives about the island: the hollow's emitters are placed against a height
@@ -60,7 +69,7 @@ const LOOPS := {
 ## you look *over*: 1.6 m of box with the density halving every 1.1 m puts
 ## almost all of it under a standing Bog's chin. What it buys is the bottom of
 ## every torch pool thickening into the peat instead of stopping dead at it, and
-## the distance posts standing out of something.
+## the 1.25 m cover blocks standing out of something.
 const MIST_TOP := 1.6
 const MIST_FALLOFF := 1.1
 
@@ -141,7 +150,7 @@ static func _build_mist(parent: Node3D, middle: Vector3, size: Vector2) -> void:
 ## — it just glows, for hours. So these sit low (0.3 to 1.6 m), drift at a
 ## third of the speed, and their ramp fades in and out over a long lifetime
 ## instead of pulsing. The blink is what would make them read as insects, and
-## insects are not what the map is named for.
+## an insect is a thing you look at rather than a thing you see the bog through.
 static func _build_glowworms(parent: Node3D, rng: RandomNumberGenerator) -> void:
 	var quad := QuadMesh.new()
 	quad.size = Vector2(0.22, 0.22)
@@ -169,7 +178,7 @@ static func _build_glowworms(parent: Node3D, rng: RandomNumberGenerator) -> void
 		process.color_ramp = _fade_ramp(GLOW_TINT, 0.95)
 
 		var worms := GPUParticles3D.new()
-		worms.name = "Glowworms%d" % i
+		worms.name = "Motes%d" % i
 		worms.draw_pass_1 = quad
 		worms.process_material = process
 		worms.amount = SWARM_COUNT

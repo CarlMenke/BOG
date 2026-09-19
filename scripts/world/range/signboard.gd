@@ -16,11 +16,12 @@ extends Area3D
 ## that is about the player rather than about the range, and it is deliberately
 ## the dullest object on the map:
 ##
-##   no lantern   the twenty-four lantern heads are distance marks. A
-##                twenty-fifth that meant something else was the one thing
-##                stopping them reading as a scale.
-##   no light     an `OmniLight3D` on the lodge deck at dusk is a light on the
-##                eight spawn pads, which is four metres away.
+##   no lantern   there were twenty-four lantern heads on this map and they are
+##                gone with the posts they sat on. A glowing ball is not a prop
+##                (`range_map`, above `TORCHES`), and this sign was never going
+##                to be the twenty-fifth.
+##   no light     an `OmniLight3D` on the lodge deck is a light on the eight
+##                spawn pads, which is four metres away.
 ##   no chime     the feedback is the stats panel in the corner of the HUD going
 ##                to zero, which is the thing you were looking at when you
 ##                decided to reset it. A sound as well would be the range
@@ -55,7 +56,7 @@ const DEBOUNCE := 1.0
 const LABEL_Y := 1.42
 const LABEL_OUT := 0.075
 ## Limed letters cut into tarred timber. Not emissive: a sign that glows is a
-## lantern, and this map has enough of those.
+## lamp, and a lamp is not what a signboard is.
 const LABEL_COLOUR := Color(0.88, 0.83, 0.70)
 
 var zone: String = ""

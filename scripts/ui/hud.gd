@@ -16,7 +16,9 @@ extends CanvasLayer
 ## Elder's robe. Three of those are wall-clock deadlines with no per-frame signal
 ## to hang off — inside `BogCombat` for the bar, on the host for the other two —
 ## and the clock is broadcast twice a second, so polling is both simpler and
-## smoother than the alternative.
+## smoother than the alternative. The minimap is a fifth and the least arguable
+## of them: every blip on it is a body that moved this frame, and there is no
+## signal for "somebody walked".
 ## Everything else — kills, scores, phases, deaths, letters — arrives as a signal
 ## and is handled once. The controls being pushed to all early-out when nothing
 ## has actually moved, which is what keeps a per-frame push cheap.
@@ -55,6 +57,7 @@ const HEALTH_BAR := Vector2(224.0, 22.0)
 @onready var _lives: HBoxContainer = %Lives
 @onready var _letters: LetterTrack = %Letters
 @onready var _letter_call: LetterCall = %LetterCall
+@onready var _minimap: Minimap = %Minimap
 @onready var _elder: ElderTrack = %Elder
 @onready var _abilities: HBoxContainer = %Abilities
 @onready var _spear_slot: AbilitySlot = %SpearSlot
@@ -135,6 +138,7 @@ func _ready() -> void:
 	MatchState.letter_stolen.connect(_on_letter_stolen)
 	MatchState.letter_dropped.connect(_on_letter_dropped)
 	MatchState.letter_returned.connect(_on_letter_returned)
+	MatchState.letter_appeared.connect(_on_letter_appeared)
 	Net.chat_received.connect(_chat.add_message)
 	Net.left_lobby.connect(_on_left_lobby)
 	Net.return_to_lobby_requested.connect(_go_to_lobby)
@@ -149,6 +153,7 @@ func _ready() -> void:
 	_build_health()
 	_refresh_score()
 	_refresh_letters()
+	_refresh_minimap()
 	refresh_range_panel()
 	_on_phase_changed(MatchState.phase)
 
@@ -159,6 +164,7 @@ func _process(delta: float) -> void:
 	_refresh_health()
 	_refresh_abilities()
 	_refresh_letters()
+	_refresh_minimap()
 	_refresh_elder()
 	_refresh_clock()
 	if _spectating:
@@ -557,6 +563,26 @@ func _refresh_letters() -> void:
 		Net.config.mode == MatchConfig.Mode.TEAMS, carrying)
 
 
+## The corner map, in B·O·G and in nothing else (the letters round).
+##
+## Two early-outs before anything is read, and they are the whole of the cost in
+## every other mode: a hidden `Control` is asked for one boolean per frame and
+## nothing else. Being hidden with the results up is not tested here either —
+## the map lives under `Root`, and `_process` already makes "the results screen
+## replaces the gameplay HUD" an invariant of the whole node.
+##
+## `is_bog` rather than `scores_letters`, which is the same predicate under the
+## name this round gave it: the mode the map is for is called B·O·G, and a call
+## site that says so is one fewer thing to work out when the two flavours are
+## read back later.
+func _refresh_minimap() -> void:
+	var show := MatchConfig.is_bog(Net.config.win_condition)
+	_minimap.visible = show
+	if not show:
+		return
+	_minimap.refresh()
+
+
 ## The robe's countdown, for the local player only (D-040).
 ##
 ## Polled rather than driven by `elder_changed`, for exactly the reason the
@@ -743,7 +769,7 @@ func _on_hit_landed(attacker_id: int, victim_id: int, amount: float, cause: int,
 
 
 ## Flash the mark for something that is not a Bog — one of the range's boards,
-## its gong or an orb. Called through the `hud` group, so a target never holds a
+## its gong. Called through the `hud` group, so a target never holds a
 ## reference to a HUD that is rebuilt with every match.
 ##
 ## The hit shape, never the kill shape, whatever the tint: a board is struck and
@@ -889,6 +915,34 @@ func _on_letter_returned(letter: int) -> void:
 		"went home"])
 
 
+## A card has landed somewhere in the world (the letters round).
+##
+## **The bell rings in both flavours and the feed row only prints in one.** In
+## the collect race a letter appearing is the single most important event in the
+## match — there is exactly one out at a time, everybody is going to run at it,
+## and it appears out of a death nobody but the killer watched — so it gets a
+## sound *and* a line. In Capture the three cards are never a surprise: they
+## start at home and come back there, and `letter_returned` already prints "went
+## home" for the same card landing in the same place. Two rows for one event is
+## how a feed becomes something people stop reading.
+##
+## 2D rather than positional, and that is the point of it: the announcement is
+## made to everybody at the same volume, because a bell that got quieter with
+## distance would be telling the player furthest from the card the least about
+## it. `letter_captured` is the one that plays in the world, at the pouch.
+##
+## Gated on PLAYING because the Capture cards are laid out during warmup and a
+## bell for the arena being built is a bell for nothing.
+func _on_letter_appeared(letter: int, _at: Vector3) -> void:
+	if MatchState.phase != MatchState.Phase.PLAYING:
+		return
+	AudioDirector.play_2d(AudioDirector.LETTER_APPEARS)
+	if MatchState.is_capture():
+		return
+	_kill_feed.add_event([[MatchState.letter_name(letter), Pickup.LETTER_COLOUR],
+		"appeared"])
+
+
 func _on_local_death(respawn_in: float) -> void:
 	_scoreboard.close()
 	# Watch somebody who is still playing rather than the patch of dirt you died
@@ -974,7 +1028,11 @@ func _apply_spectator() -> void:
 	_spectate_index = posmod(_spectate_index, living.size())
 	var target := living[_spectate_index]
 	rig.spectate(target)
-	_spectate_label.text = "Spectating %s      LMB / RMB to switch" % target.display_name
+	# The two actions the spectator switch actually polls, read off the live
+	# map rather than spelt: since the controls became rebindable (D-137) this
+	# was the one string on screen still naming a key by hand.
+	_spectate_label.text = "Spectating %s      %s / %s to switch" % [target.display_name,
+		SettingsPanel.primary_key("primary_attack"), SettingsPanel.primary_key("aim")]
 	_spectate_label.visible = true
 
 

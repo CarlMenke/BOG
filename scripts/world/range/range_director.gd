@@ -44,7 +44,7 @@ const GROUP_PLATES := "Plates"
 ## and its gate run whether or not that file has landed yet.
 const ITEMS_SCRIPT := "res://scripts/world/range/range_items.gd"
 
-## Unit 5's counter, boards, orbs and gong. Same guard and the same shape as the
+## Unit 5's counter, boards and gong. Same guard and the same shape as the
 ## items above, deliberately: one convention for "a unit hangs itself off the
 ## map's markers", not two.
 const STATS_SCRIPT := "res://scripts/world/range/range_stats.gd"

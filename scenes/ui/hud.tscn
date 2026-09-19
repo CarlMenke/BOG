@@ -1,4 +1,4 @@
-[gd_scene load_steps=15 format=3 uid="uid://gubhud00000001"]
+[gd_scene load_steps=16 format=3 uid="uid://gubhud00000001"]
 
 [ext_resource type="Script" path="res://scripts/ui/hud.gd" id="1_hud"]
 [ext_resource type="Theme" path="res://resources/ui/bog_theme.tres" id="2_theme"]
@@ -14,6 +14,7 @@
 [ext_resource type="Script" path="res://scripts/ui/letter_call.gd" id="12_call"]
 [ext_resource type="Script" path="res://scripts/ui/range_stats_panel.gd" id="13_range"]
 [ext_resource type="PackedScene" path="res://scenes/ui/class_picker.tscn" id="14_class"]
+[ext_resource type="Script" path="res://scripts/ui/minimap.gd" id="14_minimap"]
 
 [node name="HUD" type="CanvasLayer"]
 layer = 8
@@ -110,6 +111,21 @@ offset_right = 34.0
 offset_bottom = 22.0
 mouse_filter = 2
 script = ExtResource("13_range")
+
+[node name="Minimap" type="Control" parent="Root"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -212.0
+offset_top = 32.0
+offset_right = -32.0
+offset_bottom = 212.0
+grow_horizontal = 0
+mouse_filter = 2
+script = ExtResource("14_minimap")
 
 [node name="Crosshair" type="Control" parent="Root"]
 unique_name_in_owner = true

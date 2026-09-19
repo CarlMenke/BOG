@@ -55,7 +55,9 @@ extends AnimationTree
 ##     slash      OneShot        the picked window, upper body, over the sword plane
 ##     swing      OneShot        SwordSpin, **full body**
 ##     emote      Blend2         swing / Twerk, **full body**, by how emoting
-##     output   <- emote
+##     grip_left  Blend2         a frozen finger pose, the left hand's twelve bones only
+##     grip_right Blend2         the same for the right hand's twelve
+##     output   <- grip_right
 ##
 ## Three planes and a switch where there was one plane and a carry layer: the
 ## great sword set and the archer set each have their own walks, runs and
@@ -121,6 +123,25 @@ const SLIDE_JUMP_FALLBACK := "RunJump"
 ## `Cast` would `push_error` once a frame.
 const PUNCH_ROLE := "Punch"
 const PUNCH_FALLBACK := "Cast"
+
+## The capture's clip, and the clip it borrows until that one lands (the letters
+## round). **Not** in `REQUIRED_CLIPS`, for `SLIDE_JUMP_ROLE`'s and
+## `PUNCH_ROLE`'s reason exactly: the performance is designed, wired and
+## playable before its take has been picked off Mixamo
+## (`assets/source/clips.json` carries the row and the query).
+##
+## The pose being asked for is *"their right hand will be up in the air, as if
+## it's pulling the letter down"* — a looping idle with the right arm raised and
+## the palm up, held, while the left hangs at the hip with the pouch in it.
+##
+## `CastIdle` is an honest stand-in and it is the closest thing on disk: it is
+## the same take `SpearCarry` is cut from (`Standing Idle Ready To Cast Spell`),
+## a one-handed ready idle with the right fist up beside the head in open air.
+## What it is not is a hand *above* the head with the palm turned up, so the arm
+## reads as guarding rather than as reaching — which is a pose that says the
+## right thing about being busy and the wrong thing about what with.
+const CAPTURE_ROLE := "Capture"
+const CAPTURE_FALLBACK := "CastIdle"
 
 
 ## A clip by role, from the library. Loud on a missing one, because every
@@ -371,6 +392,20 @@ static var PUNCH_CLIP_END: float = minf(PUNCH_HIT_IN_CLIP + FOLLOW_THROUGH,
 static var PUNCH_RELEASE_TIME: float = minf(PUNCH_WINDOW, PUNCH_RELEASE_MAX)
 static var PUNCH_RATE: float = PUNCH_WINDOW / maxf(PUNCH_RELEASE_TIME, 0.01)
 
+# ------------------------------------------------------------- the capture ---
+
+## Which clip the capture is actually drawn with. Resolved once, statically,
+## for `PUNCH_PLAYS`'s reason: the thing it is about is the library and there is
+## one of those.
+##
+## There is no marker, no rate and no window under it — unlike every other
+## resolved role in this file. A capture is a **looping pose** held for as long
+## as the host's clock says, so there is nothing in it that has to land on a
+## frame and nothing to derive a playback rate from; the whole of its timing
+## lives in `MatchState`, where the clock is, and this layer only says whether
+## the arm is up.
+static var CAPTURE_PLAYS: String = clip_or(CAPTURE_ROLE, CAPTURE_FALLBACK)
+
 # --------------------------------------------------------------- the drink ---
 
 ## The drink is its `raise` to its `done` — the bottle up, at the lips, and
@@ -454,6 +489,13 @@ const LEAP_BLEND_SPEED := 12.0
 ## running; a carry has nowhere to be.
 const CARRY_BLEND_SPEED := 5.0
 const DRAW_BLEND_SPEED := 12.0
+## How fast the capture pose comes up (the letters round). Faster than the
+## carry and slower than the draw, which is where it belongs on both counts: a
+## capture is a decision that has already been made by the host and arrives
+## over the wire, so the arm should be up promptly enough that the clock and
+## the pose start together — but there is no event inside it waiting on the
+## arm, which is the thing that makes the draw urgent.
+const CAPTURE_BLEND_SPEED := 6.0
 ## The cross-fade between the three ground planes, in seconds: a bow coming
 ## up, a bow going down. Short enough that the aim pose arrives with the
 ## charge, long enough that the feet do not scissor.
@@ -466,6 +508,14 @@ const PLANE_XFADE := 0.15
 ## node for it: `Twerk` loops until the player stops it, and a one-shot that is
 ## never allowed to finish is the clock D-026 exists to keep out of this graph.
 const EMOTE_BLEND_SPEED := 1.0 / PLANE_XFADE
+
+## How fast a hand closes on what it is holding, and opens again (the letters
+## round). The fastest blend in this block, and it is allowed to be: what moves
+## is twelve bones inside a fist about 4 cm across, so there is no weight to
+## settle and nothing for the eye to follow — the only thing an eighth of a
+## second buys over a snap is that a prop appearing in a hand does not arrive
+## with the fingers already round it.
+const GRIP_BLEND_SPEED := 8.0
 
 # ----------------------------------------------------------- the upper body --
 
@@ -484,6 +534,69 @@ const UPPER_BODY_BONES: Array[String] = [
 	"mixamorig_RightHandIndex1", "mixamorig_RightHandIndex2", "mixamorig_RightHandIndex3", "mixamorig_RightHandIndex4",
 	"mixamorig_RightHandMiddle1", "mixamorig_RightHandMiddle2", "mixamorig_RightHandMiddle3", "mixamorig_RightHandMiddle4",
 ]
+
+# ------------------------------------------------------------- the fingers ---
+# The grip layer's vocabulary (the letters round). Its nodes, its wiring and
+# its per-frame drive are one section of their own further down; what is here
+# is the part `tools/grip_poses.gd` has to agree with, and it reads these
+# rather than repeating them (D-098).
+
+## The frozen finger poses and the name the body's player files them under.
+## Written by `tools/grip_poses.gd` out of the clip library and committed
+## beside it; the game never derives them at load time.
+const GRIP_LIBRARY := "res://art/generated/grip_poses.res"
+const GRIP_LIBRARY_NAME := "grip"
+
+## The three shapes a hand is ever asked for. **One pose per prop and not one
+## per clip**, which is the owner's own line and is the same rule as D-065's
+## "one thing per hand" said about the fingers: a hand holds one object, the
+## object decides the shape, and the body clip playing underneath has no vote.
+## A closed fist round a shaft, a hilt, an arrow or a potion; a hook round the
+## bow's riser, which is the one grip that is not a fist; and the open hand,
+## which is what the other two relax back into.
+const GRIP_FIST := "fist"
+const GRIP_HOOK := "hook"
+const GRIP_OPEN := "open"
+
+## Which poses each hand has, keyed the way Mixamo spells the side — and the
+## whole list of poses the tool writes, which is why it is a table here and
+## not a pair of `if`s in two files. The right hand never hooks anything: the
+## bow is held in the left and drawn by the right, and a drawing hand is a
+## fist round the nock (D-065).
+##
+## `GRIP_OPEN` is first in both rows on purpose. An `AnimationNodeTransition`
+## opens on its input 0, so the resting hand is the pose a Bog spawns holding
+## and there is no first frame to correct.
+const GRIP_POSES := {
+	"Left": [GRIP_OPEN, GRIP_FIST, GRIP_HOOK],
+	"Right": [GRIP_OPEN, GRIP_FIST],
+}
+
+## What a hand is made of, checked rather than assumed by the tool: the BOG's
+## is a three-digit mitten — thumb, index and middle, four joints each — and
+## nothing else in the rig to pose. A rig that grows a ring finger changes this
+## number, `UPPER_BODY_BONES` and the poses on disk together or not at all.
+const FINGER_BONES_PER_HAND := 12
+
+
+## One hand's finger bones, read out of `UPPER_BODY_BONES` so there is one home
+## for what a mitten is made of (D-098): everything under that wrist, and not
+## the wrist itself — the hand bone belongs to the arm layers and a grip that
+## re-posed it would turn the prop.
+static func finger_bones(side: String) -> Array[String]:
+	var wrist := "mixamorig_%sHand" % side
+	var out: Array[String] = []
+	for bone in UPPER_BODY_BONES:
+		if bone != wrist and bone.begins_with(wrist):
+			out.append(bone)
+	return out
+
+
+## What one hand's pose is called in the grip library: `fist_left`,
+## `open_right`. The tool writes these names and the graph asks for them, both
+## through here.
+static func grip_pose_name(pose: String, side: String) -> String:
+	return "%s_%s" % [pose, side.to_lower()]
 
 # -------------------------------------------------------------- parameters ---
 
@@ -512,6 +625,7 @@ const P_CARRY := "parameters/carry/blend_amount"
 const P_CARRY_PICK := "parameters/carry_pick/transition_request"
 const P_DRAW := "parameters/draw/blend_amount"
 const P_DRAW_SEEK := "parameters/draw_seek/seek_request"
+const P_CAPTURE := "parameters/capture/blend_amount"
 const P_LOOSE := "parameters/loose/request"
 const P_LOOSE_ACTIVE := "parameters/loose/active"
 const P_DRINK := "parameters/drink/request"
@@ -533,6 +647,13 @@ const P_SWING := "parameters/swing/request"
 const P_SWING_ACTIVE := "parameters/swing/active"
 const P_SWING_RATE := "parameters/swing_rate/scale"
 const P_EMOTE := "parameters/emote/blend_amount"
+## The two finger layers and the pose each is holding (the letters round).
+## Literal, like every other parameter in this block, and they have to spell
+## what `_grip_blend_name` and `_grip_pick_name` build.
+const P_GRIP_LEFT := "parameters/grip_left/blend_amount"
+const P_GRIP_LEFT_PICK := "parameters/grip_left_pick/transition_request"
+const P_GRIP_RIGHT := "parameters/grip_right/blend_amount"
+const P_GRIP_RIGHT_PICK := "parameters/grip_right_pick/transition_request"
 
 ## The carry pose a holstered Bog stands in, and the name of the extra
 ## `carry_pick` input that plays it (the feel round).
@@ -585,6 +706,10 @@ var _draw_blend: float = 0.0
 ## How far the carry pose is over the body (D-070). The same number
 ## `HeldGear.set_carry` is handed for the bow's tilt.
 var _carry_blend: float = 0.0
+## How far the capture pose is over the body (the letters round). Moved toward
+## `Bog.is_capturing()` — `MatchState.letter_hold_is_timed` off the replicated hold row,
+## so the eight machines watching raise the same arm at the same moment.
+var _capture_blend: float = 0.0
 ## How much of the emote is showing, 0 to 1. Moved toward `Bog.is_emoting()`,
 ## which answers off the flag the relay writes on every peer, so the eight
 ## machines watching blend the same dance in over the same 0.15 s.
@@ -644,6 +769,8 @@ var _slide_jump_role: String = SLIDE_JUMP_FALLBACK
 static var _slide_jump_warned: bool = false
 ## And whether this run has said so about the punch. Static for the same reason.
 static var _punch_warned: bool = false
+## And about the capture. Static for the same reason again.
+static var _capture_warned: bool = false
 
 
 func _ready() -> void:
@@ -676,8 +803,16 @@ func _ready() -> void:
 		_punch_warned = true
 		push_warning("BogAnimator: no '%s' clip yet; the punch is drawn with '%s'"
 			% [PUNCH_ROLE, PUNCH_PLAYS])
+	# And the capture's, said once for the third time and for the same reason.
+	if CAPTURE_PLAYS != CAPTURE_ROLE and not _capture_warned:
+		_capture_warned = true
+		push_warning("BogAnimator: no '%s' clip yet; the capture is drawn with '%s'"
+			% [CAPTURE_ROLE, CAPTURE_PLAYS])
 
 	_skeleton_path = _find_skeleton_track_prefix(player)
+	# Before the graph and after the prefix: the grip layers are only built if
+	# their poses are on the player, and the poses are filtered by the prefix.
+	_load_grip_library(player)
 	tree_root = _build_graph(player)
 	active = true
 
@@ -831,6 +966,14 @@ func _build_graph(player: AnimationPlayer) -> AnimationNodeBlendTree:
 	tree.add_node("draw_clip", _scrubbed("BowReload"), Vector2(1960, 1000))
 	tree.add_node("draw_seek", AnimationNodeTimeSeek.new(), Vector2(2140, 1000))
 	tree.add_node("draw", _upper_body_blend(), Vector2(2160, 640))
+	# The capture (the letters round): a looping pose held over the arms while
+	# the host's clock runs down. A Blend2 and not a OneShot for the emote's
+	# reason — it lasts as long as the hold lasts and a one-shot that is never
+	# allowed to finish is the clock D-026 exists to keep out of this graph —
+	# and filtered to the upper body because the whole of what a capture costs
+	# is the weapon, never the legs: the owner's *"movement is free"*.
+	tree.add_node("capture_clip", _cycle(player, CAPTURE_PLAYS, 0.0), Vector2(2160, 1120))
+	tree.add_node("capture", _upper_body_blend(), Vector2(2260, 650))
 	tree.add_node("loose_clip", _window("BowLoose", LOOSE_CLIP_START, LOOSE_CLIP_END), Vector2(2160, 1000))
 	tree.add_node("loose", _upper_body_shot(LOOSE_FADE_IN, LOOSE_FADE_OUT), Vector2(2360, 660))
 	tree.add_node("drink_clip", _window("Drink", DRINK_CLIP_START, DRINK_CLIP_END), Vector2(2360, 1000))
@@ -912,7 +1055,12 @@ func _build_graph(player: AnimationPlayer) -> AnimationNodeBlendTree:
 	# drink is the lowest of the layered one-shots (D-067); the draw and its
 	# loose sit under the two windups, and the throw over the cast, for the
 	# same argument each time — the thing that must win a tie is the one whose
-	# weapon is in the hand on the frame the tie happens (D-064).
+	# weapon is in the hand on the frame the tie happens (D-064). The capture
+	# goes in over the draw and under every one-shot by the same rule read one
+	# more time: there is no weapon in that hand at all — a letter hold disarms
+	# (D-035) — so it must beat the two held poses, and there is nothing it
+	# could beat above it, because every one-shot up there is an attack a
+	# capturing Bog is refused.
 	for i in Loadout.CARRY_CLIPS.size():
 		tree.connect_node("carry_pick", i, _carry_input(i))
 	tree.connect_node("carry_pick", Loadout.CARRY_CLIPS.size(), CARRY_FISTS)
@@ -921,7 +1069,9 @@ func _build_graph(player: AnimationPlayer) -> AnimationNodeBlendTree:
 	tree.connect_node("draw_seek", 0, "draw_clip")
 	tree.connect_node("draw", 0, "carry")
 	tree.connect_node("draw", 1, "draw_seek")
-	tree.connect_node("loose", 0, "draw")
+	tree.connect_node("capture", 0, "draw")
+	tree.connect_node("capture", 1, "capture_clip")
+	tree.connect_node("loose", 0, "capture")
 	tree.connect_node("loose", 1, "loose_clip")
 	tree.connect_node("drink_rate", 0, "drink_clip")
 	tree.connect_node("drink", 0, "loose")
@@ -959,7 +1109,10 @@ func _build_graph(player: AnimationPlayer) -> AnimationNodeBlendTree:
 	# is told to stop.
 	tree.connect_node("emote", 0, "swing")
 	tree.connect_node("emote", 1, "twerk_clip")
-	tree.connect_node("output", 0, "emote")
+	# The fingers go on over even the emote, and they are the last thing in the
+	# graph. `_add_grip_layers` wires `output` — to its own top layer when the
+	# poses are on the player and straight to the emote when they are not.
+	_add_grip_layers(tree, "emote")
 	return tree
 
 
@@ -1174,6 +1327,234 @@ func _upper_body_shot(fade_in: float, fade_out: float) -> AnimationNodeOneShot:
 	return shot
 
 
+# ------------------------------------------------------- the finger layers ---
+# The grip (the letters round). Everything below is one concern: the twelve
+# bones of each hand are taken off the body clip and given a single frozen
+# pose for as long as there is something in that hand. Its vocabulary — the
+# poses, the bone list, the names — is the `the fingers` block above, shared
+# with `tools/grip_poses.gd`, which authors the poses.
+#
+# The owner: *"one grip pose per prop, not per clip; the finger bones get a
+# single frozen pose while the prop is held, layered over whatever the body
+# clip is doing … author it once by stealing it from a clip where the hand is
+# closed."*
+#
+# **Two layers and not one**, because the hands hold different things at the
+# same time — a bow hooked in the left while the right is a fist round the
+# nock is the ordinary case (D-065) — and because two filters that never
+# overlap can never fight. They sit at the very top of the graph for the
+# reason every layer order in this file is argued from: what must win a tie is
+# the thing that is actually in the hand on the frame the tie happens, and a
+# prop is in the hand through the spin, the throw and the dance alike. Nothing
+# below them poses a finger on purpose; what they overrule is the incidental
+# curl a body clip happens to have been authored with.
+#
+# **Nothing new goes on the wire.** `held_gear` is refreshed on every peer by
+# `BogCombat._refresh_hand`, which is the one place that decides what is in a
+# fist (D-098), so the eight machines watching close the same hand on the same
+# frame for the same reason — the same argument the charge is replicated by
+# not being replicated (D-065).
+
+## Whether the poses are actually on this body's player. False leaves the two
+## layers out of the graph altogether rather than in it at weight 0, and that
+## is not tidiness: an `AnimationNodeAnimation` naming an animation the player
+## does not have invalidates the whole tree, which is a Bog that does not move
+## at all. A missing grip has to cost the fingers and nothing else.
+var _grip_ready: bool = false
+## Whether this run has already said the poses are missing. Static for
+## `_slide_jump_warned`'s reason: the news is about the library, not about any
+## of the eight bodies that noticed.
+static var _grip_warned: bool = false
+## How far each hand is into its pose, and which pose it is holding.
+var _grip_left: float = 0.0
+var _grip_right: float = 0.0
+var _grip_left_pose: String = GRIP_OPEN
+var _grip_right_pose: String = GRIP_OPEN
+
+
+## Put the frozen poses on the body's own player under `GRIP_LIBRARY_NAME`, so
+## the graph can name them `grip/fist_left` the way it names `SwordCarry`.
+## Called from `_ready` before the graph is built.
+##
+## Every pose the graph will ask for is checked here rather than trusted,
+## because the cost of one that is missing is the whole tree (see
+## `_grip_ready`) and the thing that writes them is a tool somebody has to
+## remember to run.
+func _load_grip_library(player: AnimationPlayer) -> void:
+	# A layer with no filter is not a smaller version of this one, it is a
+	# different thing: an unfiltered Blend2 weighs *every* track the branch
+	# below it animates against a twelve-track pose, which is the whole body
+	# sagging toward its rest pose by the blend amount. The other layers wear
+	# that in this case (`_find_skeleton_track_prefix` says so out loud); the
+	# fingers are worth nothing like it.
+	if _skeleton_path.is_empty():
+		_warn_no_grips("there are no skeleton tracks to filter a hand out of")
+		return
+	if not ResourceLoader.exists(GRIP_LIBRARY):
+		_warn_no_grips("there is no %s yet — run tools/grip_poses.tscn after an import" % GRIP_LIBRARY)
+		return
+	var lib := load(GRIP_LIBRARY) as AnimationLibrary
+	if lib == null:
+		_warn_no_grips("%s is not an AnimationLibrary" % GRIP_LIBRARY)
+		return
+	for side: String in GRIP_POSES:
+		for pose: String in GRIP_POSES[side]:
+			if not lib.has_animation(grip_pose_name(pose, side)):
+				_warn_no_grips("%s has no '%s'" % [GRIP_LIBRARY, grip_pose_name(pose, side)])
+				return
+	if not player.has_animation_library(GRIP_LIBRARY_NAME):
+		var err := player.add_animation_library(GRIP_LIBRARY_NAME, lib)
+		if err != OK:
+			_warn_no_grips("the player would not take %s (%d)" % [GRIP_LIBRARY, err])
+			return
+	_grip_ready = true
+
+
+static func _warn_no_grips(why: String) -> void:
+	if _grip_warned:
+		return
+	_grip_warned = true
+	push_warning("BogAnimator: the fingers keep whatever pose the body clip has — %s" % why)
+
+
+## Stack the two hands on top of `under` and wire the tree's output, which is
+## this function's other job: with no poses there is nothing to stack and the
+## output goes straight to `under`, and the graph is exactly the one this file
+## built before the grip existed.
+func _add_grip_layers(tree: AnimationNodeBlendTree, under: String) -> void:
+	if not _grip_ready:
+		tree.connect_node("output", 0, under)
+		return
+	var below := under
+	var column := 3560
+	for side: String in GRIP_POSES:
+		var poses: Array = GRIP_POSES[side]
+		var blend := _grip_blend_name(side)
+		var pick := _grip_pick_name(side)
+		for i in poses.size():
+			tree.add_node(_grip_input_name(side, poses[i]), _finger_pose(side, poses[i]),
+				Vector2(column, 1000 + 120 * i))
+		tree.add_node(pick, _finger_pick(side), Vector2(column + 200, 1060))
+		tree.add_node(blend, _finger_blend(side), Vector2(column + 220, 800))
+		for i in poses.size():
+			tree.connect_node(pick, i, _grip_input_name(side, poses[i]))
+		tree.connect_node(blend, 0, below)
+		tree.connect_node(blend, 1, pick)
+		below = blend
+		column += 420
+	tree.connect_node("output", 0, below)
+
+
+## The node names the two layers are built under, and the parameters in the
+## block above are the same strings with `parameters/` round them.
+static func _grip_blend_name(side: String) -> String:
+	return "grip_%s" % side.to_lower()
+
+
+static func _grip_pick_name(side: String) -> String:
+	return "grip_%s_pick" % side.to_lower()
+
+
+static func _grip_input_name(side: String, pose: String) -> String:
+	return "grip_%s_%s" % [side.to_lower(), pose]
+
+
+## A held layer filtered to one hand's fingers — `_upper_body_blend`'s sibling,
+## and the narrowest filter in the graph. The arms, the chest and the wrist are
+## deliberately *not* in it: where a prop is pointing is the arm layers' answer
+## and this one only says what is wrapped round it.
+func _finger_blend(side: String) -> AnimationNodeBlend2:
+	var blend := _blend2()
+	# No unfiltered fallback, unlike `_upper_body_blend`: with no prefix to
+	# filter against there is no grip layer at all (`_load_grip_library`).
+	blend.filter_enabled = true
+	for bone in finger_bones(side):
+		blend.set_filter_path(NodePath("%s:%s" % [_skeleton_path, bone]), true)
+	return blend
+
+
+## Which pose one hand is holding. A `Transition` for `_carry_pick`'s reason:
+## half a fist blended into half a hook is not a grip. Zero cross-fade for its
+## other reason too — the blend underneath is what the eye sees arrive, and a
+## pose is only ever switched while that blend is on its way up or already at
+## zero (see `_point_grip`).
+func _finger_pick(side: String) -> AnimationNodeTransition:
+	var pick := AnimationNodeTransition.new()
+	pick.xfade_time = 0.0
+	pick.allow_transition_to_self = false
+	var poses: Array = GRIP_POSES[side]
+	pick.input_count = poses.size()
+	pick.sync = true
+	for i in poses.size():
+		pick.set_input_name(i, poses[i])
+		pick.set("input_%d/auto_advance" % i, false)
+		pick.set("input_%d/reset" % i, false)
+	return pick
+
+
+## One frozen pose, out of the grip library. A looping clip of one key, so it
+## is the first of the three kinds of node this graph allows (D-026): it holds
+## its pose for as long as it is asked to and there is no last frame to stop
+## on.
+func _finger_pose(side: String, pose: String) -> AnimationNodeAnimation:
+	var node := AnimationNodeAnimation.new()
+	node.animation = "%s/%s" % [GRIP_LIBRARY_NAME, grip_pose_name(pose, side)]
+	node.use_custom_timeline = false
+	node.loop_mode = Animation.LOOP_LINEAR
+	return node
+
+
+## The fingers, once a frame, from what is actually hanging off each hand.
+## Asked of `held_gear` and of nothing else, for `_armed()`'s reason: the
+## attachments are the one place that knows, on every peer (D-098).
+##
+## The right closes on all three of the things it can be holding — the spear's
+## shaft, the great sword's hilt, the nocked arrow — because they are all
+## shafts and the same fist is authored for each (`SwordCarry`'s). The left
+## hooks the bow's riser, and closes on the potion and on the capture pouch,
+## which are the small objects it is ever given. Everything else is an open
+## hand at weight zero: the body clip's own fingers, which is the right answer
+## for a hand carrying nothing.
+func _drive_grip(delta: float) -> void:
+	if not _grip_ready:
+		return
+	var gear: HeldGear = _body.held_gear
+	var left := GRIP_OPEN
+	var right := GRIP_OPEN
+	if gear != null:
+		if gear.is_carried() or gear.has_sword() or gear.has_arrow():
+			right = GRIP_FIST
+		if gear.has_bow():
+			left = GRIP_HOOK
+		elif gear.has_potion() or gear.has_pouch():
+			left = GRIP_FIST
+	_grip_left = move_toward(_grip_left, 0.0 if left == GRIP_OPEN else 1.0,
+		GRIP_BLEND_SPEED * delta)
+	_grip_right = move_toward(_grip_right, 0.0 if right == GRIP_OPEN else 1.0,
+		GRIP_BLEND_SPEED * delta)
+	_grip_left_pose = _point_grip(P_GRIP_LEFT_PICK, _grip_left_pose, left, _grip_left)
+	_grip_right_pose = _point_grip(P_GRIP_RIGHT_PICK, _grip_right_pose, right, _grip_right)
+	set(P_GRIP_LEFT, _grip_left)
+	set(P_GRIP_RIGHT, _grip_right)
+
+
+## Point one hand's pick at the pose it should be holding, and answer with the
+## pose it is now pointing at. Requested only when it changes, because the
+## transition has no cross-fade and a request a frame is a node being told to
+## restart a frame.
+##
+## The one exception is the way back to `GRIP_OPEN`, which waits until the
+## layer has actually gone: a hard cut under a live weight is a pop, and the
+## open hand is only ever drawn at zero, so there is nothing to hurry for.
+func _point_grip(pick: String, shown: String, want: String, weight: float) -> String:
+	if want == shown:
+		return shown
+	if want == GRIP_OPEN and weight > 0.0:
+		return shown
+	set(pick, want)
+	return want
+
+
 # ------------------------------------------------------------------ update ---
 
 func _process(delta: float) -> void:
@@ -1253,10 +1634,33 @@ func _process(delta: float) -> void:
 		plane = LOCO_SWORD
 	_point_plane(plane)
 
+	# The capture (the letters round). One replicated question, asked here
+	# exactly as the crouch, the draw and the emote are: a target of 0 or 1 and
+	# a move toward it. Nothing else in this file knows what a letter is.
+	#
+	# **A timed hold only**, which is the same line `BogCombat._wants_pouch` and
+	# `CaptureRig` draw: a Capture B·O·G carry is the same hold row with
+	# `ends_at = INF`, and that Bog is *running a card somewhere* with it up in
+	# its fist — the last thing it should be doing is standing there reaching
+	# into the air.
+	# Typed by hand and not inferred: `Bog` and this class refer to each other,
+	# and on a cold cache the parser can reach this line while `Bog` is still
+	# mid-parse, at which point a method's return type is not yet known and the
+	# inference fails — "Cannot infer the type of 'capturing'", four gate checks
+	# red, and every verdict inside them green once the retry loaded it. A stated
+	# type asks nothing of the other class.
+	var capturing: bool = _body.is_capturing()
+	_capture_blend = move_toward(_capture_blend, 1.0 if capturing else 0.0,
+		CAPTURE_BLEND_SPEED * delta)
+	set(P_CAPTURE, _capture_blend)
+
 	# One number for the carry pose and for the prop's own lever (D-070). The
-	# sword's carry is its own plane now, so its layer stays down.
+	# sword's carry is its own plane now, so its layer stays down. A capture
+	# takes it away for the reason a spin does: the arms have been given to
+	# something else, and two held poses fighting over one shoulder is the tie
+	# the layer order exists to settle rather than to blend.
 	var carrying := 1.0 - _aim_blend
-	if _body.is_spinning() or not _armed() or plane == LOCO_SWORD:
+	if _body.is_spinning() or not _armed() or plane == LOCO_SWORD or capturing:
 		carrying = 0.0
 	_carry_blend = move_toward(_carry_blend, carrying, CARRY_BLEND_SPEED * delta)
 	set(P_CARRY, _carry_blend)
@@ -1269,6 +1673,10 @@ func _process(delta: float) -> void:
 	_emote_blend = move_toward(_emote_blend, 1.0 if _body.is_emoting() else 0.0,
 		EMOTE_BLEND_SPEED * delta)
 	set(P_EMOTE, _emote_blend)
+
+	# The fingers, over everything above (the letters round): see
+	# `_drive_grip`. Last, because it is the last layer in the graph.
+	_drive_grip(delta)
 
 	set(P_STANCE, _stance)
 	set(P_AIRBORNE, _airborne)
@@ -1654,7 +2062,7 @@ func _shot_weight(shot: Array) -> float:
 ## and not of `BogCombat`'s gates: `_refresh_hand` is the one place that
 ## decides what is in a fist, on every peer.
 func _armed() -> bool:
-	var gear := _body.held_gear
+	var gear: HeldGear = _body.held_gear
 	return gear != null and (gear.is_carried() or gear.has_bow() or gear.has_sword())
 
 

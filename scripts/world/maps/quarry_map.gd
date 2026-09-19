@@ -4,7 +4,7 @@ extends StaticMap
 ## bench for each team in opposite corners, and a mine adit bored through the
 ## spoil in a third. Built in code from layout tables the way Kopje Crossing,
 ## Lantern Wharf and Halcyon Wake are (D-042, D-056, D-057), and rebuilt in
-## place against the quarry asset pack (D-129).
+## place against the quarry asset pack (D-138).
 ##
 ## **The footprint has not moved.** 48 m of pit inside an 11 m rim, terraced
 ## away above that to 32.6 m outside the middle — the same numbers the first

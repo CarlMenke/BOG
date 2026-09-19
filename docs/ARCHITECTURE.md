@@ -202,6 +202,20 @@ It is the only score in the game that can go down. A carry is a letter hold with
 the carrier marker and the feed are the letters mode's own (**D-050**). The
 bases and home points come from `CaptureLayout`, below.
 
+**Those two are one game now, called B·O·G** (**D-129**). Free-for-all is the
+collect race (`LETTERS`), Teams is capture-the-flag (`CAPTURE`), and the Match
+type switch is the only thing that picks between them: `MatchConfig._clamp_all`
+turns `LETTERS` into `CAPTURE` under Teams and back under Free-for-all, the
+"Ends on" picker offers one **B·O·G** entry for both ordinals, and both ordinals
+stay on the wire. In the collect race **one letter is alive at a time**: a death
+deals `MatchState.next_letter()` — B, then O, then G — as its whole drop when
+`letter_active()` is false, and rolls the ordinary table when a card is out or
+somebody is capturing one. `letter_drop_chance` is gone. A hold row is
+`{letter, ends_at, started_at, seconds}` and `letter_hold_is_timed(peer)` is
+the one question that tells a timed capture from a carry (`ends_at = INF`);
+the pouch, the raised arm, the floating letter and the guide line all branch on
+it and nothing has to know which mode it is in.
+
 The loading card exists because the arena is *generated* and that costs two to
 six seconds inside `arena.gd`'s `_ready`. `change_scene_to_file` does not return
 until that finishes, so the card has to be on screen *before* the call — there is
@@ -376,7 +390,7 @@ each base in its team's colour, only in this mode.
 
 ### The practice range
 
-**Glowworm Grounds** (`range`) is a map like any other in the picker, and
+**Highsun Grounds** (`range`, Glowworm Grounds until **D-135** turned the sun up) is a map like any other in the picker, and
 everything that makes it a practice range hangs off its own `Marker3D` groups
 rather than off a mode (**D-112**..**D-116**, **D-119**). It is worth knowing
 where the pieces are, because none of them is reachable from a search for
@@ -390,16 +404,21 @@ where the pieces are, because none of them is reachable from a search for
   census, and the gate greps it, so a marker dropped by a later edit fails there
   rather than in a playtest: `27 dummies (27 live, 0 reserved), 4 wells, 3
   racks, 1 signboard(s), 9 targets`.
-- **The hour is golden** (**D-119**). `resources/shaders/range_sky.gdshader` is
-  a fork of Kopje's `safari_sky.gdshader` — the third fork, not a second set of
-  values in the second — with a third gradient stop, a stated cloud shadow
-  colour and a warm wash keyed on the angle to the sun; `range_sky.tres` is the
-  material and `range_env.tres` derives its ambient from it. The scene's `Sun`
-  stands 9° up on a bearing 30° east of north, so the west bank's 50.5 m of
-  shadow falls off the map and no lane has the disc at its vanishing point, and
-  a shadowless `Bounce` comes back from the south-south-west at −6°. That second
-  light is `sky_mode = LIGHT_ONLY` and it is not optional: the sky follows
-  LIGHT0 for its disc, and a second light reaching it would move the sun.
+- **The hour was golden and is late morning now** (**D-119**, **D-135**).
+  `resources/shaders/range_sky.gdshader` is a fork of Kopje's
+  `safari_sky.gdshader` — the third fork, not a second set of values in the
+  second — with a third gradient stop, a stated cloud shadow colour and a warm
+  wash keyed on the angle to the sun; `range_sky.tres` is the material and
+  `range_env.tres` derives its ambient from it. D-119 stood the `Sun` 9° up on a
+  bearing 30° east of north, so no lane had the disc at its vanishing point;
+  D-135 raised it to **32°** on the same bearing (the disc sits well above the
+  archer's sight picture), turned the lamp down to 3.0 as the ground caught
+  more of it, and retuned the sky and the ambient to a lit day. The shadowless
+  `Bounce` from the south-south-west stays at a tenth of its dusk energy. That
+  second light is `sky_mode = LIGHT_ONLY` and it is not optional: the sky
+  follows LIGHT0 for its disc, and a second light reaching it would move the
+  sun. `range_map._check_sun_and_sky` prints the sun back out of the built
+  scene and the gate greps the line.
 - `scripts/world/range/range_director.gd` — the one thing that walks those
   groups. Two lines in `range_map.gd` add it and `RangeDummies` after `super()`;
   it waits for `PLAYING`, then stands the dummies, the signboard and the parkour
@@ -421,8 +440,9 @@ where the pieces are, because none of them is reachable from a search for
   and a board in the lodge's own timber with a carved STATS label and an
   `Area3D`, no lantern, no light and no chime, because the feedback is the HUD
   panel going to zero (**D-119**).
-- `scripts/world/range/range_target.gd`, `gong.gd`, `glow_orb.gd`,
-  `orb_launcher.gd` — things to shoot that are not Bogs. A projectile asks
+- `scripts/world/range/range_target.gd`, `gong.gd` — things to shoot that are
+  not Bogs (the glowing orbs and their launcher went with **D-135**, which also
+  wrote the rule: nothing in the world is a bare unshaded primitive). A projectile asks
   `collider.has_method("range_hit")` before it asks whether it is a body;
   damage still lands only on Bogs.
 - `scripts/world/range/range_stats.gd` + `scripts/ui/range_stats_panel.gd` — the
@@ -450,6 +470,29 @@ under it where `_apply_death` played `HITMARKER`. `strike()` takes a `kill` flag
 so `flash_hit` — the range's boards — keeps the hit shape by saying nothing.
 The vocabulary is unchanged: `UIPalette.BOG` yellow is a hit, white a kill, amber
 a board.
+
+### The guide line
+
+`scripts/world/nav/` is the one part of the world that is **local and
+cosmetic** (**D-130**): each client bakes its own navmesh and paths for itself,
+nothing replicates, and no rule reads a metre of it — the host decides the
+match and has no navmesh at all. `arena.gd` adds `NavBake` (group `nav_bake`)
+and `GuideLine` on every peer after `register_arena`. `NavBake` waits the two
+physics frames a static map's collision needs, parses **static colliders on
+physics layer 1** from the arena down — the one geometry rule, because every
+map's collision is world-space triangles on layer 1 whether it came from a
+`.glb`, a layout table or the island generator, and dressing with no collider
+(the yacht's sea) is invisible to it — bakes on a worker thread, and prints
+`nav_bake: <map> <polygons> polygons, <links> links, <ms>`. `JumpLinks` then
+walks the navmesh's border edges and adds `NavigationLink3D`s for the drops
+and the leaps a Bog can actually make, using `JumpArc` — the arc
+`tools/parkour_report.gd` used to carry, lifted so the checker and the line
+agree about a jump. `GuideTargets` says what to point at (gold a loose card,
+red an enemy carrier, blue a teammate carrier or your own vault while you
+carry), `GuidePath` repaths at 5 Hz, arcs the link segments, smooths, resamples
+and chases, and `GuideLine` draws each as a camera-facing ribbon twice — depth
+tested, and faintly through walls. `NavBake.outline_image()` is also the
+minimap's ground. `tools/nav_check.tscn` bakes every map in the gate.
 
 ---
 
@@ -495,6 +538,15 @@ tools/           dev tools and testbeds — none of this ships
 | `tools/import_clip.gd`, `tools/import_body.gd` | the character's whole art pipeline: Godot's importer plus a clip table (**D-095**) |
 | `tools/movement_check.tscn` | the moves as numbers, counted in physics ticks on flat ground — 33 checks over `draw`, `slide_jump`, `landing` and `remote` (**D-123**). The `remote` one is the one worth naming: the snapshot handed to a second Bog is copied field by field out of the replication config `scenes/player/bog.tscn` actually ships, so a field left out of that config fails here rather than in a match. **In the gate**, headless |
 | `tools/preview_carry.tscn` | the carry layer for all three props, and since **D-121** the bow's **head** clearance beside its floor and trunk: `-- measure` prints a `head PASS` line (`HEAD_MIN` 0.06 m, the limb segment against the head's skinned vertices and the `Neck`/`Head`/`HeadTop_End` joints), `-- probe` walks the whole 360 × 180 of the tilt at 15° and prints head, layered floor and bare-armed floor in every cell, and `-- candidates <weapon>` sheets that weapon rather than only the spear |
+| `scripts/world/nav/nav_bake.gd`, `jump_links.gd`, `jump_arc.gd` | the navmesh each client bakes, the ledge links, and the jump arc the parkour report shares (**D-130**) |
+| `scripts/world/nav/guide_targets.gd`, `guide_path.gd`, `guide_line.gd` | what the line points at, the path it takes, and the ribbon it is drawn as (**D-130**) |
+| `scripts/player/capture_rig.gd` | the letter floating from the raised hand down into the pouch, the steal in reverse, the burst (**D-131**) |
+| `scripts/items/pouch_mesh.gd`, `sunburst.gd` | the wool pouch built from primitives; fourteen gold rays for a bank or a steal (**D-131**) |
+| `scripts/ui/minimap.gd` | the heading-up circle top-right, on under B·O·G only (**D-132**) |
+| `scripts/ui/tutorial.gd` + `scenes/ui/tutorial.tscn` | six drawn, looping cards; instanced by the menu and the lobby (**D-132**) |
+| `scripts/ui/menu_letters.gd` | the three real letters over the fire, and their exit on Start (**D-133**) |
+| `tools/grip_poses.gd` | measures five finger poses out of the clip library into `art/generated/grip_poses.res` (**D-134**) |
+| `tools/nav_check.tscn`, `tools/preview_capture.tscn` | every map's bake and a pad-to-pad path; the capture pose with both anchors printed (**D-130**, **D-131**) |
 
 ### The showroom
 
@@ -572,6 +624,24 @@ primary click is a **punch**: `Bog.Cause.FIST`, 20 damage at 1.1 m inside a 50°
 front on a 0.5 s cycle, thrown as an **upper-body one-shot** so you keep the
 camera and full speed through it. `_bare_handed()` is the one sentence the
 holster and the emote share, so the dance empties the hands too.
+
+**A timed letter hold is a performance, not a card in a fist** (**D-131**).
+`HeldGear.set_pouch` hangs a procedural wool pouch on the left-hand attachment
+— that fist's third exclusive object after the bow and the potion, and
+`BogCombat._refresh_hand` still decides all of them in one place — while
+`set_letter` gets the card only for a Capture carry. `BogAnimator` has a
+`capture` upper-body `Blend2` over the carry and the draw, on the `Capture`
+role with `CastIdle` as its `clip_or` stand-in, driven by
+`MatchState.letter_hold_is_timed`. `CaptureRig`, a `top_level` node on every
+Bog, floats the letter between `HeldGear.hand_transform()` and
+`pouch_mouth_global()` by `letter_hold_fraction`. **Fingers are their own
+layer** (**D-134**): `grip_left` and `grip_right` sit over the emote at the top
+of the graph, filtered to the twelve bones of each three-digit mitten, and play
+one-frame poses from `art/generated/grip_poses.res` — a fist round a shaft, a
+sword or an arrow, a hook round the bow, a fist round the potion or the pouch —
+chosen off `held_gear`, so nothing new is replicated. When that library is
+missing the layers are left out rather than held at 0, because a node naming an
+absent animation invalidates the whole tree.
 
 **The great sword has two attacks** (**D-124**): the primary click is a
 three-slash chain on `SwordCombo`, windowed per slash between its own `swing_N`

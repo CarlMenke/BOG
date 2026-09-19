@@ -48,7 +48,7 @@ const RESPAWN := preload("res://audio/sfx/respawn.wav")
 const HITMARKER := preload("res://audio/sfx/hitmarker.wav")
 const HITMARKER_KILL := preload("res://audio/sfx/hitmarker_kill.wav")
 
-## The practice range's three non-Bog targets. They are here rather than in the
+## The practice range's two non-Bog targets. They are here rather than in the
 ## range's own files for the reason everything else here is: a caller names a
 ## sound and never a path, and a sound that lives somewhere else is a second
 ## place to look.
@@ -59,7 +59,6 @@ const HITMARKER_KILL := preload("res://audio/sfx/hitmarker_kill.wav")
 ## clean over about a fifth either side of unity.
 const RANGE_BOARD := preload("res://audio/sfx/range_board.wav")
 const RANGE_GONG := preload("res://audio/sfx/range_gong.wav")
-const RANGE_ORB := preload("res://audio/sfx/range_orb.wav")
 
 ## The practice range's two furniture sounds: the refill stone filling somebody
 ## up, and a weapon coming off a rack.
@@ -84,6 +83,27 @@ const RACK_SWAP := preload("res://audio/sfx/rack_swap.wav")
 ## makes no sound at all: its feedback is the HUD panel going to zero, which is
 ## what you were looking at when you reset it.
 const RANGE_PLATE := preload("res://audio/sfx/range_plate.wav")
+
+## B·O·G's two letter sounds (the letters round), and they are a pair: a
+## question and an answer, written to be heard as two halves of one mechanic
+## rather than as two events.
+##
+## `LETTER_APPEARS` is a soft bell played **2D on every machine**, which is the
+## only sound in this library outside the hitmarkers that is flat in both ears
+## and is not UI. That is the mechanic rather than a convenience: in the
+## free-for-all there is exactly one letter out at a time, so where it landed is
+## the whole of the game for the next thirty seconds and everybody has to learn
+## about it at the same instant — a positional cue would tell the people
+## standing near it and nobody else. The guide line is what says *which way*;
+## this only says *now*.
+##
+## `LETTER_CAPTURED` is the chime under the sunburst, played **3D at the pouch**
+## the letter just sank into, because that one did happen somewhere and the
+## people nearby are the ones who just failed to stop it. Fired by `CaptureRig`
+## on every peer off `MatchState.letter_banked`, so it is an event the lobby
+## heard and not a private reward on the capturer's machine.
+const LETTER_APPEARS := preload("res://audio/sfx/letter_appears.wav")
+const LETTER_CAPTURED := preload("res://audio/sfx/letter_captured.wav")
 ## The Elder's bolt, in two voices rather than one (D-038). The crack is the
 ## strike and the roll is what follows it half a second later, and they are
 ## separate clips because the balance between them is what decides whether a

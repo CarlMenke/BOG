@@ -65,6 +65,10 @@ func _ready() -> void:
 		_input.gui_input.connect(_on_input_gui_input)
 		_apply_reveal()
 	_hint.text = "%s to chat" % SettingsPanel.primary_key("chat")
+	# And again whenever the chat key is rebound (D-137).
+	Settings.changed.connect(func(key: String, _value: Variant) -> void:
+		if key == "keybinds":
+			_hint.text = "%s to chat" % SettingsPanel.primary_key("chat"))
 	_update_compact_skin()
 
 

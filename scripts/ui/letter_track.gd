@@ -196,8 +196,17 @@ func _draw_lamp(rect: Rect2, bit: int) -> void:
 ## The exact number of seconds, under a bar that is only approximate. Both, and
 ## not one or the other: the bar is what you catch without looking and the
 ## number is what you need when you are deciding whether to run for cover.
+##
+## **"CAPTURING", not "HOLDING"** (the letters round). Standing still with a card
+## up is the one thing in this game a player does with their hands that is not
+## an attack, and "holding" describes the posture rather than the act — it reads
+## as inventory, which is exactly the wrong idea about a ten-second commitment
+## you can be killed out of. The word now matches what the Bog is visibly doing:
+## the arm is up, the card is coming down into the pouch, and the caption says
+## what that is. The carry's caption is untouched — a Capture carry really is
+## carrying, and it is the one case where the card is just in your fist.
 func _draw_caption() -> void:
-	var text := "HOLDING %s  ·  %d s" % [MatchState.letter_name(_hold_letter), _hold_seconds]
+	var text := "CAPTURING %s  ·  %d s" % [MatchState.letter_name(_hold_letter), _hold_seconds]
 	if _carrying:
 		text = "CARRYING %s  ·  TO YOUR BASE" % MatchState.letter_name(_hold_letter)
 	var font := get_theme_default_font()

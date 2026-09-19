@@ -54,6 +54,7 @@ func _ready() -> void:
 	_run_team_letter_hold()
 	_run_letter_hold()
 	_run_letter_hold_disconnect()
+	_run_one_letter_at_a_time()
 	_run_elder()
 	_run_time_limit()
 	_run_void_credit()
@@ -244,6 +245,23 @@ func _newest_card_letter() -> int:
 			newest = id
 			letter = MatchState._pickups[id].letter
 	return letter
+
+
+## The id of that newest card, for a scenario that has to walk into the one the
+## rules just dealt rather than one it put down itself.
+func _newest_card_id() -> int:
+	var newest := 0
+	for id: int in MatchState._pickups:
+		newest = maxi(newest, id)
+	return newest
+
+
+## How many letter cards are lying in the world untaken — the public count, off
+## `loose_letter_pickups`, because that is the answer the minimap and the guide
+## line will be drawing and a harness that counted `_pickups` itself would agree
+## with nothing.
+func _loose_letters() -> int:
+	return MatchState.loose_letter_pickups().size()
 
 
 ## A Bog's combat node and its hand, or null if that Bog never got one.
@@ -453,6 +471,18 @@ func _run_letters() -> void:
 		MatchState.award_letter(902, MatchState.LETTER_G), false)
 
 
+## Teams **plus the collect race**, which no lobby can now produce: since the
+## letters round the mode picks the flavour, so Teams B·O·G is Capture
+## (`MatchConfig._clamp_all`). The three scenarios below still configure it, and
+## still should.
+##
+## The clamp runs on `apply_dict` and `_begin` writes `Net.config` straight, so
+## nothing here is fighting it. What these scenarios are about is the *pooling*
+## (D-049) — a teammate's letter is your duplicate, a leaver's letters stay with
+## the team, two teammates standing for the same card — and every one of those
+## rules is live under Capture too, reached through the same `award_letter`.
+## They are checked here in the one form that can exercise the timed hold
+## alongside them; Capture's own path is `_run_capture`.
 func _team_letters_config(c: MatchConfig) -> void:
 	c.mode = MatchConfig.Mode.TEAMS
 	c.team_count = 2
@@ -604,7 +634,7 @@ func _run_letter_hold() -> void:
 	if combat != null and hand != null:
 		_check("no spear while holding", combat.has_spear(), false)
 		_check("the shaft leaves the hand", hand.is_carried(), false)
-		_check("and the card is in it", hand.has_letter(), true)
+		_check("and the pouch is in the other fist (the card floats, the letters round)", hand.has_pouch(), true)
 
 	# One hold at a time. A second card is not consumed, not queued, and not
 	# refused to anybody else — it is simply still there.
@@ -627,7 +657,7 @@ func _run_letter_hold() -> void:
 	if combat != null and hand != null:
 		_check("the spear comes back", combat.has_spear(), true)
 		_check("into the hand", hand.is_carried(), true)
-		_check("and the card is gone from it", hand.has_letter(), false)
+		_check("and the pouch is gone from the other", hand.has_pouch(), false)
 
 	# Dying nine seconds in is the whole point of the mechanic, from the other
 	# side. 902 is still holding O.
@@ -698,6 +728,87 @@ func _run_letter_hold_disconnect() -> void:
 	_check("the hold goes with them", MatchState.is_holding_letter(902), false)
 	_check("and the card does not", MatchState._pickups.size(), before + 1)
 	_check("it is the same letter", _newest_card_letter(), MatchState.LETTER_B)
+
+
+## **One letter out at a time, B then O then G.** The whole of the collect
+## race's economy since the drop chance went away.
+##
+## Driven through `report_kill` rather than through `_drop_card`, because what
+## is being checked is the *deal* — which letter `_drop_loot` chooses and
+## whether it chooses one at all — and a harness that put the cards down itself
+## would prove nothing about it. These scenarios have no world, so the ground
+## ray finds nothing and the card lands on a pad, which is the rule a letter
+## obeys where ordinary loot is simply skipped (`_drop_next_letter`).
+func _run_one_letter_at_a_time() -> void:
+	_scenario("free-for-all, one letter out at a time")
+	# Four, so there is always somebody alive to be killed next: a death is the
+	# only thing that deals a card and the checks below need six of them.
+	_begin(4, func(c: MatchConfig) -> void:
+		c.mode = MatchConfig.Mode.FREE_FOR_ALL
+		c.win_condition = MatchConfig.WinCondition.LETTERS
+		c.kill_limit = 50
+		c.time_limit = 0
+		c.letter_hold_time = 10.0)
+
+	_check("no letter is out before anybody dies", MatchState.letter_active(), false)
+	_check("and the cycle opens on B", MatchState.next_letter(), MatchState.LETTER_B)
+
+	# The first death *is* the letter: the whole drop, no roll beside it.
+	_kill(901, 902)
+	_revive(901)
+	_check("the first death deals one card", _loose_letters(), 1)
+	_check("and it is the B", _newest_card_letter(), MatchState.LETTER_B)
+	_check("which is a letter in play", MatchState.letter_active(), true)
+	_check("with the O queued behind it", MatchState.next_letter(), MatchState.LETTER_O)
+
+	# A second death while it lies there deals nothing. This is the half the
+	# drop chance could never give: the card on the floor is *the* card.
+	_kill(902, 901)
+	_revive(902)
+	_check("a second death deals no second letter", _loose_letters(), 1)
+	_check("and does not move the cycle", MatchState.next_letter(), MatchState.LETTER_O)
+
+	# A card being stood with is as much "in play" as one lying on the ground,
+	# which is the other half: the moment somebody walks onto it, `_pickups` is
+	# empty again and only `_letter_holds` says a letter exists.
+	var lying := _newest_card_id()
+	MatchState.claim_pickup(lying, 901)
+	_check("claiming it takes it off the ground", _loose_letters(), 0)
+	_check("but a capture in progress is still a letter in play",
+		MatchState.letter_active(), true)
+	_kill(903, 902)
+	_revive(903)
+	_check("so a death mid-capture deals nothing", _loose_letters(), 0)
+
+	# Finished. Nothing is in play again, and the next death deals the O.
+	_expire_hold(901)
+	_check("the capture banks the B", MatchState.letters_for(901), MatchState.LETTER_B)
+	_check("and leaves nothing in play", MatchState.letter_active(), false)
+	_kill(902, 903)
+	_revive(902)
+	_check("the next death deals the next letter",
+		_newest_card_letter(), MatchState.LETTER_O)
+	_check("one card, as ever", _loose_letters(), 1)
+	_check("with the G queued behind it", MatchState.next_letter(), MatchState.LETTER_G)
+
+	# A re-dropped card is the same letter coming back, not a new deal: killing
+	# the Bog who is standing with the O puts the O back and leaves the G where
+	# it was in the queue. Otherwise every kill on a carrier would burn a letter
+	# and the race would run out of alphabet.
+	MatchState.claim_pickup(_newest_card_id(), 903)
+	_check("the O is being captured", MatchState.letter_hold_letter(903),
+		MatchState.LETTER_O)
+	_kill(903, 901)
+	_revive(903)
+	_check("killing the carrier puts the card back", _loose_letters(), 1)
+	_check("as the same letter", _newest_card_letter(), MatchState.LETTER_O)
+	_check("and the cycle head has not moved", MatchState.next_letter(),
+		MatchState.LETTER_G)
+
+	# A fresh match opens on B again, whatever the last one got through.
+	MatchState.reset()
+	_check("reset winds the cycle back to B", MatchState.next_letter(),
+		MatchState.LETTER_B)
 
 
 func _run_elder() -> void:
@@ -778,7 +889,7 @@ func _run_elder() -> void:
 	if combat != null and hand != null:
 		_check("and cannot fire while holding it", combat.has_lightning(), false)
 		_check("the crackle goes with it", hand.is_charged(), false)
-		_check("and the card is in the hand instead", hand.has_letter(), true)
+		_check("and the pouch is in the other hand instead", hand.has_pouch(), true)
 		var held_at := combat._server_lightning_ready_at
 		_cast(901)
 		_check("the host refuses a cast mid-hold",
@@ -1004,7 +1115,7 @@ func _run_loadout() -> void:
 	var swordsman := _combat(902)
 	_check("a hold disarms the swordsman", swordsman.has_sword(), false)
 	_check("and takes the sword out of the fists", _hand(902).has_sword(), false)
-	_check("putting the card there instead", _hand(902).has_letter(), true)
+	_check("putting the pouch in the other fist instead", _hand(902).has_pouch(), true)
 	_expire_hold(902)
 	_check("and the sword comes back when the hold ends",
 		swordsman.has_sword(), true)
@@ -1355,9 +1466,11 @@ func _run_capture() -> void:
 		c.win_condition = MatchConfig.WinCondition.CAPTURE
 		c.kill_limit = 50
 		c.time_limit = 0
-		# The two chances forced to the top, so a letter out of a corpse would be
-		# certain if the loot roll ever handed one out in this mode.
-		c.letter_drop_chance = 1.0
+		# Nothing named may roll off a death here, so anything that falls out of
+		# a corpse in this run is a shield or a magnet. There is no letter share
+		# left to force to zero: since the one-letter rule, a card is dealt by
+		# the collect race and by nothing else, so Capture's three are the only
+		# three there can be.
 		c.elder_drop_chance = 0.0
 		# Not the defaults, so a check against them proves the dial was read.
 		c.capture_return_time = 12.0
@@ -1663,37 +1776,89 @@ func _run_capture_layout() -> void:
 	_check("with a base for every team", short.bases.size(), 3)
 
 
-## Free-for-all and Capture B·O·G, both ways round.
+## **One letters game, two flavours, and the mode decides which.** Free-for-all
+## B·O·G is the collect race (`LETTERS`) and Teams B·O·G is capture-the-flag
+## (`CAPTURE`); both ordinals stay on the wire and neither is something a host
+## picks directly any more.
+##
+## This used to be the other rule — `CAPTURE` forced Teams on, and the lobby
+## panel owned the reverse half — so it is the scenario that has to change most.
+## What it checks now is that the clamp resolves *both* directions on its own, so
+## there is no second half anywhere to fall out of step with it.
 func _run_capture_lobby() -> void:
-	_scenario("capture B·O·G is a Teams mode")
+	_scenario("B·O·G: the mode decides the flavour")
 	var config := MatchConfig.new()
 	config.apply_dict({"mode": MatchConfig.Mode.FREE_FOR_ALL,
 		"win_condition": MatchConfig.WinCondition.CAPTURE})
-	_check("choosing capture turns Teams on", config.mode, MatchConfig.Mode.TEAMS)
-	_check("and keeps capture", config.win_condition, MatchConfig.WinCondition.CAPTURE)
+	_check("capture under free-for-all becomes the collect race",
+		config.win_condition, MatchConfig.WinCondition.LETTERS)
+	_check("and leaves the mode alone", config.mode, MatchConfig.Mode.FREE_FOR_ALL)
+	config.apply_dict({"mode": MatchConfig.Mode.TEAMS,
+		"win_condition": MatchConfig.WinCondition.LETTERS})
+	_check("and the collect race under teams becomes capture",
+		config.win_condition, MatchConfig.WinCondition.CAPTURE)
+	_check("still on teams", config.mode, MatchConfig.Mode.TEAMS)
+	_check("both are B·O·G", MatchConfig.is_bog(config.win_condition)
+		and MatchConfig.is_bog(MatchConfig.WinCondition.LETTERS), true)
+	_check("and nothing else is", MatchConfig.is_bog(MatchConfig.WinCondition.LIVES), false)
 
 	# The lobby panel's own push, through the host's real `update_config`.
 	MatchState.reset()
 	Net.start_offline()
 	var fresh := MatchConfig.new()
-	fresh.win_condition = MatchConfig.WinCondition.CAPTURE
+	fresh.mode = MatchConfig.Mode.TEAMS
+	fresh.win_condition = MatchConfig.WinCondition.LETTERS
 	Net.update_config(fresh)
-	_check("the host's config is Teams under capture", Net.config.mode, MatchConfig.Mode.TEAMS)
+	_check("the host's teams config lands on capture", Net.config.win_condition,
+		MatchConfig.WinCondition.CAPTURE)
 	var panel := load("res://scenes/ui/match_settings.tscn").instantiate() as MatchSettingsPanel
 	add_child(panel)
 	var section := panel.find_child("CaptureRules", true, false) as Control
 	_check("the lobby has a capture rules section", section != null, true)
 	if section != null:
 		_check("shown under capture", section.visible, true)
+	var bog_note := panel.find_child("BogRules", true, false) as Control
+	_check("and a note saying what B·O·G means", bog_note != null, true)
+	if bog_note != null:
+		_check("shown with it", bog_note.visible, true)
 	var return_row: Control = panel._fields["capture_return_time"]["row"]
 	_check("with the return-time dial showing", return_row.visible, true)
+	# The single picker entry stands for both ordinals, so it reads as B·O·G
+	# under either one. `_write_field` is what does that, through
+	# `_condition_choice`, and it is the half of the mapping the clamp cannot do.
+	var picker := panel._fields["win_condition"]["control"] as OptionButton
+	_check("the picker shows B·O·G under capture",
+		picker.get_item_text(picker.selected), "B·O·G")
+
+	# Flipping the Match type is now what swaps the flavour — and stays on
+	# B·O·G, rather than dumping the host back on the kill limit.
 	panel._push("mode", MatchConfig.Mode.FREE_FOR_ALL)
 	_check("picking Free-for-all gives a free-for-all", Net.config.mode,
 		MatchConfig.Mode.FREE_FOR_ALL)
-	_check("on the kill limit", Net.config.win_condition, MatchConfig.WinCondition.KILL_LIMIT)
+	_check("still on B·O·G, as the collect race", Net.config.win_condition,
+		MatchConfig.WinCondition.LETTERS)
+	_check("the picker still shows B·O·G",
+		picker.get_item_text(picker.selected), "B·O·G")
+	if bog_note != null:
+		_check("and the note stays up", bog_note.visible, true)
 	if section != null:
 		_check("and the capture section hides", section.visible, false)
 	_check("and so does its dial", return_row.visible, false)
+	_check("while the capture time appears",
+		(panel._fields["letter_hold_time"]["row"] as Control).visible, true)
+
+	# And picking B·O·G itself writes the ordinal the mode calls for. The entry
+	# is index 3, which is `LETTERS`; the clamp is what turns it into `CAPTURE`
+	# when the mode is Teams, which is the whole rule in one place.
+	panel._push("mode", MatchConfig.Mode.TEAMS)
+	_check("teams turns the collect race into capture", Net.config.win_condition,
+		MatchConfig.WinCondition.CAPTURE)
+	panel._push("win_condition", MatchConfig.WinCondition.KILL_LIMIT)
+	_check("and another condition can still be picked off it",
+		Net.config.win_condition, MatchConfig.WinCondition.KILL_LIMIT)
+	panel._push("win_condition", MatchConfig.WinCondition.LETTERS)
+	_check("while picking B·O·G on teams comes back to capture",
+		Net.config.win_condition, MatchConfig.WinCondition.CAPTURE)
 	panel.free()
 	Net.update_config(MatchConfig.new())
 
@@ -1714,7 +1879,11 @@ func _run_capture_lobby() -> void:
 	arrived.apply_dict({"capture_return_time": 0.0, "capture_carrier_speed": 0.0})
 	_check("a zero return time is clamped", arrived.capture_return_time, 3.0)
 	_check("a stationary carrier is clamped", arrived.capture_carrier_speed, 0.5)
-	arrived.apply_dict({"win_condition": MatchConfig.WinCondition.CAPTURE + 1})
+	# On Teams, so that the flavour rule leaves it where the range clamp put it:
+	# a capture under a free-for-all is a collect race, which is the *other*
+	# thing this line would then be proving.
+	arrived.apply_dict({"mode": MatchConfig.Mode.TEAMS,
+		"win_condition": MatchConfig.WinCondition.CAPTURE + 1})
 	_check("a condition past capture is clamped to it", arrived.win_condition,
 		MatchConfig.WinCondition.CAPTURE)
 

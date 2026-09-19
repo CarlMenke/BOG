@@ -1,15 +1,24 @@
 [gd_resource type="Sky" load_steps=3 format=3 uid="uid://d7gubrangesky"]
 
-; The sky over Glowworm Grounds, and the reason the map is worth standing on.
+; The sky over Highsun Grounds, and the reason the map is worth standing on.
 ;
-; It was the island's night: `enchanted_sky.gdshader` with a moon pinned to the
-; map's own Sun, a flat sheet of cloud, stars, an aurora and a glow band over
-; the trees to the south. That was correct — the range is a cleared bog a mile
-; from Whisperbloom Hollow and it would be strange under a different moon — and
-; it gave a range you could barely see the ground of, which is the one thing a
-; range must not be. So this is **the same bog an hour earlier**: nine degrees
-; of sun north-north-east, a cotton-candy sky, and the glowworm lanterns just
-; coming on.
+; It was the island's night once, and then a dusk: nine degrees of sun
+; north-north-east under a cotton-candy sky, with the glowworm lanterns coming
+; on. The owner asked for the sun higher in the air and the name off the
+; glowworms, and both of those land here — this is **the same bog in the middle
+; of the morning**: thirty-two degrees of sun on the same bearing, a clear blue
+; overhead, and cumulus lit from above.
+;
+; What that meant, knob by knob, is a cooler and much less saturated ramp. A
+; dusk gradient is a *gradient* — apricot skyline, rose band, periwinkle zenith,
+; three stops doing the work — and a day sky is nearly one colour with a pale
+; band along the bottom. So `zenith_color` went to a clear blue, `horizon_color`
+; from a saturated orange to a pale warm grey, `mid_energy` from 0.5 to 0.12
+; (the rose band is what made it read as dusk, and at 0.5 under a blue zenith it
+; was a bruise), and `haze_color` from amber to near-white. The clouds went white
+; with a cool shadow side, and `puff_rim` came down from 2.6 to 1.4 because a
+; blazing sunward rim is a low-sun feature: at thirty-two degrees you see a
+; cloud's lit *top*, not its edge.
 ;
 ; The shader is `range_sky.gdshader`. Its header carries the argument for why
 ; the clouds are a **stylised 2D field on the dome** rather than the marched
@@ -17,22 +26,29 @@
 ; height can only ever give shelves, and it was measured three ways before it
 ; was believed. All the tuning lives here. What the numbers are for:
 ;
-;   the three stops       apricot at the skyline (`horizon_color`), rose through
-;                         the middle of the dome (`mid_color`, centred at
+;   the three stops       pale warm grey at the skyline (`horizon_color`), a
+;                         thin cool band through the middle of the dome
+;                         (`mid_color` at `mid_energy` 0.12, centred
 ;                         `mid_height` 0.38 of the way up the ramp and 0.5
-;                         wide), soft periwinkle overhead (`zenith_color`). The
-;                         zenith was a saturated 0.22/0.45/0.84 blue first and
-;                         read as a hole punched in the sunset.
-;   the glory             `sun_aureole_falloff` **100 against Kopje's 190**, at
-;                         0.85 energy. A nine-degree sun is seen through about
-;                         six times the air a noon one is, so a wide aureole is
-;                         the honest picture as well as the pretty one. It was
-;                         70 at 1.5 to begin with and the horizon went white.
-;   the disc              `sun_energy` 9.0 against Kopje's 22, because a low sun
-;                         is reddened by what it comes through — and because the
-;                         lanes point near it. `sun_angular_size` 0.021 is twice
-;                         the real sun: a low sun reads bigger, and at 0.0093 it
-;                         is four pixels.
+;                         wide), clear blue overhead (`zenith_color`). The
+;                         middle stop is the one that changed character: at dusk
+;                         it was a rose band at 0.5 and it was most of the
+;                         picture, and under a day zenith the same band at the
+;                         same energy is a bruise across the sky. It is left in
+;                         at a tenth of the strength because a dome with two
+;                         stops and no waist reads as a painted ceiling.
+;   the glory             `sun_aureole_falloff` **170, between the dusk pass's
+;                         100 and Kopje's 190**. A nine-degree sun is seen
+;                         through about six times the air a noon one is and
+;                         wanted a wide aureole; a thirty-two-degree sun is seen
+;                         through about two, so the glory tightens toward the
+;                         noon map's. 0.85 energy either way.
+;   the disc              `sun_energy` 18.0, up from the dusk pass's 9.0 and
+;                         still under Kopje's 22: a sun this high is barely
+;                         reddened by what it comes through.
+;                         `sun_angular_size` **0.016 rather than 0.021** — a low
+;                         sun reads bigger than it is and a high one does not, so
+;                         this is Kopje's number now.
 ;   which sun             `sun_follow_light` is **on**, so the disc and the
 ;                         glory are pinned to the map's own `Sun` and cannot
 ;                         disagree with the shadows. `sun_direction` is the
@@ -48,7 +64,7 @@
 ;                         bracketing: 0.36 gives a mackerel sky of small clots
 ;                         over the whole dome, 0.50 a connected chain, 0.60 a
 ;                         chain with holes, 0.68 four to six separate clouds
-;                         with rose sky between them and under them. `puff_warp`
+;                         with open sky between them and under them. `puff_warp`
 ;                         0.45 is what stops them being round blobs and
 ;                         `puff_billow` 0.60 is the cauliflower knob — the two
 ;                         folded octaves that give a lobed edge instead of a
@@ -59,10 +75,15 @@
 ;                         rather than a line: at 20 the two taps read as a
 ;                         stencil with a hard edge across every cloud, at 9 the
 ;                         lit side fades into the shadow the way a cumulus does.
-;                         `puff_belly` 0.75 over a longer step, because an
-;                         underside is a broader feature than a shoulder.
-;   the rim               `puff_rim` 2.6 in a warm peach. At nine degrees the
-;                         sunward edge of a cloud is most of what you see of it.
+;                         `puff_belly` **1.0 rather than 0.75**, over a longer
+;                         step, because an underside is a broader feature than a
+;                         shoulder — and because a cloud seen from under a
+;                         32-degree sun is mostly underside, where at nine
+;                         degrees it was mostly sunward edge.
+;   the rim               `puff_rim` 1.4 in a near-white. At nine degrees the
+;                         sunward edge of a cloud was most of what you saw of
+;                         it; at thirty-two it is the top, so the rim steps back
+;                         and `puff_light` does the work.
 ;   the second layer      the same field at `puff2_scale` 1.6 and its own patch,
 ;                         at 0.6 opacity: the small fair-weather cumulus between
 ;                         and under the big ones. One layer at any coverage is
@@ -89,34 +110,34 @@
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_range_sky"]
 shader = ExtResource("1_range_sky_shader")
-shader_parameter/zenith_color = Color(0.46, 0.5, 0.74, 1)
-shader_parameter/horizon_color = Color(1, 0.6, 0.33, 1)
+shader_parameter/zenith_color = Color(0.28, 0.48, 0.8, 1)
+shader_parameter/horizon_color = Color(0.84, 0.85, 0.82, 1)
 shader_parameter/horizon_falloff = 0.45
-shader_parameter/mid_color = Color(0.97, 0.55, 0.52, 1)
+shader_parameter/mid_color = Color(0.72, 0.79, 0.88, 1)
 shader_parameter/mid_height = 0.38
 shader_parameter/mid_width = 0.5
-shader_parameter/mid_energy = 0.5
-shader_parameter/ground_horizon_color = Color(0.54, 0.4, 0.33, 1)
-shader_parameter/ground_bottom_color = Color(0.34, 0.27, 0.24, 1)
+shader_parameter/mid_energy = 0.12
+shader_parameter/ground_horizon_color = Color(0.62, 0.52, 0.42, 1)
+shader_parameter/ground_bottom_color = Color(0.4, 0.33, 0.28, 1)
 shader_parameter/ground_falloff = 0.16
 shader_parameter/sky_energy = 1.0
-shader_parameter/haze_color = Color(1, 0.74, 0.47, 1)
-shader_parameter/haze_energy = 0.24
+shader_parameter/haze_color = Color(0.92, 0.93, 0.92, 1)
+shader_parameter/haze_energy = 0.22
 shader_parameter/haze_band = 0.11
-shader_parameter/haze_power = 2.2
-shader_parameter/sun_direction = Vector3(0.49384, 0.15643, -0.85537)
+shader_parameter/haze_power = 2.4
+shader_parameter/sun_direction = Vector3(0.424024, 0.529919, -0.734431)
 shader_parameter/sun_follow_light = true
-shader_parameter/sun_color = Color(1, 0.71, 0.42, 1)
-shader_parameter/sun_energy = 9.0
-shader_parameter/sun_angular_size = 0.021
-shader_parameter/sun_aureole_color = Color(1, 0.65, 0.36, 1)
+shader_parameter/sun_color = Color(1, 0.94, 0.84, 1)
+shader_parameter/sun_energy = 18.0
+shader_parameter/sun_angular_size = 0.016
+shader_parameter/sun_aureole_color = Color(1, 0.93, 0.8, 1)
 shader_parameter/sun_aureole_energy = 0.85
-shader_parameter/sun_aureole_falloff = 100.0
-shader_parameter/sun_wash = 0.28
-shader_parameter/puff_sun_color = Color(1, 0.84, 0.66, 1)
-shader_parameter/puff_body_color = Color(0.97, 0.66, 0.66, 1)
-shader_parameter/puff_shadow_color = Color(0.46, 0.44, 0.74, 1)
-shader_parameter/puff_rim_color = Color(1, 0.79, 0.56, 1)
+shader_parameter/sun_aureole_falloff = 170.0
+shader_parameter/sun_wash = 0.22
+shader_parameter/puff_sun_color = Color(1, 0.98, 0.94, 1)
+shader_parameter/puff_body_color = Color(0.9, 0.92, 0.96, 1)
+shader_parameter/puff_shadow_color = Color(0.38, 0.44, 0.6, 1)
+shader_parameter/puff_rim_color = Color(1, 0.97, 0.91, 1)
 shader_parameter/puff_energy = 1.35
 shader_parameter/puff_coverage = 0.68
 shader_parameter/puff_softness = 0.045
@@ -128,8 +149,8 @@ shader_parameter/puff_billow = 0.6
 shader_parameter/puff_light_step = 0.09
 shader_parameter/puff_light = 9.0
 shader_parameter/puff_belly_step = 0.16
-shader_parameter/puff_belly = 0.75
-shader_parameter/puff_rim = 2.6
+shader_parameter/puff_belly = 1.0
+shader_parameter/puff_rim = 1.4
 shader_parameter/puff_opacity = 1.0
 shader_parameter/puff_drift = 0.004
 shader_parameter/puff_drift_azimuth = 0.78
@@ -139,8 +160,8 @@ shader_parameter/puff2_scale = 1.6
 shader_parameter/puff2_coverage = 0.06
 shader_parameter/puff2_offset = Vector2(7.3, -4.1)
 shader_parameter/puff2_opacity = 0.6
-shader_parameter/cirrus_color = Color(1, 0.75, 0.71, 1)
-shader_parameter/cirrus_opacity = 0.06
+shader_parameter/cirrus_color = Color(0.97, 0.97, 1, 1)
+shader_parameter/cirrus_opacity = 0.035
 shader_parameter/cirrus_coverage = 0.6
 shader_parameter/cirrus_size_m = 7000.0
 shader_parameter/cirrus_height_m = 8000.0
@@ -149,7 +170,7 @@ shader_parameter/cirrus_azimuth = 1.15
 shader_parameter/cirrus_parallax = 0.0016
 
 [resource]
-resource_name = "GlowwormGroundsSky"
+resource_name = "HighsunGroundsSky"
 sky_material = SubResource("ShaderMaterial_range_sky")
 process_mode = 2
 radiance_size = 3

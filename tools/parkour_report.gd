@@ -6,9 +6,11 @@ extends Node3D
 ## that every one of them is reachable from the ground. That is not something a
 ## render can show and it is certainly not something a coordinate can: the
 ## question "is this gap crossable" is a question about the Bog's jump arc, and
-## the arc is five constants in `bog.gd` and one in `project.godot`.
+## the arc is five constants in `bog.gd` and one in `project.godot` — gathered
+## into `scripts/world/nav/jump_arc.gd`, which is where this reads it and where
+## the guide line's jump links read it too.
 ##
-## So this rebuilds the arc from those constants, builds the whole reachability
+## So this takes the arc from `JumpArc`, builds the whole reachability
 ## graph out of the map's `StaticMap.platforms`, and walks it from the ground. Anything it
 ## cannot reach is named. It also checks the *physics* against the table — a ray
 ## down onto layer 1 from every landing and a Bog-sized capsule standing on it —
@@ -125,7 +127,7 @@ const EXPECT := {
 		# spear cannot cross the gap, so what the two bases have of each other is
 		# information, not threat.
 		#
-		# Both grew again at the rebuild (D-129) and for one reason: the shaft
+		# Both grew again at the rebuild (D-138) and for one reason: the shaft
 		# went from 13 m across to 15, so there is two metres more of the middle
 		# of this map that no rock can ever stand in. 44 m of ground line is a
 		# rim-to-rim run down the one band the berms do not cross, and 60 m from
@@ -145,7 +147,7 @@ const EXPECT := {
 		"min_platforms": 28, "min_big_edges": 2, "summit_zone": "",
 		# **The sightline scan is off, and this is the one map it should be off
 		# on.** Every other entry here is an arena, where a line longer than the
-		# budget is someone dying before they can move. Glowworm Grounds is a
+		# budget is someone dying before they can move. Highsun Grounds is a
 		# range: its whole job is a sixty-metre bow lane, a gong at the spear's
 		# flat twenty-eight, and a dummy you can read at forty-five. A cap would
 		# be a number this map is built to break, and a loosened one would be a
@@ -181,18 +183,13 @@ const EYE := 1.45
 const OVERBOARD := 1.0
 const VOID_DEPTH := 5.0
 
-## The movement model, read off `Bog` and `ProjectSettings` rather than typed, so
-## a change to the character's jump fails this check instead of quietly
-## invalidating every gap on the map.
-const RUN := Bog.RUN_SPEED
-const JUMP := Bog.JUMP_VELOCITY
-const DIVE_FORWARD := Bog.DIVE_FORWARD_SPEED
-const DIVE_UP := Bog.DIVE_UP_VELOCITY
-## The one number here that is a literal, because it is a literal in
-## `Bog._apply_gravity` too: falling is 1.35x as fast as rising, which is what
-## makes a jump feel decisive. If that ever becomes a constant, name it here.
-const FALL_MULTIPLIER := 1.35
-
+## The movement model is `JumpArc`, which is read off `Bog` and
+## `ProjectSettings` rather than typed, so a change to the character's jump
+## fails this check instead of quietly invalidating every gap on the map. It
+## used to be written out here; the guide line's navmesh needs the same
+## arithmetic to decide which gaps a route may cross, and two copies of a
+## parabola is how a map checker and a line drawn on screen end up disagreeing
+## about what the player can do (D-098).
 const CAPSULE_RADIUS := Bog.CAPSULE_RADIUS
 const CAPSULE_HEIGHT := Bog.STAND_HEIGHT
 ## Where the capsule's centre sits above the Bog's feet — the offset on the
@@ -241,8 +238,10 @@ const SPAWN_TRUNK_KEEPOUT := 4.0
 ## reports a map made almost entirely of leaps. Weighting a leap above two hops
 ## says the opposite and truer thing — you hop while hopping will do, and you
 ## commit to a dive when it will not — and the tree that comes out is the route
-## a player actually finds.
-const LEAP_COST := 2.25
+## a player actually finds. It lives in `JumpArc` with the rest of the model,
+## because the navmesh's jump links are priced with the same number and a route
+## drawn on screen should prefer the way round this checker calls cheaper.
+const LEAP_COST := JumpArc.LEAP_COST
 
 const VIEWS := ["top", "side", "iso"]
 
@@ -263,17 +262,6 @@ var _checks: int = 0
 var _failures: int = 0
 var _reported: bool = false
 
-## Derived once from the constants above. `_apex` is how high the jump gets,
-## `_dive_apex` how high a jump plus a dive at the apex gets, `_tick_apex` how
-## high a jump plus a dive one tick later gets.
-var _gravity: float = 24.0
-var _apex: float = 0.0
-var _dive_apex: float = 0.0
-var _tick_apex: float = 0.0
-var _tick_start: float = 0.0
-var _tick_forward: float = 0.0
-var _tick_rise: float = 0.0
-
 
 func _ready() -> void:
 	for arg: String in OS.get_cmdline_user_args():
@@ -283,19 +271,6 @@ func _ready() -> void:
 			_map_path = arg.trim_prefix("map=")
 	_expect = EXPECT.get(_map_path, EXPECT[DEFAULT_MAP])
 	_grid_step = float(_expect["grid"])
-
-	_gravity = float(ProjectSettings.get_setting("physics/3d/default_gravity", 24.0))
-	_apex = JUMP * JUMP / (2.0 * _gravity)
-	_dive_apex = _apex + DIVE_UP * DIVE_UP / (2.0 * _gravity)
-	# One physics tick after the jump the Bog has risen a little and lost a
-	# little speed; the dive then adds its whole upward kick to what is left.
-	var tick := 1.0 / float(ProjectSettings.get_setting(
-		"physics/common/physics_ticks_per_second", 60))
-	var after := (JUMP - _gravity * tick) + DIVE_UP
-	_tick_start = JUMP * tick
-	_tick_forward = RUN * tick
-	_tick_rise = after / _gravity
-	_tick_apex = _tick_start + after * after / (2.0 * _gravity)
 
 	var packed := load(_map_path) as PackedScene
 	if packed == null:
@@ -444,44 +419,13 @@ func _classify(a: StaticMap.Platform, b: StaticMap.Platform) -> String:
 	var gap := Vector2(a.centre.x, a.centre.z).distance_to(Vector2(b.centre.x, b.centre.z))
 	var needed := gap - (a.radius - EDGE_MARGIN) - b.radius - CAPSULE_RADIUS + LANDING_MARGIN
 	var rise: float = b.centre.y - a.centre.y + LIP_CLEARANCE
-	if needed <= _hop_reach(rise):
+	if needed <= JumpArc.hop_reach(rise):
 		return "hop"
-	if needed <= _leap_reach(rise):
+	if needed <= JumpArc.leap_reach(rise):
 		return "leap"
-	if needed <= _big_reach(rise):
+	if needed <= JumpArc.big_reach(rise):
 		return "big"
 	return ""
-
-
-## A jump at run speed. Up under gravity, down under 1.35x gravity, and no
-## horizontal acceleration worth modelling — air control is weak on purpose and
-## the arc is what the layout was spaced against.
-func _hop_reach(rise: float) -> float:
-	if rise > _apex:
-		return -1.0
-	var up := JUMP / _gravity
-	var down := sqrt(2.0 * (_apex - rise) / (FALL_MULTIPLIER * _gravity))
-	return RUN * (up + down)
-
-
-## Jump, then dive at the apex: run speed until the top of the jump, then the
-## dive sets the horizontal speed outright and adds its own upward kick.
-func _leap_reach(rise: float) -> float:
-	if rise > _dive_apex:
-		return -1.0
-	var up := DIVE_UP / _gravity
-	var down := sqrt(2.0 * (_dive_apex - rise) / (FALL_MULTIPLIER * _gravity))
-	return RUN * (JUMP / _gravity) + DIVE_FORWARD * (up + down)
-
-
-## Jump and dive on the very next tick, which is the earliest the dive is legal.
-## Nearly the whole of the jump's upward speed is still there for the dive to add
-## to, which is why this goes half as far again as a leap does.
-func _big_reach(rise: float) -> float:
-	if rise > _tick_apex:
-		return -1.0
-	var down := sqrt(2.0 * (_tick_apex - rise) / (FALL_MULTIPLIER * _gravity))
-	return _tick_forward + DIVE_FORWARD * (_tick_rise + down)
 
 
 # ------------------------------------------------------------ reachability ---
@@ -630,7 +574,7 @@ func _check_off_limits() -> void:
 	var reached: Array[String] = []
 	for perch: StaticMap.Platform in perches:
 		# From the ground there is no gap to cross, only a height to clear.
-		if perch.centre.y + LIP_CLEARANCE <= _tick_apex:
+		if perch.centre.y + LIP_CLEARANCE <= JumpArc.tick_apex():
 			reached.append("%s from the ground" % perch.label)
 			continue
 		for platform: StaticMap.Platform in _platforms:
@@ -641,7 +585,7 @@ func _check_off_limits() -> void:
 	for what: String in reached:
 		print("  FAIL  a Bog can reach %s" % what)
 	_want("no jump reaches an off-limits top (%d tops, highest dive %.2f m, %d reached)" % [
-		perches.size(), _tick_apex, reached.size()], reached.is_empty())
+		perches.size(), JumpArc.tick_apex(), reached.size()], reached.is_empty())
 
 
 # -------------------------------------------------------------- sightlines ---

@@ -9,8 +9,15 @@ extends Node3D
 ## the same signals it counts off in a match. Nothing here reaches past a public
 ## API, so a board that scores here scores in the range.
 ##
-## Five verdicts, and the fourth is the reason the first three mean anything: a
+## Four verdicts, and the third is the reason the first two mean anything: a
 ## counter that never saw a miss would pass an accuracy check by accident.
+##
+## There were five. The fifth stood up a `GlowOrb` — an unshaded emissive sphere
+## flying a parabola down the bow lane — and proved that a target which frees
+## itself on a hit takes the shaft with it. The orb is gone from the range and
+## the stage went with it; `spear_projectile._resolve` still carries the branch,
+## because `range_hit` is a duck-typed contract and the next target to answer it
+## may free itself too.
 
 const SPEAR := preload("res://scripts/items/spear_projectile.gd")
 
@@ -67,7 +74,6 @@ func _ready() -> void:
 
 	await _run_board()
 	await _run_gong()
-	await _run_orb()
 	_run_stats()
 	_run_reset()
 
@@ -177,33 +183,6 @@ func _run_gong() -> void:
 	if is_instance_valid(spear):
 		spear.queue_free()
 	gong.queue_free()
-
-
-# -------------------------------------------------------------------- orb ---
-
-## An orb burst, and the thing that makes it different from a board: it frees
-## itself, and the shaft has to go with it rather than hang in mid-air.
-func _run_orb() -> void:
-	var orb := GlowOrb.launch(_items, Transform3D(Basis(), Vector3(0.0, 3.0, 0.0)),
-		1234, 60.0)
-	await get_tree().physics_frame
-	var before := _items.get_child_count()
-
-	orb.range_hit(orb.global_position, 1, Bog.Cause.ARROW)
-	_expect(orb.is_queued_for_deletion(),
-		"the orb survived being hit and should not have")
-	await get_tree().process_frame
-	await get_tree().process_frame
-
-	var alive := false
-	for child: Node in _items.get_children():
-		if child is GlowOrb and not child.is_queued_for_deletion():
-			alive = true
-	_expect(not alive, "an orb was still standing after it burst")
-	_expect(_items.get_child_count() >= before,
-		"the burst left nothing behind at all")
-	if not alive:
-		print("range_targets: an orb burst and left nothing behind")
 
 
 # ------------------------------------------------------------------ stats ---

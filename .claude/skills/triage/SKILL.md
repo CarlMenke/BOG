@@ -12,9 +12,9 @@ The output is tickets and a short report. **No code changes.**
 
 - Pasted text: that is the dump.
 - A file: read all of it. Past dumps live in `feedback/`.
-- An audio memo (`memos/*.mp3`): it needs a transcript first. If no
-  transcriber is on this machine, say so and ask for the transcript. Do not
-  guess at what a memo says.
+- An audio memo (`memos/*.mp3`): that is the `memo` skill's job. It
+  transcribes, untangles the transcript into a `feedback/` file, and comes
+  back here at step 2 with that file. Do not guess at what a memo says.
 
 Read every line before writing anything. Then list each distinct want in a
 sentence. One want can hide three; three sentences can be one want.

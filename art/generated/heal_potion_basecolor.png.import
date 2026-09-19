@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dweilqe5cgdef"
-path="res://.godot/imported/heal_potion_basecolor.png-27b1dde453572fd57d1d9317730ee99d.ctex"
+path.s3tc="res://.godot/imported/heal_potion_basecolor.png-27b1dde453572fd57d1d9317730ee99d.s3tc.ctex"
+path.etc2="res://.godot/imported/heal_potion_basecolor.png-27b1dde453572fd57d1d9317730ee99d.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "84628102c9bff5b26be606201856e12f"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://art/generated/heal_potion_basecolor.png"
-dest_files=["res://.godot/imported/heal_potion_basecolor.png-27b1dde453572fd57d1d9317730ee99d.ctex"]
+dest_files=["res://.godot/imported/heal_potion_basecolor.png-27b1dde453572fd57d1d9317730ee99d.s3tc.ctex", "res://.godot/imported/heal_potion_basecolor.png-27b1dde453572fd57d1d9317730ee99d.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +42,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

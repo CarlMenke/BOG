@@ -1,61 +1,74 @@
 [gd_scene load_steps=3 format=3 uid="uid://bgubmaprange01"]
 
-; Glowworm Grounds — the seventh map, and the first one that is not an arena
-; (D-113). The practice range: a cleared bog at golden hour with a lodge at the south
-; end, three throwing lanes, a sixty-metre bow lane, a gallery, a melee pit, an
-; ability yard, a parkour course and void off the north and east edges.
+; Highsun Grounds — the seventh map, and the first one that is not an arena
+; (D-113). The practice range: a cleared bog under a high sun with a lodge at
+; the south end, three throwing lanes, a sixty-metre bow lane, a gallery, a
+; melee pit, an ability yard, a parkour course and void off the north and east
+; edges. It was Glowworm Grounds while it was a bog at night, and the name went
+; up with the sun.
 ;
 ; Like Kopje Crossing, Lantern Wharf, Halcyon Wake and Twin Quarry this scene
 ; has no geometry in it at all. `scripts/world/maps/range_map.gd` extends
 ; `StaticMap` and builds the whole place in `_ready()` from its layout tables,
 ; then calls `super()`, which sweeps it into world-space trimesh collision on
-; layer 1, and then adds the dressing: ten torches, twenty-four glowworm
-; lanterns, the MegaKit reed and snag, and the ambience.
+; layer 1, and then adds the dressing: ten torches, the MegaKit reed and snag,
+; and the ambience. There were twenty-four glowworm lanterns as well — unshaded
+; emissive spheres on the tops of the lane posts — and they are gone with the
+; posts and with the fences the posts stood on.
 ;
 ; It also builds every `Marker3D` on the map in code rather than here, which is
 ; a departure from the other five and is deliberate. This map carries fifty-odd
 ; markers across eight groups, and every one of their positions is *derived* —
-; a dummy stands on the distance mark its own post is generated from, a board
-; stands `BOARD_OFFSET` off the lane centre the fences are generated from. Typed
+; a dummy stands on a distance mark its own lane's table gives, a board stands
+; `BOARD_OFFSET` off the lane centre those four dividing lines give. Typed
 ; into a scene file those would be fifty coordinates that go stale silently the
 ; first time a lane moves. Built from the same tables as the geometry, they
 ; cannot.
 ;
 ; So this file is what `static_map.gd` asks for, and no more:
 ;
-;   Environment  golden hour over the bog, at a fog density you can shoot
-;                through (`range_env.tres`). See that file for why the ambient
-;                went from 8.0 to 0.62 when the sky changed.
-;   Sun          **nine degrees up and north-north-east** — thirty degrees east
-;                of north — at 4.2 energy in a warm orange. The sky's disc
-;                follows this node (`sun_follow_light` in `range_sky.tres`), so
-;                what you can see in the sky and where the shadows point can
+;   Environment  a lit day over the bog, at a fog density you can shoot through
+;                (`range_env.tres`). See that file for what each knob did at
+;                dusk and where it went when the sun came up.
+;   Sun          **thirty-two degrees up and north-north-east** — thirty degrees
+;                east of north — at 3.0 energy in a pale warm white. The sky's
+;                disc follows this node (`sun_follow_light` in `range_sky.tres`),
+;                so what you can see in the sky and where the shadows point can
 ;                never disagree. Serialised ROW-major, as every `.tscn` stores a
 ;                `Transform3D`: the nine floats are the basis's three **rows**,
 ;                not its columns, and the axes are the columns. Written as
-;                columns this node came out 59.6 degrees from where it was meant
-;                to be — 7.8 degrees up and 30 degrees *west* of north — and the
-;                error was silent because the moon it replaced was due north,
-;                where the matrix is symmetric and the transpose is itself. The
-;                light's own -Z — where the light *goes* — is
-;                (-0.494, -0.156, +0.855), so the sun sits at
-;                (+0.494, +0.156, -0.855): 9.0 degrees of elevation on a bearing
-;                30.0 degrees east of north. `range_map._check_sun_and_sky`
-;                prints both back out of the built scene and the gate reads them,
-;                because this is exactly the kind of number that is wrong in a
-;                way no render obviously shows.
+;                columns this node once came out 59.6 degrees from where it was
+;                meant to be — and the error was silent, because the moon it
+;                replaced was due north, where the matrix is symmetric and the
+;                transpose is itself. The light's own -Z — where the light
+;                *goes* — is (-0.424, -0.530, +0.734), so the sun sits at
+;                (+0.424, +0.530, -0.734): 32.0 degrees of elevation on a
+;                bearing 30.0 degrees east of north.
+;                `range_map._check_sun_and_sky` prints both back out of the
+;                built scene and the gate reads them, because this is exactly
+;                the kind of number that is wrong in a way no render obviously
+;                shows.
 ;
-;                This was an 11-degree moon due north at 1.15 in cold blue, and
-;                the two changes are one decision (see `range_env.tres`): a
-;                range you cannot read the ground of is not a range, and the
-;                night's answer to that was to keep raising the fill until the
-;                peat appeared. The hour before it gives the light for nothing.
-;                **4.2 and not 2.0**: at 2.0 the warm key lost the argument with
-;                the pink ambient and the whole bog came out mauve. The peat at
-;                45 m now medians 82-126 of 255 with mean RGB 186/122/72 across
-;                the four front pads.
+;                It was an 11-degree moon due north, then a 9-degree sun on this
+;                bearing, and it is now 32 degrees on the same bearing because
+;                the owner asked for the sun higher in the air. **The bearing did
+;                not move with it**, and the section below is why: it is the
+;                number with the argument under it.
+;
+;                **3.0 and not 4.2.** Elevation did most of this, not energy: a
+;                key lands sin(elevation) of itself on a horizontal surface and
+;                this whole map is horizontal surface, so nine degrees put 15.6%
+;                of 4.2 down (0.66) and thirty-two puts 53.0% of 3.0 down (1.59).
+;                That is **2.4 times the key light on the peat off a lamp a third
+;                smaller**, and the top-down render says the same thing from the
+;                other end: the open peat's median luminance went 27 to 58 of 255
+;                and the west lanes' 27 to 66. It sits a third over Kopje
+;                Crossing's noon (1.3 at 64 degrees, 1.17), which is right rather
+;                than greedy — Kopje is pale sand and this is wet peat at 0.21
+;                albedo, and the same light off a floor a third as reflective is
+;                not the same picture. Left at 4.2 the bog blew chalky.
 ;   Bounce       a second, shadowless directional light from the south-south-west
-;                at -6 degrees. See the node.
+;                at -6 degrees, and now at a third of what it was. See the node.
 ;
 ;   Spawns       filled by the script: eight pads on the lodge deck, two rows of
 ;                four, all facing north up the range. The deck is 24 m wide
@@ -72,59 +85,69 @@
 ; floor at -1.5 has ten and a half metres of clearance under it, so nobody dies
 ; by walking into the melee ring.
 ;
-; ## Nine degrees, and thirty degrees east of north
+; ## Thirty-two degrees, and thirty degrees east of north
 ;
-; Both numbers are the renders' doing, and the second one is the one with an
-; argument under it.
+; Both numbers are the renders' doing. The first one is the owner's — *"the sun
+; needs to be higher in the air"* — and the second one is the one with an
+; argument under it, which is why it did not move when the first one did.
 ;
-; **Elevation.** Seven degrees puts cos(83) — twelve per cent — of a light's
-; energy onto a horizontal surface, and a horizontal surface is what this entire
-; map is made of. Eleven put nineteen per cent down and was chosen for that.
-; Nine is a step back toward the horizon and it is bought with the sky rather
-; than paid for by the ground: sin(9) is 15.6% down, but the fill is now a lit
-; dome instead of a night, so the peat is brighter at nine degrees than it ever
-; was at eleven. What nine buys over eleven is the picture — the glory sits
-; lower, the cumulus are lit further up their flanks, and the shadows get long
-; enough to be scenery.
+; **Elevation.** This map has been at eleven degrees of moon, then nine of sun,
+; and is now at thirty-two. The number that matters is sin(elevation), because
+; that is the fraction of a key that lands on a horizontal surface and a range
+; is nothing but horizontal surface: 11 degrees put 19% down, 9 put 15.6%, and
+; 32 puts **53.0%**. Three and a half times the light on the peat, at two thirds
+; of the lamp — see the `Sun` note above for the energy arithmetic. What it
+; costs is the picture the low sun bought: the glory sits high instead of down
+; the lane, the cumulus are lit from above rather than along their flanks, and
+; the shadows are a sixth of the length they were. What it buys is a range you
+; can read at sixty metres at any hour of the match, which is the thing a range
+; is for.
 ;
-; **Azimuth, and this is the load-bearing one.** A shadow from a 9-degree light
-; is **6.31 times as long as the thing casting it** (1 / tan 9). The west bank is
-; 8 m of peat running the full 90 m length of the map, so it throws a
-; **50.5 m** shadow, and where that lands is entirely a question of the bearing:
+; **Azimuth, and this is the load-bearing one.** A shadow from a 32-degree light
+; is **1.60 times as long as the thing casting it** (1 / tan 32; at nine degrees
+; it was 6.31). The west bank is 8 m of peat running the full 90 m length of the
+; map, so it throws a **12.8 m** shadow, and where that lands is still a question
+; of the bearing:
 ;
-;   north-north-west  (the first attempt, D-113) — 41 m of shadow laid *across*
-;                     a 60 m map. Two thirds of the range in permanent darkness,
-;                     and no amount of ambient fixes a shadow.
-;   due north         (what shipped) — the bank shadows along its own length and
-;                     therefore shadows nothing, and so do the lane fences, which
-;                     run the same way. It also puts the disc at the vanishing
-;                     point of every lane, which is a sun in the crosshair of an
-;                     archer at the firing line.
+;   north-north-west  (the first attempt, D-113) — shadow laid *across* the map,
+;                     which at nine degrees put two thirds of the range in
+;                     permanent darkness. At 32 it is a tenth of it, and it is
+;                     still the wrong way to lay a shadow on a place you shoot
+;                     along.
+;   due north         (what shipped once) — the bank shadows along its own length
+;                     and therefore shadows nothing. It also puts the disc at the
+;                     vanishing point of every lane, which is a sun in the
+;                     crosshair of an archer at the firing line, and raising the
+;                     sun does not fix that: it only moves the disc up the same
+;                     line.
 ;   north-north-east  (here) — shadows run **south-south-west**, on (-0.5, +0.866).
-;                     The bank's 50.5 m goes 25.2 m west and 43.7 m south: west
-;                     is *off the map* (the bank is already the west edge) and
-;                     south runs out under the lodge. It shadows nothing, for the
-;                     same reason due north did, and it does it while standing
-;                     30 degrees off every lane's axis.
+;                     The bank's 12.8 m goes 6.4 m west and 11.1 m south: west is
+;                     *off the map* (the bank is already the west edge) and south
+;                     runs out under the lodge. It shadows nothing, and it does it
+;                     while standing 30 degrees off every lane's axis.
 ;
-; Everything else follows: the lodge ridge at 7.4 m throws 46.7 m, 40 m of it
-; southward, off the south edge of the world; the south banks do the same; the
-; 3 m yard ledge throws 18.9 m into open yard; a 2.2 m distance post throws
-; 13.9 m diagonally across a 6 m lane, which is a stripe of texture on the peat
-; and the reason the ground reads as ground rather than as paint. The 0.60 m lane
-; rails throw 3.8 m and are the only shadows in a lane a thrower can see past.
+; Everything else follows: the lodge ridge at 7.4 m throws 11.8 m, 10.3 m of it
+; southward onto its own apron; the 3 m yard ledge throws 4.8 m into open yard;
+; a 1.25 m cover block throws 2.0 m, which is a shape on the peat beside it and
+; the reason a block reads as a block from twenty metres. The 2.2 m distance
+; posts and the 0.60 m lane rails used to be in this list and are not on the map
+; any more — see `range_map._build_lanes`.
 ;
-; And the crosshair. The lanes run due north; the sun is 30 degrees east of it.
-; A half-horizontal FOV at 16:9 is about 54 degrees, so the glory is **in frame
-; and ahead-right of the crosshair** from every firing line, and the disc is
-; nowhere near the target. That was the brief: sky glory down the lane, not a
-; disc in the sight.
+; And the crosshair, which is better than it was. The lanes run due north; the
+; sun is 30 degrees east of that and 32 degrees up. From a firing line with a
+; level crosshair the disc sits 30 degrees right and **35.8 degrees up the
+; frame** against a half-vertical FOV of 37.5 (the game's 75-degree vertical
+; FOV), so it is in the top-right corner of the picture and out of it altogether
+; the moment an archer lifts to loft a shot. At nine degrees it was 10.4 degrees
+; up — in frame, ahead-right, and a lot nearer the sight.
 ;
 ; The cost, stated, and it is the same trade D-113 made: the faces a shooter
 ; sees are the *south-south-west* ones, which are the shaded ones. That is the
 ; right way round for a range — a target read as a shape against a bright sky is
 ; a target you can lead at forty-five metres — and the ambient is what keeps its
-; near face from being a hole.
+; near face from being a hole. A 32-degree sun makes that cheaper than it was:
+; the tops are lit properly now, so a dummy is a lit crown over a shaded body
+; rather than a silhouette.
 ;
 ; `tools/preview_map.gd` stands a Bog on every pad, `tools/parkour_report.gd`
 ; walks the jump graph and proves the course and the off-limits tops, and
@@ -143,9 +166,9 @@ base_radius = 4.0
 environment = ExtResource("2_range_env")
 
 [node name="Sun" type="DirectionalLight3D" parent="."]
-transform = Transform3D(-0.86603, -0.078215, 0.49384, 0, 0.987745, 0.15643, -0.5, 0.135472, -0.85537, 0, 40, 0)
-light_color = Color(1, 0.72, 0.46, 1)
-light_energy = 4.2
+transform = Transform3D(-0.866025, -0.26496, 0.424024, 0, 0.848048, 0.529919, -0.5, 0.458924, -0.734431, 0, 40, 0)
+light_color = Color(1, 0.91, 0.78, 1)
+light_energy = 3.0
 light_specular = 0.3
 light_volumetric_fog_energy = 0.25
 shadow_enabled = true
@@ -154,17 +177,24 @@ directional_shadow_mode = 1
 directional_shadow_max_distance = 120.0
 directional_shadow_blend_splits = true
 
-; The bounce, and it is load-bearing rather than decoration. At nine degrees of
-; elevation the key light reaches exactly two kinds of surface: the tops of
+; The bounce, still load-bearing and now doing a third of the work it did. The
+; key light reaches exactly two kinds of surface at any elevation: the tops of
 ; things and their north-north-east faces. Everything else on the map — every
 ; south face a shooter at a firing line is looking at, the underside of the
 ; lodge roof the eight pads stand under, the inside of the melee pit, the
-; shaded half of every 1.25 m block — is lit by the sky ambient alone, and the
-; first eye-height renders came back with eleven to sixteen per cent of the two
-; back pads' frames at literal black. Kopje Crossing made the same argument for
-; the same reason under a *noon* sun over pale sand (D-061) and the answer is
-; the same one: a shadowless directional light almost anti-parallel to the Sun,
-; warm, at a fifth of its energy.
+; shaded half of every 1.25 m block — is lit by the sky ambient alone, and at
+; nine degrees the first eye-height renders came back with eleven to sixteen per
+; cent of the two back pads' frames at literal black. Kopje Crossing made the
+; same argument for the same reason under a *noon* sun over pale sand (D-061)
+; and the answer is the same one: a shadowless directional light almost
+; anti-parallel to the Sun, warm, at a fraction of its energy.
+;
+; **0.15 rather than 0.45**, because the sky that feeds the ambient is now a lit
+; day dome rather than a sunset and `range_env.tres`'s ambient went 0.62 to 1.15
+; with it. A bounce sized against a night's fill is a second sun under a day's,
+; and a second sun flattens the very silhouette the off-axis key is bought for.
+; What it is still here for is the one surface the sky cannot reach: the
+; underside of the lodge roof over the eight spawn pads.
 ;
 ; **`sky_mode = 1` (LIGHT_ONLY) is not optional.** `range_sky.gdshader` follows
 ; LIGHT0 for the sun disc and the glory (`sun_follow_light`), and a second light
@@ -174,12 +204,12 @@ directional_shadow_blend_splits = true
 ;
 ; It comes from the south-south-west at **-6 degrees**, which is to say from
 ; under the horizon behind you: bounce off ninety metres of wet peat arrives
-; from below, and a light at +6 would be a second sun and would flatten the very
-; silhouette the low key is bought for. 0.45 against the key's 4.2.
+; from below, and a light at +6 would be a second sun. 0.15 against the key's
+; 3.0.
 [node name="Bounce" type="DirectionalLight3D" parent="."]
 transform = Transform3D(0.8659, -0.05042, -0.4977, 0, 0.99492, -0.1008, 0.5002, 0.08728, 0.8615, 0, 30, 0)
-light_color = Color(1, 0.63, 0.43, 1)
-light_energy = 0.45
+light_color = Color(1, 0.78, 0.62, 1)
+light_energy = 0.15
 light_specular = 0.0
 shadow_enabled = false
 sky_mode = 1

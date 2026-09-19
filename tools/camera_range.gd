@@ -61,11 +61,25 @@ extends Node3D
 ##   than a pop, so coming in is instant. The worst one is printed rather than
 ##   judged, and it is the honest price of the rule.
 ##
-## - **faces** — the body follows the camera (the whole rework). Standing and
-##   running, a 45-degree view step has to be matched by the body to within 2
-##   degrees inside 0.1 s; and through a sword spin and an emote the body yaw
-##   must not move at all while the view is swung 180 degrees, because those two
-##   are commitments the camera is not allowed to re-point.
+## - **faces** — the body follows the camera (the whole rework), *except* while
+##   the player is only looking around (`Bog.YAW_SLACK`). Five claims, and the
+##   middle three are the idle slack:
+##     * a 45-degree view step with the Bog standing still moves the body **not
+##       at all** — 45 is inside the 60 degrees of slack, and the whole point of
+##       the feature is that a look is not a turn;
+##     * a second 45-degree step, putting the view 90 off the body and so 30
+##       past the edge, leaves the body at rest *on* the edge — 60 degrees off
+##       the view, not 90 and not 0. The slack travels round with the view;
+##     * then the player runs, with the view held where it was: the body has to
+##       close that 60 degrees inside 0.35 s, and no single tick of it may turn
+##       the body further than `rotate_toward` can — which is the difference
+##       between squaring up and snapping, and the only part of this a number
+##       can tell apart;
+##     * running view steps of 45 degrees are matched to within 2 degrees inside
+##       0.1 s, exactly as before: once you are moving, the body is welded on;
+##     * through a sword spin and an emote the body yaw must not move at all
+##       while the view is swung 180 degrees, because those two are commitments
+##       the camera is not allowed to re-point.
 
 ## World and camera blockers, which is what the rig is meant to avoid. Bogs,
 ## projectiles and pickups are deliberately not in it.
@@ -92,28 +106,55 @@ const CUT_TURN := 0.15
 ## how much a committed heading may drift while the view swings (none, in
 ## practice — `Bog._face` returns before touching `body_yaw`).
 const FACE_TOLERANCE := 0.0349   # 2 degrees
-const FACE_CATCHUP_TICKS := 6    # 0.1 s at 60 Hz
+const FACE_CATCHUP_TICKS := 6    # 0.1 s at 60 Hz, once the slack is shut
 const FACE_HOLD_TOLERANCE := 0.0087  # half a degree
+## The idle slack, read off the Bog rather than typed here, so a re-tune of the
+## feel cannot leave this testbed asserting a number nobody ships.
+const FACE_SLACK := Bog.YAW_SLACK
+## How long the body gets to hand the whole slack back once the player moves.
+## `Bog.SLACK_CLOSE_RATE` puts the honest figure at 60 degrees in 0.26 s, or
+## about 16 ticks; 21 is that plus the frame the view basis spends crossing from
+## `_process` to the next physics tick, plus slack for the 2-degree tolerance.
+const FACE_CLOSE_TICKS := 21     # 0.35 s at 60 Hz
+## Ticks given to the body to come to rest on the slack's edge after the second
+## standing step. It is 30 degrees of `TURN_SPEED`, about 3 ticks; 30 is room.
+const FACE_EDGE_SETTLE := 30
 
 ## Ticks after a teleport before anything is checked: the pivot eases after the
 ## body (`BogCamera.LAG_FLAT`), so for a moment after a forty-metre jump it is
 ## legitimately flying through whatever lies between two stations.
 const SETTLE_TICKS := 50
 
-## The `facing` leg's clock, in ticks of its own. Standing turns, then running
-## turns, then a spin, then an emote — and the two commitments get room either
-## side to let the body settle onto the view before the thing that freezes it.
+## The `facing` leg's clock, in ticks of its own. Two standing steps, then the
+## move that closes the slack, then running steps, then a spin and an emote —
+## and every phase gets room at its end, because what is being measured is where
+## the body comes to *rest* and a phase that ran into the next one would be
+## measuring a body still on its way somewhere.
 const FACE_STEP := 0.7854        # 45 degrees a step
 const FACE_STEP_TICKS := 16
-const FACE_RUN_FROM := 100
-const FACE_TURN_END := 195
-const FACE_SPIN_AT := 205
-const FACE_SPIN_SECONDS := 1.2
-const FACE_SPIN_SWEEP := 210
+## Standing. The first step is inside the slack, so the body must not move at
+## all; the second puts the view 90 degrees off it, 30 past the edge.
+const FACE_STAND_A := 20
+const FACE_STAND_B := 70
+## Then forward, with the view held where the second step left it. This is the
+## owner's "if they start moving, smooth it back to inside the previous clamp",
+## and it is driven from a standstill at the edge so that the 60 degrees being
+## handed back is the whole 60 and not some fraction of it.
+const FACE_MOVE_AT := 130
+## Running steps, by which time the slack has been shut for a second.
+const FACE_RUN_FROM := 190
+const FACE_TURN_END := 300
+const FACE_SPIN_AT := 310
+## Wall-clock seconds, because `Bog.is_spinning` is on `Time.get_ticks_msec`
+## and a headless loop at `--fixed-fps 60` runs many times faster than real
+## time. 3 s is not a feel number, it is enough real time to be sure the spin
+## outlasts the 95 ticks of sweep and settle below on any machine this runs on.
+const FACE_SPIN_SECONDS := 3.0
+const FACE_SPIN_SWEEP := 320
 const FACE_SWEEP_TICKS := 60
-const FACE_SPIN_END := 300
-const FACE_EMOTE_AT := 310
-const FACE_EMOTE_SWEEP := 320
+const FACE_SPIN_END := 405
+const FACE_EMOTE_AT := 425
+const FACE_EMOTE_SWEEP := 445
 
 ## Each leg puts the Bog on `spot` facing -Z and then runs `ticks` of `drive`.
 const LEGS := [
@@ -124,7 +165,7 @@ const LEGS := [
 	{"name": "canopy edge", "spot": Vector3(80.0, 0.1, 3.4), "ticks": 260, "drive": "canopy"},
 	{"name": "back to a wall", "spot": Vector3(120.0, 0.1, 0.0), "ticks": 260, "drive": "turn"},
 	{"name": "tunnel", "spot": Vector3(160.0, 0.1, 10.0), "ticks": 260, "drive": "tunnel"},
-	{"name": "open ground", "spot": Vector3(190.0, 0.1, 0.0), "ticks": 420, "drive": "face"},
+	{"name": "open ground", "spot": Vector3(255.0, 0.1, 0.0), "ticks": 540, "drive": "face"},
 ]
 
 ## Boxes, as {centre, size}. Layer 1, like every map's collision.
@@ -146,6 +187,11 @@ const BLOCKS := [
 	[Vector3(161.6, 1.5, 0.0), Vector3(0.6, 3.0, 26.0)],
 	[Vector3(160.0, 2.5, 0.0), Vector3(3.8, 0.6, 26.0)],
 	# station 6 is deliberately empty ground: the `facing` leg is about the body.
+	# It gets a pad of its own, overlapping the shared floor at x = 205, because
+	# the leg now runs for nearly three seconds and the shared floor's far edge
+	# (x = 210) and the tunnel (x = 161.6) are both inside that. Nothing else
+	# stands within 90 m of it, which is the point.
+	[Vector3(255.0, -0.5, 0.0), Vector3(100.0, 1.0, 120.0)],
 ]
 
 var _leg: int = -1
@@ -204,6 +250,30 @@ var _face_turns: int = 0
 var _face_slow: int = 0
 var _face_worst_catchup: int = 0
 var _face_worst_error: float = 0.0
+## Standing phase A: the body yaw the first step was taken against, and how far
+## the body wandered off it while the view sat 45 degrees away.
+var _face_stand_from: float = 0.0
+var _face_stand_frames: int = 0
+var _face_stand_broke: int = 0
+var _face_worst_stand: float = 0.0
+## Standing phase B: how far the body ended up from the slack's edge once the
+## view had stepped 30 degrees past it.
+var _face_edge_frames: int = 0
+var _face_edge_broke: int = 0
+var _face_worst_edge: float = 0.0
+## The move-start: ticks the body took to give the whole slack back, -1 while it
+## still has not, and the largest single tick of that close.
+var _face_close_ticks: int = -1
+var _face_close_step: float = 0.0
+## The largest body turn in any one physics tick, anywhere on the leg. This is
+## `rotate_toward`'s cap being asserted rather than assumed: it is what says the
+## slack closing is a turn and not a teleport.
+var _face_worst_step: float = 0.0
+var _face_prev_yaw: float = 0.0
+var _face_have_prev: bool = false
+## `Bog.TURN_SPEED` for one physics tick, plus float slack. Filled in `_ready`
+## off the engine rather than off 60, because the budget above is in ticks.
+var _turn_cap: float = 0.0
 var _face_held: float = 0.0
 var _face_holding: bool = false
 var _face_held_frames: int = 0
@@ -255,7 +325,9 @@ func _ready() -> void:
 	_rig = _bog.get_node("CameraRig") as BogCamera
 	_combat = _bog.get_node("Combat") as BogCombat
 	_arm = Vector3(BogCamera.SHOULDER_DEFAULT, 0.0, BogCamera.DISTANCE_DEFAULT).length()
-	print("camera_range: starting, %d legs, arm %.3f m" % [LEGS.size(), _arm])
+	_turn_cap = Bog.TURN_SPEED / float(Engine.physics_ticks_per_second) + 0.0001
+	print("camera_range: starting, %d legs, arm %.3f m, slack %.1f deg, turn cap %.4f rad a tick" % [
+		LEGS.size(), _arm, rad_to_deg(FACE_SLACK), _turn_cap])
 	_next_leg()
 
 
@@ -295,6 +367,8 @@ func _next_leg() -> void:
 	_face_yaw = 0.0
 	_face_holding = false
 	_face_settled = true
+	# A teleport is a jump the per-tick cap is not asked about.
+	_face_have_prev = false
 
 
 func _physics_process(_delta: float) -> void:
@@ -352,29 +426,54 @@ func _drive(kind: String, t: int) -> void:
 		Input.action_release("move_forward")
 
 
-## The `faces` leg, in four phases, and the only leg that touches the Bog itself.
+## The `faces` leg, in six phases, and the only leg that touches the Bog itself.
 ##
-## The view is stepped rather than swept for the two turning phases on purpose.
-## A sweep measures a body chasing a moving target, which is a lag and not a
-## catch-up; a step asks the question the player asks, which is "I flicked, when
-## is the Bog pointing there". 45 degrees is a real mouse movement and closes at
-## `Bog.TURN_SPEED` in about 3.4 ticks, so 6 ticks of budget is the turn plus the
-## one frame the view basis spends crossing from `_process` to the next physics
-## tick, plus slack.
+## The view is stepped rather than swept on purpose. A sweep measures a body
+## chasing a moving target, which is a lag and not a catch-up; a step asks the
+## question the player asks, which is "I flicked, when is the Bog pointing
+## there". 45 degrees is a real mouse movement: one of them is inside the idle
+## slack and two are not, which is exactly the pair of answers the feature owes.
+## Once the Bog is moving a step closes at `Bog.TURN_SPEED` in about 3.4 ticks,
+## so 6 ticks of budget is the turn plus the one frame the view basis spends
+## crossing from `_process` to the next physics tick, plus slack.
+##
+## The move-start phase presses one key and touches the view not at all, because
+## the claim there is about the *body* alone: it is at rest on the slack's edge,
+## the view has not moved, and the only thing that can close the 60 degrees
+## between them is the slack being given back. Anything else moving would make
+## the measurement two things at once.
 ##
 ## The two commitments are then driven directly rather than through a key, for
 ## `tools/combat_range.gd`'s reason: what is being measured is what `Bog._face`
 ## does about `is_spinning()` and `is_emoting()`, and a key press would add the
 ## whole of `BogCombat`'s gating to the thing that could fail.
 func _drive_face(t: int) -> Dictionary:
+	# One sample of the body a physics tick, which is where the per-tick turn
+	# cap is measured. Taken before the Bog's own `_physics_process` runs this
+	# tick, so consecutive samples are one `Bog._face` apart exactly.
+	if _face_have_prev:
+		var step := absf(angle_difference(_bog.body_yaw, _face_prev_yaw))
+		_face_worst_step = maxf(_face_worst_step, step)
+		if t > FACE_MOVE_AT and t <= FACE_RUN_FROM:
+			_face_close_step = maxf(_face_close_step, step)
+	_face_prev_yaw = _bog.body_yaw
+	_face_have_prev = true
+
 	var forward := false
 	if t <= FACE_TURN_END:
-		forward = t > FACE_RUN_FROM
-		# Hold the view still for the last stretch, so the body is settled on it
-		# before the spin freezes whatever it is holding. `t > 0` because the
+		forward = t >= FACE_MOVE_AT
+		# The two standing steps, then the running ones. `t > 0` because the
 		# settle calls this with t = 0 over and over, and a step there would be
 		# fifty turns nobody drove and nobody watched.
-		if t > 0 and t % FACE_STEP_TICKS == 0 and t <= FACE_TURN_END - FACE_STEP_TICKS:
+		if t == FACE_STAND_A:
+			# The body the first step is taken against, read before the view
+			# moves — the claim is that this number does not change.
+			_face_stand_from = _bog.body_yaw
+			_face_yaw += FACE_STEP
+		elif t == FACE_STAND_B:
+			_face_yaw += FACE_STEP
+		elif t >= FACE_RUN_FROM and (t - FACE_RUN_FROM) % FACE_STEP_TICKS == 0 \
+				and t <= FACE_TURN_END - FACE_STEP_TICKS:
 			_face_yaw += FACE_STEP
 			_face_turned_at = t
 			_face_settled = false
@@ -387,6 +486,11 @@ func _drive_face(t: int) -> Dictionary:
 				_face_notes.append("the spin never started")
 		if t == FACE_SPIN_SWEEP - 2:
 			_begin_hold()
+		if t == FACE_SPIN_END and _face_spun and not _bog.is_spinning():
+			# The spin's clock is wall time and this leg's is ticks, so say so
+			# out loud rather than let a fast machine and a slow one disagree
+			# about why the body moved.
+			_face_notes.append("the spin ran out before the sweep was over")
 		if t >= FACE_SPIN_SWEEP:
 			var through := clampf(float(t - FACE_SPIN_SWEEP) / float(FACE_SWEEP_TICKS),
 				0.0, 1.0)
@@ -573,14 +677,32 @@ func _lens_aim_point(space: PhysicsDirectSpaceState3D) -> Vector3:
 	return p
 
 
-## The `faces` verdict, asked only on the open-ground leg.
+## The `faces` verdict, asked only on the open-ground leg, and routed by which
+## phase of the leg's clock the tick belongs to.
 ##
-## Two halves. While the view is being stepped, every step starts a stopwatch
-## that stops when the body is within `FACE_TOLERANCE` of the view; a step the
-## body has not matched inside `FACE_CATCHUP_TICKS` is a failure. While a
-## commitment is holding, the body yaw is compared with the one it had when the
-## hold began and any movement at all is a failure — the camera may turn through
-## a whole half-circle and the body must not notice.
+## **Standing, inside the slack** — the body yaw is compared with the one it had
+## before the view stepped, and any movement is a failure. This is the owner's
+## complaint stated as a number: the feet are not allowed to leave the floor
+## they are standing on because somebody looked at something.
+##
+## **Standing, past the edge** — what is compared is not the body against the
+## view but the *gap* against `FACE_SLACK`. Asking "is the body 60 degrees off"
+## rather than "is the body at 30 degrees" is the difference between checking
+## the feature and checking this leg's arithmetic, and it stays true whichever
+## way the view was stepped.
+##
+## **The move-start** — a stopwatch from the tick the key goes down to the tick
+## the body is within `FACE_TOLERANCE` of the view. The *smoothness* half of
+## that claim is not measured here but in `_drive_face`, one sample a physics
+## tick, because a check running in `_process` cannot honestly say "no tick".
+##
+## **Running steps** — the old claim, unchanged: every step starts a stopwatch
+## that stops when the body is within `FACE_TOLERANCE` of the view, and a step
+## not matched inside `FACE_CATCHUP_TICKS` is a failure.
+##
+## **A commitment holding** — the body yaw is compared with the one it had when
+## the hold began and any movement at all is a failure; the camera may turn
+## through a whole half-circle and the body must not notice.
 func _check_facing() -> void:
 	var error := absf(angle_difference(_bog.body_yaw, _rig.yaw()))
 	if _face_holding:
@@ -589,6 +711,24 @@ func _check_facing() -> void:
 		_face_worst_drift = maxf(_face_worst_drift, drift)
 		if drift > FACE_HOLD_TOLERANCE:
 			_face_broke += 1
+		return
+	if _tick >= FACE_STAND_A and _tick < FACE_STAND_B:
+		_face_stand_frames += 1
+		var moved := absf(angle_difference(_bog.body_yaw, _face_stand_from))
+		_face_worst_stand = maxf(_face_worst_stand, moved)
+		if moved > FACE_TOLERANCE:
+			_face_stand_broke += 1
+		return
+	if _tick >= FACE_STAND_B + FACE_EDGE_SETTLE and _tick < FACE_MOVE_AT:
+		_face_edge_frames += 1
+		var off_edge := absf(error - FACE_SLACK)
+		_face_worst_edge = maxf(_face_worst_edge, off_edge)
+		if off_edge > FACE_TOLERANCE:
+			_face_edge_broke += 1
+		return
+	if _tick >= FACE_MOVE_AT and _tick < FACE_RUN_FROM:
+		if _face_close_ticks < 0 and error <= FACE_TOLERANCE:
+			_face_close_ticks = _tick - FACE_MOVE_AT
 		return
 	if _face_settled:
 		return
@@ -660,13 +800,37 @@ func _finish() -> void:
 		_total_pulls, _worst_pull, _worst_cut, _total_flips,
 		"PASS" if calm else "FAIL"])
 
+	var closed := _face_close_ticks >= 0 and _face_close_ticks <= FACE_CLOSE_TICKS
+	if not closed and _face_close_ticks < 0:
+		_face_notes.append("the body never came back onto the view after the move")
+	if _face_worst_step > _turn_cap:
+		_face_notes.append("a single tick turned the body %.4f rad, over the %.4f cap"
+			% [_face_worst_step, _turn_cap])
+	print("camera_range: standing, a 45-degree look moved the body on %d of %d frames (worst %.3f deg); a 90-degree one left it on the %.1f-degree slack edge, off it on %d of %d frames (worst %.3f deg)" % [
+		_face_stand_broke, _face_stand_frames, rad_to_deg(_face_worst_stand),
+		rad_to_deg(FACE_SLACK), _face_edge_broke, _face_edge_frames,
+		rad_to_deg(_face_worst_edge)])
+	print("camera_range: on the first step of a walk the body gave the slack back in %d ticks of %d allowed, the biggest tick of that close %.4f rad; biggest tick anywhere on the leg %.4f rad against a %.4f cap" % [
+		_face_close_ticks, FACE_CLOSE_TICKS, _face_close_step,
+		_face_worst_step, _turn_cap])
+	# `FACE_SLACK > FACE_TOLERANCE` is the leg refusing to be degenerate: the two
+	# standing claims are both written against the Bog's own constant, so a
+	# slack of zero would make the second of them read "the body is on the view"
+	# and pass for the wrong reason. Only the first would catch it, and a
+	# testbed that can pass a feature it has switched off is worth one line.
 	var faced := _face_turns > 0 and _face_slow == 0 and _face_broke == 0 \
-		and _face_spun and _face_emoted and _face_held_frames > 0
+		and _face_spun and _face_emoted and _face_held_frames > 0 \
+		and FACE_SLACK > FACE_TOLERANCE \
+		and _face_stand_frames > 0 and _face_stand_broke == 0 \
+		and _face_edge_frames > 0 and _face_edge_broke == 0 \
+		and closed and _face_worst_step <= _turn_cap
 	var note := "" if _face_notes.is_empty() else " (" + ", ".join(_face_notes) + ")"
-	print("camera_range: the body matched the view on %d of %d turns within %d ticks (worst %d ticks, %.2f deg still out), and held its heading through %d committed frames (worst drift %.3f deg)%s — faces %s" % [
+	print("camera_range: the body matched the view on %d of %d turns within %d ticks (worst %d ticks, %.2f deg still out), held still through %d of %d standing frames and %d committed ones (worst drift %.3f deg), sat %d frames off the slack's edge, and gave the slack back in %d ticks%s — faces %s" % [
 		_face_turns - _face_slow, _face_turns, FACE_CATCHUP_TICKS,
 		_face_worst_catchup, rad_to_deg(_face_worst_error),
-		_face_held_frames, rad_to_deg(_face_worst_drift), note,
+		_face_stand_frames - _face_stand_broke, _face_stand_frames,
+		_face_held_frames, rad_to_deg(_face_worst_drift),
+		_face_edge_broke, _face_close_ticks, note,
 		"PASS" if faced else "FAIL"])
 	get_tree().quit()
 

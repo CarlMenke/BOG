@@ -977,6 +977,19 @@
     "flat": 0.367,
     "up": 1.267
    }
+  },
+  {
+   "file": "Capture",
+   "role": "Capture",
+   "suite": "letters",
+   "mixamo_name": null,
+   "mixamo_id": null,
+   "mixamo_query": "reaching",
+   "in_place": false,
+   "loop": true,
+   "face": "hips",
+   "untwist": true,
+   "markers": {}
   }
  ]
 }

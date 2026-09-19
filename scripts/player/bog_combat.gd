@@ -2156,6 +2156,40 @@ func _wants_potion() -> bool:
 		and is_channelling()
 
 
+## Should the bow fist be holding the loot pouch right now (the letters round)?
+##
+## `_wants_potion`'s sibling in this fist and its exact mirror image: that one
+## is *not holding a letter and channelling*, this one is *holding a letter and
+## being timed*, so the two can never both be true and the exclusivity is a
+## property of the sentences rather than of anything remembering to check.
+##
+## **`is_timed` is the whole of the second clause, and it is the line that
+## separates the two letters games.** A Capture B·O·G carry is the same hold row
+## with `ends_at = INF` — nothing is counting down, the card is being *run*
+## somewhere — and that Bog keeps the card up in its fist exactly as it has
+## since D-035. A timed capture is the one with a clock, and it is the one the
+## owner asked for a performance for: *"players might incorrectly assume you can
+## punch, so make it so they are actually doing something with their hands —
+## capturing."* So the pouch, the raised arm (`BogAnimator`) and the floating
+## letter (`CaptureRig`) all hang off this one question, asked of `MatchState`
+## every time for `is_holding_letter`'s reason — the host owns the clock and a
+## copy here would be a second one.
+##
+## **It is the one `_wants_*` here with no `_bare_handed()` clause, and that is
+## deliberate rather than an omission.** The other five carry it because a
+## holster and an emote are two ways of saying "this Bog is not holding its
+## weapon", and a great sword hanging off a twerking Bog reads as a bug
+## (D-105). A pouch is not a weapon: there is nothing to put away, because a
+## letter hold has already disarmed this Bog (D-035), and the sack is the
+## *destination* of a descent that is still running — `CaptureRig` aims the
+## shrinking letter at `pouch_mouth_global()` whatever the hands are doing, so
+## taking the pouch away mid-capture would leave a card sinking into thin air
+## at the hip. A dancing Bog with a sack is a joke; a dancing Bog swallowing a
+## letter with nothing there is a broken effect.
+func _wants_pouch() -> bool:
+	return is_holding_letter() and MatchState.letter_hold_is_timed(_bog.peer_id)
+
+
 ## Should the fists be holding a great sword right now (D-068, D-069)?
 ##
 ## `_wants_shaft`'s fourth sibling, and since D-069 the closest of the four to
@@ -3236,12 +3270,31 @@ func _refresh_hand() -> void:
 	# Decided here with the other four and in the same breath, so a bottle
 	# and a bow can no more be out together than a bow and a great sword.
 	_bog.held_gear.set_potion(_wants_potion())
+	# And the **sixth**, which is the bow fist's third object (the letters
+	# round). Decided here with the other five and in the same breath, so a
+	# pouch, a bottle and a bow can no more be out together than a bow and a
+	# great sword can — and so that the one function that says what a capture
+	# looks like in the hands says both halves of it: a sack in the left, and
+	# the right emptied for the card the `CaptureRig` floats above it.
+	_bog.held_gear.set_pouch(_wants_pouch())
 	# Runs on every peer's copy of every Bog, which is the point: a Bog ten
 	# seconds from a letter has to be readable from across the clearing by the
 	# people who might stop it, not only by the player holding the card. The
 	# Elder's crackle is the same argument with a shorter fuse.
+	#
+	# **A carry only, since the letters round.** There is one letters game with
+	# two flavours, and the hold row is the same row in both: `ends_at = INF` is
+	# a Capture B·O·G card being *run* to a vault, and a finite one is a timed
+	# capture. A carry keeps the card up in the fist exactly as it has since
+	# D-035 — the Bog is sprinting across a map with a prize and the fist is
+	# where that reads from. A timed capture does not, because the card is the
+	# thing descending into the pouch and a Bog holding two of them would be
+	# two answers to one question. The condition is `_wants_pouch()`'s own,
+	# negated, and it is in this function for D-065's reason: one place decides
+	# what is in a hand.
+	var card_in_fist := holding and not MatchState.letter_hold_is_timed(_bog.peer_id)
 	_bog.held_gear.set_letter(
-		MatchState.letter_hold_letter(_bog.peer_id) if holding else 0)
+		MatchState.letter_hold_letter(_bog.peer_id) if card_in_fist else 0)
 	_bog.held_gear.set_charged(_wants_crackle())
 
 

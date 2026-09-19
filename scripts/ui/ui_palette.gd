@@ -68,6 +68,30 @@ const BOG_DIM := AMBER_DIM
 const DANGER := Color(1.00, 0.40, 0.36)
 const GOOD := Color(0.50, 0.88, 0.55)
 
+# ------------------------------------------------------------------- guide ---
+
+## The three things a guide line, a minimap blip and a tutorial figure can all
+## be saying about one letter, and they are one family on purpose: the line on
+## the ground, the dot in the corner and the picture in the how-to-play card
+## are three views of the same sentence, and a player who learns the colour
+## once has learned all three.
+##
+## **This is the one place in the UI where a colour means a verb.** Everything
+## else in the Quiet scheme is white, dim white, or the one accent — and the
+## rule holds here too, because `GUIDE_LOOSE` *is* the accent: a loose letter is
+## a thing you can go and touch, which is what amber has always meant. The other
+## two are the two verdicts already in the palette read at a distance — red is
+## the thing to kill, blue is the thing to cover — and blue is new only because
+## `GOOD` green over grass is a colour nobody can find.
+const GUIDE_LOOSE := AMBER
+## An enemy carries it: go kill them. Warmer and lighter than `DANGER` so the
+## line does not read as the health bar's bottom band from the corner of an eye.
+const GUIDE_ENEMY := Color(1.00, 0.36, 0.33)
+## A friendly destination: your teammate carrying the card, or your own vault.
+## The one cool colour in the scheme, and it is cool so it reads as somewhere to
+## go rather than as something happening to you.
+const GUIDE_ALLY := Color(0.45, 0.72, 1.00)
+
 # ------------------------------------------------------------------ scales ---
 
 ## Authored against the 1600x900 base viewport; `canvas_items` stretch scales

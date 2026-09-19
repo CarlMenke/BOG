@@ -47,8 +47,12 @@ check() {
     checks=$((checks + 1))
     printf '  %-32s ' "$name"
 
-    if ! "$@" >"$log" 2>&1; then
-        echo "FAIL (Godot exited non-zero)"
+    # Under a wall clock, since the letters round: a tool whose root script
+    # fails to parse has nothing left to call `quit`, and a check that never
+    # returns is a gate that never says FAIL. Fifteen minutes is longer than
+    # the slowest honest check here (the Rust playthrough) by a wide margin.
+    if ! timeout "${CHECK_TIMEOUT:-900}" "$@" >"$log" 2>&1; then
+        echo "FAIL (Godot exited non-zero, or ran past ${CHECK_TIMEOUT:-900} s)"
         sed 's/^/      /' "$log" | tail -20
         failures=$((failures + 1))
         return
@@ -125,6 +129,15 @@ echo "headless checks"
 # above, so a broken .import setting shows up here first.
 check "clip library" "clip_check: PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" --script tools/clip_check.gd
+# The finger grips (the letters round): one frozen pose per hand per prop,
+# lifted off the clips that already draw a closed hand. It runs here and not
+# earlier because what it reads, art/generated/bog_clips.res, is written by
+# tools/import_clip.gd during the import pass above — and what it writes,
+# art/generated/grip_poses.res, has to be **committed**: BogAnimator loads it
+# at runtime, nothing derives it at load time, and a checkout without it is a
+# Bog whose fingers keep whatever curl the body clip was authored with.
+check "finger grips" "grip_poses: PASS"     "$GODOT" --headless --path "$GODOT_ROOT" tools/grip_poses.tscn
+also "finger grips" "grip_poses: 5 poses,"
 check "invite codes" "invite_codes: PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/invite_codes.tscn
 check "match rules" "match_rules: PASS" \
@@ -983,7 +996,7 @@ check "quarry playthrough" "playthrough: PASS" \
 also "quarry playthrough" "arena: Twin Quarry built from"
 also "quarry playthrough" "playthrough: capture layout PASS"
 also "quarry playthrough" "capture layout on 'quarry' — declared bases"
-# And on Glowworm Grounds, the practice range (D-112). The same walk again, and
+# And on Highsun Grounds, the practice range (D-112, by day since the range wave). The same walk again, and
 # then a different ending: a practice map has no clock and no win check, so the
 # run swaps the kill loop and the results screen for a stage that proves what
 # unit 1 of the range actually built. The four `also` lines are the four claims
@@ -994,13 +1007,13 @@ also "quarry playthrough" "capture layout on 'quarry' — declared bases"
 # would ever notice), and a map-placed pickup can be claimed.
 check "range playthrough" "playthrough: PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/playthrough.tscn -- range
-also "range playthrough" "arena: Glowworm Grounds built from"
+also "range playthrough" "arena: Highsun Grounds built from"
 also "range playthrough" "playthrough: practice PASS"
 also "range playthrough" "playthrough: the range brought a RangeDummies node"
 also "range playthrough" "playthrough: dummies are hidden from every roster screen"
 also "range playthrough" "playthrough: a placed pickup was claimed"
 # The eight dummy behaviours, the stats signboard and the parkour clock, on a
-# bare fixture and then on Glowworm Grounds itself. A dummy has no physics at
+# bare fixture and then on Highsun Grounds itself. A dummy has no physics at
 # all — its Bog node is authored by a peer that does not exist, so
 # `move_and_slide` never runs on any machine — which means every brain is a
 # position as a function of time and every one of them can be wrong in a way a
@@ -1039,21 +1052,18 @@ also "range items" "range_items: a well re-minted 4.0 s after it was taken PASS"
 also "range items" "range_items: the refill stone raised 0/0/0 to 2/2/1 PASS"
 also "range items" "range_items: a full Bog got nothing and no chime PASS"
 also "range items" "range_items: a rack swapped spear to bow on the Bog, the hand and the roster within one frame PASS"
-# Boards, orbs and the gong: things to shoot that are not Bogs, reached through
+# Boards and the gong: things to shoot that are not Bogs, reached through
 # `range_hit` rather than through the damage door, which stays keyed by peer id.
-# The board's rings, the gong at the spear's measured flat 28 m and an orb that
-# takes the shaft with it when it bursts are each a different answer to "what
-# becomes of the projectile", and the last `also` is the counter — a hit filed
-# under the weapon that threw it, which is the whole of what a stats board is.
-# This block is also where the bug that justified the tool was caught: every
-# target was first built with its collision shape nested under the swinging
-# hinge, which Godot ignores in silence, and the only check that noticed was the
-# one that threw a real spear through a real sweep.
+# The board's rings and the gong at the spear's measured flat 28 m are two
+# different answers to "what becomes of the projectile", and the last `also`s
+# are the counter: a hit files under the weapon that threw it, and the reset
+# zeroes every row. There was a third answer — a glowing orb that took the
+# shaft with it when it burst; it went with the orbs in the range wave, which
+# took every bare unshaded sphere off the map.
 check "range targets" "range_targets: PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/range_targets.tscn
 also "range targets" "range_targets: board scored 3, 2, 1 by ring"
 also "range targets" "range_targets: the gong rang at 28.0 m"
-also "range targets" "range_targets: an orb burst and left nothing behind"
 also "range targets" "range_targets: 1 throw, 1 hit, 1 kill, accuracy 100%"
 also "range targets" "range_targets: a board hit files under the weapon that threw it"
 also "range targets" "range_targets: reset zeroed every row"
@@ -1067,6 +1077,24 @@ also "range targets" "range_targets: reset zeroed every row"
 #         res://tools/capture_preview.tscn out/capture_base.png 150 safari
 check "capture match on a real map" "capture_preview: PASS" \
     "$GODOT" --headless --path "$GODOT_ROOT" tools/capture_preview.tscn -- safari
+# Every map bakes a navmesh the guide line can be drawn on, and you can get from
+# the first spawn pad to the last over it (the letters round). The line is local
+# and cosmetic, so nothing here is a rule — but a bake that collapses to nothing
+# after a layout change is a line that vanishes in a match, and the census per
+# map is in the log for exactly that. Headless; every map is stood up in turn.
+check "navmesh on every map" "nav_check: PASS"     "$GODOT" --headless --path "$GODOT_ROOT" tools/nav_check.tscn
+also "navmesh on every map" "nav_check: hollow"
+also "navmesh on every map" "nav_check: range"
+# The capture performance, measured on one Bog (the letters round). Four
+# structural claims out of one run, and each of them is a thing three files have
+# to agree about: the pouch is in the left fist (`HeldGear`), the card is *not*
+# in the right one (`BogCombat._refresh_hand` — a carry only, now), the pouch
+# mouth is below the raised hand, and the floating letter is on the line between
+# the two (`CaptureRig`). It also prints both anchors and the descent in world
+# metres, which is how `POUCH_GRIP_OFFSET` and `POUCH_GRIP_ROTATION` — the only
+# grip constants in this repo written down rather than solved — get read off a
+# render and corrected. Headless, about four seconds.
+check "the capture performance" "capture PASS"     "$GODOT" --headless --path "$GODOT_ROOT" tools/preview_capture.tscn -- f=0.5
 # The two-process test, `tools/net_test.sh` (roster, config, chat, a kill, a
 # respawn, a disconnect, and D-044's ten rematches), is deliberately not in the
 # gate: it adds about 45 s to every run for a path that changes rarely. Run it
@@ -1188,6 +1216,26 @@ check "spear reload timer on the tile" "reload_timer PASS" \
 check "the range panel" "hud_range: range PASS" \
     "$GODOT" --path "$GODOT_ROOT" --resolution 1600x900 --script tools/snapshot.gd -- \
     res://tools/hud_range.tscn "$GODOT_LOG_DIR/range.png" 110 range
+# The corner map's three kinds of blip, counted rather than photographed (the
+# letters round). A loose card twelve metres north-east, an enemy carrying one
+# eighteen west, a teammate eight south — and the verdict read off
+# `Minimap.debug_counts()` rather than off the picture, because everything that
+# can go wrong here is a *rule*: an enemy with no letter drawn, an ally drawn in
+# a free-for-all, a card counted that is past the rim. A rule is a number, and a
+# 180 px circle scaled into a screenshot is not a thing a number can be read out
+# of. Played as Teams, because a teammate does not exist in a free-for-all.
+check "the minimap's blips" "minimap allies=1 letters=1 carriers=1 PASS"     "$GODOT" --path "$GODOT_ROOT" --resolution 1600x900 --script tools/snapshot.gd --     res://tools/hud_range.tscn "$GODOT_LOG_DIR/minimap.png" 110 minimap
+# HOW TO PLAY, driven three times (the letters round): it opens itself on a
+# machine that has not seen it, closing is what marks it seen, and it does not
+# come back. That flag is the half of this feature no picture can show and the
+# half that decides whether anybody ever reads it — six cards of dots and dashed
+# lines either look right or do not, and that is a person's call. The same run
+# leaves card three standing for the camera, which is the one with the pouch,
+# the sunburst and the HUD lamp in it. `tutorial_seen` is put back afterwards,
+# because `Settings` writes to disk and this runs on somebody's own machine.
+check "the how-to-play cards" "tutorial PASS"     "$GODOT" --path "$GODOT_ROOT" --resolution 1600x900 --script tools/snapshot.gd --     res://tools/hud_range.tscn "$GODOT_LOG_DIR/tutorial.png" 60 tutorial
+also "the how-to-play cards" "6 cards, shown once and reopenable"
+also "the how-to-play cards" "every one of the 6 cards drew"
 # The ability bar's tiles are photographs of the real props (D-076), and this is
 # the claim that makes seven of them a *set* rather than seven pictures: one
 # camera, one light rig, and one framing rule — the geometric mean of a
@@ -1260,6 +1308,20 @@ check "a config reaches the clipboard" "capture: PASS" \
 also "a config reaches the clipboard" "capture: fields PASS"
 also "a config reaches the clipboard" "capture: clipboard PASS"
 also "a config reaches the clipboard" "capture: saved PASS"
+# The menu's wordmark is three letter cards standing in the glade now (the
+# letters round), so "is the B·O·G clear of the Bog, and are his feet clear of
+# the button bar" stopped being something an anchor could promise and became a
+# projection. This shoots the menu and prints every box in fractions of the
+# frame — the window a screenshot is taken at is not the window a player runs —
+# then says whether the row and the hero's capsule overlap.
+check "the menu's letters clear the Bog" "menu_letters: PASS"     "$GODOT" --path "$GODOT_ROOT" --resolution 1600x900 --script tools/snapshot.gd --     res://tools/ui_range.tscn "$GODOT_LOG_DIR/menu_letters.png" 60 menu_letters
+# The same rig at the lobby's lens over a full eight-Bog ring, and this is the
+# one that will rot: that camera is pitched down at a ring standing behind the
+# fire, so raising `MenuLetters.HOVER_HEIGHT` walks the row *into* the faces
+# rather than out of them. Requires the row inside the panels' 400..1140 clear
+# band (`tools/weapon_select.gd`'s band) and below every head, and prints which
+# world height on the nearest Bog the row's top crosses.
+check "the lobby's letters clear the ring" "lobby_letters: PASS"     "$GODOT" --path "$GODOT_ROOT" --resolution 1600x900 --script tools/snapshot.gd --     res://tools/ui_range.tscn "$GODOT_LOG_DIR/lobby_letters.png" 60 lobby_letters
 # Holds W and requires the Bog to have gone somewhere. Movement was wired into
 # the testbeds and nowhere else, so every testbed could be walked around while
 # the real arena could not, and the abilities — which read their own keys —
@@ -1342,16 +1404,16 @@ check "quarry spawns and collision" "preview_map: PASS" \
 # Stack stands on the origin every one of those lines runs through (D-082).
 check "quarry parkour and ramps" "parkour_report: PASS" \
     "$GODOT" --path "$GODOT_ROOT" --resolution 1000x1000 --script tools/snapshot.gd -- \
-    res://tools/parkour_report.tscn "$GODOT_LOG_DIR/quarry_parkour.png" 30 top \
+    res://tools/parkour_report.tscn "$GODOT_LOG_DIR/quarry_parkour.png" 40 top \
     map=res://scenes/world/maps/quarry.tscn
-# Twin Quarry is fair (D-135). The two bases are one function called twice, and
+# Twin Quarry is fair (D-144). The two bases are one function called twice, and
 # this re-proves it from the built scene rather than trusting that: the bases
 # congruent under a half turn, all three letter runs the same length from both,
 # cover and high ground counted equal either side, and every pad and letter on
 # solid ground. It is the only thing standing between "not symmetrical" and
 # "not even".
 check "the quarry is even" "quarry_check: PASS"     "$GODOT" --headless --path "$GODOT_ROOT" --script tools/quarry_check.gd
-# Glowworm Grounds' eight pads, all of them on one lodge deck — which is what
+# Highsun Grounds' eight pads, all of them on one lodge deck — which is what
 # makes `PAD_SEPARATION` the number the deck's 24 m width was derived from. Its
 # triangle floor is its own and the lowest but the quarry's: the whole range is
 # 2,640 triangles of slabs and posts, because a range is mostly empty ground.
@@ -1367,14 +1429,14 @@ check "range spawns and collision" "preview_map: PASS" \
 # map with one pad. This is the last of the two rows of four, and its height
 # says it is standing on the deck with the other seven.
 also "range spawns and collision" "pad 7  (9.75, 1.32, 44.00)"
-also "range spawns and collision" "27 dummies (27 live, 0 reserved), 4 wells, 3 racks, 1 signboard(s), 9 targets"
+also "range spawns and collision" "27 dummies (27 live, 0 reserved), 4 wells, 3 racks, 1 signboard(s), 8 targets"
 # Where the sun actually ended up, read back out of the built scene rather than
 # taken from the comment that claims it. Every argument this map makes about
 # where a shadow falls is made from these two numbers, and they were sixty
 # degrees wrong for a whole pass: a `.tscn` stores a `Transform3D` as the
 # basis's three *rows* and the Sun had been written as its columns, which is a
 # transpose and therefore invisible on the due-north moon this map used to have.
-also "range spawns and collision" "sun 9.0 deg up, bearing 30.0 deg E of N (0.0 off design)"
+also "range spawns and collision" "sun 32.0 deg up, bearing 30.0 deg E of N (0.0 off design)"
 # And the range's own promises, which are about the jump arc rather than about
 # sightlines: every landing on the parkour course is reachable from the ground by
 # hops and leaps alone, the course offers the one-tick dive as a shortcut and
@@ -1386,6 +1448,12 @@ check "range parkour and reaches" "parkour_report: PASS" \
     res://tools/parkour_report.tscn "$GODOT_LOG_DIR/range_parkour.png" 40 top \
     map=res://scenes/world/maps/range.tscn
 also "range parkour and reaches" "every landing is reachable from the ground (0 stranded)"
+# And the picture the capture's numbers belong beside: the raised fist with the
+# card above it, half way down (the letters round). `shield deploys`' form — it
+# proves the scene renders with a Bog, a pouch and a card in it, which no
+# headless run can; whether the sack hangs right is a person's call.
+check "the capture looks like one" "snapshot: wrote"     "$GODOT" --path "$GODOT_ROOT" --resolution 1600x900 --script tools/snapshot.gd --     res://tools/preview_capture.tscn "$GODOT_LOG_DIR/capture_hand.png" 40 f=0.5
+also "the capture looks like one" "capture PASS"
 # Walks the menu into a real match and asks Input.mouse_mode what happened. It
 # grabs the physical mouse for about a second on the way through, which is the
 # only way to prove the thing it proves: every other check here stands the arena

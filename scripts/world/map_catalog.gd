@@ -108,7 +108,7 @@ const MAPS: Array[Dictionary] = [
 	},
 	{
 		"id": "range",
-		"display_name": "Glowworm Grounds",
+		"display_name": "Highsun Grounds",
 		"kind": Kind.STATIC,
 		"scene": "res://scenes/world/maps/range.tscn",
 		# The first row with a `practice` key, and the only one that has it. A
@@ -120,7 +120,7 @@ const MAPS: Array[Dictionary] = [
 		# being *on* it. Read through `MatchConfig.is_practice` and its
 		# `effective_*` accessors and nowhere else.
 		"practice": true,
-		"loading_line": "Lighting the glowworms",
+		"loading_line": "Walking out the lanes",
 	},
 	# A static map is one more entry and nothing else in this file changes —
 	# the lobby's picker, `SceneFlow`'s loading card and `arena.gd`'s branch all

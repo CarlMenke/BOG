@@ -1,9 +1,15 @@
 shader_type sky;
 
-// Golden hour over Glowworm Grounds.
+// The sky over Highsun Grounds. It was written for a golden hour and it now
+// carries a lit morning: the shader only declares the knobs and their
+// fallbacks, and **all the tuning lives in `range_sky.tres`**, which is where
+// the dusk-to-day move was made. The defaults below are the dusk ones and are
+// left that way deliberately — they are what a scene opened without its
+// resource falls back to, and a fallback that has drifted is a fallback nobody
+// can read the history off.
 //
 // Started as a fork of `safari_sky.gdshader` (D-061) and kept the half of it
-// that was right: the graded backdrop, the low-sun aureole, the cirrus sheet
+// that was right: the graded backdrop, the aureole, the cirrus sheet
 // and the `LIGHT0` follow that pins the disc to this map's own Sun. Kopje owns
 // `safari_sky.gdshader` and the Hollow owns `enchanted_sky.gdshader`; neither
 // is edited from here.
@@ -60,7 +66,9 @@ shader_type sky;
 //                    underside out of a field with no third dimension in it.
 //   the rim          `a * (1 - a)` peaks exactly on the silhouette edge; gated
 //                    on the sun-facing term it lights the sunward edge only,
-//                    which at nine degrees is most of what a cumulus is.
+//                    which under a low sun is most of what a cumulus is. Under
+//                    a high one it is not, which is why `range_sky.tres` turns
+//                    `puff_rim` down and `puff_belly` up.
 //
 // ## Cost, and why it is full resolution
 //

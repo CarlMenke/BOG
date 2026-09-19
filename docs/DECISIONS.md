@@ -15295,7 +15295,597 @@ move the gate's count to twenty-five.
 - **Leaving them pickable with a note.** A player does not read notes, and a
   skin on the ring is a claim that it is right.
 
-## D-129 — A dive's way down is measured against the floor it left, so it only hangs when it lands lower
+## D-129 — One B·O·G, one card at a time, and the mode is the only switch
+The owner, settling the scope of the letters round: *"the capture the flag mode
+will just be the team mode of this same game. And the other individual is the
+free for all for the letters mode. Denote that in the settings somewhere. It's
+okay if things change around this, it will be a core truth going forward."*
+And on the letters themselves: *"There should only be one letter active in the
+match at a time. It is still whenever you kill someone that it spawns, but if
+there is a letter or there is a player currently capturing a letter, then no
+deaths during that time should spawn a letter."*
+
+**There is one letters game, called B·O·G.** Its Free-for-all form is the
+collect race (`WinCondition.LETTERS`) and its Teams form is capture-the-flag
+(`WinCondition.CAPTURE`, D-051/D-068/D-092, untouched). The Match type switch is
+what picks between them: `MatchConfig._clamp_all` now says **the mode decides
+the flavour** in both directions — LETTERS under TEAMS becomes CAPTURE, CAPTURE
+under FREE_FOR_ALL becomes LETTERS. The old rule was half in the clamp (CAPTURE
+forces TEAMS) and half in the lobby panel (`_push` moved a host back to the
+kill limit), because the clamp cannot tell which field just moved. It still
+cannot, and no longer needs to: the mode is the answer whichever moved. The
+"Ends on" picker offers four entries and the fourth is **B·O·G**, selected for
+either ordinal, with a note under it saying what it means in each mode. Both
+ordinals stay on the wire (the enum is append-only); Teams + pooled-collect
+(D-049) stops being reachable from the lobby and stays in the code, because
+Capture is what uses the pooling.
+
+**One card at a time, dealt in order.** `letter_drop_chance` is deleted —
+field, dial, `_FIELDS` entry and clamp. A percentage made the mode a lottery
+nobody could read: at 8% a card was hundreds of deaths away, at 100% the floor
+was carpeted, and at neither end could a player say what the next kill would
+produce. What replaces it is a sentence a player can hold: *there is one letter
+out, and when somebody takes it the next death drops the next one, B then O
+then G.* `_drop_loot` under LETTERS asks `letter_active()` — a live untaken
+LETTER card exists, or any hold row does — and when it is false the death deals
+`next_letter()` as the *whole* drop and `_letter_cycle` steps on; when true the
+death rolls the ordinary table, from which the letter share is gone entirely.
+The cycle advances only on a genuinely new deal: a carrier killed mid-capture
+puts the *same* card back (`_interrupt_letter_hold`, unchanged), otherwise the
+race would run out of alphabet. A letter that has nowhere to land goes on a
+spawn pad rather than being skipped, which is the argument
+`_interrupt_letter_hold` already makes — with one card in the world, a skipped
+card ends the mode.
+
+**The hold row carries its own clock.** `_do_begin_hold` writes `started_at`
+and `seconds` beside `ends_at` (no wire change — `seconds` was already the
+argument), and `letter_hold_fraction` counts **up** from `started_at`, so a
+client whose clock runs out early sits at 1.0 with the letter in the pouch and
+waits, which is the rule `is_holding_letter` already obeys. The performance
+reads the row and not `config().letter_hold_time`, so a host dragging that dial
+mid-match does not move the denominator under every capture already running,
+and a carry's length — INF — is not in the dial at all. `letter_hold_is_timed`
+is the one question that separates the two things `_letter_holds` holds, asked
+in one place so nothing downstream has to know that INF is how a carry is
+written.
+
+`tools/match_rules.gd` gained `_run_one_letter_at_a_time`, driven through
+`report_kill` rather than `_drop_card` so it tests the deal: first death → one
+card and it is B; a second death while it lies there → still one; claim it and
+a third death deals nothing; expire the hold and the next death deals O; kill
+the O-holder and the re-dropped card is O with the head still G; `reset()` →
+back to B.
+
+### Rejected
+
+- **Keeping the drop chance at 0 as a hidden dial.** A setting nobody can see
+  is a setting that rots, and the gate's `capture: fields` compares the panel
+  to `fields()` in both directions.
+- **Advancing the cycle when a card is collected rather than dealt.** A card
+  nobody picks up would freeze the race.
+- **A random letter under the cap.** Random was today's code and it lets three
+  Gs go by while somebody needs a B; the cycle gives natural catch-up, since
+  whoever already holds the next letter has no reason to contest it.
+- **Converting the harnesses' Teams+LETTERS scenarios to CAPTURE.** They write
+  `Net.config` directly, so the clamp never fires there, and they are the only
+  place a *timed* hold with teammates (D-049's duplicate rule, D-050's marker)
+  can be exercised. Each carries a note saying so.
+
+## D-130 — The guide line is drawn on ground each client bakes for itself
+The owner: *"floating, translucent, dashed gold line appears between all
+players and the letters … If the letter is picked up by an enemy, the line is
+now red and is between you and the enemy you want to kill; if picked up by a
+teammate, blue, between you and your teammate. Very important that these lines
+are well rendered and super smooth … they should not go through walls and over
+stuff. It should show the fastest possible path the BOG could take to get
+there. This will be tough with jumping and stuff like that, but it would be
+really cool to get it right."* Fidelity chosen: navmesh plus auto-generated
+jump and drop links.
+
+BOG had no navigation of any kind. It now has `scripts/world/nav/`, added by
+`arena.gd` on every peer after the map is built, and **none of it is
+replicated and no rule reads a metre of it** (D-010, D-007): the host decides
+the match and has no navmesh at all. Each client paths for itself, like a
+ragdoll.
+
+**One baker for seven maps**, because collision is the same shape everywhere:
+world-space triangles on physics layer 1 under a `StaticBody3D`, whether they
+came from a `.glb`, a layout table or the island generator, and dressing with
+no collider (the yacht's 2.4 km sea quad) is invisible to a collider parse.
+`NavBake` waits the two physics frames `_try_spawn_capture_letters` waits (a
+static map builds its `Collision` inside its own `_ready`), parses static
+colliders on the main thread, bakes on a worker
+(`bake_from_source_geometry_data_async`), puts the mesh on a
+`NavigationRegion3D`, then rasterises the walkable area top-down into a 512 px
+`Image` for the minimap and prints `nav_bake: <map> <polygons> polygons,
+<links> links, <ms>`. Cell 0.25, agent radius/height from `Bog`'s capsule,
+`agent_max_climb 0.3` because the Bog has no step-up (stairs are ramps).
+
+**The jump arc moved rather than being copied.** `JumpArc` is
+`tools/parkour_report.gd`'s `_hop_reach`/`_leap_reach`/`_big_reach` and their
+derivations lifted verbatim, and the report now reads it — two parabolas is
+how a map checker and a line drawn on screen end up disagreeing about what the
+player can do (D-098). `JumpLinks` walks the navmesh's border edges, samples
+every 1.5 m, skips walls (a short ray along the outward normal), and offers
+**both** a drop (ray down, up to 14 m) and a jump (out to 6 m, accepted when
+`d − CAPSULE_RADIUS ≤ leap_reach(rise)`), bidirectional when the return leap
+also makes it, `travel_cost` 1.2 for a drop and 2.25 for a leap (the report's
+`LEAP_COST`). The first version took the drop and stopped, because it is the
+cheaper probe; on a container stack with a floor three metres down and the next
+container an easy hop across it found the drop and never the hop, so the route
+climbed down and walked round — the line teaching the opposite of how the map
+is played.
+
+**Three colours, three verbs.** `GuideTargets`: gold (`UIPalette.GUIDE_LOOSE`)
+for a card nobody holds — *take it*; red (`GUIDE_ENEMY`) for an enemy carrier —
+*kill them*; blue (`GUIDE_ALLY`) for a friendly destination — a teammate
+carrying it, or in Capture your own vault while *you* carry. Cards standing in
+your own vault draw nothing; cards in an enemy vault are gold. A timed hold of
+your own draws nothing (you are the target). `GuidePath` repaths every 0.2 s or
+0.5 m of target movement, replaces link segments with `JumpArc.arc_points`,
+Chaikin-smooths the rest twice, resamples every 0.35 m, lifts 0.35 m, and
+chases the shown polyline at 12 m/s so a repath never snaps. In Capture the
+nearest target draws whole and each other target shares its prefix with it
+index-for-index (both are resampled at the same spacing from the same head)
+and draws only its divergent tail, at half width and 0.5 alpha, at most three —
+the owner's *"merge together long lines for the same user that are closer to
+each other."* Hysteresis: under 2.0 m of path the line fades out, above 3.0 m
+it fades back, 0.25 s each way.
+
+**Two passes, one mesh.** A camera-facing `ImmediateMesh` strip 0.12 m wide
+with `UV.x` in metres, drawn once depth-tested at 0.85 alpha and once with the
+depth test off at 0.18, so the line neither vanishes behind a corner nor reads
+as a laser through the scenery. A `ShaderMaterial` cannot switch
+`depth_test_disabled` at runtime — it is a compiled render mode — so
+`GuideLine` builds the x-ray twin by replacing that one line of the source, and
+warns if the strings ever drift. Dashes 1.2 m at 0.5 duty scroll toward the
+target at 2.5 m/s. `tools/nav_check.tscn` stands every map up in turn and
+requires ≥ 50 polygons and a path from the first pad to the last.
+
+### Rejected
+
+- **Navmesh, walking only.** Correct, never through a wall, and visibly longer
+  than the route a player would run wherever a ledge is involved.
+- **A smart straight line.** Wrong the moment the target is behind a building
+  or on another deck.
+- **A tube.** Honest geometry and worse to look at; a flat ribbon reads as a
+  painted line from every angle.
+- **Replicating the path or baking on the host.** Nothing another peer needs
+  to agree about, and a per-frame wire cost for a drawing.
+- **Comparing shared trunks point-to-polyline.** Correct and O(n·m) at 400
+  points a line; index-for-index is the same question and O(n).
+
+## D-131 — The capture is a performance between two hands, and only a timed hold gets one
+The owner: *"when the bog first captures the letter, it will be above their
+right hand, bigger and floating kinda high; their right hand will be up in the
+air, as if it's pulling the letter down; there is a small woolen loot pouch in
+the user's left hand, down by their hip, maybe a little up and out; as the time
+progresses the letter gets smaller and slowly moves down into the pouch; when
+it hits 0, a short small gold array of sunburst, along with a sound."* And the
+reason: *"we currently have it where if you press H then you don't have
+anything equipped. But if we reuse this for the letter capturing then players
+might incorrectly assume that you can punch. So make it so they are actually
+doing something with their hands — capturing."* On movement: *"Currently it's
+attached to their hand, but it will now float and bob around them, so that's
+not really a concern."*
+
+A letter hold used to be one card in one fist (D-035) and nothing else. It is
+now three things at once, and the reason they can be three things without
+becoming three opinions is that all three ask `MatchState` the **same**
+question — `letter_hold_is_timed(peer)`. `BogCombat._refresh_hand` answers it
+to put a pouch in the left fist (`HeldGear.set_pouch`, the bow hand's third
+exclusive object after the bow and the potion, D-065) and to keep the card
+*out* of the right one; `BogAnimator` answers it to raise the arm (a filtered
+`Blend2` named `capture` over the carry and the draw, under every one-shot, on
+the `Capture` role with `CastIdle` as its `clip_or` stand-in) and to drop the
+carry layer; `CaptureRig` answers it to float the letter between the two
+hands. One question, three consequences, no clock outside the host's — D-035's
+own rule applied to a performance instead of a gate.
+
+**The rig.** `CaptureRig` is a `top_level` node on every Bog on every peer,
+built after `_equip_spear()`. Each frame, for a timed hold, it lerps a
+`Pickup.build_card` pivot from 0.55 m above the right hand to
+`HeldGear.pouch_mouth_global()` by `smoothstep(f)`, bobs `0.06·(1−f)·sin(2.6t)`,
+scales 1.6 → 0.25, yaws at `1.1·(1−f)` rad/s, and rides a *sibling* light in
+`Pickup.LETTER_COLOUR` (a child light would have its range shrunk by the
+scale — the trap `HeldGear.set_letter` divides out). It is upright by
+construction: a yaw about world up on a node that inherits nothing. On
+`letter_banked` for its own peer it fires `Sunburst` — fourteen flat gold rays,
+alternating length so it reads as a star and not a cog, billboarded to the
+camera because a spherical spray collapses to a dot from any one viewpoint —
+and `letter_captured.wav`. **Only a timed hold gets this.** A Capture B·O·G
+carry is the same row with `ends_at = INF`, and that Bog is sprinting across a
+map with a prize; the card stays in the fist it has had since D-035, because
+the fist is where that reads from. Distinguishing by the finiteness of the row
+rather than by the win condition means nothing has to know which mode it is in.
+
+**The steal is the same rig in reverse.** On `steal_progress` for its own peer
+a ghost card rises from the robbed team's vault to the raised hand by `done`,
+1.0 → 1.3; `letter_stolen` bursts at the hand. No pouch — the thief runs off
+with it.
+
+**The pouch is built, not downloaded.** `PouchMesh.build()` is a drawstring
+sack from primitives — mouth torus, neck, cinch, two splayed cord tails, a
+squashed sphere body — origin at the mouth, in wool `(0.45, 0.36, 0.27)` at
+roughness 1.0. The asset route for a prop is Tripo → `assets/source/props/` →
+`decimate_assets.py`, and it goes through the owner; a 12 cm object at the hip
+does not need to wait for it, and a Tripo pouch drops in later as one row in
+that table. Its grip constants are the only ones in the repo written down
+rather than solved; `tools/preview_capture.tscn -- f=0.5` prints both anchors
+and the descent so they can be read off a render and corrected.
+
+**Two sounds** from `tools/make_sfx.py`: `letter_appears` (a soft two-partial
+bell, 0.9 s, played 2D on every peer off `MatchState.letter_appeared`) and
+`letter_captured` (a rising three-note chime, 0.7 s, 3D at the pouch).
+
+**The clip is a row before it is a file.** `clips.json` gains `Capture` as a
+`mixamo_query` row (`"reaching"`, `loop`, `untwist` like the carry idles); until
+a take is fetched `CAPTURE_PLAYS` resolves to `CastIdle` with one
+`push_warning` per run, the punch's pattern (D-124/D-125). Searches worth
+trying: *reaching up*, *hold torch* (probably the best silhouette), *victory
+idle*, *praying*.
+
+### Rejected
+
+- **Pinning the letter to the hand.** The obvious reading of "above their right
+  hand", and wrong for the reason `CARD_ALONG_SHAFT` spent three revisions
+  learning: a wrist thrown about by the locomotion planes makes a prop's world
+  position somebody else's problem. The owner also said it floats.
+- **Slowing or rooting a capturing Bog.** The owner: the letter floats, so a
+  running capturer looks fine, and the fight is still "kill the carrier".
+- **A spherical spray of rays.** See above.
+- **A Tripo pouch first.** Blocks on the owner for a 12 cm sack.
+
+## D-132 — The corner answers one question, and six looping cards answer the rest
+The owner: *"We should have minimaps that show you your teammates, and any
+letters on the ground, and any enemies that have a letter; enemies without
+letters do not show up on it."* And: *"we will need a solid tutorial, ideally a
+quick click through with animations."* Style chosen: a heading-up circle,
+top-right; drawn 2D cards animated in code.
+
+**The minimap is scoped by one argument.** A minimap in a deathmatch is a
+radar, and a radar moves the fight from the clearing to the corner of the
+screen — you stop looking for a Bog and start looking for a dot. So it is on
+under `MatchConfig.is_bog` and nothing else, and **an enemy carrying no letter
+is not drawn**: somebody hunting you is still something you have to hear.
+Heading-up rather than north-up because a north-up map has to be *read* and a
+heading-up one is *looked at*; the price is that the ground turns under it,
+which is why the ground is a wash of the navmesh (`NavBake.outline_image()`,
+mapped by `bounds()`) at `RAISED_STRONG` — enough to say "there is floor
+between us", not enough to navigate by. 180 px, `RANGE_M` 30 m to the rim, you
+as a white triangle, teammates as `team_colour` dots, loose cards as their
+glyph in `GUIDE_LOOSE` with a `VOID` outline, carriers as a dot with the glyph
+beside it in `GUIDE_ENEMY`/`GUIDE_ALLY`, Capture vaults as a ring per team. The
+disc a player sees and the `clip_children` stencil are two separate layers,
+because the mask's alpha multiplies its children's and a 0.72 disc would have
+quietly dimmed every blip. `debug_counts()` is read by `hud_range minimap`
+because everything that can go wrong here is a rule, and a rule is a number.
+
+**The tutorial is drawn rather than authored.** Every rule in this mode is
+about motion — a letter falls out of a corpse, a line bends round a wall, a
+card sinks into a pouch over ten seconds, a colour says chase or cover — and
+each is a sentence you read twice and a picture you understand once. Six scene
+files with AnimationPlayers would have been six places for the gold to drift
+away from `Pickup.LETTER_COLOUR`; one `_draw` on one clock reading the same
+`UIPalette` the HUD does means card 1's gold *is* the gold on the ground, card
+4's red and blue *are* the guide line's, and card 5 is the minimap's geometry
+rather than a drawing of it. `Tutorial` (`scenes/ui/tutorial.tscn`, layer 20)
+is instanced by the menu (HOW TO PLAY on the foot bar) and by the lobby, which
+opens it once per machine when the room is set to B·O·G
+(`Settings.tutorial_seen`); **closing is what marks it seen**, so somebody who
+Escapes out on card one is not shown it again — a tutorial that reappears is a
+tutorial people learn to dismiss without reading.
+
+**The word on the lamp changed.** `LetterTrack` says `CAPTURING X · N s` where
+it said `HOLDING`: "holding" describes a posture and reads as inventory, which
+is the wrong idea about ten seconds you can be killed out of.
+
+### Rejected
+
+- **A map that draws every player.** That is the radar.
+- **North-up with a rotating "you" arrow.** Readable, and nobody reads it
+  mid-fight.
+- **Live 3D tutorial panels.** A real Bog in a viewport per card would double
+  as the place the capture pose is tuned, and it is the most that can look
+  broken; drawn cards match how every other screen here is built.
+- **A feed row for a letter appearing in Capture.** `letter_returned` already
+  prints "went home" for the same card landing in the same place.
+
+## D-133 — The wordmark comes out of the UI and stands in the glade
+The owner: *"remove the GUI BOG letters from the menu, replace them with the
+real, floating, gently bobbing real asset letters … when the game starts, the
+letters should bounce down then bounce out of the top of the screen, as if they
+are leaving first, and then the screen goes, so we see them leave … the
+campfire should be moved to the left in the menu and the BOG hovers above it;
+in the lobby the letters are much smaller but still hovering over the campfire
+— same scale relationship to the campfire in both."* Composition chosen: fire
+centre-left under the letters, the hero Bog standing beside the fire lit from
+the side.
+
+The 148 px `Title` label is gone. `MenuLetters` hangs three
+`Pickup.build_card` pivots over the `Fire` node at `LETTER_WORLD_HEIGHT` 0.85 m
+and `HOVER_HEIGHT` 1.35 m, each glyph's width **measured off its mesh** at
+build time (0.447 / 0.582 / 0.413 m for B / O / G) so the word is kerned rather
+than pitched, bobbing on two detuned sines per letter and **swaying** ±12° —
+never spinning, since a wordmark is edge-on for a third of every revolution and
+mirror-written for another third. The rig takes the camera's own yaw so the row
+lies in the image plane; facing the eye point is off by 10.6° in HERO and draws
+the B 13% smaller than the G. **One rig, one size, both formations**: the menu
+camera at 5.7 m / 24° makes it the wordmark and the lobby camera at 9.95 m /
+36° makes it small, and the letter-to-fire proportion is identical by
+construction rather than by two numbers somebody has to keep equal. On Start
+the row dips 0.25 m and launches 9 m over 0.85 s, staggered 0.06 s per letter,
+and every peer's lobby awaits it before `SceneFlow.go_to_arena()`.
+
+**The lobby binds the height, and the wrong way round.** The plan expected to
+raise the letters if they crossed a face; the projection says the opposite. The
+RING camera is pitched 17° down at a ring standing 3.5 m *behind* the fire, so a
+ring Bog's head projects *higher* on screen than anything at the same height
+over the flame — at 1.55 m the row crossed four chins, at 1.35 it clears every
+antenna by 40 px and sits a quarter of a letter above the flame's tip.
+
+**HERO re-aimed**: eye (3.90, 2.20, 6.15), look (1.54, 0.83, 0.25), the 24° lens
+kept; the hero slot (1.72, 0, −0.69) at yaw 175.7° — 1.85 m from the fire along
+the *camera's* right, and a quarter of the way from the lens bearing toward the
+flame's, which lands the key 64° off his facing on the far cheek. Paper
+projection at 1600×900: letters x 104..695, y 107..393; hero capsule
+x 807..1093; 112 px of air between the G and the Bog; his feet 132 px above the
+button bar; the quip re-anchored 19 px under the row sharing the B's left edge.
+The letter meshes do not cast shadows: the line from the fire to his head passes
+through the bottom of the G, and a self-lit glyph that drops a hard shadow reads
+as a cardboard cut-out. `tools/ui_range.gd` gained `menu_letters` and
+`lobby_letters`, which print every box in fractions of the frame and fail on
+overlap — because the window a screenshot is taken at is not the window a
+player runs (D-118).
+
+### Rejected
+
+- **Spinning the letters.** See above.
+- **Two sizes.** The owner's "same relationship" as a thing to maintain.
+- **Moving the whole scene left, or the fire alone.** The first empties the
+  right half of the frame; the second takes the Bog's key light away.
+- **The letters leaving on PRACTICE RANGE too.** D-112 took the friction out
+  of practising; 0.85 s of ceremony every time puts it back.
+
+## D-134 — One grip pose per prop, stolen from a clip that already closes the hand
+From the owner's conversation on hands and props: *"one grip pose per prop, not
+per clip; the finger bones get a single frozen pose while the prop is held,
+layered over whatever the body clip is doing … author it once by stealing it
+from a clip where the hand is closed."* Small priority, and last.
+
+Five poses — `fist_left`, `fist_right`, `hook_left`, `open_left`, `open_right`
+— are measured out of the clip library by `tools/grip_poses.gd` (`SwordCarry`
+at 0.5 s for the fists, `BowCarry` at 0.5 s for the hook, `Idle` at 0 for open)
+and written as one-frame looping animations into
+`art/generated/grip_poses.res`, a committed `AnimationLibrary`. The poses are a
+**build step** rather than a hand-authored resource for D-095's reason read once
+more: a pose that is a measurement of a clip has to be re-measurable when the
+clip is re-imported, without anybody opening a modelling tool. The tool prints
+how many degrees each closed pose sits off its hand's open one, which is the
+only evidence that the Mixamo takes animate the mitten at all.
+
+Two filtered `Blend2`s at the very top of the animator's graph — `grip_left`
+over the emote, `grip_right` over that, `output` off `grip_right` — put the
+poses on the twelve finger bones of each three-digit mitten while there is
+something in that hand: right fist while `is_carried() or has_sword() or
+has_arrow()`, left hook while `has_bow()`, left fist while `has_potion() or
+has_pouch()`. Two layers because the hands hold different things at once — a
+bow hooked in the left while the right is a fist round the nock is the
+ordinary case — which is D-065's "one thing per hand" stated about the fingers.
+They sit above the emote because a prop is in the hand through the spin, the
+throw and the dance alike. **Nothing new goes on the wire**: the targets are
+read off `held_gear`, which `BogCombat._refresh_hand` already refreshes on
+every peer. When the library is missing the layers are **left out** rather than
+held at 0, because an `AnimationNodeAnimation` naming an absent animation
+invalidates the whole tree — a missing grip must cost the fingers and nothing
+else. The pick returns to `open` only once the blend has reached 0: with a zero
+cross-fade a hard cut under a live weight is a pop.
+
+### Rejected
+
+- **A pose per clip.** Forty takes' worth of finger authoring for a hand 4 cm
+  across — the thing the owner ruled out.
+- **Layers at weight 0 when the poses are missing.** See above.
+- **A `hook` on the right hand.** The bow is held in the left and drawn by the
+  right, and a drawing hand is a fist round the nock.
+- **A fist round the Capture carry's card.** The brief enumerated six
+  accessors; `has_letter()` is one clause away if the owner wants it.
+
+## D-135 — Highsun Grounds: the fences, the lantern spheres and the orbs come off the range, the sun goes to thirty-two degrees, and a rule about what may stand in the world
+The owner, after playing the round's first build: *"all of the fences need to
+be removed from the training range, and the sun needs to be higher in the air.
+and the range needs to be renamed away from glowworm, that's when it was at
+night."* And: *"There seems to be a pattern in the practice range where there
+are bright, untextured circles, some are on fence topping (that all should be
+deleted) and some are moving that you can shoot. Just to be clear, I'm not
+talking about the faint circles that help with theme and ambiance. I'm talking
+about the spheres in the map that have no texture and really take the theme
+off course. I want you to remove all of this from the practice range, and then
+make a note so that in the future you know to avoid those styles of items and
+things in the game."*
+
+**What came off.** The four lines of 2.2 m lane posts and their 0.60 m rails,
+and the two lines on the bow lane — 54 posts and 6 rails, 720 triangles — and
+with them the twenty-four glowworm lanterns that sat on the posts and the
+unshaded emissive material that made them. The flying glow orbs and the
+launcher that threw them down the bow lane are deleted (`glow_orb.gd`,
+`orb_launcher.gd`, the `Target_orb_launcher` marker, the `range_target` branch,
+`AudioDirector.RANGE_ORB`, `range_targets`' orb stage), taking the ninth target
+with them: the census reads `8 targets`. **What stayed**: the three stone cover
+blocks, the gallery's waist walls and its two 1.8 m backstops — cover and
+backstop are what a range is made of, and `FENCE` is renamed `BACKSTOP` because
+that constant's name was the only thing making them sound like fences. The
+range's drifting glow motes (`range_ambience.gd`) stay exactly as they were,
+because the owner kept them by name. The void's guard rail stays too: it is the
+one thing between a player and a twelve-metre drop, and it was read as a rail
+and a warning rather than a fence — the owner can say otherwise.
+
+**The sun** went from 9° to **32°** on the same bearing, 30° east of north
+(D-119's argument for the bearing holds by day: every lane runs north and the
+disc must stay out of the archer's sight picture — at 32° it sits 35.8° up the
+frame against a 37.5° half-vertical field, out of it entirely). `sin(32)` is
+53% against `sin(9)`'s 16%, so the lamp came down 4.2 → 3.0 into a pale warm
+white and the `Bounce` 0.45 → 0.15; the sky went from a dusk gradient to a lit
+morning (blue zenith, pale horizon, `mid_energy` 0.75 → 0.12, cool haze, the
+disc twice its size with white clouds and a cool shadow side) and the
+environment's ambient 0.62 → 1.15. Measured off the top-down render, the open
+peat's median went 27 → 58 of 255 and the west lanes 27 → 66, from deep red
+(55/21/14) to warm brown (75/56/48). Renamed **Highsun Grounds** everywhere
+the words appeared; the id `range` and every path stay.
+
+**The rule, written down so it is not learned twice.** *A thing a player looks
+at, walks past or shoots is a textured, themed prop that belongs to the place.
+It is never a bare unshaded primitive. Unshaded emissive geometry is for
+effects — particles, a burst, a flame cone, the ambience's drifting motes — and
+not for objects.* Why: a bare glowing sphere reads as a placeholder somebody
+forgot to replace, because that is usually what it is; it breaks the material
+grammar the rest of the map keeps (wet peat, tarred timber, pale cut stone —
+three materials and nothing else) by being the one thing in frame made of no
+material at all; and on a range it is actively harmful, because unshaded
+emissive geometry is the brightest thing in the picture, the eye goes to it
+first, and what it teaches is nothing. The test to apply: if you cannot say
+what the object is *made of*, it does not go in the world; if it is genuinely
+an effect — no silhouette, no collision, nothing to aim at, gone in a second —
+unshaded emissive is right, and the motes are the example.
+
+### Rejected
+
+- **Keeping the posts as distance marks without the lanterns.** The owner said
+  all the fences; the posts were the fences. The range has no distance marks
+  now beyond the dummies (8 / 15 / 22 / 28 / 45 m) and the boards — if that
+  reads thin in play, the themed answer is flush cut-stone plaques let into
+  the peat with the number carved, and it is one small builder.
+- **Deleting `range_orb.wav` and its generator.** The clip has no caller, but
+  `make_sfx.py`'s other generators cite its technique in their comments;
+  deleting sounds was not this wave's job.
+- **Putting the torches out.** They are flame props, not bare primitives, and
+  nobody asked; they are the one remaining thing on the map that says night.
+
+## D-136 — A moon over the viewer's shoulder, and the hero a step to the right of the fire
+The owner: *"for the lobby and the main menu, there should be some faint moon
+lighting coming from above the camera, currently it's just tough with the one
+main center light that is really orange. This new moon lighting should be about
+1/3 the strength of the campfire lighting."* And: *"the BOG body in main menu
+needs to be moved over to the right a little more … also back the BOG away from
+the camera a little bit as well."*
+
+**The glade had one key and no fill.** The fire is an orange omni at ground
+level, so anything it does not rake is ambient-only, and in the lobby that was
+eight faces turned toward a lens the light never reaches. There *was* a `Moon`
+in `_build_environment`, aimed at the island's fixed `(-0.42, 0.38, -0.82)` at
+energy 0.30 — in front of the lens and to the left, the one place a fill cannot
+reach a face turned toward the camera. It is built by its own `_build_moon()`
+now and aimed from the camera's own framing: `look − eye` flattened to the
+ground and tipped up `MOON_PITCH_DEGREES` 52°, so "above and behind the viewer"
+is one rule that answers correctly for both the 24° menu lens and the 36° lobby
+lens instead of one constant that is over-the-shoulder for at most one of them.
+`MOON_COLOR` is the island's `(0.62, 0.72, 1.0)`; soft shadows, low specular.
+
+**"A third" is a measurement, not `FIRE_ENERGY / 3`.** An omni's energy at 11 m
+range and a directional's are different units, so the menu was rendered three
+times with the flicker pinned — fire alone, moon alone at 1.0, both off — and a
+90×115 px patch of the hero's belly averaged in linear luma with the lights-off
+pass subtracted as the ambient floor: fire 0.0511, moon-at-1.0 0.0380, so a
+third of the fire is energy **0.45** (`MOON_ENERGY`), which puts the moon at
+0.335 of the fire on the body. It reads as a bigger change than the number
+says, because the moon arrives frontally where the fire only rakes the near
+side, and because the treeline beyond the fire's 11 m had no direct light at
+all before. The fire stays the key three to one and the picture stays a night.
+
+**The hero** moves 0.35 m further along the camera's right and 0.50 m further
+along its forward — both steps along a camera axis, both solved the same way —
+to `(1.86, 0, -1.28)`. His yaw is re-solved rather than carried: the
+quarter-turn-from-the-lens-toward-the-flame rule (D-133) is the rule, and at
+the new spot the lens and the flame are 71° apart rather than 86, so the yaw is
+177.7°. Measured by `ui_range menu_letters` at 1600×900: capsule x 838..1067 →
+930..1149, air to the letter row 142 → 234 px, feet y 632 → 593 against a bar
+at 764. He gives up 6% of his height and a quarter of his key, which the moon
+covers — the two changes landed together for that reason.
+
+**The lobby ring back in the band.** The commit before the letters round
+widened `ring_radius` 3.0 → 3.5 and never re-measured; the eight-Bog ring read
+x 370..1172 against `weapon_select`'s band of 400..1140. The radius is the
+owner's and the panels are the layout's, so the eye moved: `FRAMING[RING].eye`
+`(0, 3.71, 9.95)` → `(-0.03, 4.25, 11.74)`, 18% back along its own eye→look
+line (10% only reached the line), reading **431..1120** with 31 and 20 px of
+margin, `lobby_letters` still passing with the row 0.046 of the frame below
+every head. It costs 13% of a Bog's height on screen.
+
+### Rejected
+
+- **Closing `ring_arc_degrees` 98 → 81** would have held the span with no
+  pull-back and no loss of size — and at 3.5 m stands eight Bogs 0.70 m apart
+  with their shoulders touching; a ring the owner widened to get air into is
+  not a ring to take the air back out of.
+- **The island's fixed moon bearing.** A sidelight for one camera and a
+  backlight for the other.
+- **Reading "a third" as `FIRE_ENERGY / 3`.** That is 1.0, more than twice
+  the fire on the body, because the two numbers are not the same unit.
+- **`MOON_ENERGY` 0.30.** A good picture, warmer and a shade more night, and
+  0.22 of the fire — not the third that was asked for. One constant if the
+  owner finds 0.45 too bright for "faint".
+
+## D-137 — A key is a thing you can change, and changing one takes it off whatever else had it
+The owner: *"key binds allowed in settings."*
+
+D-016 built the Controls section as a reference page — a list you read — and it
+has said "rebinding is not wired up yet" ever since. Every row is now a button
+that says what key it is on; clicking it arms the row for one press, the next
+key or mouse button binds it, Escape cancels (and does **not** close the panel
+while a row is armed — arming captures in `_input` and marks the press
+handled), a right-click puts that row back to the project's default, and
+**RESET CONTROLS** puts them all back. Move is four rows, because a player who
+wants movement on the arrow keys wants four keys and not one of them four
+times. Emote and Respawn are rows too, so that nothing can be doubled onto Y or
+R unseen.
+
+**The binds live in `Settings`, as a difference from `project.godot`.**
+`"keybinds"` sits beside mouse sensitivity because it is a per-machine
+preference for the same reason the volume is, and what is saved is only the
+actions a player moved — `{"jump": [{"kind": "key", "physical": 69}]}` — so a
+build that moves a default moves it for everybody who never touched that row,
+and an old `settings.cfg` cannot pin a key to an action that no longer exists.
+`apply_keybinds()` runs last in `Settings._ready` and always starts from
+`InputMap.load_from_project_settings()` before laying the overrides on, because
+a difference can shrink and rebuilding from the bottom is the only way a
+removed override goes back. `REBINDABLE` names the eighteen actions that may
+move; `ui_*` and `free_cursor` never do. `rebind`, `reset_keybind` and
+`reset_all_keybinds` apply to the live map **first** and then save, because
+`changed` listeners answer by reading the map: the ability tiles' key caps, the
+chat hint and the spectator's "LMB / RMB to switch" all read
+`SettingsPanel.primary_key` off the live `InputMap`, and the tiles and the
+hint re-read it on `changed("keybinds")` so a rebind from the pause menu
+mid-match lands on screen at once.
+
+**A chosen key is taken off any other listed action.** That is the rule
+`tools/hud_range.gd`'s `controls` mode has enforced since D-070 — two actions
+quietly sharing R for two decision records is what that mode exists to prevent
+— and a rebinding UI that could recreate it by hand would have undone the
+check. The row that lost its key reads "-" where it can be seen. The same mode
+now calls `InputMap.load_from_project_settings()` before it looks, because from
+the moment `Settings` applies a player's binds the live map is *theirs*, and a
+player who deliberately doubles a key must not fail a gate about our defaults
+on their own machine. Escape is the one key that cannot be bound: it is the way
+out of an arm, and a player who binds their cancel key away has no cancel key.
+
+### Rejected
+
+- **Copying the defaults into `settings.cfg` on first run.** It freezes today's
+  keys into every player's file, so the next time a default moves it moves for
+  nobody.
+- **Adding the new key to the action instead of replacing its events.** A row
+  shows one key and has to *be* one key, or the second press is a binding the
+  row never admitted to. The visible cost is that rebinding Move forward drops
+  its arrow-key alternate; RESET CONTROLS brings it back.
+- **Letting a new key sit beside the action that already had it.** Exactly the
+  D-070 bug, reachable from a menu.
+- **Handling the press in `_gui_input`.** The interesting keys are the ones the
+  GUI eats first — Escape closes the panel, Tab moves focus, Space presses the
+  focused button.
+- **Binding the mouse wheel is left possible.** An armed row takes any mouse
+  button, wheel included; it displays as WH+/WH- and a right-click undoes it.
+
+## D-138 — A dive's way down is measured against the floor it left, so it only hangs when it lands lower
 The owner: *"the second jump dive roll stalls a little bit too much and too
 motionless for too long ... a pause at a certain point is okay, but should only
 occur if they jump off somewhere higher than where they land."*
@@ -15315,7 +15905,7 @@ outruns the clip and holds the pose, which is the pause the owner allowed; one
 above it is cut short by the roll. The jump and slide-jump arcs pass no
 `land_speed` and read exactly as before.
 
-## D-130 — The head is a sphere on the skull, and a shot through it is worth 1.3 of itself
+## D-139 — The head is a sphere on the skull, and a shot through it is worth 1.3 of itself
 The owner: *"there should be a headshot hitbox, the headshots need to do 30%
 more damage."*
 
@@ -15339,7 +15929,7 @@ a whole body's worth already. In practice this is the bow's rule: 20-80 becomes
 26-104, **so a full draw to the head kills from full health**, which is new and
 is the point. The spear's 100 is 130 and changes nothing.
 
-## D-131 — The shoulder walks out with the bowstring, to seventeen degrees at a full draw
+## D-140 — The shoulder walks out with the bowstring, to seventeen degrees at a full draw
 The owner: *"when you're fully drawn with the bow, the camera angle is behind
 the bog, you can't see your crosshair, the camera needs to offset to the right a
 few degrees."*
@@ -15362,7 +15952,7 @@ nothing new to say. Written against the pre-D-rework rig and ported onto
 5 (the shot leaves the lens) means the crosshair stays truthful wherever the
 shoulder is.
 
-## D-132 — The potion is drunk where it is found: no key, no stock, and the cost is two slow unarmed seconds
+## D-141 — The potion is drunk where it is found: no key, no stock, and the cost is two slow unarmed seconds
 The owner: *"the potion should just automatically drink once you pick it up,
 the animation doesn't work for me."*
 
@@ -15394,7 +15984,7 @@ and its reference row are retired. `RefillStone` still stocks one in the range,
 reachable only by the tools — kept as the way back if a carried spare is ever
 wanted again.
 
-## D-133 — You may pick again mid-match, and only the next Bog you get hears about it
+## D-142 — You may pick again mid-match, and only the next Bog you get hears about it
 The owner: *"Ingame you can hit escape then change class to change your
 loadout. Once you die there is also a popup on your screen to press a key to
 quickly get to the change class screen to swap; if you don't change fast enough
@@ -15425,14 +16015,14 @@ next lobby; a rematch keeps the queue and spends it on the first spawn.
 `ClassPicker` is one scene reached two ways: CHANGE CLASS in the pause menu
 (shown only in a running match; Escape backs out one layer) and the
 `change_class` action, **B**, advertised by a prompt on the death screen that
-reads its key from `SettingsPanel.primary_key` and goes away on respawn. There
-is no rebind UI in this project (D-016), so it has a reference row and nothing
-else. The skin stays locked at Start, and the difference is the reason: a
+reads its key from `SettingsPanel.primary_key` and goes away on respawn. It
+is a row in `CONTROL_REFERENCE`, which since D-137 (landed on `main` the same
+evening) makes it a key the player can change, and the prompt follows the bind. The skin stays locked at Start, and the difference is the reason: a
 respawn rebuilds the thing that carries a weapon, while a body stands there all
 match and swapping it would leave seven players aiming at somebody they no
 longer recognise.
 
-## D-134 — Lantern Wharf is a fifth bigger, has its lanterns, and paid for the room in sightlines
+## D-143 — Lantern Wharf is a fifth bigger, has its lanterns, and paid for the room in sightlines
 The owner: *"the wharf needs to be maybe 20% bigger as well as a very nice
 dressing revamp"*, to the depth Whisperbloom Hollow has.
 
@@ -15470,7 +16060,7 @@ four moored boats and a lit far shore, midges under the lit strings, and hooks
 for quay water north and south and for rigging. Eleven new draw calls, seven
 shared materials, no new shadow casters; collision unchanged.
 
-## D-135 — Twin Quarry is rebuilt on its own footprint: one base written once, the asymmetry on the bisector, and a tunnel
+## D-144 — Twin Quarry is rebuilt on its own footprint: one base written once, the asymmetry on the bisector, and a tunnel
 The owner: *"rebuild the quarry map with the idea the same as the old one just
 more in depth and more detail. The main idea is one big hole in the middle,
 quarry-like, with 2 identical bases. The map doesn't have to be symmetrical, it

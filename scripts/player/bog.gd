@@ -348,6 +348,45 @@ const CROUCH_TRANSITION := 9.0
 ## responsive, slow enough that the turn reads as a turn.
 const TURN_SPEED := 14.0
 
+## **Idle yaw slack**: how far the view may swing off a Bog that is only looking
+## around before the body is dragged after it. See `_face`.
+##
+## The owner, after the first evening on the PvP rig: *"if they are standing
+## still, not moving at all and just moving the camera, then let them get it a
+## little further around before it starts moving the character, not all the way
+## just further, and then if they start moving, smooth it back to inside the
+## previous clamp."* That is Fortnite's standing behaviour, and it is the answer
+## to the one cosmetic gap `docs/PLAN_CAMERA.md` knowingly left open: with the
+## body welded to the camera, a Bog that stands still and looks around slides
+## its feet across the floor for every degree of it, because this repo has no
+## turn-in-place clips to hide the turn with. The slack does not remove the
+## slide — it removes the *occasion* for it. A look round the room is now a look
+## round the room, and the feet only move when the player has actually
+## re-pointed the Bog.
+##
+## 60 degrees because that is what a look costs: a glance over either shoulder,
+## a check of a flank, reading a room, all sit inside it, and anything wider is
+## a turn the player meant. Past the edge the body is dragged so that it sits
+## exactly *on* the edge rather than snapping onto the view — the slack travels
+## round with you, which is what makes it read as a shoulder and not a dead
+## zone you fall out of.
+const YAW_SLACK := 1.047
+## Radians a second the slack closes at once the Bog is doing anything but
+## standing there. The second half of the owner's sentence, and it is a **rate
+## and not a switch** for the reason that sentence gives: dropping the slack to
+## zero the moment a key goes down would leave the body up to 60 degrees off the
+## view with nothing but `TURN_SPEED` between them, and 60 degrees at 800 deg/s
+## is an 0.075 s snap — the Bog would *flick* onto the camera on the first step
+## of every walk, which is the jerk the slack was bought to avoid. At 4 rad/s
+## the whole 60 degrees is handed back over 0.26 s, slower than the body could
+## turn and therefore the thing you actually see: the Bog squares up as it sets
+## off, one motion, and is locked to the view again by the time it is moving.
+const SLACK_CLOSE_RATE := 4.0
+## Horizontal speed under which a Bog with no key down counts as standing still
+## — the slide's own 0.35 m/s, for the same reason it uses it: below that a
+## velocity is the tail of a stop and not travel.
+const IDLE_SPEED := 0.35
+
 ## Magnet. Once caught, the Bog is dragged toward the magnet until it is inside
 ## MAGNET_GRIP metres, then pinned there for the rest of the hold. Jumping is
 ## blocked for the duration — the magnet is meant to feel like being grabbed, and
@@ -525,6 +564,15 @@ var elder_robe: ElderRobe
 ## The gold card over this Bog's head while it carries a letter, for everyone
 ## but its owner (D-050). Switched by whoever decides what is carried.
 var carrier_marker: CarrierMarker
+## The capture performance: the letter this Bog is pulling out of the air and
+## down into its pouch, while a **timed** hold is running (the letters round).
+##
+## Beside the marker and the gear rather than inside either, because it is a
+## third answer to a different question. The marker says *who* is carrying, over
+## the head and through walls; the gear says what is *in the hands*; this says
+## what the hands are *doing*, in world space between them. It watches
+## `MatchState` itself and needs nobody to switch it.
+var capture_rig: CaptureRig
 var team: int = MatchConfig.TEAM_NONE
 ## Which weapon this Bog brought to the match, as a `Loadout.Weapon` (D-069).
 ##
@@ -589,11 +637,32 @@ var invulnerable_until: float = 0.0
 var input_direction: Vector2 = Vector2.ZERO
 var wants_sprint: bool = false
 var wants_crouch: bool = false
+## Is the aim button down this frame? `BogCamera` reads the same key and answers
+## `is_aiming()` off it, and this is deliberately a second read rather than a
+## call into the rig: `_face` wants it on the same tick as `input_direction`, it
+## is only ever asked on the Bog we own, and a body that had to reach up into
+## its own camera to find out whether it may stand still would be the dependency
+## pointing the wrong way. See YAW_SLACK — a player lining up a shot is not
+## standing still, however still they are.
+var wants_aim: bool = false
 ## False on a Bog whose movement is being driven by something other than the
 ## player: `tools/sandbox.gd` walks one through scripted poses for a snapshot,
 ## and reading an empty keyboard over the top of that would zero it every frame.
 var reads_local_input: bool = true
 var body_yaw: float = 0.0
+## How far the view is currently allowed to be off `body_yaw` before the body
+## follows it: `YAW_SLACK` while this Bog is only looking around, closing to
+## zero at `SLACK_CLOSE_RATE` the moment it does anything else. See `_face`.
+##
+## Local only, and there is nothing to replicate: what other peers need is where
+## the body ended up, and that arrives on `sync_yaw` already slacked.
+var _yaw_slack: float = 0.0
+## This Bog's animation tree, found the first time `_face` needs it and kept.
+## The body asks it exactly one question — `is_throwing()`, which is true
+## through a wind-up, a cast and a loose — and asking the scene tree for a child
+## by name every physics tick to get it would be a lookup a frame for a node
+## that never moves.
+var _animator: BogAnimator
 
 var _coyote: float = 0.0
 var _jump_buffered: float = 0.0
@@ -689,6 +758,7 @@ func _ready() -> void:
 	body_mesh = _find_body_mesh()
 	_equip_spear()
 	_build_carrier_marker()
+	_build_capture_rig()
 
 
 ## The mesh `tools/import_body.gd` names "Bog", under the skeleton. Looked for by name
@@ -817,6 +887,21 @@ func _equip_spear() -> void:
 	held_gear.attach_to(skeleton)
 
 
+## After `_equip_spear`, and that order is load-bearing: the rig reads both
+## hands off `held_gear` every frame, so the gear has to have found its bones
+## before anything asks it where they are.
+##
+## On **every** Bog on **every** peer, exactly like the carrier marker above and
+## for a sharper version of its reason. A capture is ten seconds of standing in
+## the open with no weapon, and what it buys the other seven players is that
+## they can see it happening from across a clearing — so a rig built only for
+## the local player would be the vulnerability with its tell removed.
+func _build_capture_rig() -> void:
+	capture_rig = CaptureRig.new()
+	capture_rig.name = "CaptureRig"
+	add_child(capture_rig)
+
+
 ## Put the Elder's robe on this Bog, or take it off again.
 ##
 ## Called on **every** peer's copy from `MatchState._do_set_elder`, never from
@@ -922,11 +1007,13 @@ func _read_input() -> void:
 		input_direction = Vector2.ZERO
 		wants_sprint = false
 		wants_crouch = false
+		wants_aim = false
 		return
 	input_direction = Input.get_vector("move_left", "move_right",
 		"move_forward", "move_back")
 	wants_sprint = Input.is_action_pressed("sprint")
 	wants_crouch = Input.is_action_pressed("crouch")
+	wants_aim = Input.is_action_pressed("aim")
 	var jumping := Input.is_action_just_pressed("jump")
 	# **The half of the emote's stop list that is made of movement**, and it is
 	# here because this is where movement is read: walking, jumping or crouching
@@ -947,6 +1034,7 @@ func _read_input() -> void:
 			input_direction = Vector2.ZERO
 			wants_sprint = false
 			wants_crouch = false
+			wants_aim = false
 			return
 	if jumping:
 		request_jump()
@@ -1112,6 +1200,17 @@ func is_grounded() -> bool:
 ## one question about it.
 func is_emoting() -> bool:
 	return emoting
+
+
+## Is this Bog standing a letter down into its pouch — a hold with a clock on
+## it, as opposed to a Capture B·O·G carry (D-131)? Asked here and not in the
+## animator for the reason every other question the animator asks goes through
+## the body (`is_drawing`, `is_emoting`, `crouch_pose`): `BogAnimator` names no
+## autoload, so the headless `--script` tools that load it to read its tables
+## (`tools/clip_check.gd`, `tools/grip_poses.gd`) can compile it in a process
+## where `MatchState` does not exist.
+func is_capturing() -> bool:
+	return MatchState.letter_hold_is_timed(peer_id)
 
 
 func is_drawing() -> bool:
@@ -1725,19 +1824,65 @@ func _detect_landing(grounded_before: bool) -> void:
 ##
 ## `TURN_SPEED` is 14 rad/s, about 800 deg/s. For a drag that is effectively
 ## instant; for a flick it is a frame or two behind, which reads as weight rather
-## than as delay. There is deliberately no idle dead zone and no turn-in-place:
-## a standing Bog that looks around slides its feet, because this repo has no
-## turn-in-place clips to hide it with, and that is the one cosmetic gap the
-## rework knowingly leaves open.
+## than as delay.
+##
+## **The one thing that is not welded: a Bog that is only looking around**
+## (`YAW_SLACK`, `SLACK_CLOSE_RATE`). The rework shipped with the body on the
+## camera at every instant, and named the cost itself — a standing Bog that
+## looks about slides its feet, because there are no turn-in-place clips here to
+## hide the turn with. The owner played it and asked for Fortnite's answer:
+## *"if they are standing still, not moving at all and just moving the camera,
+## then let them get it a little further around before it starts moving the
+## character, not all the way just further, and then if they start moving,
+## smooth it back to inside the previous clamp."*
+##
+## So the view is allowed 60 degrees either side of a standing body before it
+## drags it, and that freedom is handed back over a quarter of a second as soon
+## as the Bog does anything. "Anything" is the list below, and every entry is
+## there because it is a moment the player is pointing the Bog at something
+## rather than looking at it: a key down, real speed under the feet, the aim
+## button, a drawn bow, a wind-up or a cast in flight, and being off the floor
+## (the slack is a standing posture, and a Bog in the air that lands facing 60
+## degrees off its own camera is the bug the slack would otherwise buy).
+##
+## Two properties are worth naming because they are what makes it feel like a
+## shoulder rather than a dead zone. Past the edge the body is dragged to sit
+## *on* the edge, so the slack travels round with the view instead of being a
+## fixed arc the view escapes from. And the slack closes as a rate, so what the
+## player sees on the first step of a walk is the Bog squaring up — one motion
+## over 0.26 s, slower than `TURN_SPEED` and therefore visible as intent, where
+## zeroing the slack outright would be a 60-degree flick in an eighth of that.
 func _face(delta: float) -> void:
 	if is_spinning() or is_rolling() or is_emoting():
 		return
+	if _animator == null:
+		_animator = get_node_or_null("AnimationTree") as BogAnimator
+	# Ordered so the cheap tests short-circuit the node question, and so that
+	# each clause is one reason the Bog is not merely looking around.
+	var idle := is_on_floor() and input_direction == Vector2.ZERO \
+		and not wants_aim and not is_sliding() and not is_drawing() \
+		and Vector2(velocity.x, velocity.z).length() < IDLE_SPEED \
+		and (_animator == null or not _animator.is_throwing())
+	if idle:
+		_yaw_slack = YAW_SLACK
+	else:
+		_yaw_slack = move_toward(_yaw_slack, 0.0, SLACK_CLOSE_RATE * delta)
 	var desired := yaw_towards(-_view_basis.z)
 	if is_sliding():
 		# A slide that has run down to nothing has no heading left to read, so
 		# it keeps the one it had rather than snapping onto the view mid-slide.
 		var horizontal := Vector3(velocity.x, 0.0, velocity.z)
 		desired = yaw_towards(horizontal) if horizontal.length() > 0.35 else body_yaw
+	else:
+		# The slack in one line: the view, pulled back toward the body by as
+		# much of the gap between them as the slack covers. Inside the slack
+		# that is the whole gap, so `desired` comes out as `body_yaw` and the
+		# body holds; past it, what is left over is exactly how far outside the
+		# edge the view has gone, so the body is asked for the edge and nothing
+		# more. At a slack of zero it is `desired` untouched, which is the
+		# welded rig the rework shipped. `wrapf` because the gap is an angle
+		# and +179 to -179 degrees is two degrees apart, not 358.
+		desired -= clampf(wrapf(desired - body_yaw, -PI, PI), -_yaw_slack, _yaw_slack)
 	body_yaw = rotate_toward(body_yaw, desired, TURN_SPEED * delta)
 	_model_root.rotation.y = body_yaw
 

@@ -293,3 +293,68 @@ argued against.
             headless tool line or a gate check; not one of the thirteen has been felt
             by a person with a mouse in their hand. Phase 9's 9.6 is the same
             sentence about the range itself and stays open beside this one
+
+## Phase 11 — The letters round (D-129..D-134)
+
+One letters game, called B·O·G: Free-for-all is the collect race, Teams is
+capture-the-flag, and the Match type switch is the only thing that picks
+(**D-129**). `docs/PLAN_LETTERS.md` is the contract the six groups coded
+against. Every item below is a render, a headless tool line or a gate check;
+nobody has played it.
+
+- [x] 11.1  One letter alive at a time in the collect race; every death deals the
+            next letter when none is out or being captured, B→O→G from B;
+            `letter_drop_chance` deleted; the "Ends on" picker's fourth entry is
+            **B·O·G** and the clamp says the mode decides the flavour (**D-129**)
+- [x] 11.2  The hold row carries `started_at` and `seconds`; `letter_hold_fraction`,
+            `letter_hold_total`, `letter_hold_is_timed`, `loose_letter_pickups`,
+            `letter_carriers`, `letter_appeared` (**D-129**)
+- [x] 11.3  The guide line: `scripts/world/nav/` — a navmesh baked per client per
+            map from layer-1 colliders, jump and drop links from `JumpArc` (lifted
+            out of `parkour_report`), a two-pass dashed ribbon in gold / red /
+            blue, trunk-merged in Capture, hysteresis at 2 / 3 m; `nav_check` in
+            the gate on every map (**D-130**)
+- [x] 11.4  The capture performance: `CaptureRig` floats the letter from above the
+            raised right hand down into a procedural wool pouch in the left over
+            the hold, `Sunburst` and `letter_captured.wav` when it lands; the
+            `capture` upper-body layer on the `Capture` role with `CastIdle` as its
+            stand-in; the steal in reverse; a carry keeps the card in the fist
+            (**D-131**)
+- [ ] 11.4a **The real `Capture` clip.** The row is a `"reaching"` search; fetch,
+            pick a take with the arm overhead, fill in `mixamo_id`, drop the query
+- [ ] 11.4b **A Tripo pouch.** `PouchMesh.build()` is primitives; a downloaded sack
+            is one row in `decimate_assets.py` and one `preload` in `held_gear.gd`
+- [ ] 11.4c **The pouch grip off a render.** `POUCH_GRIP_OFFSET`/`ROTATION` were
+            written down, not solved; `tools/preview_capture.tscn -- f=0.9 pouch`
+            prints the anchors to correct them against
+- [x] 11.5  The minimap: a heading-up circle top-right, on under B·O·G only, the
+            navmesh outline as its ground, teammates, loose letters and carriers,
+            never an enemy without a letter (**D-132**)
+- [x] 11.6  The tutorial: six drawn, looping cards; HOW TO PLAY on the menu and
+            auto-once on the first B·O·G lobby (`Settings.tutorial_seen`);
+            `CAPTURING` on the lamp (**D-132**)
+- [x] 11.7  The menu's wordmark is three real letters over the fire, bobbing and
+            swaying, the hero Bog beside the fire; one rig at one size in menu and
+            lobby; the letters dip and launch out of frame on Start before the fade
+            (**D-133**)
+- [x] 11.8  The finger grip layer: five poses measured out of the clip library into
+            `art/generated/grip_poses.res`, two filtered blends over the emote
+            (**D-134**)
+- [x] 11.10 **The range by day** (**D-135**): fences, lantern spheres, the orb
+            launcher and the orbs off; the sun 9° → 32° on the same bearing with a
+            daytime sky; renamed Highsun Grounds; and the rule — nothing in the
+            world is a bare unshaded primitive, unshaded emissive is for effects
+- [x] 11.11 **A moon over the viewer's shoulder** (**D-136**): a directional fill
+            aimed from each camera's own framing at a measured third of the fire
+            on the body; the hero 0.35 m right and 0.5 m back; the lobby eye 18%
+            further out so the 3.5 m ring sits inside the panel band again
+- [x] 11.12 **Rebindable controls** (**D-137**): every Controls row is a button —
+            click, press, bound; Esc cancels; right-click resets one; RESET
+            CONTROLS resets all; a key taken is taken off whatever else had it.
+            Saved in `settings.cfg` as the difference from `project.godot`
+- [ ] 11.13 Distance marks for the range: the posts that said "twenty metres" went
+            with the fences (**D-135**); flush cut-stone plaques let into the peat
+            are the themed answer if the lanes read thin
+- [ ] 11.9  **Nobody has played any of this.** Same sentence as 10.16 and 9.6: the
+            line, the pouch, the minimap and the menu are numbers and renders until
+            somebody with a mouse says otherwise

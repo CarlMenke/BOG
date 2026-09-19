@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bymlsakws0776"
-path="res://.godot/imported/greatsword_basecolor.png-7d973d4e80c2ff98ae65a48091560b6a.ctex"
+path.s3tc="res://.godot/imported/greatsword_basecolor.png-7d973d4e80c2ff98ae65a48091560b6a.s3tc.ctex"
+path.etc2="res://.godot/imported/greatsword_basecolor.png-7d973d4e80c2ff98ae65a48091560b6a.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "960f0d35c5778500d6e9458cbf5fa075"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://art/generated/greatsword_basecolor.png"
-dest_files=["res://.godot/imported/greatsword_basecolor.png-7d973d4e80c2ff98ae65a48091560b6a.ctex"]
+dest_files=["res://.godot/imported/greatsword_basecolor.png-7d973d4e80c2ff98ae65a48091560b6a.s3tc.ctex", "res://.godot/imported/greatsword_basecolor.png-7d973d4e80c2ff98ae65a48091560b6a.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +42,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0
