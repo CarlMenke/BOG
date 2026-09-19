@@ -18296,3 +18296,109 @@ Not exercised: another peer seeing the swipe (the relay of `_do_slash` with its
 new `blade` argument is reasoned, and `net_test.sh` has no sword round), how the
 pale additive fan reads at Highsun's noon, and a render at the 6.0 reach.
 (BOG-48.)
+
+## D-172 — The capture reads out front: a bigger bag that hangs and swings, and a letter that comes down in front of the Bog
+Carl, watching a timed capture (2026-09-18): the bag wants to be bigger, more
+bag-like, and to have life in it — *"not loose cloth, but a sway and settle as
+the Bog moves and as the letter drops in"* — carried well out in front with the
+arm extended; and the letter *"starts higher and bigger, well out in front of
+the Bog above the bag"*, with its path staying in front of the body all the way
+down. Three things, and only two of them are code: which clip extends that arm
+is BOG-17's pick.
+
+**The letter was going through the chest and nothing had said so.** D-131 lerped
+it from 0.55 m above the right wrist to the pouch mouth at the hip, and the
+straight line between those two comes within **0.194 m** of the Bog's own axis
+against a 0.38 m capsule — a card sliding down through the body for the first
+half of the descent. `preview_capture`'s check could not see it: "the letter is
+on the line between them" is a test that the lerp was not written backwards, and
+it passed for the whole of the time the line ran through the Bog.
+
+So the descent is a **curve** now. `CaptureRig.descent_point` is a quadratic
+Bezier whose control point is the midpoint of the two anchors pushed `CURVE_BOW`
+0.22 m along the Bog's facing, and the start moved with it: `START_LIFT` 0.82 and
+`START_AHEAD` 0.40 put the card above the head and out in front of the body
+rather than over it, at `SCALE_FROM` 2.0 from 1.6. Measured over 41 samples at six
+fractions, the card now passes no nearer the axis than **0.547 m** — 0.167 m
+outside the capsule — and is above and no further back than the bag at every one.
+`HAND_LIFT` stays at 0.55 and is the **steal's** anchor alone: a steal ends in
+the raised hand, so its top is wherever that hand is, and the two performances
+stop sharing a number they only ever shared by argument.
+
+**The bag is bigger and that is all that was done to it.** `BODY_RADIUS` 0.065 →
+0.095, and the seven measurements under it by the same 1.46: 19 cm across and 24
+cm tall, a loot sack rather than a coin purse, and wide enough at the mouth that
+the letter arriving is a thing going in. Nothing is sculpted further. A more
+elaborate primitive is the shape D-135 exists to refuse, and the bag Carl is
+describing is a Tripo sack under BOG-17; these constants are the table it will be
+measured against.
+
+**Carried out in front, as far as an offset can carry it.** `POUCH_GRIP_OFFSET`
+goes to (-0.026, 0.226, 0.015), which takes the mouth from 0.241 m to **0.365 m**
+in front of the body axis at the same height — the sack in front of the thigh
+instead of against it. All three components move because forward is a direction
+in the world and this is a point in a fist the clip holds at an angle;
+`preview_capture -- solve` divides the one by the other and prints the paste line,
+so it is re-solved rather than re-argued when the real take lands.
+
+**The life is a pendulum, and it lives in `HeldGear` rather than in `PouchMesh`.**
+Two nodes go between the fist and the sack: `PouchGrip` carries the grip and is
+therefore the mouth, `PouchSwing` sits at its origin carrying nothing but the
+swing. So the bag can move without the point the letter is falling into moving,
+and a Tripo sack hangs off the same two nodes and inherits the whole of it.
+The rest angle is the **apparent** gravity — world down less the mouth's own
+acceleration — and a spring chases it: a Bog setting off leaves the bag behind, a
+Bog stopping throws it forward, a Bog standing still lets it hang, and
+`CaptureRig.landing_push` knocks it the way the letter came in when the capture
+lands. Three behaviours and an event out of one line.
+
+**Nothing about it is replicated and nothing needs to be.** The inputs are a bone
+attachment's world position and `body_yaw`, both of which every peer already has
+off the same replicated pose the animator reads — the same argument D-131's rig
+makes about the descent. Two machines at different frame rates land on the same
+swing rather than on the same float, and a bag is the last thing in this game
+worth a byte on the wire.
+
+**Two things the spring found that nobody had asked.** The sack was hanging **86
+deg off world down**: `POUCH_GRIP_ROTATION`'s 165 deg was derived for an arm
+hanging at the hip and the stand-in clip holds that arm out at the belly, so the
+bag stuck out of the fist rather than hanging from it. `SWAY_MAX_DEGREES` is 100
+so the correction fits, which means the hang belongs to the spring now and the
+grip rotation only decides which way the mouth faces — the property that makes
+this survive whatever pose BOG-17's take holds. And the raw input is a second
+difference of a skinned bone, which is mostly noise: the first spring here (a
+0.85 s period at a fifth of critical, the swing of a bag on a long cord) sat close
+enough to the capture clip's own cycle to be driven by it and never settled at
+all. Half the period and twice the damping take it off that frequency;
+`SWAY_ACCEL_SMOOTH` takes the hash out of the drive.
+
+**The tool grew the check the old one could not be.** `preview_capture` samples
+`descent_point` end to end and asks two things of every sample — above and no
+further back than the bag, and never nearer the axis than the capsule is wide —
+which is Carl's sentence rather than an absolute. `-- swing` traces the bag for a
+second while it is only being carried, knocks it with the game's own push, and
+judges what follows **against that baseline**, because a carried bag is never
+still and the life is the floor: carried 6.4 deg, knocked to 22.2 deg, back
+through the other side, inside 3.7 deg a second later. `-- sheet front|side|settle`
+stands six Bogs in a row — the first two walk the descent, the third holds the
+fraction still and staggers the knocks so one shutter catches six moments of one
+swing.
+
+The pose is still `CastIdle` (`BogAnimator.CAPTURE_FALLBACK`). It is the one clip
+on disk with the right arm out in front, which is closer to the criterion Carl
+changed it to than to the one it was picked against. Not measured: the sway on a
+running, jumping or rolling Bog (bounded by the clamps, not watched), and the
+composition on a remote copy in a two-process run.
+
+### Rejected
+
+- **A more bag-like primitive.** Creases, a slumped base, a second lobe: all of
+  it is the asset's job (D-135), and a better-sculpted stand-in is the thing that
+  stops the real one being asked for.
+- **The sway inside `PouchMesh`.** It would die with the primitive, which is the
+  one file that is certain to be deleted.
+- **Cloth.** One degree of freedom is what a drawstring sack has; the rest is a
+  solver nobody can see the output of on a 19 cm prop.
+- **Replicating the swing, or seeding it off a shared clock.** Cosmetic, derived
+  from a pose every peer already has, and a divergence nobody could see.
+  (BOG-32.)

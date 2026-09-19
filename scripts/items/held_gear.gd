@@ -378,6 +378,36 @@ var _potion_grip_rotation: Vector3 = POTION_GRIP_ROTATION
 ## the three is in it, and a bow, a bottle and a pouch can no more be out
 ## together than a bow and a great sword can (D-065).
 var _pouch: Node3D
+## The two nodes between the fist and the sack (D-172), and the reason the pouch
+## is the one prop here that is not hung straight off its attachment.
+##
+## `_pouch_grip` carries the grip — offset, rotation, scale — and is therefore
+## where the **mouth** is; `_pouch_swing` sits at its origin carrying nothing but
+## the pendulum, so the sack below it can swing without the point the letter is
+## falling into moving a millimetre. That split is what lets `pouch_mouth_global`
+## stay one number while the bag has life in it, and it is why the sway lives
+## here rather than inside `PouchMesh`: a Tripo sack (BOG-17) hangs off these two
+## nodes exactly as the primitive one does and inherits the whole of it.
+var _pouch_grip_node: Node3D
+var _pouch_swing: Node3D
+## The pendulum's state: the angle about the grip's own X and Z, in radians, and
+## how fast each is moving. Local and cosmetic and never replicated — every peer
+## drives it from the same bone positions and the same replicated pose, so eight
+## machines see the same bag swing without a byte on the wire (`_swing_pouch`).
+var _pouch_tilt: Vector2 = Vector2.ZERO
+var _pouch_tilt_speed: Vector2 = Vector2.ZERO
+## Where the mouth was last frame and how fast it was going, for the difference
+## that is the hand's acceleration. `Vector3.INF` is "no previous frame", which
+## is a real state and not a sentinel for laziness: the first frame a pouch is
+## out has no velocity to take a difference against, and a zero there would kick
+## the bag every time one appeared.
+var _pouch_was_at: Vector3 = Vector3.INF
+var _pouch_speed: Vector3 = Vector3.ZERO
+## The hand's acceleration, smoothed. A second difference of a bone position is
+## two subtractions of numbers a millimetre apart, so the raw figure is mostly
+## the difference between one frame's skinning and the next's — 6 deg of bag on
+## a Bog standing still, measured. `SWAY_ACCEL_SMOOTH` is what takes it out.
+var _pouch_accel: Vector3 = Vector3.ZERO
 ## The grip `set_pouch_grip` was last handed. Three fields, the potion's shape
 ## exactly: the pouch is built at true metres so its scale is 1, but the hook
 ## exists for the same tool and would be a lie if it could not move all three.
@@ -478,10 +508,19 @@ func _attach_bow(skeleton: Skeleton3D) -> void:
 	# a match and a sack rebuilt for each of them buys nothing a `visible` flag
 	# does not. Kept hidden, like everything else on this attachment —
 	# `_refresh_hand` decides, and it decides on the first frame.
+	# Three nodes rather than one, and `_pouch_grip_node` is the visible one:
+	# hiding the grip hides everything under it, so the swing and the sack cannot
+	# be left showing by a toggle that only knew about the mesh.
+	_pouch_grip_node = Node3D.new()
+	_pouch_grip_node.name = "PouchGrip"
+	_bow_attachment.add_child(_pouch_grip_node)
+	_pouch_swing = Node3D.new()
+	_pouch_swing.name = "PouchSwing"
+	_pouch_grip_node.add_child(_pouch_swing)
 	_pouch = PouchMesh.build()
-	_bow_attachment.add_child(_pouch)
+	_pouch_swing.add_child(_pouch)
 	set_pouch_grip(POUCH_SCALE, POUCH_GRIP_OFFSET, POUCH_GRIP_ROTATION)
-	_pouch.visible = false
+	_pouch_grip_node.visible = false
 
 	_bow_string = _bow.find_child(STRING_NODE, true, false) as MeshInstance3D
 	if _bow_string == null or _bow_string.mesh == null \
@@ -572,7 +611,13 @@ func has_letter() -> bool:
 ## `Basis.looking_at` aims **−Z** at what it is handed and these letters front
 ## on **+Z**, so the target is the facing *negated*: point the back away down
 ## the facing and the front comes round to it.
-func _process(_delta: float) -> void:
+##
+## The pouch's sway is stepped from here too (D-172), for this function's own
+## reason: both are a prop being corrected *after* the skeleton has posed the
+## bone it hangs off, and there is nowhere else in this file that runs once a
+## frame.
+func _process(delta: float) -> void:
+	_swing_pouch(delta)
 	if _card == null:
 		return
 	var bog := get_parent() as Bog
@@ -1531,7 +1576,30 @@ const POUCH_SCALE := 1.0
 ## a palm point means nothing except in the pose the prop is held in, and this
 ## is the other hand in a third pose again — the arm hanging at the hip while
 ## the right one is up in the air.
-const POUCH_GRIP_OFFSET := Vector3(0.015, 0.110, 0.030)
+##
+## **It is carried out in front of the Bog now, and this is the half of that the
+## code owns** (D-172). Carl: the bag should be *"carried well out in front of
+## the Bog, arm extended"*. An arm is a clip and not a constant, so the other
+## half is BOG-17's take; what an offset can do is take the sack off the thigh
+## and put it in front of the leg, which is where the descent needs it — a
+## letter that has to stay in front of the body all the way down cannot end at a
+## mouth that is beside one.
+##
+## All three components moved, and that is the shape of the answer rather than
+## an overreach: "forward" is a direction in the *world* and this is a point in
+## a fist that the stand-in's clip holds at an angle, so a metre out in front is
+## a little of each axis. `preview_capture -- solve` divides the one by the
+## other — it takes the mouth where it is, slides it along the Bog's own facing
+## to where it is wanted, and reads the result back through the hand's basis —
+## and this is what it printed: the mouth goes from **0.241 m** in front of the
+## body axis to **0.365 m**, which is the sack in front of the thigh instead of
+## against it, with its height and its distance off the body unchanged.
+##
+## **Re-solve it when the clip lands.** This is a point in the hand's own frame
+## and every number above is the stand-in's hanging arm; an arm extended forward
+## moves the fist without moving anything inside it, which is D-074's rule again
+## and is why the tool that solved it is in the repo rather than in a comment.
+const POUCH_GRIP_OFFSET := Vector3(-0.026, 0.226, 0.015)
 
 ## Which way the pouch hangs out of the fist.
 ##
@@ -1552,15 +1620,236 @@ const POUCH_GRIP_ROTATION := Vector3(165.0, 0.0, 0.0)
 
 
 func _orient_pouch() -> void:
-	if _pouch == null:
+	if _pouch_grip_node == null:
 		return
 	# The stored offset and not a re-derivation of it, `_orient_potion`'s shape
 	# exactly and for its reason: a tool sweeping a grip hands in an offset
 	# that is deliberately not the one the constants say, and a function that
 	# recomputed it would quietly throw the sweep away.
+	#
+	# On the grip node rather than on the mesh (D-172), so the swing below it has
+	# a frame of its own to turn in and the mouth stays where the grip put it.
 	var grip := Basis.from_euler(_pouch_grip_rotation * (PI / 180.0))
-	_pouch.transform = Transform3D(
+	_pouch_grip_node.transform = Transform3D(
 		grip.scaled(Vector3.ONE * _pouch_model_scale), _pouch_grip_offset)
+
+
+# ------------------------------------------------------------- the sway ---
+
+## What the bag swings like (D-172). Carl, watching a capture: the pouch wants
+## *"not loose cloth, but a sway and settle as the Bog moves and as the letter
+## drops in"*.
+##
+## **A pendulum and not a cloth sim**, which is the whole of the difference: the
+## sack hangs off the mouth by a drawstring, so the one honest degree of freedom
+## it has is *which way down is*, and down is not world down on a body that is
+## running. So the rest angle is the **apparent** gravity — `Vector3.DOWN *
+## SWAY_GRAVITY` less the mouth's own acceleration — and a spring chases it. A
+## Bog setting off leaves the bag behind, a Bog stopping throws it forward, and a
+## Bog standing still lets it hang: three behaviours out of one line, none of
+## them written down separately.
+##
+## `SWAY_GRAVITY` is not 9.8 and is not trying to be. It is the denominator that
+## turns metres per second squared into an angle, so it *is* the gain: at 14 a
+## hand accelerating at 5 m/s² pulls the sack 20 deg off the vertical, which is
+## the swing of a bag rather than of a lantern on a pole.
+const SWAY_GRAVITY := 14.0
+
+## The spring, as the square of its own rate and a decay on the speed. 160 puts
+## the natural period at **0.50 s** and 12 leaves it just under half of
+## critical, so a knock is one big swing, one smaller one back, and stillness.
+##
+## **Both numbers are set by a resonance rather than by taste**, and it is the
+## thing this file had to be measured to find. The capture clip moves the fist
+## on a cycle of its own, and the first spring here — a 0.85 s period at a fifth
+## of critical, which is the swing of a bag on a long cord — sat close enough to
+## that cycle to be *driven* by it: the bag never settled at all, it rode round
+## at 7 deg for ever, and the letter landing in it was invisible against that.
+## Half the period takes the spring off the clip's frequency and twice the
+## damping stops what is left of it accumulating. `preview_capture -- swing`
+## prints the trace both numbers were read off: the bag now sits at 6.5 deg
+## while it is carried, goes to 22 deg when the letter lands, and is back inside
+## 3 deg within a second.
+##
+## **Settling is the half Carl asked for**: a bag that damps flat on the first
+## swing has weight and no life, and one that never stops is a balloon.
+const SWAY_STIFFNESS := 160.0
+const SWAY_DAMPING := 12.0
+
+## How far the sack may ever be off the grip's own line, in degrees, and the
+## acceleration past which the rest angle stops answering. Both are clamps on
+## the same failure and it is not hypothetical: a dive roll turns this fist
+## through a somersault in a quarter of a second, and an unclamped pendulum hung
+## off it flips through the arm.
+##
+## **100 is a large number and it has to be**, which is the thing the pendulum
+## found. `POUCH_GRIP_ROTATION` below was written to hang the sack down the
+## fingers on the assumption of an arm hanging at the hip; the stand-in clip
+## does not hang that arm, it holds it out at the belly, and measured, the
+## sack's own line comes out **86 deg off world down** — the bag was sticking
+## out of the fist rather than hanging from it, and nothing had ever asked. A
+## clamp tight enough to be safe on a somersault would also be a clamp that
+## refused to correct that, so the number is set by the correction and the
+## somersault is covered by the damping instead.
+##
+## What it means is worth saying plainly: **the hang is the spring's now, not
+## the grip's**. `POUCH_GRIP_ROTATION` still decides which way the mouth faces
+## and which way the cord tails fall; which way the *sack* points is settled
+## every frame against the world. That is the property that makes this survive
+## BOG-17 — whatever pose the real take holds that arm in, the bag hangs.
+const SWAY_MAX_DEGREES := 100.0
+const SWAY_ACCEL_MAX := 14.0
+
+## How fast the smoothed acceleration follows the raw one, per second.
+##
+## **The filter is not a nicety, it is what makes this a measurement.** The
+## input is the second difference of a skinned bone's world position, and at
+## sixty frames a second the two subtractions leave more skinning noise than
+## signal: unfiltered, a Bog standing in `Idle` swung its bag 6 deg, which is
+## more than the letter landing in it was worth and would have made the whole
+## thing read as a twitch. At 6 the filter settles in about a sixth of a
+## second, so a real acceleration — a Bog setting off, a dive roll — is through
+## it intact and the frame-to-frame hash is not.
+const SWAY_ACCEL_SMOOTH := 6.0
+
+## The longest step the spring is integrated over, in seconds. A frame that
+## took longer than this one is a hitch, and a spring handed a 0.4 s step does
+## not lag — it explodes.
+const SWAY_MAX_STEP := 1.0 / 30.0
+
+## What the letter landing is worth, as a rate on the angle the push would turn
+## the sack to in a second — so it is radians a second of swing, per radian the
+## bag is knocked off its line.
+##
+## The other half of *"as the letter drops in"*: `CaptureRig.landing_push` hands
+## `nudge_pouch` the direction the card came down in at `LANDING_SPEED`, and 3.0
+## turns the part of that which is *across* the sack into the 22 deg swing the
+## trace measures. It is the one moment in a capture the pouch is doing
+## something rather than being carried, so it is worth being seen.
+const SWAY_LETTER_KICK := 3.0
+
+
+## Swing the sack under the fist, once a frame, on every peer.
+##
+## **Nothing here is replicated and nothing here needs to be.** The input is the
+## world position of a bone attachment, and that bone is posed by the animation
+## tree off `sync_velocity`, `sync_grounded` and the hold row — all of which
+## every peer already has, which is the same argument `CaptureRig`'s header
+## makes about the descent. Two machines running at different frame rates land
+## on the same swing rather than on the same float, and a bag is the last thing
+## in this game worth a byte on the wire.
+func _swing_pouch(delta: float) -> void:
+	if _pouch_swing == null or _pouch_grip_node == null:
+		return
+	if not _pouch_grip_node.visible:
+		# Forget the frame it was hidden on, so the next capture starts hanging
+		# still rather than with half a match's worth of stale velocity in it.
+		_pouch_was_at = Vector3.INF
+		_pouch_speed = Vector3.ZERO
+		_pouch_accel = Vector3.ZERO
+		_pouch_tilt = Vector2.ZERO
+		_pouch_tilt_speed = Vector2.ZERO
+		_pouch_swing.rotation = Vector3.ZERO
+		return
+
+	var step := minf(delta, SWAY_MAX_STEP)
+	if step <= 0.0:
+		return
+	var at := _pouch_grip_node.global_position
+	var first := _pouch_was_at == Vector3.INF
+	var speed := Vector3.ZERO
+	if not first:
+		speed = (at - _pouch_was_at) / step
+	_pouch_was_at = at
+	var raw := ((speed - _pouch_speed) / step).limit_length(SWAY_ACCEL_MAX)
+	_pouch_speed = speed
+	_pouch_accel = _pouch_accel.lerp(raw, clampf(SWAY_ACCEL_SMOOTH * step, 0.0, 1.0))
+
+	# The line the sack would hang along if it had settled: gravity less the
+	# hand's acceleration, in the grip's own frame, where the sack's rest is a
+	# straight −Y.
+	var apparent := (Vector3.DOWN * SWAY_GRAVITY - _pouch_accel).normalized()
+	var rest := _hang_angles(
+		_pouch_grip_node.global_basis.orthonormalized().inverse() * apparent)
+	if first:
+		# The frame a pouch appears on, it is *already* hanging. The correction
+		# from the grip's own line to the world's is most of a right angle
+		# (`SWAY_MAX_DEGREES`), and a spring asked to travel that from rest
+		# would open every capture with the bag flailing up from the fist.
+		_pouch_tilt = rest
+		_pouch_tilt_speed = Vector2.ZERO
+
+	_pouch_tilt_speed += (rest - _pouch_tilt) * SWAY_STIFFNESS * step
+	_pouch_tilt_speed *= exp(-SWAY_DAMPING * step)
+	_pouch_tilt += _pouch_tilt_speed * step
+	var most := deg_to_rad(SWAY_MAX_DEGREES)
+	_pouch_tilt = Vector2(clampf(_pouch_tilt.x, -most, most),
+		clampf(_pouch_tilt.y, -most, most))
+	# Godot's default Euler order is YXZ, so with no yaw this is exactly the
+	# `Rx · Rz` that `_hang_angles` inverts — the two have to agree or the rest
+	# angle is a target the spring can never reach.
+	_pouch_swing.rotation = Vector3(_pouch_tilt.x, 0.0, _pouch_tilt.y)
+
+
+## The pair of angles that point the sack's own −Y along `down`, which is given
+## in the grip's frame and assumed unit.
+##
+## Exact rather than small-angle, because 40 deg is not small: `Rx(x)·Rz(z)`
+## takes `(0, −1, 0)` to `(sin z, −cos z · cos x, −cos z · sin x)`, and this is
+## that read backwards.
+static func _hang_angles(down: Vector3) -> Vector2:
+	var about_z := asin(clampf(down.x, -1.0, 1.0))
+	# Straight along the grip's own X, the other two components are both zero
+	# and the `atan2` below is reading noise — the gimbal in this decomposition.
+	# One angle does the whole job there, so take it and leave the other at rest
+	# rather than letting a rounding error spin the sack.
+	if absf(down.y) + absf(down.z) < 0.02:
+		return Vector2(0.0, about_z)
+	return Vector2(atan2(-down.z, -down.y), about_z)
+
+
+## How far the sack is off straight down right now, in degrees, split into the
+## Bog's own forward and right. `(0, 0)` is a bag hanging.
+##
+## Measured off the drawn node rather than reported out of `_pouch_tilt`, and
+## that is the difference that makes it worth having: the tilt is an angle in a
+## frame the clip decides, so it says nothing on its own, while this is the
+## thing a player sees. For `tools/preview_capture.tscn -- swing`, which reads
+## the settle off a running Bog rather than integrating its own copy of the
+## spring — a tool that did the arithmetic again would be measuring itself.
+func pouch_hang_degrees() -> Vector2:
+	if _pouch_swing == null:
+		return Vector2.ZERO
+	var bog := get_parent() as Bog
+	if bog == null:
+		return Vector2.ZERO
+	var sack := -_pouch_swing.global_basis.orthonormalized().y
+	var facing := bog.facing()
+	return Vector2(
+		rad_to_deg(asin(clampf(sack.dot(facing), -1.0, 1.0))),
+		rad_to_deg(asin(clampf(sack.dot(facing.cross(Vector3.UP)), -1.0, 1.0))))
+
+
+## Knock the bag, as the letter arriving does. `push` is the card's world
+## velocity at the mouth; only what is across the hanging line moves it.
+##
+## Public because the moment belongs to `CaptureRig` — it is the one node that
+## knows when a descent ended and which way it came in — and a second opinion
+## about that here would be a pouch guessing at a clock (D-131).
+func nudge_pouch(push: Vector3) -> void:
+	if _pouch_grip_node == null or not _pouch_grip_node.visible:
+		return
+	# Where the sack is pointing now, in the grip's frame, and what is left of
+	# the push once the part along that line is taken out: a pendulum cannot be
+	# pushed along its own rod, and the letter comes down that rod.
+	var local := _pouch_grip_node.global_basis.orthonormalized().inverse() * push
+	var sack := Basis.from_euler(Vector3(_pouch_tilt.x, 0.0, _pouch_tilt.y)) * Vector3.DOWN
+	var across := local - sack * local.dot(sack)
+	# A second of that push, as a direction, and the angles that point the sack
+	# along it. Expressed as a *difference of angles* rather than as a torque,
+	# so the kick is the same size wherever the bag is already hanging.
+	_pouch_tilt_speed += (_hang_angles((sack + across).normalized()) - _pouch_tilt) \
+		* SWAY_LETTER_KICK
 
 
 ## Hang the loot pouch on the bow fist, or take it away.
@@ -1572,12 +1861,12 @@ func _orient_pouch() -> void:
 ## hangs off — and a second opinion here is how the hand and the clock end up
 ## disagreeing.
 func set_pouch(carried: bool) -> void:
-	if _pouch != null:
-		_pouch.visible = carried
+	if _pouch_grip_node != null:
+		_pouch_grip_node.visible = carried
 
 
 func has_pouch() -> bool:
-	return _pouch != null and _pouch.visible
+	return _pouch_grip_node != null and _pouch_grip_node.visible
 
 
 ## Exposed for `tools/preview_capture.tscn`, which sweeps these before they are
@@ -1604,9 +1893,12 @@ func set_pouch_grip(model_scale: float, offset: Vector3,
 ## zero: a letter that sank into the middle of the map would be a far louder
 ## bug than one that sank into a wrist, and the fallback is the same "a Bog
 ## with a spear and no bow is still a playable Bog" that `_attach_bow` takes.
+## Read off the **grip** node and not off the sack, which is the whole point of
+## the two-node split (D-172): the swing turns underneath this, so a bag that is
+## mid-sway has not moved the point the letter is falling into.
 func pouch_mouth_global() -> Vector3:
-	if _pouch != null:
-		return _pouch.global_position
+	if _pouch_grip_node != null:
+		return _pouch_grip_node.global_position
 	return bow_hand_transform().origin
 
 

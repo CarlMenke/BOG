@@ -11,13 +11,16 @@ extends Node3D
 ## card arriving at its mouth reads as a thing going in rather than a thing
 ## going behind.
 ##
-## **Built from primitives rather than modelled**, which is the same argument
-## `tools/make_sfx.py` makes for the sounds and `CarrierMarker` makes for the
-## marker: this is 18 cm of object seen at arm's length on a body that is a
-## cartoon, so a sphere, a cylinder and two tori say "sack" as well as a mesh
-## would, and they say it without an asset, an import, a texture or a re-bake.
-## The one thing a modelled pouch would buy — cloth that creases — is the one
-## thing nobody looks for on a prop this size.
+## **Built from primitives, and that is now a stand-in with a date on it.** The
+## original argument was that 18 cm of object at arm's length does not need a
+## mesh, and the one thing a modelled pouch would buy — cloth that creases — is
+## the one thing nobody looks for on a prop that size. Carl watched it and asked
+## for a bigger bag with life in it, which is two different answers: the *size*
+## is these constants and moved here (D-172), the *bag* is a Tripo sack under
+## BOG-17. Nothing below is sculpted any further — a more elaborate primitive is
+## the shape D-135 exists to refuse — and the sway that gives it life is
+## deliberately **not** in this file, because it has to survive the mesh landing:
+## `HeldGear` swings whatever is hanging in that fist.
 ##
 ## **The origin is the mouth's centre and the sack hangs down −Y.** That is not
 ## a convention, it is the contract: `CaptureRig` ends the letter's descent at
@@ -35,23 +38,36 @@ extends Node3D
 ## own Y by `BODY_SQUASH`, so it is an egg hanging point-up rather than a ball:
 ## a ball on a string reads as a bauble and the thing this has to read as is
 ## cloth with weight in the bottom of it.
-const BODY_RADIUS := 0.065
+##
+## **0.095 and it was 0.065** (D-172). Carl, watching a capture: the bag wants
+## to be bigger. 13 cm across is a coin purse, and what a Bog is doing with it
+## is catching a letter the size of its own head — so the mouth was narrower
+## than the thing going into it for the whole first half of the descent, which
+## is the fault under the note. 19 cm across and 24 cm tall is a loot sack: a
+## hand's span, big enough that the letter arriving at the mouth is a thing
+## going *in* rather than a thing landing on top.
+##
+## Every other measurement in this file went up by the same 1.46, because the
+## shape was right and only the scale was wrong; they are written out rather
+## than multiplied so that the Tripo sack replacing all of them (BOG-17) has one
+## table to be measured against.
+const BODY_RADIUS := 0.095
 const BODY_SQUASH := 1.25
 
 ## The gathered throat between the mouth and the sack, and the cord pulled
 ## tight round it. Short on purpose — a long neck turns the silhouette into a
 ## balloon, and what says "drawstring" is the *pinch*, which is the cinch ring
 ## below rather than the length of the tube.
-const NECK_RADIUS := 0.028
-const NECK_HEIGHT := 0.02
-const CINCH_INNER := 0.026
-const CINCH_OUTER := 0.034
+const NECK_RADIUS := 0.041
+const NECK_HEIGHT := 0.029
+const CINCH_INNER := 0.038
+const CINCH_OUTER := 0.050
 
 ## The two loose ends of the drawstring, splayed so they do not read as one
 ## stick. They are the only part of this that moves the eye, and they are why
 ## the pouch is legible from the side as well as from the front.
-const CORD_RADIUS := 0.004
-const CORD_LENGTH := 0.06
+const CORD_RADIUS := 0.006
+const CORD_LENGTH := 0.088
 const CORD_SPLAY := 22.0
 
 ## The open mouth: a ring of gathered fabric at the origin, slightly narrower
@@ -59,11 +75,11 @@ const CORD_SPLAY := 22.0
 ## pouch's — a descent that ends in mid-air over a neck looks like a card
 ## stopping short, and a descent that ends *inside a ring* looks like a card
 ## going in.
-const MOUTH_INNER := 0.02
-const MOUTH_OUTER := 0.032
+const MOUTH_INNER := 0.029
+const MOUTH_OUTER := 0.047
 
-## Coarse on purpose, for `WardFlash`'s reason one file over: this is a 13 cm
-## object held at a Bog's hip and nobody has ever counted its facets.
+## Coarse on purpose, for `WardFlash`'s reason one file over: this is a 19 cm
+## object held at a Bog's hand and nobody has ever counted its facets.
 const SEGMENTS := 12
 const RINGS := 6
 

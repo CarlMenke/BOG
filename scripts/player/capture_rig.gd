@@ -47,7 +47,60 @@ extends Node3D
 ## puts the card about a head above the fingertips — *"above their right hand,
 ## bigger and floating kinda high"*, with the gap that makes the arm read as
 ## pulling it down rather than holding it.
+##
+## **The steal's number since D-172, and only the steal's.** It used to be the
+## top of both performances, on the argument that they are the same arm doing
+## the same thing in two directions. They are not, and Carl watching the capture
+## is what said so: a steal *ends* in the raised hand, so its top is wherever
+## that hand is, while a capture ends at a bag carried out in front of the Bog
+## and has to start out in front of it too. `START_LIFT`/`START_AHEAD` below are
+## the capture's own top; this one stayed where it was.
 const HAND_LIFT := 0.55
+
+## Where the **capture's** letter starts, relative to the same wrist: this much
+## up and this much along the way the Bog is looking, in metres (D-172).
+##
+## Carl, watching it: the letter *"starts higher and bigger, well out in front
+## of the Bog above the bag"*. At 0.55 straight up it started level with the
+## head and 0.17 m in front of the body's own axis — which is *inside* a 0.38 m
+## capsule, so the first half of the descent was a card sliding down through the
+## chest. Both numbers are that fault: 0.82 puts it clear above the head, where
+## a thing being pulled out of the air is, and 0.40 forward puts it over the
+## bag rather than over the Bog.
+##
+## **Forward is the Bog's own facing and not the hand's.** A wrist is thrown
+## about by whatever the legs are doing and `body_yaw` is not; a start anchored
+## to the hand's own axes would swing the top of the descent round the body
+## every time a Bog turned, which is the fault `CARD_ALONG_SHAFT` spent three
+## revisions on one file over.
+const START_LIFT := 0.82
+const START_AHEAD := 0.40
+
+## How far the descent bows out in front of the Bog at its middle, in metres
+## (D-172).
+##
+## The path is a quadratic Bezier and this is the whole of what its control
+## point is: the midpoint of the two anchors, pushed along the facing. A
+## straight line between a start that is in front and a mouth that is in front
+## still cuts the corner between them, and the corner is the Bog — the letter
+## came within 0.17 m of the body axis at f=0.5 on the lerp that shipped. Bowed,
+## the nearest the card ever comes to the axis is the bag it is landing in.
+##
+## It is also the better read. A card that falls in a straight line is being
+## *moved*; one that comes down an arc and settles is being pulled.
+const CURVE_BOW := 0.22
+
+## How hard the letter hits the bag when it lands, in metres a second along the
+## descent's last direction (D-172) — the other half of Carl's *"a sway and
+## settle as the Bog moves and as the letter drops in"*.
+##
+## A constant rather than the card's real speed, because the card has no real
+## speed: it is a position on a ten-second curve and its velocity at the end is
+## whatever `smoothstep` was doing, which is nearly nothing. What the eye wants
+## is the weight of a letter dropping into a sack, and 2.5 m/s through
+## `HeldGear.SWAY_LETTER_KICK` is two swings and a settle inside a second —
+## over in about the time the sunburst is.
+const LANDING_SPEED := 2.5
 
 ## How big the card is at each end of the descent, as a multiple of the card on
 ## the ground (`Pickup.build_card` is 1.0).
@@ -58,7 +111,12 @@ const HAND_LIFT := 0.55
 ## unmistakably bigger than a dropped card and 0.25 is a spark going into a
 ## sack. Colour cannot do this job — every letter is the same gold — and
 ## position cannot do it alone, because a Bog may be facing any way.
-const SCALE_FROM := 1.6
+##
+## **2.0 from 1.6 at the top** (D-172): *"it starts higher and bigger"*. The
+## range is the clock, so widening it is widening the dial — and the top is the
+## end that can afford it, because the card up there is in open air above the
+## Bog's head rather than beside a body it has to not swallow.
+const SCALE_FROM := 2.0
 const SCALE_TO := 0.25
 
 ## The float. Amplitude in metres and the sine's rate in radians a second,
@@ -166,7 +224,8 @@ func _run_capture(peer: int, delta: float) -> void:
 	# instant the clock starts reads as falling, and the thing being drawn is a
 	# Bog pulling something down against its will.
 	var eased := smoothstep(0.0, 1.0, f)
-	var at: Vector3 = _hand_anchor().lerp(_bog.held_gear.pouch_mouth_global(), eased)
+	var at := descent_point(eased, _capture_start(),
+		_bog.held_gear.pouch_mouth_global(), _bog.facing())
 	at.y += BOB_HEIGHT * (1.0 - f) * sin(BOB_SPEED * _clock)
 	_place(at, lerpf(SCALE_FROM, SCALE_TO, eased), SPIN_SPEED * (1.0 - f), delta)
 	_light.light_energy = LIGHT_ENERGY * (1.0 - LIGHT_DIM * f)
@@ -204,6 +263,46 @@ func _run_steal(delta: float) -> void:
 ## a capturer is about to start pulling one down from.
 func _hand_anchor() -> Vector3:
 	return _bog.held_gear.hand_transform().origin + Vector3.UP * HAND_LIFT
+
+
+## Where the capture's letter starts, in world metres: high, and out in front of
+## the Bog rather than over it (D-172). The steal's `_hand_anchor` above is the
+## same wrist read a different way, and the two comments say why they parted.
+func _capture_start() -> Vector3:
+	return _bog.held_gear.hand_transform().origin \
+		+ Vector3.UP * START_LIFT + _bog.facing() * START_AHEAD
+
+
+## The descent, as a curve: where the letter is at eased fraction `t` on its way
+## from `start` down into `mouth`, with `facing` the way the Bog is looking
+## (D-172).
+##
+## A quadratic Bezier whose control point is the midpoint pushed `CURVE_BOW`
+## along the facing — so the path leans away from the body instead of cutting
+## through it, and both ends are exactly where they were.
+##
+## **Static, and it is the one home for the shape.** `tools/preview_capture.tscn`
+## samples this rather than reproducing it, which is that tool's own rule about
+## measuring its own copy of a file; a curve written twice is a curve that gets
+## corrected once.
+## Which way the letter was going when it reached the bag, at `LANDING_SPEED` —
+## the descent's own end tangent, which for a quadratic Bezier is the line from
+## the control point to the far end.
+##
+## Public because `tools/preview_capture.tscn -- swing` knocks a bag with it and
+## has to knock it with the game's own push; a tool that made up a direction
+## would be photographing a swing nobody ever sees.
+func landing_push() -> Vector3:
+	var mouth := _bog.held_gear.pouch_mouth_global()
+	var control := _capture_start().lerp(mouth, 0.5) + _bog.facing() * CURVE_BOW
+	return (mouth - control).normalized() * LANDING_SPEED
+
+
+static func descent_point(t: float, start: Vector3, mouth: Vector3,
+		facing: Vector3) -> Vector3:
+	var control := start.lerp(mouth, 0.5) + facing * CURVE_BOW
+	var u := 1.0 - t
+	return start * (u * u) + control * (2.0 * u * t) + mouth * (t * t)
 
 
 func _place(at: Vector3, size: float, spin: float, delta: float) -> void:
@@ -295,6 +394,11 @@ func _on_letter_banked(peer_id: int, _letter_bit: int) -> void:
 		return
 	var at: Vector3 = _bog.held_gear.pouch_mouth_global() if _was_timed \
 		else _bog.held_gear.hand_transform().origin
+	if _was_timed:
+		# The bag is knocked by the thing that just landed in it (D-172).
+		# Fired here rather than watched for by `HeldGear` because this is the
+		# node that knows a descent ended, and it is on every peer.
+		_bog.held_gear.nudge_pouch(landing_push())
 	_burst(at)
 
 
