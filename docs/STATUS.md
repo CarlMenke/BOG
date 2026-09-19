@@ -23,13 +23,13 @@ island and out to a results screen, and two automated checks now walk that path:
 one in a single process, one across two processes over a real socket.
 
 ```
-bash tools/smoke_test.sh        # 191 checks, ~10 minutes, all green; finds Godot by itself
+bash tools/smoke_test.sh        # 199 checks, ~10 minutes, all green; finds Godot by itself
 bash tools/net_test.sh          # two processes, one socket; ~45 s, run by hand
 ```
 
-`smoke_test.sh` is the gate; it is at **191 of 191** (the letters round, 2026-09-18). `net_test.sh` is kept out
+`smoke_test.sh` is the gate; it is at **199 of 199** (the low-priority round, D-148..D-155, 2026-09-19). `net_test.sh` is kept out
 of it to keep the gate fast; run it by hand after touching networking, the lobby
-or the results screen. It passes all twelve stages (200 + 34 assertions), ten of
+or the results screen. It passes all twelve stages (225 + 41 assertions; stage 4 carries the Teams skin rules over the socket, and stage 9's hit, a headshot since D-130, is at `body_centre()` now, D-155), ten of
 which end in a rematch, with the engine quiet in both processes — the error it
 had reported at "match start" since D-022 was its own teardown. Rematch was
 stalling for 25 s whenever a client had pressed BACK TO LOBBY; D-044 is the fix
@@ -772,6 +772,9 @@ Three tiers, because three different kinds of claim need three different proofs
 | `tools/team_tint.tscn` | every Bog's body is in its team's nameplate colour, free-for-all is the body's own imported colour, the Elder's robe stays purple, a corpse keeps its colour, and a lobby team switch repaints the Bog (D-046). **In the gate**, headless; through `snapshot.gd` it renders the lineup |
 | `tools/letter_carriers.tscn` | a letter card that starts a hold puts "Name picked up G" in the feed and a wasted duplicate puts nothing; carriers behind a wall, enemy included, have a gold card marker over their heads drawn through it and above the nameplate, your own hold marks nothing on your screen, and the marker goes on bank and on death; the same in free-for-all (`-- ffa`) (D-050). **In the gate**, headless; through `snapshot.gd` it renders the Bog's own view with the feed |
 | `tools/capture_preview.tscn` | a Capture B·O·G match in the real arena: both team bases drawn, three letter cards at home, every Bog on its own team's pad (D-051). **In the gate** on Kopje Crossing, headless; takes a map id; through `snapshot.gd` it renders the view from above Team 1's base. The mode's rules are `match_rules`, and the base/letter layout on every map is checked by `playthrough` |
+| `tools/fps_readout.tscn` | the FPS readout (D-148): off out of the box, following the Settings toggle in both directions with a real frame rate in it, kept by `settings.cfg`, and hidden whenever a render tool has set the suppression flag, so no `preview_*` shot carries it. **In the gate**, headless, about five seconds |
+| `tools/preview_plate.tscn` | the nameplate against the head (D-150): twelve moments of eighteen clips, the name 0.120 m clear of the crown at its tightest (`RunJump`) and the lift a flat 0.000 m in every ground clip. **In the gate**, headless; `sheet <Clip>` through `snapshot.gd` draws the picture |
+| `tools/combat_range.tscn -- emote` | the Y key pressed for real (D-155): start, stop, start again off `Bog.emoting`, the `Twerk` blend reaching full and the joints travelling, and a step ending it. **In the gate**, headless |
 | `tools/team_plates.tscn` | a teammate's nameplate is drawn through a wall and never fades, an enemy's beside it is occluded and faded as before, the HUD chip says which team you are on, and free-for-all plates are unchanged (`-- ffa`) (D-047). **In the gate**, headless; through `snapshot.gd` it renders the Bog's own view |
 | `tools/ragdoll_stability.tscn` | a corpse is still a corpse 150 ticks later |
 | `tools/combat_range.tscn` | the real match path: a spear, a shield, a magnet, a letter, the Elder's bolt |
@@ -854,17 +857,6 @@ and the tool quietly uses its defaults. Pass them literally.
 
 ## Known issues
 
-- **The ragdoll can still stretch a limb.** The corpse no longer explodes (D-013)
-  and carries the spear's momentum, but at higher impact energies a limb can
-  briefly stretch during the tumble. It always settles — `ragdoll_stability`
-  requires a compact, still corpse by tick 150 and that passes. The lever that
-  worked before was **widening** the joint spans in `RagdollBuilder.SEGMENTS`,
-  not tightening them; `BogRagdoll.IMPACT_TRANSFER` (0.15) is the other dial, and
-  above ~0.2 contact starts amplifying and the corpse gets punted. Reproduce with
-  `combat_range` in `hit` mode around tick 100. D-029 tightened the *neck* to
-  35°/25° against that grain and swept the alternatives to find out why it could
-  go no further: 25° reaches 160 m/s and 18° reaches 285 m/s, because the spans
-  have to cover the bend the death pose already contains.
 
 Five more are limitations of the source art rather than faults in the code, and
 D-029 argues each one out rather than pretending it is fixed:
@@ -885,9 +877,6 @@ D-029 argues each one out rather than pretending it is fixed:
 - **A sliding Bog is hard to hit.** The slide capsule is vertically right but a
   vertical capsule cannot follow a prone body whose head is half a metre forward
   of the axis.
-- **A held spear vanishes when its Bog dies.** `BogRagdoll._adopt_spears` adopts
-  embedded projectiles, not the carried one, so a corpse carries the spear that
-  killed it and not the one it was holding. Pre-existing.
 
 One thing two reviewers flagged is settled: **`ROLL_LOCK` is a ground rule.**
 A Bog that rolls off a ledge inside the 0.45 s lock used to keep the lock in
@@ -903,6 +892,13 @@ constant and 0.0 turns it off.
 
 - **When in doubt, open a ragdoll joint up.** A cone-twist driven past its limit
   adds energy rather than clamping. Too floppy looks rubbery; too tight explodes.
+  That is true of the limit's *strength* as well as its span:
+  `joint_constraints/bias` went 0.25 to 0.10 in D-153 and the corpse's peak
+  speed halved, because a limit pushing back hard tears the two bodies apart at
+  the joint before the point constraint can pull them back. Raising it, or
+  raising the project's solver iterations, detonates the corpse. The elbow
+  still separates 0.081 m at worst, and `ragdoll_stability` settles at 1.45 m/s
+  against its 1.5 limit.
 - `MAGNET_GRAVITY` in `bog_combat.gd` must equal `Magnet.GRAVITY`. The arc is solved
   in one file and flown in the other (D-014).
 - **The Bog is authored at 1.80 m and imported at `root_scale 1.0`** — the whole
