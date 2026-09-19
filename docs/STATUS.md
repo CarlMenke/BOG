@@ -23,11 +23,11 @@ island and out to a results screen, and two automated checks now walk that path:
 one in a single process, one across two processes over a real socket.
 
 ```
-bash tools/smoke_test.sh        # 204 checks, ~10 minutes, all green; finds Godot by itself
+bash tools/smoke_test.sh        # 205 checks, ~10 minutes, all green; finds Godot by itself
 bash tools/net_test.sh          # two processes, one socket; ~100 s, run by hand
 ```
 
-`smoke_test.sh` is the gate; it is at **204 of 204** (the medium-priority round, D-156..D-164, 2026-09-19). `net_test.sh` is kept out
+`smoke_test.sh` is the gate; it is at **205 of 205** (D-148..D-166, 2026-09-19). `net_test.sh` is kept out
 of it to keep the gate fast; run it by hand after touching networking, the lobby
 or the results screen. It passes all thirteen stages (263 + 53 assertions; stage 12 walks a peer out of a running match and back into it as a spectator, D-164; stage 4 carries the Teams skin rules over the socket, and stage 9's hit, a headshot since D-130, is at `body_centre()` now, D-155), ten of
 which end in a rematch, with the engine quiet in both processes — the error it
