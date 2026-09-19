@@ -16822,3 +16822,43 @@ touch earlier than before. That is the spring arm doing its job — `clip` is
 still zero frames on both shoulders walked along, the corner and the tunnel —
 but it is the number to watch if aiming in a doorway ever reads as tight.
 (BOG-53.)
+
+## D-157 — A carry is not a hold: a Bog running a letter can taunt, a Bog capturing one cannot
+`BogCombat.can_emote()` refused on `is_holding_letter()`, which is **both**
+kinds of hold at once (D-035, D-051), and nothing had ever chosen that — it
+came along with the list of things that stop an emote. So a Bog sprinting a
+card across Lantern Wharf could not dance, which is the one moment in a match
+a player most wants to. Carl and Julian, 2026-09-18: *"You can't emote while
+you have a letter. I want to taunt people, bro."*
+
+**The clause is `Bog.is_capturing()` now — the timed half alone.** A timed
+capture is an arm in the air over a pouch with a letter sinking into it
+(D-131); a body that danced out from under that performance would be showing
+two things at once, and the hands are genuinely busy. A carry is `ends_at =
+INF`, a card in the fist and a run, and there is nothing in it for a dance to
+contradict. One question already existed for exactly this line and it is the
+one the pouch, the capture layer and the guide line all branch on, so the two
+letters games stay told apart in one place.
+
+**The card stays in the fist through the dance**, and that is not an
+oversight. D-124's *"the dance empties the hands"* is about weapons —
+`_bare_handed()` feeds the five `_wants_*` that decide what a fist is holding
+— and `_refresh_hand`'s `card_in_fist` is not one of them. The fist is where
+"this one has the letter" reads from (D-050); a carrier whose hand went empty
+while it taunted would be lying to everybody hunting it.
+
+Nothing else moved. `refresh_emote` asks `can_emote()` once a frame and is
+still the whole mechanism, so a capture *starting* under a dancer ends the
+dance on the next frame with nobody pressing anything, and a hit still ends it
+through `Bog.set_health` on every peer. `can_holster()` keeps the wider clause:
+a Bog holding a card of either kind has already been disarmed, so a holster
+there is a key that does nothing.
+
+`combat_range -- emote` gained a fourth verdict, `carry` (D-155 wrote
+"`can_emote()` refuses a hold today and may not tomorrow (BOG-47)" into that
+mode's notes, and this is tomorrow). It stages the carry row the way
+`_drive_bow` stages one, presses Y, and reads both halves: the dance started
+and the card is still in the fist. Then the same row becomes a timed capture
+and the dance has to end **by itself**, and Y has to fail to start another —
+which is the control, and the half of the sentence that would otherwise be
+unproved. (BOG-47.)

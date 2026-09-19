@@ -341,9 +341,13 @@ const SHIELD := preload("res://scenes/items/shield.tscn")
 ##              `move_forward` held while dancing ends it, which is
 ##              `Bog._read_input` rather than `refresh_emote`.
 ##
-##              Nothing here carries a letter. `can_emote()` refuses a hold
-##              today and may not tomorrow (BOG-47), and this mode is about the
-##              key and the clip, not about that list.
+##              `carry` is the fourth and it is D-157's: a Capture B·O·G carry
+##              is a card in the fist and a run, so Y has to start a dance with
+##              one — and the card has to still be in the fist while the body
+##              dances, because that is where "this one has the letter" reads
+##              from. The timed hold is the control and the other half of the
+##              record: the same row turned into a capture stops the dance on
+##              the frame `refresh_emote` next asks, and Y cannot start another.
 ##   free     — no script; play it yourself
 const MODES := ["flight", "hit", "arc", "miss", "aim", "shield", "cover",
 	"magnet", "magnet_self", "letter", "cards", "lightning", "blast", "ward", "recharge",
@@ -5225,7 +5229,16 @@ const EMOTE_GONE_AT := 192
 const EMOTE_RESTART_AT := 196
 const EMOTE_STEP_AT := 210
 const EMOTE_STEPPED_AT := 214
-const EMOTE_DONE_AT := 220
+## D-157's half. The carry is staged, danced with and read; then the same row
+## becomes a timed capture, which has to end the dance by itself — `refresh_emote`
+## runs once a frame, so a tick is enough, and the gap here is the animator's
+## fade rather than a wait for the decision.
+const EMOTE_CARRY_AT := 220
+const EMOTE_CARRY_PRESS_AT := 224
+const EMOTE_CAPTURE_AT := 232
+const EMOTE_CAPTURE_READ_AT := 236
+const EMOTE_CAPTURE_PRESS_AT := 240
+const EMOTE_DONE_AT := 246
 
 ## The joints the pose is read off, relative to the hips. Five rather than one
 ## because a dance is not guaranteed to be in the arms: `Twerk` is mostly hips
@@ -5247,6 +5260,10 @@ var _emote_started: bool = false
 var _emote_stopped: bool = false
 var _emote_restarted: bool = false
 var _emote_walked_off: bool = false
+var _emote_carry_danced: bool = false
+var _emote_carry_kept_card: bool = false
+var _emote_capture_stopped: bool = false
+var _emote_capture_refused: bool = false
 var _emote_blend_full: float = -1.0
 var _emote_blend_gone: float = -1.0
 var _emote_idle_travel: float = 0.0
@@ -5326,6 +5343,48 @@ func _drive_emote(player: Bog, combat: BogCombat) -> void:
 			# at all.
 			_emote_walked_off = _emote_restarted and not player.emoting
 			_emote_expect(_emote_walked_off, "a step did not end the dance")
+		EMOTE_CARRY_AT:
+			# Staged the way every other mode stages a hold (`_drive_bow`'s
+			# `letter` step): the row is what `is_holding_letter` asks about, and
+			# `ends_at = INF` is what makes it a carry rather than a capture.
+			MatchState._letter_holds[1] = {"letter": 1, "ends_at": INF}
+			MatchState.letter_hold_changed.emit(1)
+		EMOTE_CARRY_PRESS_AT:
+			Input.action_press("emote")
+		EMOTE_CARRY_PRESS_AT + 1:
+			Input.action_release("emote")
+			_emote_carry_danced = player.emoting
+			_emote_expect(_emote_carry_danced,
+				"a Bog carrying a letter could not start a dance")
+			# The dance empties the hands of *weapons* (D-124); the card is not
+			# one, and a carrier whose fist went empty while it taunted would be
+			# lying to everybody looking for it.
+			_emote_carry_kept_card = player.held_gear != null \
+				and player.held_gear.has_letter()
+			_emote_expect(_emote_carry_kept_card,
+				"the letter left the fist when the carrier danced")
+		EMOTE_CAPTURE_AT:
+			# The same Bog, the same card, one key different: a finite `seconds`
+			# is a timed capture (D-131). Far enough out that nothing banks it
+			# under the check.
+			MatchState._letter_holds[1] = {
+				"letter": 1, "ends_at": INF, "started_at": 0.0, "seconds": 1.0e9}
+			MatchState.letter_hold_changed.emit(1)
+		EMOTE_CAPTURE_READ_AT:
+			# Nobody pressed anything. `refresh_emote` asks `can_emote()` once a
+			# frame and that is the whole mechanism (D-105).
+			_emote_capture_stopped = _emote_carry_danced and not player.emoting
+			_emote_expect(_emote_capture_stopped,
+				"a capture starting under a dancer did not end the dance")
+		EMOTE_CAPTURE_PRESS_AT:
+			Input.action_press("emote")
+		EMOTE_CAPTURE_PRESS_AT + 1:
+			Input.action_release("emote")
+			_emote_capture_refused = not player.emoting
+			_emote_expect(_emote_capture_refused,
+				"Y started a dance in the middle of a capture")
+			MatchState._letter_holds.erase(1)
+			MatchState.letter_hold_changed.emit(1)
 		EMOTE_DONE_AT:
 			_report_emote()
 
@@ -5409,6 +5468,12 @@ func _report_emote() -> void:
 				EMOTE_TRAVEL_MIN, "PASS" if moved and blended else "FAIL"])
 	print("combat_range: a step ended it — walk %s"
 		% ("PASS" if _emote_walked_off else "FAIL"))
+
+	var carried := _emote_carry_danced and _emote_carry_kept_card \
+		and _emote_capture_stopped and _emote_capture_refused
+	print("combat_range: a carried letter danced and stayed in the fist, "
+		+ "a capture ended the dance and refused the next — carry %s"
+			% ("PASS" if carried else "FAIL"))
 	print("combat_range: %s" % ("emote PASS" if _emote_failures == 0
 		else "emote FAIL (%d)" % _emote_failures))
 	get_tree().quit()

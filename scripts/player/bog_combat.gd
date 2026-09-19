@@ -1616,12 +1616,25 @@ func is_emoting() -> bool:
 	return _bog != null and _bog.emoting
 
 
-## May this Bog start dancing? Alive, on the ground, empty-handed of letters and
-## not already mid-action — which is `is_busy()` plus the two that are not
-## windups, a draw held down and a hold. Deliberately **not** gated on a
+## May this Bog start dancing? Alive, on the ground, not standing a letter down
+## into a pouch, and not already mid-action — which is `is_busy()` plus the one
+## that is not a windup, a draw held down. Deliberately **not** gated on a
 ## cooldown or on the weapon: an emote costs nothing and every Bog has one.
+##
+## **A carry is not a hold, and that is D-157.** This asked
+## `is_holding_letter()`, which is both kinds of hold at once, so a Bog running
+## a card to a vault could not taunt anybody — which is the one moment in the
+## match a player most wants to. `Bog.is_capturing()` is the timed half alone:
+## there the hands are genuinely busy, one arm raised over a pouch with a letter
+## sinking into it (D-131), and a body that danced out from under that
+## performance would be showing two things at once. A carry is a card in the
+## fist and a run, and the card stays in the fist through the dance — the fist
+## is where "this one has the letter" reads from (D-050), so it is the one thing
+## `_bare_handed()` does not empty.
 func can_emote() -> bool:
-	return _bog != null and _bog.alive and _bog.is_on_floor() 		and not is_busy() and not _bog.is_drawing() and not is_holding_letter() 		and not _bog.is_crouching() and not _bog.is_spinning()
+	return _bog != null and _bog.alive and _bog.is_on_floor() \
+		and not is_busy() and not _bog.is_drawing() and not _bog.is_capturing() \
+		and not _bog.is_crouching() and not _bog.is_spinning()
 
 
 ## The key. A toggle, and the only caller of the two below that a player has.

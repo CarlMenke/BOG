@@ -726,14 +726,20 @@ also "one button for every weapon" "hold PASS"
 # It carries "and it was dancing first" inside the verdict, or it would go green
 # on a build where Y does nothing.
 #
-# **Nothing in this run carries a letter.** `can_emote()` refuses a hold today
-# and BOG-47 may let it through tomorrow; this check is about the key and the
-# clip and says nothing either way. Headless, and it quits itself at tick 220.
+# `carry` is D-157's, and it is two sentences in one run. A Capture B·O·G carry
+# is a card in the fist and a run, so Y has to start a dance with one — and the
+# card has to still be in the fist while the body dances, because that is where
+# "this one has the letter" reads from (D-050) and the dance only empties the
+# hands of weapons. The timed hold is the control and the other half of the
+# record: the same row turned into a capture ends the dance with nobody pressing
+# anything, because `refresh_emote` asks `can_emote()` once a frame, and Y
+# cannot start another. Headless, and it quits itself at tick 246.
 check "Y dances" "emote PASS" \
     "$GODOT" --headless --fixed-fps 60 --path "$GODOT_ROOT" tools/combat_range.tscn -- emote
 also "Y dances" "key PASS"
 also "Y dances" "plays PASS"
 also "Y dances" "walk PASS"
+also "Y dances" "carry PASS"
 # The input map, checked rather than read (D-070).
 #
 # **This check exists because of a bug nobody could see.** D-068 put
@@ -827,6 +833,7 @@ check "movement" "movement_check: PASS"     "$GODOT" --headless --fixed-fps 60 -
 also "movement" "movement_check: draw PASS"
 also "movement" "movement_check: slide_jump PASS"
 also "movement" "movement_check: landing PASS"
+also "movement" "movement_check: jump_chain PASS"
 also "movement" "movement_check: remote PASS"
 # Bogs in their team's colour (D-046), read off the material the renderer will
 # draw with rather than off what the script meant to set. One Bog per team has
